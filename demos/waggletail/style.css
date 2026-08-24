@@ -1,0 +1,237 @@
+/* Kwispelsteeg - warm pastel, touch-first, no external assets */
+:root{
+  --bg:#FFF4E8; --bg2:#FFE9D6; --card:#FFFDF8; --ink:#4A3B33; --ink2:#8A7566;
+  --peach:#FFB88C; --peach-d:#F2915B; --mint:#A7DEC6; --mint-d:#5FBF9B;
+  --lilac:#CBB8EA; --sky:#A9D3F0; --pink:#FFC7D9; --sun:#FFDD8C;
+  --r:22px; --shadow:0 4px 0 rgba(74,59,51,.14), 0 10px 24px rgba(74,59,51,.10);
+  --tap:52px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:"Comic Sans MS","Comic Neue","Chalkboard SE","Segoe UI Rounded",ui-rounded,"Trebuchet MS",system-ui,sans-serif;
+  background:radial-gradient(1200px 600px at 50% -10%, var(--bg2), var(--bg)) fixed;
+  color:var(--ink); font-size:18px; line-height:1.4;
+  min-height:100vh; overscroll-behavior:none;
+}
+#app{max-width:960px;margin:0 auto;padding:10px 12px 28px}
+b{font-weight:700}
+
+/* ---------- topbar ---------- */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.logo{font-size:1.25rem;font-weight:700;letter-spacing:.3px}
+.badges{display:flex;gap:8px;flex-wrap:wrap}
+.badge{background:var(--card);border:3px solid #fff;box-shadow:var(--shadow);border-radius:999px;
+  padding:8px 14px;font-size:1rem;display:flex;align-items:center;gap:6px;min-height:48px}
+.badge.tap{cursor:pointer;font-family:inherit;color:inherit}
+.badge.tap:active{transform:translateY(2px)}
+.phasebar{display:flex;gap:8px;justify-content:center;margin:4px 0 14px;flex-wrap:wrap}
+.pip{background:#fff8;border-radius:999px;padding:5px 12px;font-size:.9rem;color:var(--ink2);border:2px dashed #fff}
+.pip.on{background:var(--sun);color:var(--ink);border-color:#fff;font-weight:700}
+.pip.done{background:var(--mint);color:#2c5c48;border-style:solid}
+.foot{text-align:center;color:var(--ink2);font-size:.8rem;margin-top:22px}
+
+/* ---------- cards / buttons ---------- */
+.card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
+h1{font-size:1.5rem;margin:.1em 0 .3em}
+h2{font-size:1.2rem;margin:.1em 0 .4em}
+p{margin:.35em 0}
+.hint{color:var(--ink2);font-size:.95rem}
+.btn{font-family:inherit;font-size:1.05rem;font-weight:700;color:var(--ink);cursor:pointer;
+  background:var(--sun);border:none;border-radius:18px;padding:14px 22px;min-height:var(--tap);min-width:var(--tap);
+  box-shadow:0 4px 0 #0002; transition:transform .08s}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 #0002}
+.btn.go{background:var(--mint)}
+.btn.soft{background:#fff;border:3px solid var(--bg2)}
+.btn.big{font-size:1.2rem;padding:16px 28px}
+.btn[disabled]{opacity:.45;cursor:default}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row.center{justify-content:center}
+.spacer{flex:1}
+
+/* ---------- animals: voxel-canvas op apparaat-resolutie ----------
+   art.js tekent elk canvas op CW*G x CH*G apparaat-pixels (G = heel
+   getal, uit css-breedte * devicePixelRatio). Het canvas is dus nooit
+   kleiner dan het scherm: geen nearest-neighbour matsj meer. */
+.animal{
+  --vox-scale:1.15;
+  width:calc(var(--vox-w, 82) * var(--vox-scale) * 1px);
+  height:calc(var(--vox-h, 89) * var(--vox-scale) * 1px);
+  display:block;flex:none;pointer-events:none;
+}
+.animal canvas{
+  width:100%;height:100%;display:block;
+}
+/* groter waar er ruimte is (past net in een kaartje van 160-166px) */
+.pet .animal,.gate .animal,.vig .animal,.scene-warm .animal{--vox-scale:1.75}
+.wiggle{animation:wiggle .4s ease-in-out 2}
+@keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-6deg)}75%{transform:rotate(6deg)}}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.pop{animation:pop .3s ease-out}
+@keyframes fadeup{to{transform:translateY(-30px) scale(.4);opacity:0}}
+
+/* ---------- morning: bag + bowls ---------- */
+.bagrow{display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center}
+.bag{background:linear-gradient(#FFE7C9,#FFD2A6);border:4px solid #fff;border-radius:26px;padding:12px 16px;
+  text-align:center;min-width:170px;box-shadow:var(--shadow);touch-action:none;cursor:grab}
+.bag .n{font-size:2rem;font-weight:700;line-height:1}
+.bag .lbl{font-size:.9rem;color:#7a5b3d}
+.crumbs{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;max-width:190px;margin:6px auto 0}
+.hand{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center}
+.hand .btn{padding:10px 16px;background:#fff;border:3px solid var(--bg2)}
+.hand .btn.on{background:var(--peach);border-color:var(--peach-d)}
+
+.bowls{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+.pet{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:10px;width:166px;
+  display:flex;flex-direction:column;align-items:center;position:relative}
+.pet .nm{font-weight:700;font-size:1rem}
+.bowl{margin-top:6px;width:142px;min-height:72px;border-radius:0 0 60px 60px/0 0 40px 40px;
+  background:linear-gradient(#F7E3F0,#EAC9E0);border:4px solid #fff;box-shadow:inset 0 3px 8px #0001;
+  display:flex;flex-wrap:wrap;align-content:flex-start;justify-content:center;gap:1px;padding:6px 4px;font-size:19px}
+.bowl.jar{border-radius:16px;background:linear-gradient(#DFF1FB,#C5E4F7);width:150px}
+.drop-hot{outline:4px dashed var(--mint-d);outline-offset:3px;background:#EAFBF3}
+.count{margin-top:6px;font-size:1rem;font-weight:700}
+.need{background:var(--pink);border-radius:999px;padding:3px 12px;font-size:.95rem;margin-top:4px;font-weight:700}
+.need.over{background:var(--sky)}
+.mini{font-family:inherit;font-size:.85rem;background:#fff;border:2px solid var(--bg2);border-radius:999px;
+  padding:6px 10px;min-height:48px;cursor:pointer;margin-top:6px;color:var(--ink2)}
+.jarwrap{display:flex;flex-direction:column;align-items:center;background:var(--card);border-radius:var(--r);
+  box-shadow:var(--shadow);padding:10px;width:170px}
+
+/* ---------- tray (vet example) ---------- */
+.tray{background:#FFF7E9;border:4px dashed var(--peach);border-radius:18px;padding:10px;margin:8px 0}
+.trayrow{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:19px;flex-wrap:wrap}
+.trayrow .who{width:90px;font-size:.95rem;font-weight:700}
+
+/* ---------- middag: clock strip ---------- */
+.clockends{display:flex;justify-content:space-between;font-weight:700;margin-bottom:4px}
+.stripwrap{overflow-x:auto;padding-bottom:6px}
+.strip{position:relative;display:grid;grid-template-columns:repeat(8,minmax(62px,1fr));min-width:500px;
+  background:#fff;border:4px solid #fff;border-radius:18px;box-shadow:var(--shadow)}
+.cell{height:86px;border-right:2px dashed #EEDFCF;display:flex;align-items:flex-start;justify-content:center;
+  padding-top:4px;font-size:.72rem;color:var(--ink2)}
+.cell:last-child{border-right:none}
+.cell.drop-hot{background:#EAFBF3}
+.placed{position:absolute;top:24px;height:58px;border-radius:14px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;font-size:.82rem;font-weight:700;box-shadow:0 3px 0 #0002;
+  border:3px solid #fff;overflow:hidden;touch-action:none;cursor:grab;text-align:center;line-height:1.1}
+.blocks{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:12px}
+.block{border-radius:16px;border:3px solid #fff;box-shadow:var(--shadow);padding:10px 12px;min-height:var(--tap);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;
+  touch-action:none;cursor:grab;text-align:center;line-height:1.15}
+.block .mins{font-size:.78rem;font-weight:400;color:#5d4a3f}
+.block.sel{outline:4px solid var(--mint-d);outline-offset:3px}
+.block.placedaway{opacity:.25;pointer-events:none}
+.ghost{position:fixed;z-index:99;pointer-events:none;opacity:.92;transform:translate(-50%,-50%) rotate(-3deg)}
+body.sleept .placed{pointer-events:none}
+
+/* ---------- vignette ---------- */
+.vig{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;min-height:250px;justify-content:center}
+.vigclock{font-size:2rem;font-weight:700;background:var(--sun);border-radius:999px;padding:4px 22px}
+.vigprop{font-size:2.4rem}
+
+/* ---------- avond: gate + numpad ---------- */
+.gate{display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center;text-align:center}
+.speech{background:#fff;border:3px solid var(--bg2);border-radius:18px;padding:10px 14px;max-width:340px;position:relative}
+.stock{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin:8px 0}
+.chip{background:var(--sky);border-radius:14px;padding:8px 14px;font-weight:700}
+.chip.b{background:var(--lilac)} .chip.c{background:var(--mint)}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:260px;margin:10px auto 0}
+.pad .btn{background:#fff;border:3px solid #C9D8E6;font-size:1.3rem;padding:12px 0;
+  box-shadow:0 4px 0 #0002, inset 0 -3px 0 #EDF3F9}
+.pad .btn.ok{background:var(--mint)} .pad .btn.del{background:var(--pink)}
+.good{background:var(--mint);border-radius:14px;padding:10px 14px;font-weight:700;margin-top:8px}
+
+/* =====================================================================
+   REKENSCHRIFT - de sommen staan op gelinieerd papier, net als op school
+===================================================================== */
+.qbox,.opdracht,.tray,.soft-note{
+  --lijn:30px;
+  background-color:#FCFAF0;
+  background-image:
+    linear-gradient(90deg, rgba(255,255,255,0) 0 44px, #E9A2AC 44px 46px, rgba(255,255,255,0) 46px),
+    repeating-linear-gradient(180deg, rgba(255,255,255,0) 0 calc(var(--lijn) - 1px),
+      #C2D8EA calc(var(--lijn) - 1px) var(--lijn)),
+    radial-gradient(120% 90% at 18% 0%, #FFFFFF 0%, rgba(255,255,255,0) 70%);
+  background-position:0 0, 0 12px, 0 0;
+  border:2px solid #EAE0C8;
+  border-radius:4px 16px 16px 4px;
+  box-shadow:0 3px 0 rgba(74,59,51,.09), 0 10px 20px rgba(74,59,51,.07);
+  padding:12px 16px 16px 58px;
+  margin:12px 0 0;
+  line-height:var(--lijn);
+  position:relative;
+  letter-spacing:.2px;
+}
+/* perforatiegaatjes in de kantlijn */
+.qbox::before,.opdracht::before{
+  content:"";position:absolute;left:14px;top:20px;width:13px;height:13px;border-radius:50%;
+  background:#F1EAD6;box-shadow:0 60px 0 #F1EAD6, 0 120px 0 #F1EAD6;
+}
+.qbox h2,.opdracht h2{font-size:1.1rem;margin:0 0 2px;color:#6E5C4E}
+.qbox p,.opdracht p{margin:0}
+.qbox .hint,.opdracht .hint{color:#8A7566}
+.opdracht{margin:8px 0 12px}
+
+/* de som zelf: dikke cijfers, een leeg antwoordvak - zoals in een schrift */
+.somregel{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;
+  font-size:1.5rem;font-weight:700;margin:4px 0 2px}
+.answer{background:#fff;border:3px solid #8FA9C4;border-radius:10px;min-height:56px;font-size:1.9rem;
+  font-weight:700;text-align:center;padding:2px 10px;letter-spacing:2px;min-width:110px;display:inline-block;
+  box-shadow:inset 0 -5px 0 #EAF1F8;line-height:52px}
+.somvak{display:inline-block;width:46px;height:46px;border:3px solid #8FA9C4;border-radius:10px;
+  background:#fff;box-shadow:inset 0 -5px 0 #EAF1F8;vertical-align:middle}
+.counton{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center;
+  font-size:1.4rem;margin:6px 0 2px}
+.counton b{font-size:1.6rem;color:#6E5C4E;padding:0 2px}
+.scoop{background:#fff;border:2px solid #D9E3EC;border-radius:10px;padding:2px 6px}
+/* het hulpkaartje ligt óp het schrift: geen liniatuur in liniatuur */
+.soft-note{padding:10px 16px 12px 16px}
+.qbox .soft-note,.opdracht .soft-note{background-image:none;background-color:#FFF8E7;
+  border:2px dashed #E9C79A;border-radius:12px;box-shadow:none}
+.soft-note b{color:#6E5C4E}
+.trayrow{min-height:var(--lijn,30px);padding:0;align-items:center}
+.trayrow .who{width:96px;color:#6E5C4E}
+
+/* ---------- adoption / letters ---------- */
+.scene-warm{background:linear-gradient(#FFF1DC,#FFE4EE);border-radius:var(--r);padding:18px;text-align:center;box-shadow:var(--shadow)}
+.family{font-size:3rem}
+.letter{background:#FFFDF3;border:3px solid #fff;border-radius:16px;box-shadow:var(--shadow);padding:14px;
+  text-align:left;max-width:420px;margin:12px auto;transform:rotate(-1deg);white-space:pre-line;font-size:.95rem}
+.letter h3{margin:0 0 6px;font-size:1rem}
+.wall{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.wall .letter{max-width:280px;margin:0;font-size:.85rem}
+.wall .letter:nth-child(even){transform:rotate(1.2deg)}
+
+/* ---------- overlay / toast ---------- */
+.overlay{position:fixed;inset:0;background:#4a3b3355;display:flex;align-items:center;justify-content:center;
+  padding:14px;z-index:50;overflow:auto}
+.overlay.hidden{display:none}
+.sheet{background:var(--card);border-radius:26px;box-shadow:0 20px 50px #0003;padding:18px;max-width:560px;
+  width:100%;max-height:92vh;overflow:auto;animation:pop .25s ease-out}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:#fff;
+  padding:12px 20px;border-radius:999px;z-index:80;font-size:1rem;box-shadow:0 8px 24px #0004;max-width:92vw;text-align:center}
+.toast.hidden{display:none}
+.toast.happy{background:var(--mint-d)}
+.toast.kind{background:var(--peach-d)}
+
+/* ---------- responsive ---------- */
+@media (max-width:520px){
+  body{font-size:17px}
+  /* twee kaartjes naast elkaar op een telefoon: kaartrand krap, dier blijft groot */
+  .card{padding:12px}
+  .pet{width:160px;padding:8px} .bowl{width:136px} .bowl.jar{width:144px} .jarwrap{width:160px}
+  .gate .animal,.vig .animal,.scene-warm .animal{--vox-scale:1.15}
+  .qbox,.opdracht,.tray,.soft-note{padding-left:46px;--lijn:28px}
+  .qbox::before,.opdracht::before{left:10px}
+  .logo{font-size:1.05rem}
+}
+@media (orientation:landscape) and (max-height:560px){
+  .pet .animal,.gate .animal,.vig .animal,.scene-warm .animal{--vox-scale:1.15}
+  .pet{width:150px} .bowl{width:126px}
+  .cell{height:72px} .placed{height:48px}
+  .card{padding:12px} .vig{min-height:180px}
+}
+@media (prefers-reduced-motion:reduce){
+  .bouncy,.wiggle,.pop{animation:none}
+}

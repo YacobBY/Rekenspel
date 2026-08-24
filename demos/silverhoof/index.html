@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zilverhoef — Trektocht Seizoen</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ START ============ -->
+<section id="scr-start" class="screen active">
+  <div class="card wide">
+    <h1>Zilverhoef</h1>
+    <p class="sub">Jouw eigen pony op trektocht</p>
+    <canvas id="cv-start" class="horse-preview" width="440" height="260"></canvas>
+    <label class="field">
+      <span>Hoe heet jouw pony?</span>
+      <input id="inp-name" type="text" value="Sterre" maxlength="12" autocomplete="off" spellcheck="false">
+    </label>
+    <p class="field-label">Kies haar vachtkleur</p>
+    <div class="swatches" id="swatches"></div>
+    <button id="btn-go" class="big primary">Op pad! 🐴</button>
+  </div>
+</section>
+
+<!-- ============ RUN ============ -->
+<section id="scr-run" class="screen run-screen">
+  <canvas id="cv-run"></canvas>
+  <div class="run-hud">
+    <div class="hud-pill" id="hud-name">Sterre</div>
+    <div class="track-bar"><div class="track-dot rival" id="dot-rival"></div><div class="track-dot me" id="dot-me"></div><span class="flag">🏁</span></div>
+    <div class="hud-pill" id="hud-coins">🪙 0</div>
+  </div>
+  <div class="run-sub">
+    <div class="hud-pill small" id="hud-lap">rondje 1/3</div>
+    <button id="btn-stop-laps" class="stop-laps">Laatste rondje ✋</button>
+  </div>
+  <div id="run-overlay" class="run-overlay"></div>
+  <div id="tap-hint" class="tap-hint">Tik voor linten 🎀 — hoeft niet!</div>
+</section>
+
+<!-- ============ DIAGNOSIS ============ -->
+<section id="scr-diag" class="screen">
+  <div class="card">
+    <div id="diag-rosette" class="rosette">🥈</div>
+    <h2 id="diag-title">Tweede plaats!</h2>
+    <p id="diag-line" class="diag-line"></p>
+    <p id="diag-tip" class="tip"></p>
+    <div class="coin-row" id="diag-coins"></div>
+    <p id="diag-earn" class="earn"></p>
+    <p id="diag-note" class="note"></p>
+    <div class="btn-row">
+      <button id="btn-diag-shop" class="big primary">Naar de zadelwinkel 🛒</button>
+      <button id="btn-diag-lap" class="big ghost">Nog een rondje 🔁</button>
+      <button id="btn-diag-stable" class="big ghost">Naar de stal</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STABLE ============ -->
+<section id="scr-stable" class="screen">
+  <div class="card wide">
+    <h2 id="stable-title">De stal van Sterre</h2>
+    <canvas id="cv-stable" class="horse-preview" width="440" height="260"></canvas>
+    <p id="stable-gear" class="gear-line"></p>
+    <div class="purse-line"><span class="coin-badge">🪙</span> <b id="stable-coins">0</b> munten in je buidel</div>
+    <div class="btn-row">
+      <button id="btn-stable-run" class="big primary">Nog een rit! 🏇</button>
+      <button id="btn-stable-shop" class="big ghost">Naar de zadelwinkel 🛒</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SHOP ============ -->
+<section id="scr-shop" class="screen shop-screen">
+  <div class="shop-top">
+    <div class="keeper">
+      <svg viewBox="0 0 120 150" class="keeper-svg" aria-hidden="true">
+        <ellipse cx="60" cy="146" rx="36" ry="6" fill="#00000018"/>
+        <path d="M30 148 C28 108 34 88 60 88 C86 88 92 108 90 148 Z" fill="#8fbfa6"/>
+        <path d="M44 148 C42 116 46 100 60 100 C74 100 78 116 76 148 Z" fill="#fdf3e3"/>
+        <path d="M52 100 h16 v10 a8 8 0 0 1 -16 0 Z" fill="#f3cba6"/>
+        <path d="M30 96 C18 104 14 118 16 132" stroke="#8fbfa6" stroke-width="13" fill="none" stroke-linecap="round"/>
+        <path d="M90 96 C102 104 106 118 104 132" stroke="#8fbfa6" stroke-width="13" fill="none" stroke-linecap="round"/>
+        <circle cx="15" cy="134" r="8" fill="#f3cba6"/><circle cx="105" cy="134" r="8" fill="#f3cba6"/>
+        <circle cx="60" cy="62" r="30" fill="#f3cba6"/>
+        <path d="M30 56 C32 26 88 26 90 56 C90 40 78 30 60 30 C42 30 30 40 30 56 Z" fill="#a8724a"/>
+        <path d="M26 54 C40 40 80 40 94 54 C96 46 88 38 60 38 C32 38 24 46 26 54 Z" fill="#c98b5c"/>
+        <circle cx="49" cy="62" r="4" fill="#4a3f52"/><circle cx="71" cy="62" r="4" fill="#4a3f52"/>
+        <circle cx="38" cy="72" r="7" fill="#f4a7b9" opacity=".55"/>
+        <circle cx="82" cy="72" r="7" fill="#f4a7b9" opacity=".55"/>
+        <path d="M50 78 q10 9 20 0" stroke="#4a3f52" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div class="keeper-name">Bram de zadelmaker</div>
+    </div>
+    <div class="bubble" id="bubble">Hoi! Kijk maar rustig rond.</div>
+  </div>
+
+  <div id="shop-wares" class="wares"></div>
+
+  <div id="shop-pay" class="pay hidden">
+    <div class="pay-head">
+      <span id="pay-what">Bokkenschoenen met noppen</span>
+      <span class="price-tag" id="pay-price">€9</span>
+      <button id="btn-pay-close" class="chip">Iets anders</button>
+    </div>
+
+    <div class="counter-wrap">
+      <div id="counter" class="counter">
+        <div class="counter-label">Leg de munten op de toonbank</div>
+        <div id="counter-coins" class="counter-coins"></div>
+        <div id="ghosts" class="ghosts"></div>
+      </div>
+      <div class="counter-total">Op de toonbank: <b id="counter-total">€0</b></div>
+    </div>
+
+    <div id="pad" class="pad hidden">
+      <div class="pad-q">Hoeveel krijg je terug?</div>
+      <div class="pad-display" id="pad-display">–</div>
+      <div class="pad-keys" id="pad-keys"></div>
+    </div>
+
+    <div class="purse-wrap">
+      <div class="purse-title">Jouw buidel</div>
+      <div id="purse" class="purse"></div>
+    </div>
+
+    <div class="btn-row pay-actions">
+      <button id="btn-pay-ok" class="big primary">Klaar! ✋</button>
+      <button id="btn-pay-clear" class="big ghost">Alles terug</button>
+    </div>
+  </div>
+
+  <div class="btn-row shop-actions">
+    <button id="btn-shop-run" class="big ghost">Eerst nog een rit 🏇</button>
+    <button id="btn-shop-stable" class="big ghost">Naar de stal 🏠</button>
+  </div>
+</section>
+
+<div id="confetti" class="confetti-layer"></div>
+<div id="drag-layer" class="drag-layer"></div>
+
+<script src="art.js"></script>
+<script src="run.js"></script>
+<script src="shop.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
