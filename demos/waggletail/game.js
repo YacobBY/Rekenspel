@@ -10,10 +10,18 @@ function go(phase) {
   window.scrollTo(0, 0);
 }
 
+/* in welke fasen speelt het diorama mee (de avond en de adoptie hebben
+   hun eigen dier-in-beeld, daar is de tuin niet nodig) */
+var WERELD_FASE = { morning: 1, middag: 1 };
+
 function render() {
   $('#dayNum').textContent = state.day;
   $('#scoopNum').textContent = state.scoops;
   $('#letterNum').textContent = state.brieven.length;
+  if (window.World) {
+    World.sync(state.dieren);
+    World.toon(!!WERELD_FASE[state.phase]);
+  }
   var orde = { morning: 0, middag: 1, avond: 2 };
   var cur = orde[state.phase] === undefined ? 3 : orde[state.phase];
   $$('#phasebar .pip').forEach(function (p) {
@@ -79,13 +87,13 @@ function paintMorning() {
          }).join('') + '</div></div>';
   }
 
-  /* bakjes */
+  /* bakjes: het rekenwerk staat hier, de dieren staan in de tuin erboven */
   h += '<div class="bowls">';
   state.dieren.forEach(function (a) {
     var c = m.bowls[a.id], mis = m.per - c;
-    /* voxel-hook: het bakje in de tekening volgt precies het bakje op het scherm */
-    if (!m.klaar) Art.setFood(a.id, c, m.per);
-    h += '<div class="pet">' + Art.animal(a, moodVoor(a)) +
+    /* wereld-hook: bakje en stemming in de tuin volgen precies het scherm */
+    if (!m.klaar) { Art.setFood(a.id, c, m.per); Art.setMood(a.id, moodVoor(a)); }
+    h += '<div class="pet' + (m.feedback && !m.klaar && mis > 0 ? ' mis' : '') + '">' +
       '<div class="nm">' + esc(a.name) + '</div>' +
       '<div class="bowl" data-drop="bowl" data-id="' + a.id + '">' + koekjes(c, m.klaar) + '</div>' +
       '<div class="count">' + meervoud(c, 'koekje', 'koekjes') + '</div>';
@@ -229,7 +237,12 @@ function tijd(min) {
   var t = 14 * 60 + min, u = Math.floor(t / 60), m = t % 60;
   return u + ':' + (m < 10 ? '0' : '') + m;
 }
-var ACT_ZIN = { Wandeling: 'gaat lekker wandelen', Spelen: 'gaat spelen', Bad: 'gaat in bad', Plonzen: 'gaat plonzen' };
+var ACT_ZIN = { Wandeling: 'gaat lekker wandelen', Spelen: 'gaat spelen', Bad: 'gaat in bad',
+                Plonzen: 'gaat plonzen', Dierenarts: 'kijkt alle dieren na',
+                Bezoek: 'komt kijken bij de dieren', Voer: 'brengt de brokken',
+                Klusje: 'maakt de hokken schoon' };
+/* ACT_LID / actLid staan in state.js, zodat de regelkaartjes en de
+   foutmelding gegarandeerd dezelfde woorden gebruiken */
 
 Scenes.middag = function (host) {
   if (!state.middag) initMiddag();
@@ -241,23 +254,39 @@ function paintMiddag() {
   var d = state.middag;
   var vrij = d.blokken.filter(function (b) { return b.at === null; });
   var h = '<div class="card"><h1>🕑 Het planbord</h1>' +
-    '<p>Alles moet <b>vóór 16:00</b> klaar zijn, en niet twee dingen tegelijk. Elk blokje is <b>15 minuten</b>.</p>' +
-    '<p class="hint">Sleep een blokje op de strook. Of: tik het blokje aan en tik dan op een vakje. Tik op een geplaatst blokje om het terug te leggen.</p>' +
+    '<p>Alles moet <b>vóór 16:00</b> klaar zijn, en niet twee dingen tegelijk. Elk blokje is <b>15 minuten</b>.</p>';
+
+  /* regels van vandaag: vriendelijke plaatjeskaartjes vóór de strook */
+  if (d.regels.length) {
+    h += '<div class="regels"><h2>📋 Regels van vandaag</h2><div class="regelrij">';
+    d.regels.forEach(function (r, i) {
+      h += '<div class="regel' + (d.markeer.indexOf('r' + i) >= 0 ? ' mis' : '') + '">' +
+        '<span class="ico">' + r.emoji + '</span><span>' + esc(r.tekst) + '</span></div>';
+    });
+    h += '</div></div>';
+  }
+  if (d.fout) h += '<div class="uitleg">' + d.fout + '</div>';
+
+  h += '<p class="hint">Sleep een blokje op de strook. Of: tik het blokje aan en tik dan op een vakje. ' +
+    'Tik op een geplaatst blokje om het terug te leggen.</p>' +
     '<div class="clockends"><span>🕑 14:00</span><span>16:00 🕓</span></div>' +
     '<div class="stripwrap"><div class="strip" id="strip">';
   for (var i = 0; i < 8; i++) h += '<div class="cell" data-drop="cell" data-i="' + i + '">' + tijd(i * 15) + '</div>';
   d.blokken.forEach(function (b) {
     if (b.at === null) return;
-    h += '<div class="placed" data-blok="' + b.id + '" style="left:' + (b.at / 8 * 100) + '%;width:' +
+    h += '<div class="placed' + (b.vast ? ' vast' : '') + (d.markeer.indexOf(b.id) >= 0 ? ' mis' : '') +
+      '" data-blok="' + b.id + '" style="left:' + (b.at / 8 * 100) + '%;width:' +
       (b.cells / 8 * 100) + '%;background:' + (ACT_KLEUR[b.act] || '#FFDD8C') + '">' +
-      '<div>' + (ACT_EMOJI[b.act] || '✨') + ' ' + esc(b.act) + '</div><div>' + esc(b.name) + '</div></div>';
+      '<div>' + (b.vast ? '🔒 ' : '') + (ACT_EMOJI[b.act] || '✨') + ' ' + esc(b.act) + '</div>' +
+      '<div>' + esc(b.name) + '</div></div>';
   });
   h += '</div></div>';
 
   h += '<div class="blocks">';
   if (!vrij.length) h += '<p class="hint">Alle blokjes staan op de strook. 👍</p>';
   vrij.forEach(function (b) {
-    h += '<div class="block' + (d.gekozen === b.id ? ' sel' : '') + '" data-blok="' + b.id +
+    h += '<div class="block' + (d.gekozen === b.id ? ' sel' : '') +
+      (d.markeer.indexOf(b.id) >= 0 ? ' mis' : '') + '" data-blok="' + b.id +
       '" style="background:' + (ACT_KLEUR[b.act] || '#FFDD8C') + '">' +
       '<div>' + (ACT_EMOJI[b.act] || '✨') + ' ' + esc(b.act) + ' ' + esc(b.name) + '</div>' +
       '<div class="mins">' + b.mins + ' min</div></div>';
@@ -265,11 +294,47 @@ function paintMiddag() {
   h += '</div>';
 
   h += '<div class="row center" style="margin-top:16px">' +
-    '<button class="btn go big" id="startMiddag"' + (vrij.length ? ' disabled' : '') + '>Start de middag ▸</button>' +
-    '<button class="btn soft" id="leegBtn">Strook leegmaken ↺</button></div></div>';
+    '<button class="btn go big" id="startMiddag">Klaar! ✓</button>' +
+    '<button class="btn soft" id="leegBtn">Strook leegmaken ↺</button></div>';
+  if (d.pogingen >= 1) {
+    h += '<p class="hint" style="text-align:center;margin-top:8px">' +
+      'Schuif maar rustig door tot het klopt. Er gaat niets kapot. 💛</p>';
+  }
+  h += '</div>';
 
   $('#dArea').innerHTML = h;
   wireMiddag();
+}
+
+/* de vriendelijke controle: benoem precies wat er nog niet klopt */
+function checkMiddag() {
+  var d = state.middag;
+  d.markeer = []; d.fout = null;
+  var vrij = d.blokken.filter(function (b) { return b.at === null; });
+  if (vrij.length) {
+    d.pogingen++;
+    d.markeer = vrij.map(function (b) { return b.id; });
+    d.fout = vrij.length === 1
+      ? 'Er ligt nog <b>1 blokje</b> naast de strook: ' + esc(vrij[0].act) + ' van ' + esc(vrij[0].name) + '.'
+      : 'Er liggen nog <b>' + vrij.length + ' blokjes</b> naast de strook.';
+    paintMiddag();
+    toast('Alles moet een plekje op de strook krijgen. 💛', 'kind');
+    return;
+  }
+  var fouten = planFouten(d, planStand(d));
+  if (fouten.length) {
+    d.pogingen++;
+    var r = fouten[0], A = blokVan(d, r.a), B = blokVan(d, r.b);
+    var vanaf = tijd((B.at + B.cells) * 15);
+    d.markeer = [A.id, B.id, 'r' + d.regels.indexOf(r)];
+    d.fout = 'Kijk: ' + esc(bezit(A.name)) + ' ' + esc(String(A.act).toLowerCase()) +
+      ' staat <b>vóór</b> ' + esc(actLid(B)) + ' van ' + esc(B.name) + '. ' +
+      'Zet ' + esc(actLid(A)) + ' pas vanaf <b>' + vanaf + '</b> — dán klopt het.';
+    paintMiddag();
+    toast(bezit(A.name) + ' ' + String(A.act).toLowerCase() + ' moet ná ' + actLid(B) + '. 💛', 'kind');
+    return;
+  }
+  speelMiddag();
 }
 
 function plaatsBlok(id, i) {
@@ -277,6 +342,7 @@ function plaatsBlok(id, i) {
   var b = null, k;
   for (k = 0; k < d.blokken.length; k++) if (d.blokken[k].id === id) b = d.blokken[k];
   if (!b) return 'weg';
+  if (b.vast) return 'vast';
   if (i < 0 || i + b.cells > 8) return 'laat';
   var bezet = {};
   d.blokken.forEach(function (x) {
@@ -290,9 +356,11 @@ function plaatsBlok(id, i) {
 
 function probeer(id, i, node) {
   var r = plaatsBlok(id, i);
+  if (r === 'vast') { shake(node); toast('Dat blokje staat vast — dat mag niet verschuiven. 🔒', 'kind'); return; }
   if (r === 'overlap') { shake(node); toast('Dat past niet tegelijk! 🙃', 'kind'); return; }
   if (r === 'laat') { shake(node); toast('Dan zijn jullie pas ná 16:00 klaar. Probeer wat vroeger.', 'kind'); return; }
   state.middag.gekozen = null;
+  state.middag.markeer = [];
   paintMiddag();
 }
 
@@ -309,12 +377,18 @@ function wireMiddag() {
   });
   $$('#dArea .placed').forEach(function (node) {
     var id = node.getAttribute('data-blok');
+    var blok = blokVan(d, id);
+    if (blok && blok.vast) {
+      node.onclick = function () { toast('Die afspraak staat vast. Plan de rest eromheen. 🔒', 'kind'); };
+      return;
+    }
     makeDraggable(node, {
       dropSel: '[data-drop="cell"]',
       ghostHTML: function () { return '<div class="block" style="background:' + node.style.background + '">' + node.innerHTML + '</div>'; },
       onDrop: function (t) { probeer(id, +t.getAttribute('data-i'), node); },
       onTap: function () {
         for (var k = 0; k < d.blokken.length; k++) if (d.blokken[k].id === id) d.blokken[k].at = null;
+        d.markeer = [];
         paintMiddag();
       }
     });
@@ -326,11 +400,11 @@ function wireMiddag() {
     };
   });
   $('#leegBtn').onclick = function () {
-    d.blokken.forEach(function (b) { b.at = null; });
-    d.gekozen = null; paintMiddag();
+    d.blokken.forEach(function (b) { if (!b.vast) b.at = null; });
+    d.gekozen = null; d.markeer = []; d.fout = null; paintMiddag();
   };
   var s = $('#startMiddag');
-  if (s && !s.disabled) s.onclick = speelMiddag;
+  if (s) s.onclick = checkMiddag;
 }
 
 function speelMiddag() {
@@ -349,14 +423,13 @@ function speelMiddag() {
       $('#naarAvond').onclick = function () { go('avond'); };
       return;
     }
-    var b = seq[i], a = null;
-    state.dieren.forEach(function (x) { if (x.id === b.animal) a = x; });
-    if (!a) a = { id: b.animal, kind: 'hond' };
+    var b = seq[i];
+    /* het dier doet zijn ding IN de tuin; het kaartje eronder vertelt wat */
+    if (b.animal && window.World) World.solo(b.animal, b.act);
     $('#scene').innerHTML = '<div class="card vig">' +
       '<div class="vigclock">' + tijd(b.at * 15) + ' – ' + tijd((b.at + b.cells) * 15) + '</div>' +
-      Art.animal(a, 'bouncy') +
       '<div class="vigprop">' + (ACT_EMOJI[b.act] || '✨') + '</div>' +
-      '<h2>' + esc(b.name) + ' ' + (ACT_ZIN[b.act] || 'heeft het gezellig') + '</h2>' +
+      '<h2>' + hoofdletter(esc(b.name) + ' ' + (ACT_ZIN[b.act] || 'heeft het gezellig')) + '</h2>' +
       '<p class="hint">' + b.mins + ' minuten</p>' +
       '<button class="btn soft" id="vigNext">Verder ▸</button></div>';
     $('#vigNext').onclick = function () { i++; toon(); };

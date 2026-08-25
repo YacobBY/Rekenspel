@@ -25,7 +25,15 @@
     <span class="pip" data-p="avond">🌙 Avond</span>
   </div>
 
-  <main id="scene" class="scene"></main>
+  <div class="stagewrap">
+    <!-- het diorama: één isometrische tuin waar de dieren in wonen -->
+    <div class="world uit" id="world" role="img"
+         aria-label="De tuin van de Kwispelsteeg met de dieren erin">
+      <canvas id="worldCv"></canvas>
+      <div class="tags" id="worldTags"></div>
+    </div>
+    <main id="scene" class="scene"></main>
+  </div>
 
   <footer class="foot">Kwispelsteeg &middot; demo &middot; rustig aan, je mag alles zo vaak proberen als je wil</footer>
 </div>
@@ -37,6 +45,7 @@
 <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
 <script src="art.js"></script>
+<script src="world.js"></script>
 <script src="state.js"></script>
 <script src="ui.js"></script>
 <script src="game.js"></script>

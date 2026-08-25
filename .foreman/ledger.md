@@ -53,3 +53,11 @@
 - 2026-08-24 V9 verdict PASS_WITH_NOTES: backing store >= device res, math regressie schoon, 60fps. Note: geen git-baseline (repo zonder commits) - byte-identiteit onbewijsbaar. T9 ACCEPTED.
 - 2026-08-24 T10 attempt 1 DONE_WITH_CONCERNS: auto-collect (0 input nodig), 3-rondjes-cap + purse cap 20 (sluit farming af, lost ook beide V6-notes op), 2 nieuwe waren (12/6), parallax/paard-rework, 53/53 checks, 60fps hersteld. Concern: +696 regels vs ~500 richtlijn (visueel werk, aanvaard). LEAD screenshot check OK. V10 dispatched.
 - 2026-08-24 V10 verdict PASS: auto-collect bewezen (0 input = 6 munten, taps geven niets), caps sluiten farming, payability 0-20 gebruteforcet, gear-mapping beide kanten. T10 ACCEPTED. Run v3 closed.
+
+## Run: waggletail-v4 wereld (2026-08-24)
+- Baseline: ac68e98, werkboom schoon.
+- T11 diorama-wereld + zachtere dieren + planbord-constraints -> WORKHORSE, write set demos/waggletail/** : DISPATCHED
+- 2026-08-24 T11 attempt 1 DONE: world.js diorama (waypoint-AI, walk-to-bowl), zachter palet + organische motie, planbord-generator met DFS-solvability (360 configs 0 onoplosbaar), bevroren functies byte-identiek. LEAD screenshot check OK; twijfel: naamlabel-verankering. V11 dispatched.
+- 2026-08-24 V11 attempt 1 LOST (API-sessielimiet, geen verdict; read-only dus niets te reconcilieren). V11b herstart.
+- 2026-08-24 V11b attempt 2 verbroken (connection lost) na solvability-bevestiging; hervat via resume (zelfde context, geen dubbel werk).
+- 2026-08-24 V11 verdict PASS: 1 scene-canvas, bevroren functies byte-identiek, labels volgen eigen dier (max 4px; "Wolkje bij hok" was dwalende Boef correct gelabeld), planaudit 360/360 oplosbaar, vast blok onwrikbaar, overtreding zacht benoemd. T11 ACCEPTED.

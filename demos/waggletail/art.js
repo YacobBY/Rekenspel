@@ -29,33 +29,46 @@
 var Art = (function () {
 'use strict';
 
-/* ---------- palet: b = vacht, d = donkere vacht, e = accent, l = licht ---------- */
-var INK = '#4A3B33', WIT = '#FFFFFF';
+/* ---------- palet: b = vacht, d = donkere vacht, e = accent, l = licht ----------
+   ZACHTHEID: de tinten zijn iets warmer en de contrasten kleiner dan in de
+   eerste versie. Ogen en neusjes zijn niet meer bijna-zwart maar warm bruin;
+   dat haalt de robot-blik uit de koppen. */
+var INK = '#4A3B33', WIT = '#FFF7EC';
+var OOG = '#5B4840';           /* oogje: zacht donkerbruin, nooit zwart */
+var NEUS = '#7E6255';          /* neus / mondlijntje: nog een stap zachter */
 var PAL = {
-  hond:   { b: '#EBBA8B', d: '#C98F5F', e: '#A9663C', l: '#FAE3CC' },
-  poes:   { b: '#C4C9DF', d: '#98A0BE', e: '#F2C3D2', l: '#E9ECF6' },
-  konijn: { b: '#F3E4EE', d: '#D8BFD2', e: '#F4A9C0', l: '#FFFFFF' },
-  gans:   { b: '#FBF7E9', d: '#DCD4BC', e: '#F5A24B', l: '#FFFFFF' }
+  hond:   { b: '#EEC194', d: '#D3996A', e: '#B4744A', l: '#FCE8D3' },
+  poes:   { b: '#C9CCDC', d: '#A0A6C0', e: '#F4C8D5', l: '#EDEFF6' },
+  konijn: { b: '#F5E7EC', d: '#DCC6D3', e: '#F5B0C2', l: '#FFFBF6' },
+  gans:   { b: '#FDF8EA', d: '#E0D8C2', e: '#F6A957', l: '#FFFCF4' }
 };
-var KOM = { schaal: '#DCBFD5', rand: '#F6E2F0', brok: '#B5763F', brok2: '#8E5C2F' };
-var BAND = '#5FBF9B';          /* halsbandje van de hond */
+var KOM = { schaal: '#DFC6D6', rand: '#F8E7F1', brok: '#BC8149', brok2: '#97663A' };
+var BAND = '#6BC5A4';          /* halsbandje van de hond */
 
 /* ---------- isometrie: 1 voxel = 2S breed, S hoog (top), HG diep ---------- */
 var S = 2, HG = 2;
-var F_TOP = 1.12, F_RECHTS = 0.86, F_LINKS = 0.63;
-/* hoekdonkering: hoe meer buren tegen een vlak aan, hoe donkerder */
-var AO = [1, 0.962, 0.928, 0.902, 0.882];
-var RAND_INK = 'rgba(74,59,51,.42)';   /* dun contourlijntje */
+/* zachter licht: minder afstand tussen boven-, rechter- en linkervlak */
+var F_TOP = 1.10, F_RECHTS = 0.90, F_LINKS = 0.72;
+/* hoekdonkering: hoe meer buren tegen een vlak aan, hoe donkerder (nu subtieler) */
+var AO = [1, 0.972, 0.946, 0.928, 0.914];
+var RAND_INK = 'rgba(112,90,76,.26)';  /* dun, zacht contourlijntje */
 
+/* Licht en schaduw als kleurmenging in plaats van een kale vermenigvuldiging:
+   licht loopt naar warm ivoor, schaduw naar een zachte violet-bruine tint.
+   Dat is precies het verschil tussen "plastic blokje" en "geverfd hout". */
+var WARM = [255, 248, 236], KOEL = [116, 100, 116];
 var tint = Object.create(null);
 function shade(hex, m) {
   var k = hex + '|' + m;
   var c = tint[k];
   if (c) return c;
   var n = parseInt(hex.slice(1), 16);
-  var r = Math.max(0, Math.min(255, Math.round((n >> 16 & 255) * m)));
-  var g = Math.max(0, Math.min(255, Math.round((n >> 8 & 255) * m)));
-  var b = Math.max(0, Math.min(255, Math.round((n & 255) * m)));
+  var r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+  var doel = m >= 1 ? WARM : KOEL;
+  var t = m >= 1 ? Math.min(1, (m - 1) * 1.25) : Math.min(1, (1 - m) * 1.55);
+  r = Math.max(0, Math.min(255, Math.round(r + (doel[0] - r) * t)));
+  g = Math.max(0, Math.min(255, Math.round(g + (doel[1] - g) * t)));
+  b = Math.max(0, Math.min(255, Math.round(b + (doel[2] - b) * t)));
   return (tint[k] = 'rgb(' + r + ',' + g + ',' + b + ')');
 }
 
@@ -130,8 +143,8 @@ function ogen(v, p, x, y, z1, z2, o) {
   if (p.oog === 1) { yy = y + h - 1; h = 1; }         /* blij: knijpoogjes */
   else if (p.oog === 2) { h = Math.max(1, h - 1); }   /* sip: half dicht */
   else if (p.oog === -1) { yy = y - 1; }              /* naar het bakje kijken */
-  verf(v, x, x + dik - 1, yy, yy + h - 1, z1, z1 + w - 1, INK);
-  verf(v, x, x + dik - 1, yy, yy + h - 1, z2 - w + 1, z2, INK);
+  verf(v, x, x + dik - 1, yy, yy + h - 1, z1, z1 + w - 1, OOG);
+  verf(v, x, x + dik - 1, yy, yy + h - 1, z2 - w + 1, z2, OOG);
   if (h > 1 && o.glans !== false) {
     verf(v, x, x + dik - 1, yy + h - 1, yy + h - 1, z1, z1, WIT);
     verf(v, x, x + dik - 1, yy + h - 1, yy + h - 1, z2, z2, WIT);
@@ -139,11 +152,19 @@ function ogen(v, p, x, y, z1, z2, o) {
 }
 /* mond: 1 = open (blij/happend), 2 = zachte omlaag-mondhoekjes (sip) */
 function mond(v, p, x, y, z1, z2, zacht) {
-  if (p.mond === 1) verf(v, x, x + 1, y, y, z1 + 1, z2 - 1, INK);
+  if (p.mond === 1) verf(v, x, x + 1, y, y, z1 + 1, z2 - 1, NEUS);
   else if (p.mond === 2) {
-    verf(v, x, x + 1, y, y, z1, z1, zacht || INK);
-    verf(v, x, x + 1, y, y, z2, z2, zacht || INK);
+    verf(v, x, x + 1, y, y, z1, z1, zacht || NEUS);
+    verf(v, x, x + 1, y, y, z2, z2, zacht || NEUS);
   }
+}
+
+/* ---------- gang: welke poot staat vooruit (p.stap 0/1/2) ----------
+   Eén klein getalletje per poot; de wereldmotor laat het tempo van de
+   pasjes meelopen met de snelheid, dus versnellen en afremmen zie je. */
+function duwen(stap) {
+  var s = stap === 1 ? 1 : stap === 2 ? -1 : 0;
+  return [s, -s, -s, s];        /* diagonaal: linksachter+rechtsvoor samen */
 }
 
 /* =====================================================================
@@ -159,11 +180,14 @@ function hond(p) {
 
   /* vier stevige pootjes met een licht voetje en een teenstreepje.
      Ze staan zo ver naar binnen dat het lijf de bovenkant netjes afdekt. */
-  var poot = [[5, 3], [5, 9], [13, 3], [13, 9]];
+  var poot = [[5, 3], [5, 9], [13, 3], [13, 9]], duw = duwen(p.stap), px, py, ph;
   for (i = 0; i < 4; i++) {
-    bx(v, poot[i][0], 0, poot[i][1], 4, 7, 4, C.d);
-    bx(v, poot[i][0], 0, poot[i][1], 5, 2, 4, C.l);
-    verf(v, poot[i][0], poot[i][0] + 4, 1, 1, poot[i][1] + 2, poot[i][1] + 2, C.d);
+    px = poot[i][0] + duw[i] * 2;                 /* stap naar voren / naar achter */
+    py = duw[i] > 0 ? 1 : 0;                      /* voorwaartse poot komt los */
+    ph = 7 - py;
+    bx(v, px, py, poot[i][1], 4, ph, 4, C.d);
+    bx(v, px, py, poot[i][1], 5, 2, 4, C.l);
+    verf(v, px, px + 4, py + 1, py + 1, poot[i][1] + 2, poot[i][1] + 2, C.d);
   }
 
   /* lijf: afgeronde doos met een plat rugje */
@@ -186,7 +210,7 @@ function hond(p) {
   /* kop, snuit, neusje */
   ell(v, 22 + hx, 17 + hy, 7.5, 4.4, 5.0, 5.6, C.b, { e: 3.2 });
   ell(v, 27 + hx, 15 + hy, 7.5, 2.4, 2.4, 3.4, C.l, { e: 2.8 });
-  verf(v, 28 + hx, 29 + hx, 16 + hy, 17 + hy, 7, 8, INK);
+  verf(v, 28 + hx, 29 + hx, 16 + hy, 17 + hy, 7, 8, NEUS);
 
   /* flaporen: hangen langs de kop naar buiten, omhoog = blij.
      Ze zitten hoog op de kop; anders bungelt het verre oor over het lijf. */
@@ -207,11 +231,14 @@ function poes(p) {
   var tz = p.staart === 'l' ? -2 : p.staart === 'r' ? 2 : 0;
 
   /* slanke pootjes met witte sokjes */
-  var poot = [[6, 4], [6, 9], [13, 4], [13, 9]];
+  var poot = [[6, 4], [6, 9], [13, 4], [13, 9]], duw = duwen(p.stap), px, py, ph;
   for (i = 0; i < 4; i++) {
-    bx(v, poot[i][0], 0, poot[i][1], 3, 8, 3, C.d);
-    bx(v, poot[i][0], 0, poot[i][1], 4, 3, 3, C.l);
-    verf(v, poot[i][0], poot[i][0] + 3, 2, 2, poot[i][1] + 1, poot[i][1] + 1, C.d);
+    px = poot[i][0] + duw[i] * 2;
+    py = duw[i] > 0 ? 1 : 0;
+    ph = 8 - py;
+    bx(v, px, py, poot[i][1], 3, ph, 3, C.d);
+    bx(v, px, py, poot[i][1], 4, 3, 3, C.l);
+    verf(v, px, px + 3, py + 2, py + 2, poot[i][1] + 1, poot[i][1] + 1, C.d);
   }
 
   /* lijf */
@@ -258,13 +285,17 @@ function konijn(p) {
   var C = PAL.konijn, v = [], hx = p.hx, hy = p.hy;
   var tz = p.staart === 'l' ? -1 : p.staart === 'r' ? 1 : 0;
 
-  /* lange achtervoeten + kleine voorpootjes */
-  bx(v, 5, 0, 3, 7, 3, 4, C.l); bx(v, 5, 0, 9, 7, 3, 4, C.l);
-  verf(v, 5, 11, 2, 2, 5, 5, C.d); verf(v, 5, 11, 2, 2, 11, 11, C.d);
-  ell(v, 9, 5, 4.8, 3.5, 3.7, 2.3, C.b, { e: 3.0, ymin: 2 });
-  ell(v, 9, 5, 10.2, 3.5, 3.7, 2.3, C.b, { e: 3.0, ymin: 2 });
-  bx(v, 14, 0, 4, 3, 7, 3, C.b); bx(v, 14, 0, 9, 3, 7, 3, C.b);
-  bx(v, 14, 0, 4, 4, 2, 3, C.l); bx(v, 14, 0, 9, 4, 2, 3, C.l);
+  /* lange achtervoeten + kleine voorpootjes.
+     Huppelen in plaats van lopen: stap 1 = zweven met de achtervoeten naar
+     voren getrokken, stap 2 = landen. Zo beweegt het konijn niet in de
+     maat van de hond. */
+  var hs = p.stap === 1 ? 2 : p.stap === 2 ? -1 : 0, vy = p.stap === 1 ? 2 : 0;
+  bx(v, 5 + hs, 0, 3, 7, 3, 4, C.l); bx(v, 5 + hs, 0, 9, 7, 3, 4, C.l);
+  verf(v, 5 + hs, 11 + hs, 2, 2, 5, 5, C.d); verf(v, 5 + hs, 11 + hs, 2, 2, 11, 11, C.d);
+  ell(v, 9 + hs, 5, 4.8, 3.5, 3.7, 2.3, C.b, { e: 3.0, ymin: 2 });
+  ell(v, 9 + hs, 5, 10.2, 3.5, 3.7, 2.3, C.b, { e: 3.0, ymin: 2 });
+  bx(v, 14, vy, 4, 3, 7 - vy, 3, C.b); bx(v, 14, vy, 9, 3, 7 - vy, 3, C.b);
+  bx(v, 14, vy, 4, 4, 2, 3, C.l); bx(v, 14, vy, 9, 4, 2, 3, C.l);
 
   /* rond lijf */
   ell(v, 11, 10, 7.5, 6.2, 5.0, 5.2, C.b, { e: 3.2, ymin: 5 });
@@ -306,9 +337,10 @@ function gans(p) {
   var hx = Math.round(p.hx * 2.5), hy = p.hy < 0 ? Math.round(p.hy * 2.2) : p.hy;
   var tz = p.staart === 'l' ? -1 : p.staart === 'r' ? 1 : 0;
 
-  /* oranje zwempoten */
-  bx(v, 8, 0, 3, 5, 1, 3, C.e); bx(v, 8, 0, 10, 5, 1, 3, C.e);
-  bx(v, 9, 1, 4, 2, 7, 2, C.e); bx(v, 9, 1, 10, 2, 7, 2, C.e);
+  /* oranje zwempoten - waggelen: het ene been voor, het andere achter */
+  var gs = p.stap === 1 ? 2 : p.stap === 2 ? -2 : 0;
+  bx(v, 8 + gs, 0, 3, 5, 1, 3, C.e); bx(v, 8 - gs, 0, 10, 5, 1, 3, C.e);
+  bx(v, 9 + gs, 1, 4, 2, 7, 2, C.e); bx(v, 9 - gs, 1, 10, 2, 7, 2, C.e);
 
   /* mollig lijf */
   ell(v, 10, 10.5, 7.5, 6.2, 4.6, 5.2, C.b, { e: 3.0, ymin: 5 });
@@ -335,6 +367,22 @@ function gans(p) {
 
 var SOORT = { hond: hond, poes: poes, konijn: konijn, gans: gans };
 
+/* ---------- zitten: het achterlijf zakt, de kop blijft omhoog ----------
+   Geen extra model per dier: we duwen de voxels van achter naar voren
+   steeds minder omlaag. Zo zakt de staartkant naar de grond en houdt de
+   snuit zijn hoogte - precies wat een dier doet dat gaat zitten. */
+function zitten(v) {
+  var i, x0 = 1e9, x1 = -1e9, t, zak;
+  for (i = 0; i < v.length; i++) { if (v[i][0] < x0) x0 = v[i][0]; if (v[i][0] > x1) x1 = v[i][0]; }
+  var sp = Math.max(1, x1 - x0);
+  for (i = 0; i < v.length; i++) {
+    t = (v[i][0] - x0) / sp;
+    zak = Math.round((1 - t) * (1 - t) * 5);
+    v[i][1] = Math.max(0, v[i][1] - zak);
+  }
+  return v;
+}
+
 /* ---------- houdingen (frame-poses, geen css-transforms) ---------- */
 var POSE = {
   rust:  { hx: 0, hy: 0,  oor: 'rust',    staart: 'mid',  mond: 0, oog: 0 },
@@ -345,34 +393,52 @@ var POSE = {
   blijB: { hx: 0, hy: 2,  oor: 'perk',    staart: 'r',    mond: 1, oog: 1 },
   /* sip = zacht verdrietig: kop iets omlaag naar het bakje, oren en staart hangen.
      Nooit huilen, nooit boos - het gezicht moet zichtbaar blijven. */
-  sip:   { hx: 0, hy: -1, oor: 'hang',    staart: 'laag', mond: 2, oog: 2 }
+  sip:   { hx: 0, hy: -1, oor: 'hang',    staart: 'laag', mond: 2, oog: 2 },
+  /* --- wereld-houdingen: zwaaien, rondkijken, lopen, zitten, snuffelen --- */
+  zwaai: { hx: 0, hy: 0,  oor: 'rust',    staart: 'l',    mond: 0, oog: 0 },
+  kijk:  { hx: -1, hy: 1, oor: 'perk',    staart: 'l',    mond: 0, oog: 0 },
+  loopA: { hx: 1, hy: 0,  oor: 'rust',    staart: 'l',    mond: 0, oog: 0, stap: 1 },
+  loopB: { hx: 1, hy: 0,  oor: 'rust',    staart: 'r',    mond: 0, oog: 0, stap: 2 },
+  zit:   { hx: 0, hy: 1,  oor: 'rust',    staart: 'laag', mond: 0, oog: 0, zit: 1 },
+  zitsip:{ hx: 0, hy: 0,  oor: 'hang',    staart: 'laag', mond: 2, oog: 2, zit: 1 },
+  snuif: { hx: 1, hy: -6, oor: 'vooruit', staart: 'mid',  mond: 0, oog: -1 }
 };
-var POSE_NAMEN = ['rust', 'tril', 'hap1', 'hap2', 'blijA', 'blijB', 'sip'];
+/* alleen deze houdingen bepalen hoe groot een dier-canvas moet zijn */
+var POSE_NAMEN = ['rust', 'tril', 'hap1', 'hap2', 'blijA', 'blijB', 'sip', 'snuif', 'loopA'];
 
-/* ---------- voerbakje: rond schaaltje op x 26..33, z 4..11 ---------- */
+/* ---------- voerbakje: rond schaaltje rond (KOM_CX, KOM_CZ) ----------
+   In het diorama staat het bakje op een houten matje in het gras; daar is
+   een klein schaaltje niet meer te zien. Met groot = 1 rolt hetzelfde
+   bakje ruim anderhalf keer zo groot uit de bak, met meer brokjes per
+   niveau, zodat je het slinken ook van een afstandje ziet. */
 var KOM_CX = 29.5, KOM_CZ = 7.5, KOM_R = 3.9, KOM_H = 4, KOM_VOOR = 38;
-function komVox(niveau) {
-  var v = [], cel = [], x, z, q, mid;
-  for (x = 26; x <= 33; x++) {
-    for (z = 4; z <= 11; z++) {
-      q = Math.pow(Math.abs((x - KOM_CX) / KOM_R), 2.5) + Math.pow(Math.abs((z - KOM_CZ) / KOM_R), 2.5);
+function komVox(niveau, groot) {
+  var v = [], cel = [], x, z, q, mid, i, j;
+  var R = groot ? 6.3 : KOM_R, HH = groot ? 6 : KOM_H, BOD = groot ? 3 : 2;
+  var grens = groot ? KOM_CX + KOM_CZ + R * 0.72 : KOM_VOOR;
+  var x0 = Math.floor(KOM_CX - R), x1 = Math.ceil(KOM_CX + R);
+  var z0 = Math.floor(KOM_CZ - R), z1 = Math.ceil(KOM_CZ + R);
+  for (x = x0; x <= x1; x++) {
+    for (z = z0; z <= z1; z++) {
+      q = Math.pow(Math.abs((x - KOM_CX) / R), 2.5) + Math.pow(Math.abs((z - KOM_CZ) / R), 2.5);
       if (q > 1) continue;
-      mid = q < 0.30;
+      mid = q < (groot ? 0.36 : 0.30);
       /* voorste wandje komt ná het dier op het canvas (dier hapt erin) */
-      var voor = !mid && (x + z) >= KOM_VOOR ? 1 : 0;
-      if (mid) { bx(v, x, 0, z, 1, 2, 1, KOM.schaal); cel.push([x, z, q]); }
+      var voor = !mid && (x + z) >= grens ? 1 : 0;
+      if (mid) { bx(v, x, 0, z, 1, BOD, 1, KOM.schaal); cel.push([x, z, q]); }
       else {
-        bx(v, x, 0, z, 1, KOM_H, 1, KOM.schaal);
-        verf(v, x, x, KOM_H - 1, KOM_H - 1, z, z, KOM.rand);
-        if (voor) for (var i = v.length - KOM_H; i < v.length; i++) v[i][4] = 1;
+        bx(v, x, 0, z, 1, HH, 1, KOM.schaal);
+        verf(v, x, x, HH - 1, HH - 1, z, z, KOM.rand);
+        if (voor) for (i = v.length - HH; i < v.length; i++) v[i][4] = 1;
       }
     }
   }
   /* brokken: van het midden naar buiten opvullen */
   cel.sort(function (a, b) { return a[2] - b[2]; });
-  var n = [0, 3, 6, 10, 15][niveau] || 0;
-  for (var j = 0; j < n && j < cel.length * 2; j++) {
-    var c = cel[j % cel.length], laag = j < cel.length ? 2 : 3;
+  var trap = groot ? [0, 10, 21, 34, 50] : [0, 3, 6, 10, 15];
+  var n = trap[niveau] || 0;
+  for (j = 0; j < n && j < cel.length * 2; j++) {
+    var c = cel[j % cel.length], laag = BOD + (j < cel.length ? 0 : 1);
     v.push([c[0], laag, c[1], j % 3 === 2 ? KOM.brok2 : KOM.brok]);
   }
   return v;
@@ -404,11 +470,19 @@ function bake(vox) {
 }
 
 var poseCache = Object.create(null), komCache = [];
+function bouw(kind, pose) {
+  var p = POSE[pose] || POSE.rust;
+  var v = (SOORT[kind] || hond)(p);
+  return p.zit ? zitten(v) : v;
+}
 function faces(kind, pose) {
   var k = kind + '/' + pose;
-  return poseCache[k] || (poseCache[k] = bake((SOORT[kind] || hond)(POSE[pose] || POSE.rust)));
+  return poseCache[k] || (poseCache[k] = bake(bouw(kind, pose)));
 }
-function komFaces(n) { return komCache[n] || (komCache[n] = bake(komVox(n))); }
+function komFaces(n, groot) {
+  var k = (groot ? 'g' : 'k') + n;
+  return komCache[k] || (komCache[k] = bake(komVox(n, groot)));
+}
 
 /* ---------- canvasmaat: het bereik van alles wat we ooit tekenen ---------- */
 var CW = 0, CH = 0, OX = 0, OY = 0, GEEN_KOM = 0, GEEN_KOM_Y = 0, klaar = false;
@@ -507,6 +581,31 @@ function omlijn(cv, ctx, w) {
   ctx.drawImage(h, 0, 0);
   ctx.globalCompositeOperation = 'source-over';
 }
+/* Zachte silhouetrand: elk buitenste puntje dat aan twee kanten niets naast
+   zich heeft (dus een scherpe trapjeshoek) wordt half doorzichtig gemaakt.
+   Dat haalt precies één pixel van de zaagtandjes af - de vorm blijft
+   voxel, maar de rand bijt niet meer. */
+function rondAf(cv) {
+  var w = cv.width, h = cv.height;
+  if (w < 4 || h < 4) return;
+  var ctx = cv.getContext('2d'), img;
+  try { img = ctx.getImageData(0, 0, w, h); } catch (e) { return; }
+  var d = img.data, a = new Uint8Array(w * h), i, x, y, leeg, hoek = [];
+  for (i = 0; i < w * h; i++) a[i] = d[i * 4 + 3];
+  for (y = 1; y < h - 1; y++) {
+    for (x = 1; x < w - 1; x++) {
+      i = y * w + x;
+      if (a[i] < 200) continue;
+      leeg = (a[i - 1] < 40 ? 1 : 0) + (a[i + 1] < 40 ? 1 : 0) +
+             (a[i - w] < 40 ? 1 : 0) + (a[i + w] < 40 ? 1 : 0);
+      if (leeg >= 2) hoek.push(i);
+    }
+  }
+  if (!hoek.length) return;
+  for (i = 0; i < hoek.length; i++) d[hoek[i] * 4 + 3] = 112;
+  ctx.putImageData(img, 0, 0);
+}
+
 function plaat(list, g, silhouet) {
   var box = [1e9, -1e9, 1e9, -1e9];
   /* het vlak moet groot genoeg zijn voor lijst én silhouet (contour) */
@@ -527,10 +626,11 @@ function plaat(list, g, silhouet) {
   } else if (silhouet !== false) {
     omlijn(cv, ctx, Math.max(1, Math.round(g / 2.6)));
   }
+  if (g >= 2) rondAf(cv);
   return { cv: cv, dx: box[0] * g - pad, dy: box[2] * g - pad };
 }
 
-var plaatCache = Object.create(null), plaatOrde = [], PLAAT_MAX = 48;
+var plaatCache = Object.create(null), plaatOrde = [], PLAAT_MAX = 110;
 function haalPlaat(k, maak) {
   var e = plaatCache[k];
   if (e) return e;
@@ -547,9 +647,9 @@ function dierPlaat(kind, pose, g) {
     return plaat(faces(kind, pose), g);
   });
 }
-function komPlaat(n, g, voor) {
-  return haalPlaat('k|' + n + '|' + g + '|' + voor, function () {
-    var all = komFaces(n), deel = [], i;
+function komPlaat(n, g, voor, groot) {
+  return haalPlaat('k|' + n + '|' + g + '|' + voor + '|' + (groot ? 1 : 0), function () {
+    var all = komFaces(n, groot), deel = [], i;
     for (i = 0; i < all.length; i++) if (!!all[i].voor === !!voor) deel.push(all[i]);
     return plaat(deel, g, voor ? false : all);
   });
@@ -590,7 +690,14 @@ var MOOD = { blij: 'idle', droopy: 'sad', bouncy: 'happy' };
 /* met prefers-reduced-motion tekenen we per stemming één rustig plaatje */
 var STIL = { idle: 'rust', sad: 'sip', happy: 'blijA', eat: 'hap2' };
 
+/* De wereld (world.js) meldt zich hier aan. Staat hij er, dan gaan voer-,
+   stemmings- en smulopdrachten naar de diorama-dieren; de losse kaart-
+   dieren (poort, vignet, adoptie) blijven gewoon door art.js getekend. */
+var wereld = null;
+function koppelWereld(w) { wereld = w; }
+
 function setMood(id, mood) {
+  if (wereld && wereld.heeft(id)) wereld.mood(id, MOOD[mood] || mood || 'idle');
   var st = stand(id);
   var m = MOOD[mood] || mood || 'idle';
   if (st.seq && m === 'happy') return;      /* eerst het bakje leegeten */
@@ -600,6 +707,7 @@ function setMood(id, mood) {
   if (rustig) { st.pose = STIL[m] || 'rust'; st.dy = 0; }
 }
 function setFood(id, aantal, per) {
+  if (wereld) wereld.setFood(id, niveau(aantal, per));
   var st = stand(id);
   if (st.seq) return;                        /* niet ingrijpen tijdens het eten */
   st.eten = niveau(aantal, per);
@@ -612,6 +720,7 @@ function niveau(aantal, per) {
 /* smakelijk eten: hap voor hap leeg, daarna blij */
 function feast(ids) {
   init();
+  if (wereld) wereld.feed(ids || []);
   (ids || []).forEach(function (id) {
     var st = reg[id];
     if (!st) return;
@@ -818,7 +927,22 @@ function poseer(id, naam, eten) {
   teken();
 }
 
+/* ---------- gereedschapskist voor world.js ----------
+   De wereld bouwt zijn eigen decor (boom, hok, hek, plukjes gras) met
+   dezelfde blokjes, hetzelfde licht en dezelfde bak-cache als de dieren.
+   Zo blijft er één tekenstijl en één plaatjes-geheugen. */
+var kit = {
+  S: S, HG: HG, KOM: KOM,
+  bx: bx, ell: ell, punt: punt, verf: verf, bake: bake,
+  plaat: plaat, cache: haalPlaat, canvas: maakCanvas,
+  dier: function (kind, pose, g) { init(); return dierPlaat(kind, pose, g); },
+  kom: function (n, g, voor) { init(); return komPlaat(n, g, voor, 1); },
+  komAnker: [KOM_CX, KOM_CZ],       /* midden van het voerbakje in voxels */
+  dierAnker: [13, 7.5]              /* midden van de vier pootjes */
+};
+
 return { animal: animal, mount: koppel, setMood: setMood, setFood: setFood,
          feast: feast, debug: debug, pose: poseer, PAL: PAL, stats: stats,
+         kit: kit, wereld: koppelWereld, niveau: niveau,
          size: function () { return [CW, CH]; } };
 })();

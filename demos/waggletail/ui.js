@@ -10,6 +10,9 @@ function esc(s) {
 
 function meervoud(n, een, veel) { return n === 1 ? n + ' ' + een : n + ' ' + veel; }
 
+/* 'de bezorger brengt de brokken' -> 'De bezorger brengt de brokken' */
+function hoofdletter(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+
 var _toastT = null;
 function toast(msg, kind) {
   var t = $('#toast');

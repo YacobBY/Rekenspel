@@ -31,6 +31,42 @@ b{font-weight:700}
 .pip.done{background:var(--mint);color:#2c5c48;border-style:solid}
 .foot{text-align:center;color:var(--ink2);font-size:.8rem;margin-top:22px}
 
+/* =====================================================================
+   HET DIORAMA - één tuin met de dieren erin.
+   Staand: tuin boven, rekenwerk eronder. Liggend: naast elkaar.
+===================================================================== */
+.stagewrap{display:flex;flex-direction:column;gap:12px;align-items:stretch}
+.scene{min-width:0}
+.world{
+  position:relative;width:100%;aspect-ratio:4/3;max-height:46vh;
+  border-radius:26px;overflow:hidden;
+  background:linear-gradient(#B7DC9C,#A2CB8A);
+  border:5px solid #FFFDF8;
+  box-shadow:0 5px 0 rgba(74,59,51,.13), 0 14px 28px rgba(74,59,51,.12), inset 0 0 0 2px #EFE4CF;
+}
+.world.uit{display:none}
+.world canvas{display:block;width:100%;height:100%}
+.world .tags{position:absolute;inset:0;pointer-events:none}
+/* naamkaartje boven het dier: klein, leesbaar, altijd in het beeld */
+.wtag{
+  position:absolute;left:0;top:0;white-space:nowrap;
+  background:#FFFDF6E8;color:#5A4A3E;border:2px solid #fff;
+  border-radius:999px;padding:1px 9px;font-size:.72rem;font-weight:700;
+  box-shadow:0 2px 0 rgba(74,59,51,.14);letter-spacing:.2px;
+}
+/* liggend: de tuin blijft links staan (sticky) en het rekenwerk rechts.
+   Het kader krijgt de verhouding van het decor mee, zodat er geen gras
+   staat te wachten onder aan het beeld. */
+@media (orientation:landscape) and (min-width:900px){
+  #app{max-width:1180px}
+  .stagewrap{flex-direction:row;align-items:flex-start;gap:14px}
+  .world{flex:0 0 46%;max-width:46%;aspect-ratio:3/2;max-height:74vh;position:sticky;top:8px}
+  .scene{flex:1 1 auto}
+}
+@media (orientation:landscape) and (max-height:560px){
+  .world{max-height:56vh}
+}
+
 /* ---------- cards / buttons ---------- */
 .card{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:16px;margin-bottom:14px}
 h1{font-size:1.5rem;margin:.1em 0 .3em}
@@ -63,7 +99,9 @@ p{margin:.35em 0}
   width:100%;height:100%;display:block;
 }
 /* groter waar er ruimte is (past net in een kaartje van 160-166px) */
-.pet .animal,.gate .animal,.vig .animal,.scene-warm .animal{--vox-scale:1.75}
+/* de dieren wonen in het diorama; alleen de poort en de adoptie hebben
+   nog een los dier op een kaartje staan */
+.gate .animal,.scene-warm .animal{--vox-scale:1.75}
 .wiggle{animation:wiggle .4s ease-in-out 2}
 @keyframes wiggle{0%,100%{transform:rotate(0)}25%{transform:rotate(-6deg)}75%{transform:rotate(6deg)}}
 @keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
@@ -84,7 +122,8 @@ p{margin:.35em 0}
 .bowls{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:6px}
 .pet{background:var(--card);border-radius:var(--r);box-shadow:var(--shadow);padding:10px;width:166px;
   display:flex;flex-direction:column;align-items:center;position:relative}
-.pet .nm{font-weight:700;font-size:1rem}
+.pet .nm{font-weight:700;font-size:1.05rem}
+.pet.mis{box-shadow:var(--shadow),0 0 0 3px #F3C0B9}
 .bowl{margin-top:6px;width:142px;min-height:72px;border-radius:0 0 60px 60px/0 0 40px 40px;
   background:linear-gradient(#F7E3F0,#EAC9E0);border:4px solid #fff;box-shadow:inset 0 3px 8px #0001;
   display:flex;flex-wrap:wrap;align-content:flex-start;justify-content:center;gap:1px;padding:6px 4px;font-size:19px}
@@ -115,6 +154,24 @@ p{margin:.35em 0}
 .placed{position:absolute;top:24px;height:58px;border-radius:14px;display:flex;flex-direction:column;
   align-items:center;justify-content:center;font-size:.82rem;font-weight:700;box-shadow:0 3px 0 #0002;
   border:3px solid #fff;overflow:hidden;touch-action:none;cursor:grab;text-align:center;line-height:1.1}
+/* vaste afspraak: hij hoort erbij, maar je kunt hem niet oppakken */
+.placed.vast{cursor:default;touch-action:auto;border:3px dashed #B98F62;
+  background-image:repeating-linear-gradient(135deg,#fff5 0 6px,#fff0 6px 12px)}
+.placed.mis,.block.mis{outline:4px solid #E4776F;outline-offset:2px;
+  animation:wiggle .4s ease-in-out 2}
+
+/* ---------- regels van vandaag: schoolschrift-kaartjes ---------- */
+.regels{margin:10px 0 6px}
+.regels h2{font-size:1.05rem;margin:0 0 6px;color:#6E5C4E}
+.regelrij{display:flex;gap:10px;flex-wrap:wrap}
+.regel{display:flex;gap:9px;align-items:flex-start;background:#FFF8E7;
+  border:2px dashed #E9C79A;border-radius:14px;padding:9px 12px;
+  flex:1 1 240px;min-width:220px;font-size:.95rem;line-height:1.3}
+.regel .ico{font-size:1.5rem;line-height:1.1;flex:none}
+.regel.mis{background:#FFEDE9;border-color:#E4776F;border-style:solid}
+.uitleg{background:#FFF1EC;border:3px solid #F0BBB2;border-radius:14px;
+  padding:10px 14px;margin:8px 0 4px;font-size:1rem;line-height:1.35}
+
 .blocks{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:12px}
 .block{border-radius:16px;border:3px solid #fff;box-shadow:var(--shadow);padding:10px 12px;min-height:var(--tap);
   display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.9rem;font-weight:700;
@@ -221,13 +278,13 @@ body.sleept .placed{pointer-events:none}
   /* twee kaartjes naast elkaar op een telefoon: kaartrand krap, dier blijft groot */
   .card{padding:12px}
   .pet{width:160px;padding:8px} .bowl{width:136px} .bowl.jar{width:144px} .jarwrap{width:160px}
-  .gate .animal,.vig .animal,.scene-warm .animal{--vox-scale:1.15}
+  .gate .animal,.scene-warm .animal{--vox-scale:1.15}
   .qbox,.opdracht,.tray,.soft-note{padding-left:46px;--lijn:28px}
   .qbox::before,.opdracht::before{left:10px}
   .logo{font-size:1.05rem}
 }
 @media (orientation:landscape) and (max-height:560px){
-  .pet .animal,.gate .animal,.vig .animal,.scene-warm .animal{--vox-scale:1.15}
+  .gate .animal,.scene-warm .animal{--vox-scale:1.15}
   .pet{width:150px} .bowl{width:126px}
   .cell{height:72px} .placed{height:48px}
   .card{padding:12px} .vig{min-height:180px}
