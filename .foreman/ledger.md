@@ -61,3 +61,11 @@
 - 2026-08-24 V11 attempt 1 LOST (API-sessielimiet, geen verdict; read-only dus niets te reconcilieren). V11b herstart.
 - 2026-08-24 V11b attempt 2 verbroken (connection lost) na solvability-bevestiging; hervat via resume (zelfde context, geen dubbel werk).
 - 2026-08-24 V11 verdict PASS: 1 scene-canvas, bevroren functies byte-identiek, labels volgen eigen dier (max 4px; "Wolkje bij hok" was dwalende Boef correct gelabeld), planaudit 360/360 oplosbaar, vast blok onwrikbaar, overtreding zacht benoemd. T11 ACCEPTED.
+
+## Run: waggletail-v5 geluid & opslag (2026-08-24)
+- Baseline: 7da43f4 (v4 geaccepteerd), werkboom schoon.
+- T12 WebAudio-geluid + localStorage-opslag -> WORKHORSE, write set demos/waggletail/** + .foreman/scratch/waggletail/ : DISPATCHED (scope: geen asset-bestanden, zachte kinder-friendly tonen, startsheet Verder spelen/Nieuw spel; ochtend/middag/avond-wiskunde bevroren)
+- 2026-08-24 T12 attempt 1 DONE: snd.js IIFE (tik/plop/terug/zacht/ja/tover/dag/brief/hoera/dempt/schakel, geen botste knoppen bij dempen, demp-status in kws-geluid); state.js bewaarSpel/wisSpel/leesSpel (sleutel kws-spel-v5, only-save-na-keuze via startKeuze-vlag, kapotte save keert stil terug); game.js uitsluitend additieve hooks (go/plek/terug/fout/succes + beginscherm); index.html sndBtn-bage + scriptvolgorde.
+- Sweep5 (blind op wiskunde-invarianten): planAudit 360/360 oplosbaar, verzwakt9=0, koekjesSom consistent, vergelijk drievoudig correct, nieuweBrief deterministisch -> SWEEP ALLES OK. Bevroren functies byte-identiek vs HEAD (per-file diff, exit 0).
+- Drive5 (Playwright, 22 checks): eerste bezoek zonder zeuren, opbergen/teruglezen (dag/snoep/dieren), geluidsknop + behoud na reload, nieuw spel, alle fases + adoptie-herstel zonder exception, kapotte save speurt door, 0 console-fouten -> DRIVE ALLES OK.
+- LEAD-check: image-invoer niet beschikbaar op dit model; text-LEAD via DOM-dump: startsheet "Wel terug in de Kwispelsteeg! 👋" met dagen/dieren/snoepjes en twee heldere knoppen, badges Dag/snoep/brieven/geluid netjes in rij, PNG-afmetingen gezond. T12 ACCEPTED. Run v5 closed.

@@ -8,6 +8,9 @@ function go(phase) {
   state.phase = phase;
   render();
   window.scrollTo(0, 0);
+  if (phase === 'adoptie' || phase === 'klaar') Snd.hoera();
+  else if (phase === 'morning') Snd.dag();
+  bewaarSpel();
 }
 
 /* in welke fasen speelt het diorama mee (de avond en de adoptie hebben
@@ -129,21 +132,23 @@ function paintMorning() {
 
   $('#mArea').innerHTML = h;
   wireMorning();
+  bewaarSpel();
 }
 
 function verplaats(id, aantal) {
   var m = state.morning;
   var k = Math.min(aantal, m.bag);
-  if (k <= 0) { toast('De zak is leeg!', 'kind'); return; }
+  if (k <= 0) { Snd.zacht(); toast('De zak is leeg!', 'kind'); return; }
   m.bag -= k;
   if (id === '__pot') m.pot += k; else m.bowls[id] += k;
   paintMorning();
+  Snd.plop(m.hand);
 }
 
 function terug(id) {
   var m = state.morning;
-  if (id === '__pot') { if (m.pot > 0) { m.pot--; m.bag++; } }
-  else if (m.bowls[id] > 0) { m.bowls[id]--; m.bag++; }
+  if (id === '__pot') { if (m.pot > 0) { m.pot--; m.bag++; Snd.terug(); } }
+  else if (m.bowls[id] > 0) { m.bowls[id]--; m.bag++; Snd.terug(); }
   paintMorning();
 }
 
@@ -184,13 +189,13 @@ function resetBakjes() {
 function checkMorning() {
   var m = state.morning;
   if (m.bag > 0) {
-    m.misses++; m.feedback = true; paintMorning();
+    m.misses++; m.feedback = true; paintMorning(); Snd.zacht();
     toast('Er ' + (m.bag === 1 ? 'zit nog 1 koekje' : 'zitten nog ' + m.bag + ' koekjes') + ' in de zak.', 'kind');
     return;
   }
   var goed = state.dieren.every(function (a) { return m.bowls[a.id] === m.per; }) && m.pot === m.rest;
   if (!goed) {
-    m.misses++; m.feedback = true; paintMorning();
+    m.misses++; m.feedback = true; paintMorning(); Snd.zacht();
     var tekort = state.dieren.filter(function (a) { return m.bowls[a.id] < m.per; });
     if (tekort.length) toast(tekort[0].name + ' kijkt een beetje sip... kijk eens bij de bakjes. 💛', 'kind');
     else toast('Bijna! Ieder dier moet evenveel krijgen.', 'kind');
@@ -203,6 +208,7 @@ function checkMorning() {
   /* voxel-hook: eerst smullen (bakje leeg, kruimels), daarna blij */
   Art.feast(state.dieren.map(function (a) { return a.id; }));
   toast('Eerlijk verdeeld! Iedereen smult. 🎉', 'happy');
+  Snd.tover();
 }
 
 function vetVoorbeeld() {
@@ -222,6 +228,7 @@ function vetVoorbeeld() {
        (m.rest ? ' … en dan nog ' + m.rest + ' over.' : '.') + '</p>' +
        '<div class="row center"><button class="btn go big" id="vetOk">Ik snap het – ik doe het zelf! ▸</button></div>';
   openSheet(h);
+  Snd.brief();
   $('#vetOk').onclick = function () {
     closeSheet();
     state.morning.vetGezien = true;
@@ -304,6 +311,7 @@ function paintMiddag() {
 
   $('#dArea').innerHTML = h;
   wireMiddag();
+  bewaarSpel();
 }
 
 /* de vriendelijke controle: benoem precies wat er nog niet klopt */
@@ -317,7 +325,7 @@ function checkMiddag() {
     d.fout = vrij.length === 1
       ? 'Er ligt nog <b>1 blokje</b> naast de strook: ' + esc(vrij[0].act) + ' van ' + esc(vrij[0].name) + '.'
       : 'Er liggen nog <b>' + vrij.length + ' blokjes</b> naast de strook.';
-    paintMiddag();
+    paintMiddag(); Snd.zacht();
     toast('Alles moet een plekje op de strook krijgen. 💛', 'kind');
     return;
   }
@@ -330,10 +338,11 @@ function checkMiddag() {
     d.fout = 'Kijk: ' + esc(bezit(A.name)) + ' ' + esc(String(A.act).toLowerCase()) +
       ' staat <b>vóór</b> ' + esc(actLid(B)) + ' van ' + esc(B.name) + '. ' +
       'Zet ' + esc(actLid(A)) + ' pas vanaf <b>' + vanaf + '</b> — dán klopt het.';
-    paintMiddag();
+    paintMiddag(); Snd.zacht();
     toast(bezit(A.name) + ' ' + String(A.act).toLowerCase() + ' moet ná ' + actLid(B) + '. 💛', 'kind');
     return;
   }
+  Snd.ja();
   speelMiddag();
 }
 
@@ -356,9 +365,9 @@ function plaatsBlok(id, i) {
 
 function probeer(id, i, node) {
   var r = plaatsBlok(id, i);
-  if (r === 'vast') { shake(node); toast('Dat blokje staat vast — dat mag niet verschuiven. 🔒', 'kind'); return; }
-  if (r === 'overlap') { shake(node); toast('Dat past niet tegelijk! 🙃', 'kind'); return; }
-  if (r === 'laat') { shake(node); toast('Dan zijn jullie pas ná 16:00 klaar. Probeer wat vroeger.', 'kind'); return; }
+  if (r === 'vast') { shake(node); Snd.zacht(); toast('Dat blokje staat vast — dat mag niet verschuiven. 🔒', 'kind'); return; }
+  if (r === 'overlap') { shake(node); Snd.zacht(); toast('Dat past niet tegelijk! 🙃', 'kind'); return; }
+  if (r === 'laat') { shake(node); Snd.zacht(); toast('Dan zijn jullie pas ná 16:00 klaar. Probeer wat vroeger.', 'kind'); return; }
   state.middag.gekozen = null;
   state.middag.markeer = [];
   paintMiddag();
@@ -519,6 +528,7 @@ function paintAvond() {
   h += '</div>';
   $('#aArea').innerHTML = h;
   wireAvond();
+  bewaarSpel();
 }
 
 function sprongen(v) {
@@ -551,10 +561,10 @@ function antwoord1() {
   var v = state.avond;
   if (!v.invoer) { toast('Tik eerst een getal in. 🙂', 'kind'); return; }
   if (+v.invoer === v.nieuw) {
-    v.stap = 2; v.invoer = ''; paintAvond();
+    v.stap = 2; v.invoer = ''; paintAvond(); Snd.ja();
     toast('Precies! 🎉', 'happy');
   } else {
-    v.fouten1++; v.invoer = ''; paintAvond();
+    v.fouten1++; v.invoer = ''; paintAvond(); Snd.zacht();
     toast('Bijna! Tel de scheppen samen — ze staan eronder. 💛', 'kind');
   }
 }
@@ -569,8 +579,8 @@ function vergelijk(v) {
 
 function antwoord2(keus) {
   var v = state.avond;
-  if (keus === vergelijk(v)) { v.stap = 3; paintAvond(); toast('Goed gerekend! 🎉', 'happy'); }
-  else { v.fouten2++; paintAvond(); toast('Tel eerst met sprongen mee, dan zie je het. 💛', 'kind'); }
+  if (keus === vergelijk(v)) { v.stap = 3; paintAvond(); Snd.ja(); toast('Goed gerekend! 🎉', 'happy'); }
+  else { v.fouten2++; paintAvond(); Snd.zacht(); toast('Tel eerst met sprongen mee, dan zie je het. 💛', 'kind'); }
 }
 
 function keuze(c, g) {
@@ -578,6 +588,7 @@ function keuze(c, g) {
   v.keuze = c;
   if (c === 'ja') {
     state.dieren.push(g);
+    Snd.tover();
     v.weg = true;
     v.keuzeTitel = esc(g.name) + ' mag blijven! 🏡';
     v.keuzeTekst = g.name + ' krijgt vanavond een mandje bij de kachel. Morgenochtend staat er ook een bakje voor ' +
@@ -646,6 +657,7 @@ Scenes.adoptie = function (host) {
   if ($('#zwaai')) $('#zwaai').onclick = function () {
     state.adoptie.brief = nieuweBrief(a);
     state.adoptie.stap = 2;
+    Snd.brief();
     render();
   };
   if ($('#pin')) $('#pin').onclick = function () {
@@ -730,10 +742,52 @@ function brievenMuur() {
   }
   h += '<div class="row center" style="margin-top:12px"><button class="btn go" id="dicht">Sluiten</button></div>';
   openSheet(h);
+  Snd.brief();
   $('#dicht').onclick = closeSheet;
 }
 
 /* ===================================================================== */
+
+/* elk begin: vraag of het oude spel verder mag of dat het opnieuw begint */
+function beginScherm() {
+  var s = leesSpel();
+  newGame();
+  render();
+  if (!s) { startKeuze = true; bewaarSpel(); return; }
+  var dagen = meervoud(s.day || 1, 'dag', 'dagen');
+  var dieren = meervoud(s.dieren.length, 'dier', 'dieren');
+  var snoep = meervoud(s.snoeppot || 0, 'snoepje', 'snoepjes');
+  openSheet('<h2>Wel terug in de Kwispelsteeg! 👋</h2>' +
+    '<p class="hint" style="text-align:center;margin:0 0 14px">Je was bij <b>' + dagen + '</b> — met ' +
+    dieren + ' en ' + snoep + ' in de snoeppot.</p>' +
+    '<div class="row center" style="gap:10px">' +
+    '<button class="btn go big" id="verderBtn">Verder spelen ▸</button>' +
+    '<button class="btn big" id="nieuwBtn">Nieuw spel</button></div>');
+  $('#verderBtn').onclick = function () {
+    closeSheet();
+    state = s;
+    startKeuze = true;
+    go(state.phase || 'morning');
+  };
+  $('#nieuwBtn').onclick = function () {
+    closeSheet();
+    wisSpel();
+    newGame();
+    startKeuze = true;
+    render();
+    bewaarSpel();
+  };
+}
+
 newGame();
 $('#lettersBtn').addEventListener('click', brievenMuur);
-render();
+$('#sndBtn').textContent = Snd.dempt() ? '🔇' : '🔊';
+$('#sndBtn').addEventListener('click', function () {
+  Snd.schakel();
+  $('#sndBtn').textContent = Snd.dempt() ? '🔇' : '🔊';
+});
+/* elke knop krijgt een zacht tikgeluid — via delegatie, zo hoeft geen knop apart */
+document.addEventListener('click', function (e) {
+  if (e.target.closest && e.target.closest('.btn')) Snd.tik();
+});
+beginScherm();

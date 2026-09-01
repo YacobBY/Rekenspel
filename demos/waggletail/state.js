@@ -401,3 +401,29 @@ function klaarVoorAdoptie() {
   kand.sort(function (x, y) { return y.care - x.care; });
   return kand[0] || null;
 }
+
+/* =====================================================================
+   OPBERGEN - het spel blijft bewaard tot de volgende keer (probeer
+   rustig: "Nieuw spel" wist alles). Alles in try/catch: in een
+   incognitovenster kan opslaan niet, dan speelt het gewoon door.
+===================================================================== */
+var OPSLAG_SLEUTEL = 'kws-spel-v5';
+var startKeuze = false; /* pas bewaren nadat het kind heeft gekozen */
+
+function bewaarSpel() {
+  if (!startKeuze) return;
+  try { localStorage.setItem(OPSLAG_SLEUTEL, JSON.stringify({ v: 5, s: state })); } catch (e) {}
+}
+
+function wisSpel() {
+  try { localStorage.removeItem(OPSLAG_SLEUTEL); } catch (e) {}
+}
+
+function leesSpel() {
+  try {
+    var r = localStorage.getItem(OPSLAG_SLEUTEL);
+    if (!r) return null;
+    var d = JSON.parse(r);
+    return (d && d.v === 5 && d.s && d.s.dieren && d.s.dieren.length) ? d.s : null;
+  } catch (e) { return null; }
+}

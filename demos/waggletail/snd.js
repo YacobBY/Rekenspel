@@ -1,0 +1,97 @@
+/* =====================================================================
+   SND - HET GELUIDSMAATJE VAN DE KWISPELSTEEG
+   Alle geluiden maken we zelf met WebAudio: er zijn geen bestandjes nodig.
+   Hier bestaan geen boze geluiden, alleen zachte. Geluid uit? Tik rechts
+   bovenop de speakerknop, dat onthouden we voor de volgende keer.
+===================================================================== */
+var Snd = (function () {
+  var SLEUTEL = 'kws-geluid';
+  var ctx = null, meester = null, demp = false;
+
+  try { demp = localStorage.getItem(SLEUTEL) === '0'; } catch (e) { demp = false; }
+
+  function band() {
+    if (demp) return null;
+    if (!ctx) {
+      var A = window.AudioContext || window.webkitAudioContext;
+      if (!A) return null;
+      try {
+        ctx = new A();
+        meester = ctx.createGain();
+        meester.gain.value = 0.16;           /* altijd zacht, nooit hard */
+        meester.connect(ctx.destination);
+      } catch (e) { ctx = null; return null; }
+    }
+    if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (e) {} }
+    return ctx;
+  }
+
+  /* één zachte toon, glijdt van f naar to (optioneel), met zachte start */
+  function noot(f, to, duur, vorm, top, wacht) {
+    var c = band(); if (!c) return;
+    var t = c.currentTime + (wacht || 0);
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = vorm || 'sine';
+    o.frequency.setValueAtTime(f, t);
+    if (to && to !== f) o.frequency.exponentialRampToValueAtTime(Math.max(40, to), t + duur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(top || 0.4, t + Math.min(0.035, duur * 0.3));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + duur);
+    o.connect(g); g.connect(meester);
+    o.start(t); o.stop(t + duur + 0.03);
+  }
+
+  /* ritselend papier: korte ruis door een filter */
+  function papier(duur, freq, top, wacht) {
+    var c = band(); if (!c) return;
+    var t = c.currentTime + (wacht || 0);
+    var n = Math.max(16, Math.floor(c.sampleRate * duur));
+    var buf = c.createBuffer(1, n, c.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    var b = c.createBufferSource(); b.buffer = buf;
+    var f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 0.7;
+    var g = c.createGain(); g.gain.value = top;
+    b.connect(f); f.connect(g); g.connect(meester);
+    b.start(t);
+  }
+
+  var A = {
+    /* zacht tikje op een knop */
+    tik: function () { noot(720, 620, 0.07, 'sine', 0.30); },
+    /* koekje valt in een bakje: een vollere hand klinkt iets hoger */
+    plop: function (hand) { noot(480 + 40 * (hand || 0), 190, 0.13, 'sine', 0.5); },
+    /* een koekje rolt terug de zak in */
+    terug: function () { noot(300, 460, 0.09, 'sine', 0.28); },
+    /* dat is het nog niet - zacht meedenken, nooit een nee-geluid */
+    zacht: function () { noot(430, 0, 0.15, 'sine', 0.30); noot(340, 0, 0.22, 'sine', 0.26, 0.13); },
+    /* dat klopt! twee vrolijke toontjes */
+    ja: function () { noot(660, 0, 0.10, 'triangle', 0.42); noot(880, 0, 0.16, 'triangle', 0.42, 0.09); },
+    /* eerlijk verdeeld of een vriend die jou uitkiest: kleine magie */
+    tover: function () {
+      var n = [523, 659, 784, 1047], i;
+      for (i = 0; i < n.length; i++) noot(n[i], 0, i === 3 ? 0.5 : 0.11, 'triangle', 0.34, i * 0.08);
+    },
+    /* goedemorgen, een nieuwe dag in de steeg */
+    dag: function () { noot(587, 0, 0.12, 'sine', 0.26); noot(784, 0, 0.22, 'sine', 0.24, 0.11); },
+    /* een brief door de brievenbus */
+    brief: function () { papier(0.16, 1100, 0.5); papier(0.10, 700, 0.4, 0.10); noot(660, 0, 0.12, 'sine', 0.22, 0.16); },
+    /* hoera! adoptiedag en het grote einde */
+    hoera: function () {
+      var n = [523, 659, 784, 1047], i;
+      for (i = 0; i < n.length; i++) noot(n[i], 0, 0.14, 'triangle', 0.40, i * 0.13);
+      noot(1047, 0, 0.55, 'triangle', 0.34, 0.52);
+      noot(1319, 0, 0.55, 'sine', 0.22, 0.52);
+    },
+    /* staat het geluid uit? */
+    dempt: function () { return demp; },
+    /* speakerknop: aan of uit, onthouden voor de volgende keer */
+    schakel: function () {
+      demp = !demp;
+      try { localStorage.setItem(SLEUTEL, demp ? '0' : '1'); } catch (e) {}
+      if (!demp) A.tik();
+      return demp;
+    }
+  };
+  return A;
+})();
