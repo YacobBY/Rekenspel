@@ -91,6 +91,7 @@ function newGame() {
     wachtlijst: GASTEN_POOL.map(function (a) { return Object.assign({}, a); }),
     famIdx: 0,
     meubels: [],
+    meubelNr: 0,        /* nummer van het laatst neergezette meubel */
     taken: [],
     brieven: [],
     scoops: 20,
@@ -561,7 +562,7 @@ function bewaarSpel() {
         dag: state.dag, ronde: state.ronde, munten: state.munten, sterren: state.sterren,
         band: state.band, kunnen: state.kunnen, signaal: state.signaal,
         gasten: state.gasten, wachtlijst: state.wachtlijst, famIdx: state.famIdx,
-        meubels: state.meubels, taken: state.taken, brieven: state.brieven,
+        meubels: state.meubels, meubelNr: state.meubelNr, taken: state.taken, brieven: state.brieven,
         scoops: state.scoops, levering: state.levering, snoeppot: state.snoeppot,
         kar: state.kar, spel: state.spel, gezien: state.gezien, kamerNu: state.kamerNu,
         uitcheck: state.uitcheck,
@@ -580,7 +581,7 @@ function wisSpel() {
 
 function vulAan(s) {
   var leeg = { dag: 1, ronde: 'ochtend', munten: 0, sterren: 0, band: 3, kunnen: 3,
-               signaal: [], gasten: [], wachtlijst: [], famIdx: 0, meubels: [], taken: [],
+               signaal: [], gasten: [], wachtlijst: [], famIdx: 0, meubels: [], meubelNr: 0, taken: [],
                brieven: [], scoops: 20, levering: 4, snoeppot: 0, checkin: null,
                rekening: null, uitcheck: [], kar: null, spel: {}, gezien: {},
                kamerNu: 'receptie', dagBericht: null, nieuweGast: null, v: 6 };

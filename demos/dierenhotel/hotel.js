@@ -257,8 +257,12 @@ function hotspots() {
      het spel klaar is) zodat ze geen enkele spelknop kunnen afdekken. */
   var spelHier = false;
   if (window.Games && Games.open()) {
-    var sd = Games.get(Games.open());
-    spelHier = !!(sd && sd.kamer === nu);
+    var spelId = Games.open(), sd = Games.get(spelId);
+    /* de kamer waar het spel echt speelt (bedden valt soms terug op kamer 2),
+       plus: heeft het spel hier knoppen staan? dan wijken de wolkjes ook */
+    var speelKamer = Games.actieveKamer ? Games.actieveKamer() : null;
+    spelHier = (speelKamer === nu) || !!(sd && sd.kamer === nu) ||
+      Hits.lijst().some(function (q) { return q.door === spelId && q.kamer === nu; });
   }
   var wensNr = 0;
   alleDieren().forEach(function (g) {

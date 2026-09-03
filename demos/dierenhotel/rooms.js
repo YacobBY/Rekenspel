@@ -551,8 +551,24 @@ function naarRaster(r, x, z) {
   return beste || bezetste;
 }
 
+/* Elk meubel krijgt een eigen nummer. Die teller MOET een herlaad overleven:
+   anders begint hij weer bij 1 en krijgt een nieuw badkuipje dezelfde naam
+   als een bewaard badkuipje (m1_badkuip), en dan haalt "oppakken" er twee
+   tegelijk weg. state.js bewaart hem daarom in de opslag; bij een oude
+   opslag leiden we hem af uit de hoogste naam die er al is. */
 var meubelNr = 0;
 function nieuwId(type) { meubelNr++; return 'm' + meubelNr + '_' + type; }
+function nrStand() { return meubelNr; }
+function zetNr(n) { meubelNr = Math.max(meubelNr, (n | 0)); return meubelNr; }
+/* uit een lijst bewaarde meubels de teller terugrekenen */
+function nrUitIds(lijst) {
+  var hoog = 0;
+  (lijst || []).forEach(function (m) {
+    var mm = /^m(\d+)_/.exec(m && m.id ? m.id : '');
+    if (mm && +mm[1] > hoog) hoog = +mm[1];
+  });
+  return zetNr(hoog);
+}
 
 /* Zet een meubel neer. Geeft {id, kamer, type, x, z, rot, soort} terug,
    of null als het niet past (buiten de kamer / vakje al bezet). */
@@ -700,6 +716,7 @@ return {
   plekken: function (id) { return (BY_ID[id] || {}).plekkenLijst || [[0, 0]]; },
   model: model, vloerKleur: vloerKleur, kader: kader,
   meubelZet: meubelZet, voegBed: voegBed, meubelWeg: meubelWeg,
+  nrStand: nrStand, zetNr: zetNr, nrUitIds: nrUitIds,
   meubels: meubels, herstel: herstel, MEUBEL: MEUBEL,
   vrijVak: function (kamerId, x, z) { var r = BY_ID[kamerId]; return r ? naarRaster(r, x, z) : null; },
   MUUR: MUUR, HOUT: HOUT, HOUT_D: HOUT_D, DEURKL: DEURKL

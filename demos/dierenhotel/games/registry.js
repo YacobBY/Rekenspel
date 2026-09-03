@@ -21,7 +21,8 @@
 var Games = (function () {
 'use strict';
 
-var reg = [], byId = Object.create(null), actief = null, ctxCache = Object.create(null);
+var reg = [], byId = Object.create(null), actief = null, actieveKamer = null,
+    ctxCache = Object.create(null);
 
 function register(def) {
   if (!def || !def.id) return null;
@@ -96,6 +97,7 @@ function zetMeubel(kamerId, type, plek) {
   var st = State.ruw();
   st.meubels = st.meubels || [];
   st.meubels.push(m);
+  st.meubelNr = Rooms.nrStand();        /* teller mee in de opslag */
   naInrichten();
   return m;
 }
@@ -108,12 +110,22 @@ function naInrichten() {
 /* bij het laden: de bewaarde inrichting terugzetten (zelfde ids) */
 function herstelInrichting() {
   Rooms.herstel();
-  var lijst = (State.ruw().meubels || []).slice(), goed = [];
+  var st = State.ruw();
+  var lijst = (st.meubels || []).slice(), goed = [];
+  /* de meubelteller weer op stand brengen: uit de opslag, en anders uit de
+     hoogste naam die al bestaat (oude opslag) */
+  Rooms.zetNr(st.meubelNr || 0);
+  Rooms.nrUitIds(lijst);
   lijst.forEach(function (m) {
     var q = Rooms.meubelZet(m.kamer, m.type, m.x, m.z, m.rot, m.id);
-    if (q) goed.push(q);
+    if (!q) return;
+    /* eigen velden van het spel (bijvoorbeeld spa: 1 van de tobbe) blijven
+       staan: het bewaarde blaadje gaat over het herbouwde heen */
+    for (var k in m) if (q[k] === undefined) q[k] = m[k];
+    goed.push(q);
   });
-  State.ruw().meubels = goed;
+  st.meubels = goed;
+  st.meubelNr = Rooms.nrStand();
   World.herbouw();
   return goed;
 }
@@ -250,6 +262,7 @@ function start(id) {
   if (!def) return false;
   if (actief && actief !== id) stop();
   actief = id;
+  actieveKamer = def.kamer || null;
   /* het prikbord dicht: de taakkaartjes staan anders over de knoppen van
      het spel heen (de bel en de avondronde doen dat al net zo) */
   if (window.Hotel && Hotel.bordDicht) Hotel.bordDicht();
@@ -259,10 +272,14 @@ function start(id) {
   if (window.Hotel) Hotel.render();
   hersteek();
   if (def.kamer && World.actief() !== def.kamer) World.naar(def.kamer);
-  try { if (def.start) def.start(ctxVoor(def)); }
-  catch (e) {
+  try {
+    if (def.start) def.start(ctxVoor(def));
+    /* een spel mag onderweg een andere kamer kiezen (bedden valt bijvoorbeeld
+       terug op kamer 2): dáár staan zijn knoppen, dus dáár wijkt het hotel */
+    if (actief === id) actieveKamer = World.actief();
+  } catch (e) {
     actief = null;
-    toast('Dat spelletje wil even niet. Probeer iets anders. 💛', 'kind');
+    toast('💛 Probeer iets anders', 'kind');
     return false;
   }
   return true;
@@ -272,6 +289,7 @@ function stop() {
   if (!actief) return;
   var def = byId[actief];
   actief = null;
+  actieveKamer = null;
   try { if (def && def.stop) def.stop(); } catch (e) {}
   if (def) Hits.wisEigenaar(def.id);
   Hits.voorrang(null);
@@ -290,5 +308,6 @@ function debug() {
 return { register: register, lijst: lijst, get: get, start: start, stop: stop,
          open: open, hersteek: hersteek, plek: plek, debug: debug,
          ontgrendeld: ontgrendeld, herstelInrichting: herstelInrichting,
+         actieveKamer: function () { return actieveKamer; },
          zetMeubel: zetMeubel };
 })();
