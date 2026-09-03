@@ -276,7 +276,12 @@ function start(id) {
     if (def.start) def.start(ctxVoor(def));
     /* een spel mag onderweg een andere kamer kiezen (bedden valt bijvoorbeeld
        terug op kamer 2): dáár staan zijn knoppen, dus dáár wijkt het hotel */
-    if (actief === id) actieveKamer = World.actief();
+    if (actief === id) {
+      var was = actieveKamer;
+      actieveKamer = World.actief();
+      /* verhuisd? dan nu pas de wens-wolkjes in de echte spelkamer parkeren */
+      if (actieveKamer !== was && window.Hotel) Hotel.render();
+    }
   } catch (e) {
     actief = null;
     toast('💛 Probeer iets anders', 'kind');
