@@ -253,6 +253,14 @@ function ctxVoor(def) {
     },
     sluit: function () { stop(); }
   };
+  /* Uitbreidingen uit andere modules (world.js, rooms.js, art.js, econ.js)
+     haken hier hun eigen ctx-functies aan, zodat registry.js niet mee hoeft
+     te veranderen als een module iets nieuws aanbiedt. Een module doet bij
+     het laden: (window.CTX_UITBREIDINGEN = window.CTX_UITBREIDINGEN || [])
+     .push(function (ctx, eigen) { ctx.wereld.iets = ...; });
+     De functie draait één keer per spel (ctx wordt gecachet); `eigen` is de
+     naam van het spel, voor eigenaarschap van hotspots/wolkjes. */
+  (window.CTX_UITBREIDINGEN || []).forEach(function (f) { f(ctx, eigen); });
   ctxCache[def.id] = ctx;
   return ctx;
 }

@@ -105,3 +105,38 @@
 - 2026-09-03 alles.sh on F4 tree 20/20 OK (1911 pass, 0 fail). Committed eb0db0b (layout fixes). V-LEES2 targeted re-verification dispatched to the blind verifier (resume) at eb0db0b.
 - 2026-09-03 Host killed again (exit 137) during V-LEES2; verifier stopped without report. Tree: HEAD eb0db0b, only the ledger dirty, no orphaned browsers. Verifier resumed.
 - 2026-09-03 V-LEES2 (targeted re-verification @eb0db0b) NOT COMPLETED: three resumes ended in API 529 Overloaded (claude-opus-5); no verdict. Per fanout rules no fourth retry on unchanged input and no downgrade. Evidence available instead: workers' own suites cover the exact findings (voerkar overlap matrix n=1-6 × 3 viewports × 3 states 263/0 x2 + xs 251/0; w1 320x640 coverage/pad assertions 76/77; bedden plural scanner 64/0), alles.sh 20/20 (1911/0), LEAD screenshot check of w3-port-6-hulp.png and w1-smal-02 OK. Status: ACCEPTED_PROVISIONALLY (deterministic + lead-reviewed, blind re-verification pending). Run closed at eb0db0b; blind re-check to be scheduled when the API recovers.
+
+## Run: dierenhotel-slaap-zwembad-kamers (2026-09-03)
+
+**Task (verbatim, user):** "Mooi. Wanneer de dieren op hun bed gaan slapen dan slapen ze ernaast. Breidt het spel ook uit met meer minigames inclusief zwembad. Veel kamers voelen iets te klein maak ze 50% groter behalve de gang die ziet er wel goed uit."
+
+**Baseline:** HEAD 25a4b52 (ledger commit on top of eb0db0b), `git status` clean.
+
+**Sub-tasks:**
+| id | task | status |
+|---|---|---|
+| S1 | Guests sleep next to the bed instead of on it — locate and fix | PENDING |
+| K1 | Rooms 50% larger except the gang (corridor) | PENDING |
+| G1 | New minigames incl. zwembad (selection to be interviewed) | PENDING |
+
+**Attempts (append-only):**
+- Scouts dispatched for S1 (sleep placement) and K1 (room geometry) before any implementation.
+
+**Decisions (interview 2026-09-03):**
+- Zwembad core (user's own design, verbatim intent): variable pool length (e.g. 43 m); the animal swims 1 m per stroke; the child picks from 4 options how far to swim, max 30 m per pick; too short → the animal simply continues and the child picks the remainder; too far → the animal bumps the wall and "heeft even pijn" (brief, gentle: no red X, no lasting state).
+- Extra games this round: Wekkerdienst (klok), Hinkelpad (getallenlijn), Wasmandtoren (turven/staafdiagram), Souvenirkraam (geld/wisselgeld). Scope: zwembad + all four in this run.
+- "50% groter" interpreted as 1.5× on both floor axes for receptie, kamer1, kamer2, keuken (76→114, 80→120). Gang unchanged per user; tuin (130×130) unchanged because it is already the largest room — to be stated in the report.
+- Zwembad lives in a new room `zwembad`; wasmandtoren in a new room `wasserij`; wekkerdienst clock on the gang wall; hinkelpad and souvenirkraam in the tuin (disjoint zones reserved by the prep ticket).
+
+**Routing:**
+- K1 → fanout-worker-max (camera/scale redesign across world.js + ~30 rebased constants + save migration: cross-module, subtle).
+- S1 → fanout-worker @ xhigh in a git worktree (write set overlaps K1's files but not regions; merged after K1 lands).
+- API scout → fanout-scout.
+- Wave 1 dispatched: K1 → fanout-worker-max (main tree), S1 → fanout-worker xhigh (worktree), API-checklist scout. S1 status → IN_PROGRESS, K1 → IN_PROGRESS.
+- API scout DONE: no model-registration hook, no move-completion callback, no path animation, wishes need 4–5 shared edits, new rooms need RUIMTES + reciprocal door + KAART cell. Lead wrote the game specs to .fanout/specs/dierenhotel-golf3-games.md (G1–G5) and the P1 requirements list therein. P1 waits for K1 (shared write set).
+- S1 DONE (worktree /home/pc/Documents/xnw/rkn/.claude/worktrees/agent-ad89f5cae75060fb7, branch worktree-agent-ad89f5cae75060fb7, uncommitted). Reproduced: reduced-motion path parked the sleeper 12 voxels beside the bed; lift 1 voxel low; no lying pose; rotated-bed sta-plek on the bed; morgen() teleported sleepers to a wander tile. Fix +112/−29 in world.js/rooms.js/hotel.js/bedden.js/art.js; slaap.js 96/0 (was 62/34), w1/loop/bedden suites green. Lead checked s1-houdingen.png and s1-port-normaal-kaal.png: lying pose with closed eyes on the mattress, 💤 voxels. Reviewer dispatched on the worktree diff; merge deferred until K1 lands.
+- S1 review: FIX_FIRST — BLOCKING: reduced-motion World.sync/stilzetten('rust') leaves a sleeper upright at lift −14 (world.js:983); SHOULD-FIX: 💤 voxels read as dust and drift over the neighbouring bed; dead branch in bedden.js:628-635; NITs: gans eye never closes, konijn ears, slaapDoel nulled before inBed succeeds, sta-plek room clamp. Reviewer confirmed 3-way merge with K1's dirty main is clean and slaap.js 96/0 on the merged tree. S1-F1 fix batch sent to the S1 worker (worktree).
+- S1-F1 DONE: stilzetten() keeps sleepers in bed (inZijnBed), readable voxel z-z-Z above the head, dead bedden.js branch removed, gans eye/konijn ears, slaapDoel nulled only after inBed succeeds, pillow at the head end. slaap.js 124/0 (base 69/55), bedden 64/0 (against worktree), w1 76/0 + 77/0; loop.js not runnable on v6 worktree (scratch copy expects K1's v7 key). Lead checked s1-zzz-beide.png. Committed on the worktree branch (to be merged after K1). S1 status → DONE (pending merge + blind verification with K1).
+- K1 DONE_WITH_CONCERNS: per-room scale (world.js maatVan; canvas density max(dpr, g/q) with CSS downscale), rooms ×1.5 with Rooms.plek/hoogte fractions, all constants rebased, save v7 + naarV7 migration, hits.js display:none measuring bug fixed. alles.sh 20/21 suites, 1867 pass / 4 fail; the 4 sleutels-land failures are pre-existing at HEAD (k1-sleutels-land-HEAD.txt). Concerns: bedden room now holds ~19 beds (MAX_CAP 6 unchanged), phones downscale the canvas (softer voxels), landscape floor −8 %. Lead checked k1-receptie-420x860.png: room fills frame width. Committed as 710003e; S1 branch merged → b0f14c0 (auto-merge clean, node --check OK). Next: reviewer on 710003e, P1 in a worktree off b0f14c0, deterministic slaap.js + smoke on the merge.
+- 2026-09-03 late: user instruction (verbatim): "abort the Opus agents use Fable5.1 for the harder tasks and Opus Max agents for simpler tasks. try to use more agents and breaking up the work more." K1 reviewer and P1 worker stopped (P1 worktree had no edits; removed). New routing for the rest of the run: hard/analytical tickets → subagent_type claude + model fable; simpler tickets → fanout-worker-max; finer split with worktree isolation per ticket. Lead added a ctx extension hook (window.CTX_UITBREIDINGEN) to games/registry.js so P1 sub-tickets never share registry.js.
+- P1 split: P1a rooms (Fable), P1b model hook + runtime decor (Fable), P1c movement with completion + zwem/spring poses (Fable), P1d wishes 🏊 🎁 (Opus max), P1e accessories (Opus max), P1f wiring/sounds/stubs/docs (Opus max), X1 sleutels landscape fix (Opus max), K1 review (Fable). Each in its own worktree off the checkpoint commit; API docs per ticket in .fanout/specs/api-<id>.md, consolidated later.
