@@ -528,15 +528,24 @@ function bezet(r, x, z, marge) {
     if (Math.abs(r.deurPunten[i].ix - x) + Math.abs(r.deurPunten[i].iz - z) < 12) return true;
   return false;
 }
-/* naar het dichtstbijzijnde VRIJE vakje van het vloerraster toe schuiven */
+/* Naar het dichtstbijzijnde vakje van het vloerraster toe schuiven dat NU
+   ook echt leeg is. Het raster zelf is al vrij van de vaste inrichting;
+   deze extra controle kijkt naar wat er ná die berekening is bijgezet
+   (een bijgeplaatst bed, een tijdelijk bakje van de voerkar). Is alles
+   bezet, dan geven we het dichtstbijzijnde vakje terug en mag de beller
+   zelf beslissen. */
 function naarRaster(r, x, z) {
-  var beste = null, best = 1e9, i, v;
+  var beste = null, best = 1e9, bezetste = null, bezetBest = 1e9, i, v, af;
   for (i = 0; i < r.vrij.length; i++) {
     v = r.vrij[i];
-    var af = Math.abs(v.x - x) + Math.abs(v.z - z);
+    af = Math.abs(v.x - x) + Math.abs(v.z - z);
+    if (bezet(r, v.x, v.z)) {
+      if (af < bezetBest) { bezetBest = af; bezetste = v; }
+      continue;
+    }
     if (af < best) { best = af; beste = v; }
   }
-  return beste;
+  return beste || bezetste;
 }
 
 var meubelNr = 0;

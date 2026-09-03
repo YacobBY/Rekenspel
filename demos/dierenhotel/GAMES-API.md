@@ -93,8 +93,12 @@ slot (`bed1`, `bed2`, `bak`, `tobbe`) of de sleutel van een los voorwerp (`kar`,
 | `setBak(kamerId, slotId, 0..4)` / `bakStand(...)` | bakje rechtstreeks vullen / uitlezen |
 | `feest(ids)` | lopen → eten → blij spelen (de complete smulanimatie) |
 | `solo(id, act)` | vignet: dit dier gaat op een vrije plek zijn ding doen |
-| `ding(sleutel)` / `dingZet(sleutel, {kamer,x,z,y})` | los voorwerp opvragen / verzetten (de voerkar) |
+| `ding(sleutel)` / `dingZet(sleutel, {kamer,x,z,y})` | los voorwerp opvragen / verzetten (de voerkar). Geef je alleen `kamer` mee, dan krijgt het voorwerp vanzelf een nette plek op de vloer van die ruimte; een plek buiten de kamer wordt naar binnen gehaald. |
 | `vuil()` | zeg dat het beeld opnieuw getekend moet worden |
+| `mik(obj[, kamerId])` | waar hangt dit voorwerp/dier? → `{kamer,x,z,y,volg}` |
+| `schaal()` | `{g, dpr, k, pxPerVoxelX, pxPerVoxelY, pxPerHoogte}` — hoeveel css-px is één voxel |
+| `behoefteKlaar(gastId[, wens])` | de wens van een gast vervullen zoals het hotel dat doet |
+| `getalTag(obj, n[, o])` | **een cijfer ÓP het voorwerp** (bakje, haakje, toonbank); `n = null` haalt het weg; `o.prio` (standaard 4) bepaalt wie er blijft staan als een kamer vol raakt |
 | `voegBed(kamerId, {x,z,rot})` | **een bed erbij** → de plek, of `null` als het niet past |
 | `plaatsMeubel(kamerId, type, x, z, rot)` | meubel neerzetten → `{id,kamer,type,x,z,rot,soort}` of `null` |
 | `verwijderMeubel(id)` | meubel weer weghalen |
@@ -149,6 +153,8 @@ ctx.hotspots.maak({
 ctx.hotspots.weg('tobbe_kraan');
 ctx.hotspots.wisAlles();                      /* alles van jou weg */
 ctx.hotspots.pak('bak_kamer1_bak', function () { ... });  /* knop van het hotel lenen */
+ctx.hotspots.bron('zak', { icoon: '🍪', aantal: 12, hand: 2,  /* sleepbron mét teller */
+  sleep: { dropSel: '[data-drop="vak"]', onDrop: function (t) { ... } } });
 ctx.hotspots.laat();                          /* weer teruggeven */
 ```
 * Maximaal **±16 knoppen per kamer**; daarboven verdwijnen de knoppen met de
@@ -205,6 +211,10 @@ automatisch mee wordt bewaard en na "Verder spelen" weer terug is.
 | `getallenlijn(van, tot)` | getallenlijn met roze stapjes |
 | `voorbeeld({titel, intro, regels, slot, telmee, onOk})` | buurvrouw Els doet het één keer voor |
 | `hulpNa2s(fn)` | **alleen voor memoriseer-items**: na 2 s hulp aanbieden; geeft een afzeg-functie terug |
+| `wolk(obj, o)` / `wolkWeg(id)` | **spreekwolkje aan een voorwerp of dier** (zie §6) |
+| `somkaart(obj, som, o)` | **sommenkaartje met verankerd cijferpad** (zie §6) |
+| `bron(obj, o)` | sleepbron met teller (ook via `ctx.hotspots.bron`) |
+| `spreek(tekst)` | voorlezen met de stem van het apparaat; alleen ná een tik |
 | `chip`, `woord`, `hoofd`, `esc`, `toast`, `sheet`, `sluit`, `nu` | kleine dingen |
 
 Het paneel gebruikt de bestaande schoolschrift-stijl: zet je som in
@@ -258,6 +268,10 @@ gesorteerd op `x + z`. De knoppenlaag `#worldHits` krijgt **exact dezelfde
 volgorde** in zijn `z-index`. Daardoor pakt een tik altijd het voorwerp dat je
 vooraan ziet staan, ook als twee dingen in isometrie op precies dezelfde pixel
 belanden (HOTEL.md, open beslissing 5).
+
+Tijdens het camera-schuiven (300 ms van kamer naar kamer) staan de knoppen
+alvast stil op hun eindplek. Een kind dat halverwege de beweging tikt, raakt
+dus gewoon het goede voorwerp — er gaat nooit een tik verloren.
 
 Bovendien schuift de laag knoppen die elkaar zouden **afdekken** uit elkaar:
 van voor naar achter, in stappen van een hele knop naar boven (net als de
@@ -323,7 +337,148 @@ De voerkar is de referentie-implementatie en gebruikt alles hierboven:
 
 ---
 
-## 6. Testen
+## 6. Rekenen ín de wereld (HOTEL.md §9) — VERPLICHT voor nieuwe games
+
+Uit de speeltest van het fundament: rekenpanelen naast het diorama voelen als
+"een website naast het spel", en er staat te veel tekst. Daarom:
+
+* **Geen rekenblad meer naast de wereld.** Sommen, aantallen en keuzes hangen
+  aan een voorwerp of dier. `ctx.ui.paneel` blijft alleen voor het startblad en
+  een overzicht als het meubelboek — niet voor sommen.
+* **Eén korte regel per stap** (richtlijn ≤ 6 woorden), verder pictogrammen en
+  getallen. Feedback is pictogram + getal ("nog 2 🍪"), nooit een tekstlap.
+* **Slepen gebeurt in de wereld**: koekjes uit de zak naar de bakjes, munten uit
+  de buidel naar de toonbank, sleutels naar de haakjes.
+* **Het cijferpad is het enige 2D-ding** en hangt klein aan het voorwerp.
+
+Je hoeft nooit een eigenaar (`door`) mee te geven: alles wat je via `ctx.ui`,
+`ctx.hotspots` of `ctx.wereld` in de wereld zet staat automatisch op naam van
+jóuw spel, en `stop()` ruimt het allemaal weer op — wolkjes, sommenkaartjes,
+cijfers op voorwerpen en sleepbronnen.
+
+```js
+/* spreekwolkje aan een dier of voorwerp */
+var id = ctx.ui.wolk('boef', { icoon: '🍪', getal: 2, tekst: 'nog twee',
+                               hoog: 52,          /* voxels boven het object */
+                               tik: function () { ... } });   /* zonder tik: voorlezen */
+ctx.ui.wolkWeg(id);
+
+/* sommenkaartje met verankerd cijferpad */
+var kaart = ctx.ui.somkaart('kassa', '3 × €2 =', {
+  open: true,            /* pad meteen open */
+  max: 2,                /* hoeveel cijfers */
+  pad: false,            /* of juist géén pad: alleen een regel */
+  onOk: function (n, k) { if (n === 6) k.zet(n).klaar(); else k.hulp('2 … 4 … 6'); }
+});
+kaart.zet('6');  kaart.hulp('2 … 4 … 6');  kaart.klaar();  kaart.weg();
+
+/* een cijfer ÓP een voorwerp, en weer weg */
+ctx.wereld.getalTag('bak', 4);
+ctx.wereld.getalTag('bak', null);
+
+/* een sleepbron met teller (zak, buidel, kist).
+   Eén tik levert precies ÉÉN keer: geef je geen sleep.onTap mee, dan komt de
+   tik bij `tik` terecht; geef je er wel een, dan gebruikt hij die. */
+var zak = ctx.hotspots.bron('zak', { icoon: '🍪', aantal: 12, hand: 2,
+  tik: function (h) { ... },
+  sleep: { dropSel: '[data-drop="vak"]', onDrop: function (t) { ... } } });
+zak.zet(10, 5);       /* nieuw aantal, nieuwe handgreep */   zak.weg();
+
+/* voorlezen: alleen als het kind zelf tikt */
+ctx.ui.spreek('Hoeveel samen?');
+```
+
+Wat het fundament zelf al zo doet (kijk hier af):
+| flow | in de wereld |
+|---|---|
+| check-in | wolkje boven de gast ("Hoeveel samen?") + sommenkaart op de balie met pad; vraag 2 met drie keuzeknoppen ⬇️ ⚖️ ⬆️ |
+| voerkar | de zak is een `bron`, de vakjes zijn **echte bakjes** op de keukenvloer met het aantal als cijfer, fout = wolkje "+2 🍪", Els legt spookcijfers neer |
+| rekening | sommenkaart aan de kassa, munten uit de buidel naar de toonbank, bedrag als cijfer op de toonbank, spookmunten na de 3e poging |
+| prikbord | maximaal 3 taakkaartjes bij het bord, pictogram + ≤ 6 woorden |
+
+### Nog een paar handigheidjes
+
+```js
+/* hoe groot is een voxel op dit scherm? (voor een eigen rij of raster)
+     css-x  ~  pxPerVoxelX * (x - z)
+     css-y  ~  pxPerVoxelY * (x + z - 2y)                                  */
+var s = ctx.wereld.schaal();     // {g, dpr, k, pxPerVoxelX, pxPerVoxelY, pxPerHoogte}
+var stap = Math.ceil(56 / s.pxPerVoxelX);   // ~56 px tussen twee knoppen
+
+/* een wens van een gast vervullen (eten -> gegeten, bad/spelen -> blij) */
+ctx.wereld.behoefteKlaar(gast.id);            /* huidige wens */
+ctx.wereld.behoefteKlaar(gast.id, 'bad');     /* of een specifieke */
+
+/* een cijfer dat beslist moet blijven staan als de kamer vol knoppen zit */
+ctx.wereld.getalTag('bak', 4, { prio: 12 });
+
+/* alleen de somregel vervangen, kaart en pad blijven staan */
+kaart.regel('5 + 5 =');
+```
+
+### Een taakje op het prikbord
+Een geregistreerd spel mag zeggen wanneer het op het prikbord hoort:
+
+```js
+Games.register({
+  id: 'sleutels', ...,
+  taak: {
+    icoon: '🔑',
+    tekst: 'Hang de sleutels op',            /* of function (state) { return ...; } */
+    wanneer: function (state) { return state.gasten.length >= 2; },
+    id: 'sleutels',      /* optioneel: eigen naam voor het kaartje */
+    prio: 5              /* lager = eerder; wensen van dieren staan op 0 */
+  }
+});
+```
+Zeg je niets, dan gebruikt het hotel een standaard uit `SPEL_TAAK` in
+`hotel.js` (voor de vier bestaande spellen staat die er al). `ctx.taakKlaar()`
+zet het vinkje: dat werkt op de naam die je meegeeft **en** op de id van je
+spel, dus `ctx.taakKlaar('bad')` en `ctx.taakKlaar()` vinken allebei het
+juiste kaartje af. Een afgevinkt kaartje blijft de rest van de dag met een
+vinkje staan; morgen begint het bord leeg. Er staan er nooit meer dan drie, en
+de wensen van de dieren gaan voor.
+
+Zodra je spel start doet het hotel het prikbord automatisch dicht, zodat de
+taakkaartjes niet over jouw knoppen heen staan.
+
+Twee dingen om op te letten:
+* Zet je wolkjes en kaartjes niet allemaal op hetzelfde voorwerp: de laag schuift
+  ze dan uit elkaar (dat mag, maar het leest rustiger als je ze zelf spreidt).
+* Een `somkaart` en zijn pad staan **vast**: ze wijken niet uit voor andere
+  knoppen, andere knoppen wijken voor hén. Gebruik er dus hooguit één tegelijk.
+* Het pad komt automatisch ónder de kamer terecht (het kader is daar hoger dan
+  de kamer zelf), dus het dekt de vloer niet af. Zet er zelf geen `padHoog` op
+  tenzij je het echt ergens anders wil.
+* Een `getalTag` is een cijfer, geen knop: niet aan te tikken, niet te
+  focussen. Wil je dat er iets gebeurt bij een tik, gebruik dan een hotspot,
+  een `wolk` of een `bron`.
+* Eén ladder voor hulp, overal hetzelfde: 1e poging samen tellen, 2e poging nog
+  eens, en pas bij de **derde** poging spookvormen (zoals de winkel van
+  Zilverhoef).
+* Een `wolk` of `bron` aan een **dier** loopt met het dier mee, ook naar een
+  andere kamer: hij is alleen zichtbaar in de ruimte waar het dier op dat
+  moment is. Je hoeft er zelf niets voor te doen.
+
+## 7. Nog niet af (bewust uitgesteld)
+
+Dit bestaat nog niet; bouw het niet stiekem in een gedeeld bestand, maar vraag
+erom als je het nodig hebt:
+
+* **Geen algemene `Econ.betaal(prijs, onKlaar)`.** Er is alleen
+  `Econ.rekening(...)` voor het uitchecken; het meubelboek stelt zijn eigen
+  betaalmoment samen uit `Econ.buidel/splits/munt` plus `ui.somkaart` en een
+  `bron`. Een gedeelde betaalflow komt pas als een tweede spel hem nodig heeft.
+* **Geen halveer/verdubbel-generator in `sommen`.** Er is `deel`, `geld`,
+  `klok` en `tafel`; verdubbelen/halveren/splitsen rekent een spel voorlopig
+  zelf uit (binnen de band-plafonds van HOTEL.md 3).
+* **Eén kamer past ongeveer drie rijen bedden.** Een array van 7 × 6 (band 5)
+  past niet in één kamer: gebruik twee kamers of wacht op een groter kamertype.
+* **Geen sierlijke meubeltypen.** `plaatsMeubel` kent bed, bakje, mandje,
+  speelmand, plant en badkuip; vlaggetjes, stickers en kleurtjes bestaan nog
+  niet.
+
+## 8. Testen
 
 ```
 node --check games/jouwspel.js
@@ -331,5 +486,5 @@ node --check games/jouwspel.js
 en spelen vanaf `file://.../demos/dierenhotel/index.html`. De speeltests van het
 fundament staan in `.fanout/scratch/dierenhotel/` (`loop.js` = hele speelronde,
 `regels.js` = curriculumregels en tikgrootte, `hotspots.js` = geen knop dekt een
-andere af (dpr 1 én 3), `plugin.js` = deze API, `perf.js` = 60 fps met 12 dieren).
+andere af, ook de wolkjes en kaartjes niet (dpr 1 én 3), `plugin.js` = deze API, `perf.js` = 60 fps met 12 dieren).
 Kopieer die aanpak: laden → spelen → geen console-fouten → herladen → verder.

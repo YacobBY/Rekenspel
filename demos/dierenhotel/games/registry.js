@@ -118,6 +118,16 @@ function herstelInrichting() {
   return goed;
 }
 
+/* het ui-luikje: dezelfde functies, maar met eigenaar erop gestempeld */
+function uiVoor(eigen) {
+  var f = Object.create(Ui);
+  f.wolk = function (obj, o) { o = o || {}; o.door = eigen; return Ui.wolk(obj, o); };
+  f.somkaart = function (obj, som, o) { o = o || {}; o.door = eigen; return Ui.somkaart(obj, som, o); };
+  f.bron = function (obj, o) { o = o || {}; o.door = eigen; return Ui.bron(obj, o); };
+  f.eigenaar = eigen;
+  return f;
+}
+
 function ctxVoor(def) {
   if (ctxCache[def.id]) return ctxCache[def.id];
   var eigen = def.id;
@@ -151,6 +161,20 @@ function ctxVoor(def) {
       ding: function (sleutel) { return World.dingPlek(sleutel); },
       dingZet: function (sleutel, o) { var d = World.dingZet(sleutel, o); hersteek(); return d; },
       vuil: function () { World.vuil(); },
+      /* waar hangt dit voorwerp / dier in de wereld? */
+      mik: function (obj, kamerId) { return World.mik(obj, kamerId); },
+      /* hoeveel css-pixels is één voxel nu? (voor eigen rijtjes en rasters)
+         css-x ~ pxPerVoxelX * (x - z), css-y ~ pxPerVoxelY * (x + z - 2y) */
+      schaal: function () { return World.schaal(); },
+      /* een wens van een gast vervullen zoals het hotel dat zelf doet */
+      behoefteKlaar: function (gastId, behoefte) {
+        return window.Hotel ? Hotel.wensAf(gastId, behoefte) : false;
+      },
+      /* een cijfer ÓP een voorwerp (n = null haalt het weg) */
+      getalTag: function (obj, n, o) {
+        o = o || {}; o.door = eigen;
+        return World.getalTag(obj, n, o);
+      },
 
       /* ---------- inrichten: bedden en meubels bijplaatsen ----------
          Dit loopt via rooms.js, wordt bewaard in de opslag (v6) en staat
@@ -176,6 +200,11 @@ function ctxVoor(def) {
       maak: function (o) { o.door = eigen; return Hits.maak(o); },
       weg: function (id) { Hits.weg(id); },
       wisAlles: function () { Hits.wisEigenaar(eigen); },
+      /* een sleepbron in de wereld: zak, buidel, kist - met teller erop */
+      bron: function (obj, o) {
+        o = o || {}; o.door = eigen;
+        return Ui.bron(obj, o);
+      },
       /* leen een knop van het hotel zolang dit spel bezig is */
       pak: function (id, fn) { Hits.pak(id, eigen, fn); },
       laat: function () { Hits.laat(eigen); },
@@ -188,8 +217,13 @@ function ctxVoor(def) {
     /* je eigen laatje in de opslag (wordt bewaard in kws-hotel-v6) */
     data: function () { return State.spelData(def.id); },
 
-    /* ---------- het scherm ---------- */
-    ui: Ui,
+    /* ---------- het scherm ----------
+       Een eigen luikje op Ui: alles wat een knopje, wolkje of kaartje in de
+       wereld zet krijgt automatisch de naam van DIT spel als eigenaar. Zo
+       ruimt stop() ook de wolkjes en sommenkaartjes weer op, zonder dat een
+       spel ergens 'door' hoeft mee te geven. De rest van Ui gaat gewoon door
+       (paneel, telMee, voorbeeld, spreek, ...). */
+    ui: uiVoor(def.id),
     econ: Econ,
     snd: Snd,
 
@@ -197,7 +231,12 @@ function ctxVoor(def) {
     taakKlaar: function (naam, o) {
       o = o || {};
       Econ.sterren(o.sterren || 1, def.id);
-      if (window.Hotel) Hotel.taakAf(naam || def.id);
+      if (window.Hotel) {
+        /* op de naam die het spel doorgeeft ÉN op de naam van het spel zelf:
+           zo vinkt het altijd het juiste kaartje af */
+        Hotel.taakAf(naam || def.id);
+        if (naam && naam !== def.id) Hotel.taakAf(def.id);
+      }
       State.bewaar();
     },
     sluit: function () { stop(); }
@@ -211,6 +250,9 @@ function start(id) {
   if (!def) return false;
   if (actief && actief !== id) stop();
   actief = id;
+  /* het prikbord dicht: de taakkaartjes staan anders over de knoppen van
+     het spel heen (de bel en de avondronde doen dat al net zo) */
+  if (window.Hotel && Hotel.bordDicht) Hotel.bordDicht();
   hersteek();
   if (def.kamer && World.actief() !== def.kamer) World.naar(def.kamer);
   try { if (def.start) def.start(ctxVoor(def)); }

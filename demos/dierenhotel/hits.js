@@ -92,10 +92,12 @@ function bouwEl(s) {
   var h = zorgHost();
   if (!h) return;
   if (!s.el) {
-    s.el = document.createElement('button');
-    s.el.type = 'button';
+    /* meestal een knop; het cijferpad is een doosje mét knopjes erin, en een
+       knop in een knop mag niet van de browser */
+    s.el = document.createElement(s.tagnaam || 'button');
+    if (!s.tagnaam) s.el.type = 'button';
     s.el.setAttribute('data-hot', s.id);
-    s.el.addEventListener('click', function (ev) {
+    if (s.kind !== 'tag') s.el.addEventListener('click', function (ev) {
       ev.preventDefault();
       var q = reg[s.id];
       if (!q) return;
@@ -105,19 +107,29 @@ function bouwEl(s) {
     });
     h.appendChild(s.el);
   }
-  var kl = 'hot' + (s.kind === 'drop' ? ' hotdrop' : '') + (s.klas ? ' ' + s.klas : '');
+  var kl = 'hot' + (s.kind === 'drop' ? ' hotdrop' : '') +
+    (s.kind === 'tag' ? ' hottag' : '') + (s.klas ? ' ' + s.klas : '');
   if (s.el.className !== kl) s.el.className = kl;
   if (s.drop) s.el.setAttribute('data-drop', s.drop); else s.el.removeAttribute('data-drop');
   /* eigen gegevens krijgen een h- ervoor (data-h-kamer, data-h-slot, ...).
      Zonder dat voorvoegsel botst zo'n naam met de gewone data-attributen
      van het scherm - de kamerbalk gebruikt bijvoorbeeld ook data-kamer. */
   if (s.data) for (var k in s.data) s.el.setAttribute('data-h-' + k, s.data[k]);
-  var inh = '<span class="ico">' + (s.icoon || '') + '</span>' +
-    (s.label ? '<span class="lbl">' + s.label + '</span>' : '') +
-    (s.badge ? '<span class="bdg">' + s.badge + '</span>' : '');
+  /* html mag alles overrulen: daarmee bouwt ui.js zijn spreekwolkjes,
+     sommenkaartjes en het kleine cijferpad aan een voorwerp. */
+  var inh = (s.html !== undefined && s.html !== null) ? s.html
+    : ('<span class="ico">' + (s.icoon || '') + '</span>' +
+       (s.getal !== undefined && s.getal !== null && s.getal !== ''
+          ? '<span class="get">' + s.getal + '</span>' : '') +
+       (s.label ? '<span class="lbl">' + s.label + '</span>' : '') +
+       (s.badge ? '<span class="bdg">' + s.badge + '</span>' : ''));
   if (s.el.__inh !== inh) { s.el.innerHTML = inh; s.el.__inh = inh; }
   var titel = s.titel || s.label || s.id;
-  if (s.el.getAttribute('aria-label') !== titel) s.el.setAttribute('aria-label', titel);
+  if (s.kind === 'tag') {
+    /* niet aan te tikken, niet aan te focussen, geen knoprol */
+    if (s.el.getAttribute('aria-hidden') !== 'true') s.el.setAttribute('aria-hidden', 'true');
+    if (s.el.hasAttribute('tabindex')) s.el.removeAttribute('tabindex');
+  } else if (s.el.getAttribute('aria-label') !== titel) s.el.setAttribute('aria-label', titel);
   if (s._meet !== inh) { s._meet = inh; s._w = 0; s._h = 0; }
 }
 
@@ -142,6 +154,19 @@ function plaats(kamer, pr) {
   var h = zorgHost();
   if (!h) return;
   var i, s, zicht = [];
+  /* eerst iedereen laten meebewegen: een wolkje boven een dier dat naar een
+     andere kamer loopt, verhuist mee (en is daar dan zichtbaar, hier niet) */
+  for (i = 0; i < orde.length; i++) {
+    s = reg[orde[i]];
+    if (!s || !s.volg) continue;
+    var q = s.volg(s);
+    if (!q) continue;
+    if (q.x !== undefined) s.x = q.x;
+    if (q.z !== undefined) s.z = q.z;
+    if (q.y !== undefined) s.y = q.y;
+    if (q.kamer) s.kamer = q.kamer;
+    s.d = q.d;
+  }
   for (i = 0; i < orde.length; i++) {
     s = reg[orde[i]];
     if (!s) continue;
@@ -160,7 +185,6 @@ function plaats(kamer, pr) {
   /* diepte: precies de tekensortering van world.js (klein x+z eerst) */
   for (i = 0; i < zicht.length; i++) {
     s = zicht[i];
-    if (s.volg) { var q = s.volg(s); if (q) { s.x = q.x; s.z = q.z; if (q.y !== undefined) s.y = q.y; s.d = q.d; } }
     s._d = s.d === undefined || s.d === null ? s.x + s.z : s.d;
   }
   zicht.sort(function (a, b) { return a._d - b._d; });
@@ -168,6 +192,11 @@ function plaats(kamer, pr) {
         dier dat achteraan staat zou er anders half buiten vallen en niet meer
         te tikken zijn. */
   if (!hostW || !hostH) hermeet();
+  /* Het kader heeft (nog) geen maat: dat gebeurt heel even bij het opstarten
+     en bij het wisselen van staand naar liggend. Dan zetten we NIETS neer -
+     anders klapt elke knop in de linkerbovenhoek op elkaar. Volgende beeld
+     opnieuw. */
+  if (!hostW || !hostH) return;
   var rand = 26, plekken = [];
   for (i = 0; i < zicht.length; i++) {
     s = maat(zicht[i]);
@@ -185,8 +214,16 @@ function plaats(kamer, pr) {
         precies zoals de naamplaatjes dat al deden. Zo is elke knop altijd
         apart aan te tikken, ook als de kamer krap in beeld staat. */
   var gedaan = [], j, g;
+  /* Cijfers die ÓP een voorwerp horen (en het cijferpad) blijven staan waar
+     ze horen: die plakken we eerst vast, daarna wijkt de rest eromheen. */
   for (i = zicht.length - 1; i >= 0; i--) {
     s = zicht[i];
+    if (!s.vast && s.kind !== 'tag') continue;
+    gedaan.push({ x: plekken[i].x, y: plekken[i].y, w: s._w, h: s._h });
+  }
+  for (i = zicht.length - 1; i >= 0; i--) {
+    s = zicht[i];
+    if (s.vast || s.kind === 'tag') continue;
     var q = plekken[i], w = s._w, hgt = s._h;
     var ox = q.x, oy = q.y, poging, gekozen = null;
     for (poging = 0; poging < UITWIJK.length; poging++) {
@@ -226,8 +263,8 @@ function debug() {
   var uit = { kamer: laatsteKamer, teveel: teveel, kader: [hostW, hostH], spots: [] };
   lijst().forEach(function (s) {
     if (!s.el) return;
-    uit.spots.push({ id: s.id, kamer: s.kamer, d: s._d, z: s._zi,
-                     zichtbaar: s.el.style.display !== 'none',
+    uit.spots.push({ id: s.id, kamer: s.kamer, d: s._d, z: s._zi, kind: s.kind,
+                     zichtbaar: s.el.style.display !== 'none', klas: s.klas || null,
                      px: s._px, py: s._py, w: s._w, h: s._h, drop: s.drop || null });
   });
   uit.spots.sort(function (a, b) { return (a.z || 0) - (b.z || 0); });

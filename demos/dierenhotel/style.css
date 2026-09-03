@@ -8,6 +8,9 @@
   --tap:52px;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+/* Verborgen is verborgen. Zonder deze regel wint een eigen display-regel van
+   de standaard van de browser, en dan blijft een leeg wacht-bolletje staan. */
+[hidden]{display:none!important}
 html,body{margin:0;padding:0}
 body{
   font-family:"Comic Sans MS","Comic Neue","Chalkboard SE","Segoe UI Rounded",ui-rounded,"Trebuchet MS",system-ui,sans-serif;
@@ -343,9 +346,9 @@ body.sleept .placed{pointer-events:none}
 .kchip.aan{background:var(--sun)}
 .kchip .ki{font-size:1.25rem}
 .kchip .kn{white-space:nowrap}
-.kchip .kb{position:absolute;top:-6px;right:-6px;background:var(--peach-d);color:#fff;
+.kb{position:absolute;top:-6px;right:-6px;background:var(--peach-d);color:#fff;
   border:2px solid #fff;border-radius:999px;min-width:22px;height:22px;font-size:.7rem;
-  display:grid;place-items:center;padding:0 4px}
+  font-weight:700;display:grid;place-items:center;padding:0 4px}
 .kchip.kaart{background:#EDE7F7}
 
 .pgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
@@ -354,6 +357,7 @@ body.sleept .placed{pointer-events:none}
   font-family:inherit;font-size:.75rem;font-weight:700;color:var(--ink);cursor:pointer;padding:6px}
 .pcel.aan{background:var(--sun);border-style:solid;border-color:#fff}
 .pcel .pi{font-size:1.5rem}
+.pcel .kb{top:-8px;right:-8px}
 
 /* =====================================================================
    PRIKBORD, GASTEN, VOERKAR
@@ -438,3 +442,82 @@ body.sleept .placed{pointer-events:none}
   .coin{width:50px;height:50px}
 }
 .bedvraag{text-align:center;margin:2px 0 6px;color:#6E5C4E}
+
+/* =====================================================================
+   REKENEN ÍN DE WERELD (HOTEL.md 9)
+   Spreekwolkjes, sommenkaartjes, cijfers op voorwerpen, sleepbronnen en
+   het kleine cijferpad. Alles hangt aan een voorwerp in de kamer; er staat
+   geen rekenblad meer naast het diorama.
+===================================================================== */
+/* De wereld is het speelvlak. Zonder rekenblad ernaast maken we het kader
+   hoger dan de kamer zelf: dan is er lucht boven en onder de kamer voor de
+   wolkjes, de sommenkaart en het cijferpad, zonder dat ze de kamer afdekken. */
+.world{aspect-ratio:4/5;max-height:60vh}
+body.metpaneel .world{aspect-ratio:4/3;max-height:44vh}
+@media (orientation:landscape){
+  .world{aspect-ratio:3/2;max-height:74vh}
+}
+@media (orientation:landscape) and (min-width:900px){
+  body:not(.metpaneel) .stagecol{flex:0 0 100%;max-width:100%}
+  body:not(.metpaneel) .scene{display:none}
+  body:not(.metpaneel) .world{aspect-ratio:16/9}
+}
+
+/* spreekwolkje: één korte regel, pictogram en getal groot */
+.hot.hotwolk{background:#FFFDF6;border-color:#fff;border-radius:20px 20px 20px 6px;
+  flex-direction:row;gap:5px;padding:5px 11px;max-width:190px;
+  box-shadow:0 3px 0 rgba(74,59,51,.16), 0 6px 14px rgba(74,59,51,.10)}
+.hot.hotwolk .ico{font-size:1.4rem}
+.hot.hotwolk .get{font-size:1.3rem;font-weight:700;color:#5A4A3E;line-height:1}
+.hot.hotwolk .zeg{font-size:.78rem;font-weight:700;line-height:1.1;text-align:left;
+  max-width:120px;white-space:normal}
+.hot.hotwolk.goed{background:#E4F7EC;border-color:#BFEBD5}
+.hot.hotwolk.hulp{background:#FFF8E7;border-color:#F0DCB0}
+
+/* sommenkaartje: één regel rekenschrift aan het voorwerp */
+.hot.hotsom{flex-direction:row;gap:7px;padding:6px 10px;border-radius:6px 14px 14px 6px;
+  background-color:#FCFAF0;border-color:#EAE0C8;
+  background-image:repeating-linear-gradient(180deg, rgba(255,255,255,0) 0 21px, #C2D8EA 21px 22px);
+  box-shadow:0 3px 0 rgba(74,59,51,.12), 0 8px 16px rgba(74,59,51,.08)}
+.hot.hotsom .somlijn{font-size:1.15rem;font-weight:700;white-space:nowrap;color:#4A3B33}
+.hot.hotsom .somvak{min-width:40px;min-height:34px;border:3px solid #8FA9C4;border-radius:8px;
+  background:#fff;box-shadow:inset 0 -4px 0 #EAF1F8;font-size:1.25rem;font-weight:700;
+  display:grid;place-items:center;padding:0 4px}
+.hot.hotsom .somvak.ok{background:#D8F3E4;border-color:var(--mint-d);color:#2c5c48}
+.hot.hotsom.af{background-color:#EAFBF3;border-color:var(--mint)}
+.hot.hotsom .somhulp{font-size:.75rem;font-weight:700;color:#8A7566;max-width:110px;white-space:normal}
+
+/* het cijferpad: het enige 2D-ding, klein en aan het voorwerp vast */
+.hot.hotpad{padding:6px;gap:4px;background:#FFFDF8;border-color:#fff;border-radius:18px;
+  box-shadow:0 4px 0 rgba(74,59,51,.16), 0 10px 22px rgba(74,59,51,.12)}
+.padrij{display:flex;gap:4px}
+.padk{min-width:48px;min-height:48px;font-family:inherit;font-size:1.15rem;font-weight:700;
+  color:var(--ink);background:#fff;border:2px solid #C9D8E6;border-radius:12px;cursor:pointer;
+  box-shadow:0 3px 0 #0001}
+.padk:active{transform:translateY(2px);box-shadow:none}
+.padk.ok{background:var(--mint);border-color:var(--mint-d)}
+.padk.del{background:var(--pink);border-color:#F0BBB2}
+
+/* een cijfer ÓP een voorwerp: klein, niet aan te tikken, wijkt nooit */
+.hot.hottag{pointer-events:none;min-width:0;min-height:0;padding:1px 6px;border-width:2px;
+  border-radius:999px;background:#FFFDF6EE;box-shadow:0 2px 0 rgba(74,59,51,.14)}
+.hot.hotgetal .getal{font-size:.95rem;font-weight:700;color:#5A4A3E;line-height:1.15}
+.hot.hotgetal.veel .getal{color:#C9788F}
+.hot.hotspook{background:#FFFFFFAA;border-style:dashed;border-color:#C9A075;opacity:.75}
+.hot.hotspook .getal{color:#8a7c5e}
+
+/* sleepbron: de zak, de buidel, de kist - met de teller erop */
+.hot.hotbron{flex-direction:row;gap:6px;padding:5px 10px;background:#FFF3D0;border-color:#FFE9A8;
+  touch-action:none;cursor:grab}
+.hot.hotbron .ico{font-size:1.5rem}
+.hot.hotbron .get{font-size:1.2rem;font-weight:700;color:#7a5b3d}
+.hot.hotbron .hand{position:absolute;bottom:-9px;right:-6px;background:var(--peach-d);color:#fff;
+  border:2px solid #fff;border-radius:999px;min-width:22px;height:22px;font-size:.72rem;
+  font-weight:700;display:grid;place-items:center;padding:0 4px}
+.hot.hotbron.leeg{opacity:.55;cursor:default}
+
+@media (max-width:520px){
+  .hot.hotsom .somlijn{font-size:1rem}
+  .hot.hotwolk{max-width:160px}
+  .hot.hotwolk .zeg{max-width:96px;font-size:.74rem}
+}

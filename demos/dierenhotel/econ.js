@@ -52,10 +52,16 @@ function munt(v, extra, id) {
 function som(arr) { return arr.reduce(function (a, c) { return a + c.v; }, 0); }
 
 /* =====================================================================
-   DE REKENING
-   o = { gast, nachten, prijs, totaal, betaald, onKlaar(uit) }
+   DE REKENING - helemaal ín de wereld (HOTEL.md 9)
+
+   Aan de balie staat de kassa. Daar hangt één sommenkaartje met één regel
+   (2 x EUR2 =) en een klein cijferpad. De familie houdt een buidel vast:
+   sleep of tik de munten naar de kassa, het bedrag staat als cijfer op de
+   toonbank. Feedback is een wolkje met een pictogram en een getal; na de
+   derde keer tellen liggen er spookmunten. Geen rekenblad, geen lappen tekst.
 ===================================================================== */
 var R = null;
+var BANK = 'kassa', BUIDEL = 'boek';        /* kassa en buidel op de balie */
 
 function rekening(o) {
   var tot = o.totaal || o.nachten * o.prijs;
@@ -63,211 +69,204 @@ function rekening(o) {
     gast: o.gast, nachten: o.nachten, prijs: o.prijs, totaal: tot,
     hand: buidel(o.betaald === undefined ? tot : o.betaald),
     bank: [],
-    stap: 1,            /* 1 = som uitrekenen, 2 = munten tellen, 3 = wisselgeld */
-    pogingen: 0, wissel: 0, wisselPog: 0,
+    stap: 1,            /* 1 = som, 2 = munten tellen, 3 = wisselgeld */
+    pogingen: 0,        /* pogingen op de som nachten x prijs */
+    telPog: 0,          /* pogingen op het muntjes tellen */
+    wissel: 0, wisselPog: 0,
     fam: o.fam || 'de familie',
     onKlaar: o.onKlaar,
-    t0: Ui.nu(), klaar: false
+    t0: Ui.nu(), klaar: false, kaart: null, bronH: null
   };
-  R.pad = Ui.pad({ max: 2, euro: true, onOk: function (n) { somOk(n); } });
-  R.wpad = Ui.pad({ max: 2, euro: true, onOk: function (n) { wisselOk(n); } });
-  paint();
+  if (window.Hotel) Hotel.naarKamer('receptie');
+  bouw();
   return R;
 }
 
-function paint() {
+/* ---------- alles wat de rekening in de wereld neerzet ---------- */
+function wis() {
+  Hits.wisEigenaar('rekening');
+  spookWeg();
+}
+function spookWeg() {
+  for (var i = 0; i < 6; i++) World.getalTag({ x: 0, z: 0 }, null, { id: 'spook' + i });
+}
+function spook(bedrag, lbl) {
+  spookWeg();
+  var munten = splits(bedrag), i;
+  for (i = 0; i < munten.length && i < 6; i++) {
+    World.getalTag({ x: 30 + (i % 4) * 14, z: 26 + (i > 3 ? 14 : 0), kamer: 'receptie' },
+                   '\u20AC' + munten[i],
+                   { id: 'spook' + i, door: 'rekening', y: 16, klas: 'hotspook',
+                     titel: lbl || 'zo ziet het uit' });
+  }
+}
+
+function bouw() {
   if (!R) return;
-  var g = R.gast, h = '';
-  h += '<h1>💰 De rekening</h1>';
-  h += '<div class="opdracht"><p><b>Familie ' + esc(R.fam) + '</b> komt <b>' + esc(g.naam) +
-    '</b> ophalen. ' + esc(g.naam) + ' heeft <b>' + meervoud(R.nachten, 'nacht', 'nachten') +
-    '</b> geslapen. Eén nacht kost <b>€' + R.prijs + '</b>.</p></div>';
-
-  if (R.stap === 1) {
-    h += '<div class="qbox"><h2>Wat moet de familie betalen?</h2>' +
-      '<div class="somregel"><b>' + R.nachten + ' × €' + R.prijs + ' =</b></div>' +
-      R.pad.html();
-    if (R.pogingen === 1) h += '<div class="soft-note">Tel de nachten met sprongen van ' + R.prijs +
-      ' mee: ' + Ui.telMee(R.prijs, R.nachten) + '</div>';
-    if (R.pogingen >= 2) {
-      h += '<div class="soft-note">Kijk, ik leg elke nacht apart neer:' +
-        '<div class="counton">' + nachtRij() + '</div>' +
-        'Dat is samen <b>€' + R.totaal + '</b>.</div>';
-    }
-    h += '</div>';
-  } else {
-    h += '<div class="good">De rekening is <b>€' + R.totaal + '</b>. ' + R.nachten + ' × €' +
-      R.prijs + ' = €' + R.totaal + '.</div>';
-    h += '<div class="counter-wrap"><div class="counter-label">🧾 De toonbank</div>' +
-      '<div class="counter' + (R.bank.length ? ' vol' : '') + '" data-drop="toonbank" id="toonbank">' +
-      '<div class="counter-coins">' + R.bank.map(function (c) { return munt(c.v, 'pulse', c.id); }).join('') +
-      (R.bank.length ? '' : '<span class="purse-empty">Leg de munten hier neer</span>') + '</div>' +
-      '<div class="ghosts" id="spoken">' + (R.spook || '') + '</div>' +
-      '<div class="counter-total">samen: <b>€' + som(R.bank) + '</b></div></div></div>';
-    h += '<div class="purse-wrap"><div class="purse-title">🐾 Wat de familie geeft ' +
-      '<span class="hint">(sleep naar de toonbank, of tik erop)</span></div>' +
-      '<div class="purse" id="hand">' +
-      (R.hand.length ? R.hand.map(function (c) { return munt(c.v, '', c.id); }).join('')
-                     : '<span class="purse-empty">De familie heeft alles neergelegd.</span>') +
-      '</div></div>';
-    if (R.stap === 3) {
-      h += '<div class="qbox"><h2>Hoeveel krijgt de familie terug?</h2>' +
-        '<p>Er ligt <b>€' + som(R.bank) + '</b> op de toonbank en de rekening is <b>€' +
-        R.totaal + '</b>.</p>' + R.wpad.html();
-      if (R.wisselPog === 1) h += '<div class="soft-note">Bijna! Tel van <b>€' + R.totaal +
-        '</b> naar <b>€' + som(R.bank) + '</b>. Hoeveel stapjes zijn dat?</div>';
-      if (R.wisselPog >= 2) h += '<div class="soft-note">Tel de roze stapjes maar: van ' +
-        woord(R.totaal) + ' naar ' + woord(som(R.bank)) + '.' + Ui.getallenlijn(R.totaal, som(R.bank)) + '</div>';
-      h += '</div>';
-    }
-    h += '<div class="row center" style="margin-top:14px">' +
-      '<button class="btn go big" type="button" id="rekOk">' +
-      (R.stap === 3 ? 'Dit geef ik terug ✓' : 'Klaar met tellen ✓') + '</button>' +
-      '<button class="btn soft" type="button" id="rekTerug">Opnieuw ↺</button></div>';
-    if (R.pogingen >= 1 || R.wisselPog >= 1)
-      h += '<p class="hint" style="text-align:center;margin-top:8px">' +
-        'Rustig aan, de familie wacht gewoon. Er gaat niets kapot. 💛</p>';
-  }
-  Ui.paneel(h, 'rek');
-  wire();
+  wis();
+  var g = R.gast;
+  /* de familie met de gast: één korte regel boven het dier */
+  Ui.wolk(g.id, { id: 'rek_gast', door: 'rekening', icoon: '👪',
+                  tekst: g.naam + ' gaat naar huis', klas: 'goed', prio: 8 });
+  if (R.stap === 1) somStap();
+  else muntStap();
 }
 
-function nachtRij() {
-  var s = '', i;
-  for (i = 0; i < R.nachten; i++) s += '<span class="scoop">🌙 €' + R.prijs + '</span>';
-  return s + '<b>=</b><span class="somvak"></span>';
-}
-
-function wire() {
-  if (!R) return;
-  var root = $('#paneel');
-  if (!root) return;
-  if (R.stap === 1) { R.pad.wire(root, paint); return; }
-  if (R.stap === 3) R.wpad.wire(root, paint);
-  /* munten van de familie naar de toonbank: slepen of tikken */
-  $$('#hand [data-coin]', root).forEach(function (node) {
-    var id = node.getAttribute('data-coin');
-    makeDraggable(node, {
-      dropSel: '[data-drop="toonbank"]',
-      ghostHTML: function () { return node.outerHTML; },
-      onDrop: function () { legNeer(id); },
-      onTap: function () { legNeer(id); }
-    });
+/* ---------- stap 1: nachten x prijs ---------- */
+function somStap() {
+  R.kaart = Ui.somkaart(BANK, R.nachten + ' \u00D7 \u20AC' + R.prijs + ' =', {
+    id: 'rek_som', door: 'rekening', open: true, max: 2,
+    onOk: function (n) { somOk(n); }
   });
-  $$('#toonbank [data-coin]', root).forEach(function (node) {
-    node.onclick = function () { pakTerug(node.getAttribute('data-coin')); };
-  });
-  var ok = $('#rekOk'); if (ok) ok.onclick = function () { klaarMetTellen(); };
-  var tg = $('#rekTerug');
-  if (tg) tg.onclick = function () {
-    while (R.bank.length) R.hand.push(R.bank.pop());
-    R.hand.sort(function (a, b) { return b.v - a.v; });
-    R.stap = 2; R.spook = ''; R.wpad.wis();
-    paint();
-    toast('Geeft niks, we beginnen opnieuw. 💛', 'kind');
-  };
-}
-
-function legNeer(id) {
-  for (var i = 0; i < R.hand.length; i++) {
-    if (R.hand[i].id === id) {
-      R.bank.push(R.hand.splice(i, 1)[0]);
-      if (window.Snd) Snd.munt();
-      var s = som(R.bank);
-      paint();
-      toast('Zo ja… dat is samen ' + woord(s) + '.', 'kind');
-      return;
-    }
-  }
-}
-function pakTerug(id) {
-  for (var i = 0; i < R.bank.length; i++) {
-    if (R.bank[i].id === id) {
-      R.hand.push(R.bank.splice(i, 1)[0]);
-      R.hand.sort(function (a, b) { return b.v - a.v; });
-      if (window.Snd) Snd.terug();
-      R.stap = R.stap === 3 ? 2 : R.stap;
-      paint();
-      return;
-    }
-  }
+  /* Zelfde ladder als in de winkel van Zilverhoef, en overal dezelfde:
+     1e keer samen tellen, 2e keer nog eens, en pas bij de DERDE poging
+     liggen er spookvormen. Dat geldt hier, bij het munten tellen en bij
+     het wisselgeld. */
+  if (R.pogingen >= 1) R.kaart.hulp(Ui.telMee(R.prijs, R.nachten, ''));
+  if (R.pogingen >= 3) spook(R.totaal, 'zoveel is het samen');
+  World.getalTag({ x: 30, z: 44, kamer: 'receptie' }, null, { id: 'bank' });
 }
 
 function somOk(n) {
-  if (n === null) { toast('Tik eerst een getal, dan kijken we samen. 🙂', 'kind'); return; }
+  if (n === null) { Ui.wolk(BANK, { id: 'rek_hint', door: 'rekening', icoon: '☝', tekst: 'tik een getal', klas: 'hulp' }); return; }
   if (n === R.totaal) {
     if (window.State) State.tel(R.pogingen === 0, Ui.nu() - R.t0);
-    R.stap = 2; R.pad.wis();
-    paint();
+    R.kaart.zet(n).klaar();
+    R.stap = 2;
     if (window.Snd) Snd.ja();
-    toast('Precies! De rekening is €' + R.totaal + '. 🎉', 'happy');
+    setTimeout(function () { if (R && R.stap === 2) { bouw(); } }, 500);
     return;
   }
   R.pogingen++;
-  R.pad.wis();
-  paint();
+  R.kaart.zet('');
   if (window.Snd) Snd.zacht();
-  toast('Tel de nachten met sprongen mee. 💛', 'kind');
+  bouw();
 }
 
+/* ---------- stap 2 en 3: munten leggen en wisselgeld ---------- */
+function muntStap() {
+  var betaald = som(R.bank);
+  /* de rekening blijft als afgevinkt kaartje staan: dat is de regel waar je
+     tijdens het tellen naar kijkt */
+  Ui.somkaart(BANK, R.nachten + ' \u00D7 \u20AC' + R.prijs + ' = ' + R.totaal, {
+    id: 'rek_bon', door: 'rekening', pad: false, hoog: 26
+  }).klaar();
+
+  if (R.stap === 3) {
+    World.getalTag({ x: 30, z: 44, kamer: 'receptie' }, '\u20AC' + betaald,
+                   { id: 'bank', door: 'rekening', y: 18, titel: 'op de toonbank' });
+    wisselKaart();
+    return;
+  }
+
+  /* de toonbank: sleep of tik de munten hierheen, het bedrag staat erop */
+  Hits.maak({
+    id: 'rek_bank', door: 'rekening', kamer: 'receptie', x: 30, z: 44, y: 18,
+    icoon: '\uD83E\uDDFE', getal: '\u20AC' + betaald,
+    kind: 'drop', drop: 'toonbank', klas: 'hotbron', prio: 11,
+    titel: 'de toonbank', aan: function () { legNeer(); }
+  });
+  /* de buidel van de familie: de volgende munt staat erop */
+  var volgende = R.hand.length ? R.hand[0] : null;
+  R.bronH = Ui.bron(BUIDEL, {
+    id: 'rek_buidel', door: 'rekening', hoog: 18,
+    icoon: volgende ? '\uD83E\uDE99' : '\uD83D\uDC4D',
+    aantal: volgende ? '\u20AC' + volgende.v : '',
+    hand: R.hand.length || null,
+    klas: R.hand.length ? '' : 'leeg',
+    titel: volgende ? 'munt van ' + volgende.v + ' euro' : 'de buidel is leeg',
+    tik: function () { legNeer(); },
+    sleep: {
+      dropSel: '[data-drop="toonbank"]',
+      ghostHTML: function () { return '<div class="karghost">\uD83E\uDE99</div>'; },
+      canDrag: function () { return !!(R && R.hand.length); },
+      onDrop: function () { legNeer(); }
+      /* geen onTap: een tik komt via `tik` binnen, precies één keer */
+    }
+  });
+  /* klaar-met-tellen staat naast de toonbank */
+  Hits.maak({
+    id: 'rek_ok', door: 'rekening', kamer: 'receptie', x: 62, z: 22, y: 14,
+    icoon: '\u2714', label: 'klaar', klas: 'hotwolk goed', prio: 10,
+    titel: 'klaar met tellen', aan: function () { klaarMetTellen(); }
+  });
+}
+function mikx(obj) {
+  var p = World.mik(obj, 'receptie');
+  return p || { x: 44, z: 40 };
+}
+
+function wisselKaart() {
+  var betaald = som(R.bank);
+  R.kaart = Ui.somkaart(BANK, '\u20AC' + betaald + ' \u2212 \u20AC' + R.totaal + ' =', {
+    id: 'rek_wissel', door: 'rekening', open: true, max: 2, hoog: 30,
+    onOk: function (n) { wisselOk(n); }
+  });
+  if (R.wisselPog === 1) R.kaart.hulp(R.totaal + ' \u2192 ' + betaald);
+  if (R.wisselPog >= 2) R.kaart.hulp(Ui.telMee(1, betaald - R.totaal, ''));
+  if (R.wisselPog >= 3) spook(betaald - R.totaal, 'zoveel krijgt de familie terug');
+}
+
+function legNeer() {
+  if (!R || R.stap === 3 || !R.hand.length) return;
+  R.bank.push(R.hand.shift());
+  if (window.Snd) Snd.munt();
+  var s = som(R.bank);
+  bouw();
+  Ui.wolk(BANK, { id: 'rek_tel', door: 'rekening', icoon: '🪙', getal: '\u20AC' + s, prio: 7 });
+}
+
+/* Klaar-met-tellen zit alleen in stap 2: in stap 3 (wisselgeld) staat deze
+   knop er niet, want dan rekent het kind af met het cijferpad. */
 function klaarMetTellen() {
-  if (R.stap === 3) { wisselOk(R.wpad.getal()); return; }
+  if (!R || R.stap !== 2) return;
   var t = som(R.bank), p = R.totaal;
   if (t === p) { gelukt(0); return; }
   if (t < p) {
-    R.pogingen++;
+    /* eigen teller: een misrekening bij de SOM mag de spookmunten bij het
+       TELLEN niet vooruit halen (zoals in de winkel van Zilverhoef) */
+    R.telPog++;
     var rest = p - t;
-    toast('Dat is ' + woord(t) + '… nog ' + woord(rest) + ' erbij?', 'kind');
-    if (R.pogingen >= 3) {
-      R.spook = '<div class="hint-lbl">nog nodig: €' + rest + '</div>' +
-        splits(rest).map(function (v) { return munt(v, 'ghost'); }).join('');
-      paint();
-      toast('Kijk, zó ziet ' + woord(rest) + ' eruit. Leg die er maar bij.', 'kind');
-    } else paint();
     if (window.Snd) Snd.zacht();
+    bouw();
+    Ui.wolk(BANK, { id: 'rek_hint', door: 'rekening', icoon: '🪙',
+                    getal: '+\u20AC' + rest, klas: 'hulp', prio: 9 });
+    if (R.telPog >= 3) spook(rest, 'dit moet er nog bij');
     return;
   }
-  R.stap = 3; R.wisselPog = 0; R.wpad.wis(); R.spook = ''; R.tw = Ui.nu();
-  paint();
-  toast('Er ligt meer dan de rekening — hoeveel krijgt de familie terug?', 'kind');
+  R.stap = 3; R.wisselPog = 0; spookWeg();
+  bouw();
 }
 
 function wisselOk(n) {
   var goed = som(R.bank) - R.totaal;
-  if (n === null) { toast('Tik eerst een getal, dan kijken we samen. 🙂', 'kind'); return; }
+  if (n === null) { Ui.wolk(BANK, { id: 'rek_hint', door: 'rekening', icoon: '☝', tekst: 'tik een getal', klas: 'hulp' }); return; }
   if (n === goed) {
     if (window.State) State.tel(R.wisselPog === 0, Ui.nu() - (R.tw || R.t0));
     gelukt(goed);
     return;
   }
   R.wisselPog++;
-  R.wpad.wis();
-  if (R.wisselPog >= 3) {
-    R.spook = '<div class="hint-lbl">dit krijgt de familie terug: €' + goed + '</div>' +
-      splits(goed).map(function (v) { return munt(v, 'ghost'); }).join('');
-  }
-  paint();
   if (window.Snd) Snd.zacht();
-  toast('Tel van €' + R.totaal + ' naar €' + som(R.bank) + '. 💛', 'kind');
+  bouw();
 }
 
 function gelukt(wissel) {
   var uit = { totaal: R.totaal, betaald: som(R.bank), wissel: wissel,
-              pogingen: R.pogingen + R.wisselPog, gast: R.gast };
+              pogingen: R.pogingen + R.telPog + R.wisselPog, gast: R.gast };
   R.klaar = true;
+  R.wissel = wissel;
   if (window.Snd) Snd.tover();
-  var cb = R.onKlaar;
-  var g = R.gast;
-  var h = '<h1>💰 Betaald!</h1><div class="good">' +
-    (wissel > 0
-      ? 'Precies! ' + Ui.hoofd(woord(wissel)) + ' euro terug, alsjeblieft. De rekening van €' +
-        R.totaal + ' is betaald.'
-      : 'Helemaal precies! €' + R.totaal + ' betaald, geen wisselgeld nodig.') +
-    '</div><p>' + esc(g.naam) + ' gaat met familie ' + esc(R.fam) + ' naar huis. 👋</p>' +
-    '<div class="row center"><button class="btn go big" type="button" id="rekAf">Verder ▸</button></div>';
-  Ui.paneel(h, 'rek');
-  var b = $('#rekAf');
-  if (b) b.onclick = function () { R = null; if (cb) cb(uit); };
+  var cb = R.onKlaar, g = R.gast, mijn = R;      /* token van déze rekening */
+  wis();
+  Ui.wolk(g.id, { id: 'rek_af', door: 'rekening', icoon: '👋',
+                  getal: wissel > 0 ? '\u20AC' + wissel : '\u2714',
+                  tekst: wissel > 0 ? 'terug' : 'betaald', klas: 'goed', prio: 12 });
+  setTimeout(function () {
+    Hits.weg('rek_af');
+    if (R === mijn) R = null;                   /* staat er alweer een nieuwe? laat staan */
+    if (cb) cb(uit);
+  }, 1100);
   return uit;
 }
 

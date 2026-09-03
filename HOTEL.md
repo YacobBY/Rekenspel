@@ -87,3 +87,14 @@ Domeindekking: delen met rest, tafels/arrays, geld, tijd/klok, tijdsduur, meten 
 5. Hotspots bij overlap in isometrie: z-index moet exact de tekenvolgorde volgen (anders pakt een tik het verkeerde object). Engine-ticket die alle games delen.
 
 *Status: ontwerp, niet gebouwd, niet geplaytest. Motorclaims zijn door de workers tegen world.js/ui.js/state.js/shop.js gecheckt (hergebruik van naamplaatjes-laag, makeDraggable, planOplossingen, koekjesSom, muntenlade).*
+
+## 9. Ontwerpregel: rekenen ín de wereld, zonder leeswerk (toegevoegd na speeltest fundament)
+
+Feedback op het fundament: de rekenpanelen naast het diorama voelen als "een website naast het spel", en er staat te veel tekst. Vanaf nu geldt voor het fundament en alle minigames:
+
+- **Geen rekenpaneel naast de wereld.** Sommen, aantallen en keuzes verschijnen als kleine kaartjes of spreekwolkjes die aan een object of dier in de wereld hangen (zelfde verankering als de naamplaatjes). De wereld blijft altijd zichtbaar en is het enige speelvlak.
+- **Getallen op objecten.** Bakjes tonen hun aantal als cijfer op het bakje, haakjes hun nummer, de toonbank het bedrag, bedden hun rij. Het rekenschrift-uiterlijk mag terugkomen als één kleine "sommenkaart" aan het object, nooit als een lap tekst.
+- **Tekstbudget.** Per stap maximaal één korte regel (richtlijn ≤ 6 woorden) plus pictogrammen en getallen. Uitleg gebeurt door voordoen (uitgewerkt voorbeeld in de wereld), niet door lezen. Alle feedback als pictogram + getal ("nog 2 🍪", "3 + 3 ✓").
+- **Slepen gebeurt in de wereld.** Koekjes komen uit een zak-hotspot en gaan naar bakjes in de kamer; munten uit de buidel naar de toonbank; sleutels naar haakjes op de muur; bedjes uit de kist op de vloer. Het cijferpad is het enige toegestane 2D-element en verschijnt klein, aan het object verankerd.
+- **Optioneel voorlezen.** Korte prompts mogen via de browser-spraaksynthese (Web Speech API, offline beschikbaar op de meeste apparaten) worden voorgelezen bij een tik op het wolkje; nooit verplicht, nooit automatisch herhalend.
+- **Technisch.** Het fundament levert hiervoor primitieven in de plugin-API: `ui.wolk(obj, {icoon, getal, tekst?})` (spreekwolkje aan object), `ui.somkaart(obj, som)` (mini-rekenschrift aan object), `wereld.getalTag(obj, n)` (cijfer op object), en sleepbronnen met teller (`hotspots.bron(obj, {icoon, aantal})`). Games gebruiken uitsluitend deze primitieven voor rekenweergave; het oude `ui.paneel` blijft alleen voor het startblad en het meubelboek-overzicht.

@@ -63,11 +63,16 @@ function plekVanBehoefte(g) {
   }
   return null;
 }
+/* "Hier wacht iemand": hoeveel gasten hebben in DEZE ruimte iets van jou
+   nodig? Een gast wiens wens al ingelost is telt niet mee, en een wens die
+   nergens naartoe kan (geen plek voor) ook niet - anders blijft er een
+   bolletje staan waar je niets kunt doen. */
 function wachtIn(kamerId) {
   var n = 0;
   state.gasten.forEach(function (g) {
+    if (behoefteKlaar(g)) return;
     var p = plekVanBehoefte(g);
-    if (p && p.kamer === kamerId && !behoefteKlaar(g)) n++;
+    if (p && p.kamer === kamerId) n++;
   });
   if (kamerId === 'receptie' && state.nieuweGast) n++;
   return n;
@@ -103,7 +108,7 @@ function hud() {
    knoppen blijven dus dezelfde knoppen. Anders springt de rij bij elke
    gebeurtenis terug naar links, verdwijnt je zijwaartse stand en tik je
    zomaar de kamer ernaast aan. */
-var balkChips = null;
+var balkChips = null, takenSig = '';
 function kamerbalk() {
   var host = $('#kamerbalk');
   if (!host) return;
@@ -133,10 +138,10 @@ function kamerbalk() {
     if (b.classList.contains('aan') !== aan) b.classList.toggle('aan', aan);
     var w = wachtIn(r.id), bdg = b.querySelector('.kb');
     if (!bdg) return;
-    if (w) {
-      if (bdg.textContent !== String(w)) bdg.textContent = w;
-      if (bdg.hidden) bdg.hidden = false;
-    } else if (!bdg.hidden) bdg.hidden = true;
+    /* leeg = weg: het bolletje houdt nooit een oud getal vast */
+    var tekst = w ? String(w) : '';
+    if (bdg.textContent !== tekst) bdg.textContent = tekst;
+    if (bdg.hidden !== !w) bdg.hidden = !w;
   });
 }
 
@@ -196,7 +201,7 @@ function hotspots() {
     if (pp) Hits.maak({ id: 'prikbord', door: 'hotel', kamer: 'receptie', x: pp.x, z: pp.z, y: 22,
                         icoon: '📋', label: 'Prikbord',
                         badge: openTaken() ? String(openTaken()) : null,
-                        titel: 'Het prikbord met de taakjes', prio: 9, aan: prikbord });
+                        titel: 'Het prikbord met de taakjes', prio: 9, aan: prikbordTik });
     /* De kassa zit in de muntenknop bovenin en de avondronde in de balk:
        twee knoppen minder op de balie, want tijdens een check-in staat daar
        ook nog het naamplaatje en het wenswolkje van de gast. De lamp gaat
@@ -230,6 +235,9 @@ function hotspots() {
                 aan: function () { tikMand(nu); } });
   }
   Rooms.slots(nu, 'bak').forEach(function (s) {
+    /* bakjes die een spel even zelf neerzet (de vakjes van de voerkar)
+       krijgen geen hotelknop: dat spel doet ze zelf */
+    if (s.tijdelijk) { Hits.weg('bak_' + nu + '_' + s.id); return; }
     var niv = World.bakStand(nu, s.id);
     var gasten = state.gasten.filter(function (g) { return g.kamer === nu; });
     Hits.maak({ id: 'bak_' + nu + '_' + s.id, door: 'hotel', kamer: nu, x: s.x, z: s.z, y: 7,
@@ -247,6 +255,8 @@ function hotspots() {
   var wensNr = 0;
   alleDieren().forEach(function (g) {
     if (g.waar !== nu) return;
+    /* de gast die aan de balie ingecheckt wordt heeft al een eigen wolkje */
+    if (state.nieuweGast && state.nieuweGast.id === g.id) { Hits.weg('wens_' + g.id); return; }
     var bh = BEHOEFTE[g.behoefte];
     if (!bh || behoefteKlaar(g)) return;
     var d0 = World.dier(g.id);
@@ -271,16 +281,14 @@ function bel() {
   if (state.checkin) { paintCheckin(); toast('Er staat al iemand aan de balie. 🙂', 'kind'); return; }
   var vrij = bedVrij();
   if (!vrij) {
+    /* vriendelijk en zonder leeswerk: één wolkje bij de bel (HOTEL.md 9) */
     if (window.Snd) Snd.zacht();
-    openSheet('<h2>🔔 Even geen plek</h2>' +
-      '<p>In alle <b>' + meervoud(maxGasten(), 'bed', 'bedden') + '</b> van het hotel slaapt al iemand. ' +
-      'Er staat dus niemand nieuw aan de balie.</p>' +
-      '<p class="hint">Zodra er een gast uitcheckt komt er een bed vrij — en met munten kun je later ' +
-      'nieuwe bedden kopen. Er gaat niets mis. 💛</p>' +
-      '<div class="row center"><button class="btn go big" type="button" id="belOk">Oké ▸</button></div>');
-    $('#belOk').onclick = closeSheet;
+    Ui.wolk('bel', { id: 'bel_vol', door: 'wolk', icoon: '🛏', getal: maxGasten(),
+                     tekst: 'alle bedden vol', klas: 'hulp', hoog: 26, prio: 12 });
+    setTimeout(function () { Ui.wolkWeg('bel_vol'); World.vuil(); }, 3200);
     return;
   }
+  bordDicht();                         /* het prikbord gaat dicht: nu de gast */
   var g = pakGast();
   var geld = sommen.geld(state.band);
   g.nachten = geld.nachten;
@@ -314,127 +322,77 @@ function initCheckin(g) {
   };
 }
 
+/* korte, woordloze hulp: pictogrammen en getallen (HOTEL.md 9) */
 function scoopjes(n) {
-  var s = '';
-  for (var i = 0; i < n; i++) s += '<span class="scoop">🥄</span>';
-  return s;
+  var s = '', i;
+  if (n > 8) return n + ' 🥄';
+  for (i = 0; i < n; i++) s += '🥄';
+  return s || '0';
 }
 function sprongen(v) {
   var l = [], s = 0;
   for (var i = 0; i < v.dagen; i++) { s += v.nieuw; l.push(s); }
-  return l.join(' … ') + '. Dat is ' + s + ', en jij hebt ' + v.voorraad + '.';
+  return l.join(' … ');
 }
+
+/* =====================================================================
+   CHECK-IN ÍN DE WERELD (HOTEL.md 9)
+   Boven de gast hangt één korte vraag, op de balie ligt één sommenkaartje
+   met een klein cijferpad. Verder alleen pictogrammen en getallen.
+===================================================================== */
+var ciKaart = null;
 
 function paintCheckin() {
+  Hits.wisEigenaar('checkin');
+  ciKaart = null;
   var v = state.checkin;
   if (!v) return;
   var g = gastById(v.gastId);
-  if (!g) { state.checkin = null; Ui.leegPaneel(); return; }
-  var h = '<h1>🛎️ Check-in</h1>';
-  if (v.stap === 1 || v.stap === 2) {
-    h += '<div class="stock">' +
-      '<div class="chip">🥣 nog <b>' + v.voorraad + '</b> scheppen brokken</div>' +
-      '<div class="chip b">🐾 samen <b>' + v.samen + '</b> scheppen per dag</div>' +
-      '<div class="chip c">🚚 nieuw voer over <b>' + v.dagen + '</b> dagen</div></div>' +
-      '<div class="gast"><b>' + esc(g.naam) + '</b>, ' + esc(metLidwoord(g)) +
-      ', wil <b>' + meervoud(g.nachten, 'nacht', 'nachten') + '</b> blijven.<br>' +
-      '&bdquo;Mag ik hier slapen? Ik eet <b>' + v.extra + '</b> scheppen per dag.&rdquo;</div>';
-  }
+  if (!g) { state.checkin = null; return; }
 
   if (v.stap === 1) {
-    h += '<div class="qbox"><h2>Vraag 1 van 2</h2>' +
-      '<p>Hoeveel scheppen eet iedereen <b>samen</b> per dag als ' + esc(g.naam) + ' erbij komt?</p>' +
-      '<div class="somregel"><span class="answer" id="ans">' + (v.invoer || '?') + '</span><span>scheppen</span></div>' +
-      '<div class="pad">' +
-      [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (k) { return '<button class="btn" type="button" data-k="' + k + '">' + k + '</button>'; }).join('') +
-      '<button class="btn del" type="button" data-k="del">⌫</button><button class="btn" type="button" data-k="0">0</button>' +
-      '<button class="btn ok" type="button" data-k="ok">✓</button></div>';
-    if (v.fouten1 > 0) {
-      h += '<div class="soft-note">Tel rustig mee. De gasten die er al zijn eten <b>' + v.samen + '</b>, ' +
-        esc(g.naam) + ' eet er <b>' + v.extra + '</b> bij:' +
-        '<div class="counton">' + scoopjes(v.samen) + '<b>+</b>' + scoopjes(v.extra) +
-        '<b>=</b><span class="somvak"></span></div></div>';
-    }
-    h += '</div>';
+    Ui.wolk(g.id, { id: 'ci_vraag', door: 'checkin', icoon: '🥄',
+                    tekst: 'Hoeveel samen?', prio: 11 });
+    ciKaart = Ui.somkaart('bel', v.samen + ' + ' + v.extra + ' =', {
+      id: 'ci_som', door: 'checkin', open: true, max: 2, hoog: 24,
+      onOk: function (n) { v.invoer = (n === null ? '' : String(n)); antwoord1(); }
+    });
+    if (v.fouten1 > 0) ciKaart.hulp(scoopjes(v.samen) + ' + ' + scoopjes(v.extra));
   } else if (v.stap === 2) {
-    h += '<div class="good">Goed geteld! ' + v.samen + ' + ' + v.extra + ' = <b>' + v.nieuw + '</b> scheppen per dag.</div>' +
-      '<div class="qbox"><h2>Vraag 2 van 2</h2>' +
-      '<p>Het nieuwe voer komt pas over <b>' + v.dagen + ' dagen</b>. Je hebt nog <b>' + v.voorraad + '</b> scheppen.</p>' +
-      '<p><b>Is ' + v.dagen + ' dagen × ' + v.nieuw + ' scheppen méér of minder dan ' + v.voorraad +
-      ' — of precies evenveel?</b></p>' +
-      '<div class="row center"><button class="btn big" type="button" data-v="minder">Minder ⬇️</button>' +
-      '<button class="btn big" type="button" data-v="precies">Precies evenveel ⚖️</button>' +
-      '<button class="btn big" type="button" data-v="meer">Méér ⬆️</button></div>';
-    if (v.fouten2 > 0) h += '<div class="soft-note">Tel met sprongen mee: ' + sprongen(v) + '</div>';
-    h += '</div>';
+    Ui.wolk(g.id, { id: 'ci_vraag', door: 'checkin', icoon: '🥣',
+                    tekst: 'Genoeg eten?', prio: 11 });
+    ciKaart = Ui.somkaart('bel', v.dagen + ' × ' + v.nieuw + '  ?  ' + v.voorraad, {
+      id: 'ci_som', door: 'checkin', pad: false, hoog: 24
+    });
+    if (v.fouten2 > 0) ciKaart.hulp(sprongen(v));
+    keuzeKnop('minder', '⬇️', 4, 62);
+    keuzeKnop('precies', '⚖️', 26, 58);
+    keuzeKnop('meer', '⬆️', 48, 54);
   } else if (v.stap === 3) {
-    var tot = v.dagen * v.nieuw, uitkomst = vergelijk(v);
     var vrij = bedVrij();
-    /* het kaartje staat bovenaan: dan zie je de kamer én het kaartje samen
-       en kun je het echt van het blad op een bed slepen */
-    h += '<h2 class="bedvraag">Waar mag ' + esc(g.naam) + ' slapen?</h2>' +
-      '<div class="gastkaartrij"><div class="gastkaart" id="gastkaart" data-gast="' + g.id + '">' +
-      '<span class="gk-ico">' + (BEHOEFTE.kamer.icoon) + '</span>' +
-      '<span class="gk-nm">' + esc(g.naam) + '</span>' +
-      '<span class="gk-sub">' + meervoud(g.nachten, 'nacht', 'nachten') + ' · €' + g.prijs + ' per nacht</span>' +
-      '</div></div>' +
-      (vrij && World.actief() === vrij.kamer
-        ? '<p class="hint" style="text-align:center">Sleep het kaartje op een <b>leeg bed</b> hierboven. ' +
-          'Tikken op het bed mag ook.</p>'
-        : '<p class="hint" style="text-align:center">Er is een leeg bed in <b>' +
-          (vrij ? esc(Rooms.get(vrij.kamer).naam) : 'het hotel') +
-          '</b>. Ga daar eerst naartoe, dan sleep je het kaartje op het bed.</p>');
-    if (vrij && World.actief() !== vrij.kamer)
-      h += '<div class="row center"><button class="btn soft" type="button" id="naarBed">Ga naar ' +
-        esc(Rooms.get(vrij.kamer).naam) + ' ▸</button></div>';
-    h += '<div class="good">Klopt! ' + v.dagen + ' × ' + v.nieuw + ' = <b>' + tot + '</b> scheppen. ' +
-      'Je hebt er <b>' + v.voorraad + '</b>. Dat is dus ' +
-      (uitkomst === 'meer' ? '<b>méér</b> dan je in huis hebt.'
-        : uitkomst === 'minder' ? '<b>minder</b> dan je in huis hebt.'
-        : '<b>precies evenveel</b> — het past precies!') + '</div>';
-  } else {
-    h += '<div class="qbox"><h2>' + v.keuzeTitel + '</h2><p>' + v.keuzeTekst + '</p>' +
-      '<div class="row center"><button class="btn go big" type="button" id="ciKlaar">Fijn! ▸</button></div></div>';
+    Ui.wolk(g.id, {
+      id: 'ci_vraag', door: 'checkin', icoon: '🛏', prio: 11,
+      tekst: vrij ? 'Kies een bed' : 'Alles bezet',
+      tik: function () { if (vrij) naarKamer(vrij.kamer); }
+    });
+    if (vrij && World.actief() !== vrij.kamer) {
+      Ui.wolk({ x: 62, z: 4, kamer: 'receptie' }, {
+        id: 'ci_wijs', door: 'checkin', icoon: Rooms.get(vrij.kamer).icoon,
+        tekst: Rooms.get(vrij.kamer).naam, hoog: 16, prio: 10,
+        tik: function () { naarKamer(vrij.kamer); }
+      });
+    }
   }
-  Ui.paneel(h, 'checkin');
-  wireCheckin();
+  World.vuil();
 }
 
-function wireCheckin() {
-  var v = state.checkin;
-  if (!v) return;
-  var g = gastById(v.gastId);
-  $$('#paneel [data-k]').forEach(function (b) {
-    b.onclick = function () {
-      var k = b.getAttribute('data-k');
-      if (k === 'del') v.invoer = v.invoer.slice(0, -1);
-      else if (k === 'ok') return antwoord1();
-      else if (v.invoer.length < 2) v.invoer += k;
-      paintCheckin();
-    };
+/* de drie keuzes bij vraag 2 staan los van elkaar vóór de balie */
+function keuzeKnop(waarde, icoon, x, z) {
+  Hits.maak({
+    id: 'ci_' + waarde, door: 'checkin', kamer: 'receptie', x: x, z: z, y: 12,
+    icoon: icoon, klas: 'hotwolk', prio: 10, titel: waarde,
+    aan: function () { antwoord2(waarde); }
   });
-  $$('#paneel [data-v]').forEach(function (b) {
-    b.onclick = function () { antwoord2(b.getAttribute('data-v')); };
-  });
-  var nb = $('#naarBed');
-  if (nb) nb.onclick = function () {
-    var vrij = bedVrij();
-    if (vrij) { naarKamer(vrij.kamer); toast('Sleep ' + g.naam + ' op het lege bed. 🛏', 'kind'); }
-  };
-  var kk = $('#gastkaart');
-  if (kk) makeDraggable(kk, {
-    dropSel: '[data-drop="bed"]',
-    ghostHTML: function () { return kk.outerHTML; },
-    onDrop: function (t) { wijsBed(t.getAttribute('data-h-kamer'), t.getAttribute('data-h-slot')); },
-    onTap: function () { toast('Sleep het kaartje op een leeg bed, of tik op een bed. 🛏', 'kind'); }
-  });
-  var ok = $('#ciKlaar');
-  if (ok) ok.onclick = function () {
-    state.checkin = null;
-    Ui.leegPaneel();
-    if (state.ronde === 'ochtend') state.ronde = 'vrij';
-    render();
-  };
 }
 
 /* ---------- BEVROREN: antwoord 1 en 2 (zelfde rekencheck) ---------- */
@@ -447,7 +405,7 @@ function antwoord1() {
     State.tel(v.fouten1 === 0, Ui.nu() - v.t0);
   } else {
     v.fouten1++; v.invoer = ''; paintCheckin(); Snd.zacht();
-    toast('Bijna! Tel de scheppen samen — ze staan eronder. 💛', 'kind');
+    toast('Bijna! Tel de scheppen mee. 💛', 'kind');
   }
 }
 
@@ -456,7 +414,7 @@ function antwoord2(keus) {
   if (keus === vergelijk(v)) {
     v.stap = 3; paintCheckin(); Snd.ja(); toast('Goed gerekend! 🎉', 'happy');
     State.tel(v.fouten2 === 0, Ui.nu() - v.t0);
-  } else { v.fouten2++; paintCheckin(); Snd.zacht(); toast('Tel eerst met sprongen mee, dan zie je het. 💛', 'kind'); }
+  } else { v.fouten2++; paintCheckin(); Snd.zacht(); toast('Tel met sprongen mee. 💛', 'kind'); }
 }
 
 /* ---------- het bed toewijzen ---------- */
@@ -485,18 +443,18 @@ function wijsBed(kamerId, slotId) {
   g.waar = kamerId;
   g.behoefte = 'eten';
   g.gegeten = false;
-  v.stap = 4;
-  v.keuzeTitel = esc(g.naam) + ' mag blijven! 🛏';
-  v.keuzeTekst = g.naam + ' krijgt bed ' + (slotId === 'bed2' ? '2' : '1') + ' in ' +
-    esc(Rooms.get(kamerId).naam) + ' en gaat er meteen even liggen. ' +
-    'Morgen wil ' + g.naam + ' natuurlijk eten — vul de voerkar in de keuken!';
+  /* klaar: geen vervolgpaneel meer, alleen een wolkje boven het dier */
+  state.checkin = null;
+  Hits.wisEigenaar('checkin');
   if (window.Snd) Snd.tover();
   Econ.sterren(1, 'checkin');
   taakAf('bed');
+  if (state.ronde === 'ochtend') state.ronde = 'vrij';
   State.bewaar();
   naarKamer(kamerId);
-  paintCheckin();
-  toast(g.naam + ' ligt in bed. 💤', 'happy');
+  Ui.wolk(g.id, { id: 'ci_af', door: 'wolk', icoon: '💤', tekst: 'welterusten',
+                  klas: 'goed', prio: 12 });
+  setTimeout(function () { Ui.wolkWeg('ci_af'); World.vuil(); }, 3600);
 }
 
 /* =====================================================================
@@ -547,6 +505,23 @@ function tikMand(kamerId) {
   render();
 }
 
+/* Een wens van een gast vervullen, op de manier die het hotel zelf ook
+   gebruikt: eten -> gegeten, bad/spelen -> blij. De spellen die de vlaggen
+   zelf al zetten (voerkar: gegeten, tobbe: blij) blijven gewoon werken. */
+function wensAf(gastId, welke) {
+  var g = gastVan(gastId);
+  if (!g && state.nieuweGast && state.nieuweGast.id === gastId) g = state.nieuweGast;
+  if (!g) return false;
+  var b = welke || g.behoefte;
+  if (b === 'eten') g.gegeten = true;
+  else if (b === 'bad' || b === 'spelen') g.blij = true;
+  else if (b === 'kamer') return !!g.bed;      /* alleen een bed lost dat op */
+  Hits.weg('wens_' + g.id);
+  State.bewaar();
+  render();
+  return true;
+}
+
 function kassa() {
   var h = '<h2>💰 De kassa</h2>' +
     '<div class="row center" style="gap:10px">' +
@@ -573,7 +548,71 @@ function badMogelijk() {
   return !!(g && !g.stub && Games.ontgrendeld(g));
 }
 
-function bouwTaken() {
+/* =====================================================================
+   TAAKJES VAN DE SPELLEN
+   Een spel mag zelf zeggen wanneer het op het prikbord hoort:
+       Games.register({ ..., taak: { icoon:'🔑', tekst:'Hang de sleutels op',
+                                     wanneer: function (state) { return ...; } } })
+   Zegt een spel niets, dan geldt de standaard hieronder. tekst mag ook een
+   functie(state) zijn. Gasten gaan altijd vóór: eerst de wensen van de
+   dieren, dan de spellen, en nooit meer dan drie kaartjes.
+===================================================================== */
+function badGast(ookAls) {
+  var l = state.gasten.filter(function (g) {
+    return g.behoefte === 'bad' && (ookAls || !g.blij);
+  });
+  return l[0] || null;
+}
+var SPEL_TAAK = {
+  voerkar: null,                       /* heeft al een eigen taakje ('voer') */
+  /* de tobbe hoort bij een WENS van een gast: eigen naam 'bad' en hoge
+     voorrang, zodat hij vóór de gewone spel-taakjes op het bord komt */
+  tobbe: { id: 'bad', prio: 1, icoon: '🛁', wanneer: function () { return !!badGast(); },
+           tekst: function () { var g = badGast(true); return g ? g.naam + ' wil in bad' : 'Tobbe-tijd'; } },
+  bedden: { icoon: '🛏', tekst: 'Zet de bedden op rij',
+            wanneer: function (s) { return s.gasten.length >= 2; } },
+  sleutels: { icoon: '🔑', tekst: 'Hang de sleutels op',
+              wanneer: function (s) { return s.gasten.length >= 2; } },
+  meubels: { icoon: '📖', tekst: 'Koop iets moois',
+             wanneer: function (s) { return s.munten >= 5; } }
+};
+function spelTaken() {
+  var uit = [];
+  if (!window.Games) return uit;
+  Games.lijst().forEach(function (def) {
+    var t = def.taak !== undefined ? def.taak : SPEL_TAAK[def.id];
+    if (!t) return;
+    if (!Games.ontgrendeld(def)) return;
+    var aan = true;
+    try { aan = t.wanneer ? !!t.wanneer(state) : true; } catch (e) { aan = false; }
+    if (!aan) return;
+    var tekst = typeof t.tekst === 'function' ? t.tekst(state) : (t.tekst || def.naam);
+    uit.push({ id: t.id || def.id, spel: def.id, icoon: t.icoon || '✨', tekst: tekst,
+               kamer: t.kamer || def.kamer, actie: 'game:' + def.id,
+               prio: t.prio === undefined ? 5 : t.prio });
+  });
+  return uit;
+}
+
+/* Een vingerafdruk van alles waar een taakje van afhangt. Verandert die,
+   dan wordt het prikbord opnieuw opgemaakt - ook midden op dag 1. */
+function taakSignatuur() {
+  var s = [state.dag, state.ronde, state.gasten.length, state.munten,
+           (state.uitcheck || []).length, bedVrij() ? 1 : 0, state.nieuweGast ? 1 : 0];
+  spelTaken().forEach(function (q) { s.push('sp:' + q.id + ':' + q.tekst); });
+  state.gasten.forEach(function (g) {
+    s.push(g.id + ':' + (g.bed || '-') + ':' + g.behoefte + ':' + (g.gegeten ? 1 : 0) + ':' + (g.blij ? 1 : 0));
+  });
+  Rooms.lijst().forEach(function (r) {
+    Rooms.slots(r.id, 'bak').forEach(function (q) { s.push(r.id + '=' + World.bakStand(r.id, q.id)); });
+  });
+  return s.join('|');
+}
+
+function bouwTaken(forceer) {
+  var sig = taakSignatuur();
+  if (!forceer && sig === takenSig && state.taken && state.taken.length) return state.taken;
+  takenSig = sig;
   var t = [], i;
   var zonderBed = state.gasten.filter(function (g) { return !g.bed; });
   var legeBak = [];
@@ -584,71 +623,112 @@ function bouwTaken() {
     });
   });
   if (bedVrij() && !state.gasten.length)
-    t.push({ id: 'bel', icoon: '🔔', tekst: 'Bel de eerste gast binnen', kamer: 'receptie', actie: 'bel' });
+    t.push({ id: 'bel', icoon: '🔔', tekst: 'Bel een gast', kamer: 'receptie', actie: 'bel' });
   else if (bedVrij())
-    t.push({ id: 'bel', icoon: '🔔', tekst: 'Er is nog een bed vrij: bel een gast', kamer: 'receptie', actie: 'bel' });
+    t.push({ id: 'bel', icoon: '🔔', tekst: 'Nog een bed vrij', kamer: 'receptie', actie: 'bel' });
   if (zonderBed.length)
-    t.push({ id: 'bed', icoon: '🛏', tekst: 'Geef ' + zonderBed[0].naam + ' een bed', kamer: 'receptie', actie: 'bel' });
+    t.push({ id: 'bed', icoon: '🛏', tekst: zonderBed[0].naam + ' wil een bed', kamer: 'receptie', actie: 'bel' });
   if (legeBak.length)
-    t.push({ id: 'voer', icoon: '🍪', tekst: 'Vul de voerkar en breng het eten rond', kamer: 'keuken', actie: 'game:voerkar' });
+    t.push({ id: 'voer', icoon: '🍪', tekst: 'Vul de voerkar', kamer: 'keuken', actie: 'game:voerkar' });
   if (state.uitcheck && state.uitcheck.length)
-    t.push({ id: 'uit', icoon: '💰', tekst: 'Familie komt ' + (gastVan(state.uitcheck[0]) || { naam: 'een gast' }).naam + ' ophalen', kamer: 'receptie', actie: 'avond' });
+    t.push({ id: 'uit', icoon: '💰', tekst: 'Reken af: ' + (gastVan(state.uitcheck[0]) || { naam: 'gast' }).naam, kamer: 'receptie', actie: 'avond' });
   var spelen = state.gasten.filter(function (g) { return g.behoefte === 'spelen' && !g.blij; });
   if (spelen.length)
     t.push({ id: 'spelen', icoon: '🧶', tekst: spelen[0].naam + ' wil spelen',
              kamer: spelen[0].kamer || 'kamer1', actie: 'kamer' });
-  if (badMogelijk()) {
-    var bad = state.gasten.filter(function (g) { return g.behoefte === 'bad'; });
-    if (bad.length)
-      t.push({ id: 'bad', icoon: '🛁', tekst: bad[0].naam + ' wil in de tobbe', kamer: 'tuin', actie: 'game:tobbe' });
-  }
-  var oud = {};
-  (state.taken || []).forEach(function (q) { if (q.klaar) oud[q.id] = 1; });
-  t = t.filter(function (q) { return !oud[q.id]; });
-  state.taken = t.slice(0, 3).map(function (q) { q.klaar = false; return q; });
+  /* het badtaakje komt uit de tobbe zelf (zie SPEL_TAAK) */
+  /* Een taakje verdwijnt van het bord zodra het niet meer nodig is (het bakje
+     is vol, de gast heeft een bed). Wat je net hebt afgevinkt blijft nog even
+     met een vinkje staan zolang het er nog is. */
+  var vorige = (state.taken || []).slice(), af = {};
+  vorige.forEach(function (q) { if (q.klaar) af[q.id] = 1; });
+  /* wensen van de dieren eerst (prio 0), dan de spellen op hun eigen
+     voorrang; de volgorde binnen dezelfde voorrang blijft zoals hij is */
+  t.forEach(function (q) { if (q.prio === undefined) q.prio = 0; });
+  var alles = t.concat(spelTaken());
+  /* Wat je net hebt afgevinkt blijft de rest van de dag met een vinkje
+     staan, ook als het niet meer "nodig" is - anders verdwijnt je succesje
+     meteen van het bord. Morgen begint het bord weer leeg. */
+  vorige.forEach(function (q) {
+    if (!q.klaar) return;
+    for (var i = 0; i < alles.length; i++) if (alles[i].id === q.id) return;
+    alles.push(q);
+  });
+  alles.sort(function (a, b) { return (a.prio || 0) - (b.prio || 0); });
+  state.taken = alles.slice(0, 3).map(function (q) { q.klaar = !!af[q.id]; return q; });
   return state.taken;
 }
 function openTaken() {
   return (state.taken || []).filter(function (t) { return !t.klaar; }).length;
 }
 function taakAf(id) {
-  (state.taken || []).forEach(function (t) { if (t.id === id) t.klaar = true; });
+  var raak = false;
+  (state.taken || []).forEach(function (t) {
+    if (t.id === id || t.spel === id) { t.klaar = true; raak = true; }
+  });
+  if (raak && bordOpen) toonBord();
+  return raak;
+}
+
+var bordOpen = false;
+
+/* de taakjes hangen als kaartjes bij het prikbord: pictogram + korte regel */
+function kortTaak(q) { return q.tekst; }
+
+function doeTaak(q) {
+  bordDicht();
+  state.ronde = 'vrij';
+  if (q.kamer) naarKamer(q.kamer);
+  if (q.actie === 'bel') { if (!state.gasten.length || bedVrij()) bel(); }
+  else if (q.actie === 'avond') avondronde();
+  else if (q.actie && q.actie.indexOf('game:') === 0) Games.start(q.actie.slice(5));
+  render();
+}
+
+function toonBord() {
+  Hits.wisEigenaar('bord');
+  if (!bordOpen) return;
+  var t = state.taken || [];
+  if (!t.length) {
+    Ui.wolk('prikbord', { id: 'bord_leeg', door: 'bord', icoon: '🐾',
+                          tekst: 'Speel lekker rond', hoog: 26, prio: 10 });
+    return;
+  }
+  t.forEach(function (q, i) {
+    Ui.wolk({ x: 6 + i * 26, z: 2 + i * 26, kamer: 'receptie' }, {
+      id: 'bord_' + i, door: 'bord', icoon: q.klaar ? '✅' : q.icoon,
+      tekst: kortTaak(q), hoog: 22, prio: 10,
+      tik: function () { doeTaak(q); }
+    });
+  });
+  /* de berichtjes van vandaag: hooguit twee korte regels bij de balie */
+  (state.dagBericht || []).slice(0, 2).forEach(function (b, i) {
+    Ui.wolk({ x: 30, z: 40, kamer: 'receptie' }, {
+      id: 'dag_' + i, door: 'bord', icoon: b.icoon, tekst: b.tekst,
+      hoog: 30 + i * 12, prio: 9,
+      tik: function () { Ui.wolkWeg('dag_' + i); World.vuil(); }
+    });
+  });
 }
 
 function prikbord() {
-  if (!state.taken || !state.taken.length) bouwTaken();
-  var t = state.taken || [];
-  var h = '<h1>📋 Het prikbord</h1><div class="opdracht"><p><b>Dag ' + state.dag + '</b> — ' +
-    (t.length ? 'dit staat er vandaag op het prikbord. Je mag zelf kiezen waar je begint.'
-              : 'er staat niets meer op het prikbord. Speel gewoon lekker rond! 🐾') + '</p></div>';
-  if (state.dagBericht) h += '<div class="soft-note">' + state.dagBericht + '</div>';
-  h += '<div class="taken">';
-  t.forEach(function (q, i) {
-    h += '<button class="taak' + (q.klaar ? ' af' : '') + '" type="button" data-taak="' + i + '">' +
-      '<span class="ti">' + q.icoon + '</span><span class="tt">' + esc(q.tekst) + '</span>' +
-      '<span class="tk">' + (q.klaar ? '✓ klaar' : Rooms.get(q.kamer) ? Rooms.get(q.kamer).naam : '') + '</span></button>';
-  });
-  h += '</div><div class="row center" style="margin-top:14px">' +
-    '<button class="btn go big" type="button" id="pbDicht">Aan de slag ▸</button></div>';
-  Ui.paneel(h, 'prik');
-  $$('#paneel [data-taak]').forEach(function (b) {
-    b.onclick = function () {
-      var q = state.taken[+b.getAttribute('data-taak')];
-      if (!q) return;
-      Ui.leegPaneel();
-      state.ronde = 'vrij';
-      if (q.kamer) naarKamer(q.kamer);
-      if (q.actie === 'bel') { if (!state.gasten.length || bedVrij()) bel(); }
-      else if (q.actie === 'avond') avondronde();
-      else if (q.actie && q.actie.indexOf('game:') === 0) Games.start(q.actie.slice(5));
-      render();
-    };
-  });
-  $('#pbDicht').onclick = function () {
-    Ui.leegPaneel();
-    state.ronde = 'vrij';
-    render();
-  };
+  bouwTaken();
+  bordOpen = true;
+  naarKamer('receptie');
+  toonBord();
+}
+/* het prikbord dichtdoen (de bel, een taakje, de avondronde en elk spel dat
+   start doen dat: anders staan de taakkaartjes over de knoppen van het spel) */
+function bordDicht() {
+  if (!bordOpen) return false;
+  bordOpen = false;
+  Hits.wisEigenaar('bord');
+  World.vuil();
+  return true;
+}
+function prikbordTik() {
+  if (bordOpen) { bordOpen = false; Hits.wisEigenaar('bord'); World.vuil(); return; }
+  prikbord();
 }
 
 /* =====================================================================
@@ -659,49 +739,44 @@ function avondKlaar() { return !!(state.uitcheck && state.uitcheck.length); }
 function avondronde() {
   state.ronde = 'avond';
   World.dingZet('balielamp', { n: 'lampaan' });
+  bordDicht();
   naarKamer('receptie');
-  paintAvond();
+  toonAvond();
 }
 
-function paintAvond() {
+/* Aan de balie staat de familie (één wolkje per gast die naar huis mag) of
+   de lamp met "morgen". Geen dagoverzicht in tekst: de cijfers staan al
+   bovenin (dag, munten, sterren, brieven). */
+function toonAvond() {
+  Hits.wisEigenaar('avond');
+  if (state.ronde !== 'avond') return;
   var uit = (state.uitcheck || []).map(gastVan).filter(Boolean);
-  var h = '<h1>🌙 Avondronde</h1>';
   if (uit.length) {
-    h += '<div class="opdracht"><p>Er staat familie aan de balie! ' +
-      (uit.length === 1 ? '<b>' + esc(uit[0].naam) + '</b> heeft lang genoeg geslapen en mag naar huis.'
-                        : 'Er worden <b>' + uit.length + ' gasten</b> opgehaald.') +
-      ' Eerst nog even afrekenen.</p></div><div class="taken">';
-    uit.forEach(function (g) {
-      h += '<button class="taak" type="button" data-uit="' + g.id + '">' +
-        '<span class="ti">👪</span><span class="tt">Reken af voor ' + esc(g.naam) + '</span>' +
-        '<span class="tk">' + meervoud(g.nachten, 'nacht', 'nachten') + ' × €' + g.prijs + '</span></button>';
+    uit.slice(0, 3).forEach(function (g, i) {
+      Ui.wolk({ x: 8 + i * 24, z: 60 - i * 6, kamer: 'receptie' }, {
+        id: 'av_' + g.id, door: 'avond', icoon: '👪', tekst: g.naam,
+        hoog: 16, prio: 11, tik: function () { rekenAf(g.id); }
+      });
     });
-    h += '</div>';
   } else {
-    var som = state.gasten.length;
-    h += '<div class="opdracht"><p>Alle gasten liggen in bed. Vanavond checkt er niemand uit.</p></div>' +
-      '<div class="row center" style="gap:10px">' +
-      '<div class="chip">🐾 <b>' + som + '</b> ' + (som === 1 ? 'gast' : 'gasten') + '</div>' +
-      '<div class="chip b">💰 <b>' + state.munten + '</b> munten</div>' +
-      '<div class="chip c">⭐ <b>' + state.sterren + '</b> sterren</div>' +
-      '<div class="chip">💌 <b>' + state.brieven.length + '</b> brieven</div></div>';
+    Ui.wolk('balielamp', {
+      id: 'av_morgen', door: 'avond', icoon: '🌙', tekst: 'Morgen ▸', hoog: 24, prio: 11,
+      tik: function () { morgen(); }
+    });
   }
-  h += '<div class="row center" style="margin-top:14px">' +
-    (uit.length ? '' : '<button class="btn go big" type="button" id="morgenBtn">Slaap lekker 💤 — morgen ▸</button>') +
-    '<button class="btn soft" type="button" id="avDicht">Nog even rondkijken</button></div>';
-  Ui.paneel(h, 'avond');
-  $$('#paneel [data-uit]').forEach(function (b) {
-    b.onclick = function () { rekenAf(b.getAttribute('data-uit')); };
-  });
-  var m = $('#morgenBtn');
-  if (m) m.onclick = morgen;
-  var d = $('#avDicht');
-  if (d) d.onclick = function () { Ui.leegPaneel(); state.ronde = 'vrij'; render(); };
+  World.vuil();
 }
+var paintAvond = toonAvond;
 
 function rekenAf(id) {
   var g = gastVan(id);
   if (!g) return;
+  Hits.wisEigenaar('avond');
+  /* de gast loopt zelf naar de balie: daar staat zijn familie te wachten */
+  if (g.waar !== 'receptie') {
+    g.waar = 'receptie';
+    World.reis(g.id, 'receptie', { x: 44, z: 62, na: 'wacht' });
+  }
   var fam = FAMILIES[state.famIdx % FAMILIES.length];
   Econ.rekening({
     gast: g, fam: fam, nachten: g.nachten, prijs: g.prijs,
@@ -718,7 +793,7 @@ function rekenAf(id) {
       World.sync(alleDieren());
       taakAf('uit');
       State.bewaar();
-      briefOpMuur(brief, function () { paintAvond(); render(); });
+      briefOpMuur(brief, function () { toonAvond(); render(); });
     }
   });
 }
@@ -764,14 +839,12 @@ function morgen() {
   if (state.levering <= 1) {
     state.scoops = 20 + Math.min(state.scoops, 4);
     state.levering = 4;
-    b.push('📦 Het nieuwe voer is bezorgd! Je hebt weer <b>' + state.scoops + ' scheppen</b> brokken.');
+    b.push({ icoon: '📦', tekst: 'voer: ' + state.scoops + ' 🥄' });
   }
   if (state.scoops < gebruik) {
     var bij = 10;
-    b.push('🩺 Buurvrouw Els kwam brokken brengen. &bdquo;Je had nog <b>' + state.scoops +
-      '</b> scheppen en jullie eten samen <b>' + gebruik + '</b> per dag. Ik doe er <b>' + bij +
-      '</b> bij.&rdquo;');
     state.scoops += bij;
+    b.push({ icoon: '🩺', tekst: 'Els bracht ' + bij + ' 🥄' });
   }
 
   /* bakjes leeg, iedereen wakker, nieuwe behoeften */
@@ -794,9 +867,9 @@ function morgen() {
                               .map(function (g) { return g.id; });
   if (state.uitcheck.length) {
     var n = gastVan(state.uitcheck[0]);
-    b.push('👪 Vanavond komt de familie van <b>' + esc(n.naam) + '</b> langs om ' + esc(n.naam) + ' op te halen.');
+    b.push({ icoon: '👪', tekst: n.naam + ' gaat naar huis' });
   }
-  state.dagBericht = b.length ? b.map(function (x) { return '<p>' + x + '</p>'; }).join('') : null;
+  state.dagBericht = b.length ? b : null;
   state.ronde = 'ochtend';
   state.taken = [];
   bouwTaken();
@@ -837,14 +910,19 @@ function render() {
     if (d) g.waar = d.kamer;
   });
   hud();
+  var voor = takenSig;
+  bouwTaken();
   kamerbalk();
   hotspots();
   Games.hersteek();
+  /* staat het bord open en is er iets veranderd? dan meteen bijwerken:
+     anders blijft er een taakje hangen dat al klaar is */
+  if (takenSig !== voor && bordOpen) toonBord();
 }
 
 function start() {
   herstelWereld();
-  if (!state.taken || !state.taken.length) bouwTaken();
+  bouwTaken(true);
   render();
   /* een halve check-in gaat vóór: die maak je eerst af */
   if (state.checkin) paintCheckin();
@@ -857,5 +935,7 @@ return { start: start, render: render, naarKamer: naarKamer, bel: bel,
          taakAf: taakAf, bouwTaken: bouwTaken, hotspots: hotspots, tikMand: tikMand,
          alleDieren: alleDieren, plekVanBehoefte: plekVanBehoefte,
          stuurNaarBehoefte: stuurNaarBehoefte, wachtIn: wachtIn,
-         paintCheckin: paintCheckin, kassa: kassa };
+         paintCheckin: paintCheckin, kassa: kassa, toonBord: toonBord,
+         toonAvond: toonAvond, doeTaak: doeTaak, bordOpen: function () { return bordOpen; },
+         bordDicht: bordDicht, wensAf: wensAf, spelTaken: spelTaken, SPEL_TAAK: SPEL_TAAK };
 })();

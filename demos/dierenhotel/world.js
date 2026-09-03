@@ -405,13 +405,49 @@ function camZet() {
   camX = Math.round(c[0]); camY = Math.round(c[1]);
 }
 
+/* =====================================================================
+   HET KADER PAST ZICH AAN DE KAMER AAN
+   De voxelschaal is een heel getal (nooit uitzoomen), dus we kunnen de
+   kamer niet groter maken dan g toestaat. Wat we WEL doen: het kader net
+   zo hoog maken als de hoogste kamer plus een strook eronder voor het
+   cijferpad. Anders staat de kamer klein in een zee van lucht.
+===================================================================== */
+var KADER_ONDER = 132;          /* css-px onder de kamer: daar past het pad */
+function hoogsteKamer() {
+  var h = 0;
+  Rooms.lijst().forEach(function (r) {
+    var b = r.box || Rooms.kader(r);
+    if (b[3] - b[2] > h) h = b[3] - b[2];
+  });
+  return h;
+}
+/* geeft true als de hoogte van het kader veranderd is */
+function pasKader(ng, breedte) {
+  if (!host) return false;
+  if (document.body && document.body.classList.contains('metpaneel')) {
+    /* een spel met een rekenblad ernaast: laat de opmaak het regelen */
+    if (host.style.height) { host.style.height = ''; host.style.maxHeight = ''; return true; }
+    return false;
+  }
+  var staand = window.innerHeight >= window.innerWidth;
+  var ruim = Math.round(window.innerHeight * (staand ? 0.66 : 0.86));
+  var kamerCss = hoogsteKamer() * ng / Math.min(3, window.devicePixelRatio || 1);
+  var wil = Math.round(Math.min(ruim, kamerCss + KADER_ONDER));
+  wil = Math.max(200, wil);
+  if (host.style.height === wil + 'px') return false;
+  host.style.height = wil + 'px';
+  host.style.maxHeight = wil + 'px';
+  return true;
+}
+
 function meet() {
   if (!host) return false;
   var r = host.getBoundingClientRect();
   if (r.width < 8 || r.height < 8) return false;
   dpr = Math.min(3, window.devicePixelRatio || 1);
+  var ng = Math.max(2, Math.min(4, Math.round(Math.max(240, Math.round(r.width * dpr)) / 370)));
+  if (pasKader(ng, r.width)) r = host.getBoundingClientRect();
   var nw = Math.max(240, Math.round(r.width * dpr)), nh = Math.max(180, Math.round(r.height * dpr));
-  var ng = Math.max(2, Math.min(4, Math.round(nw / 370)));
   if (nw === W && nh === H && ng === g) return false;
   W = nw; H = nh; g = ng;
   cv.width = W; cv.height = H;
@@ -682,9 +718,16 @@ function teken(mengen) {
   Hits.plaats(r.id, projectie);
 }
 
-/* de hotspot-laag rekent in css-pixels binnen het wereldkader */
+/* De hotspot-laag rekent in css-pixels binnen het wereldkader.
+   Tijdens het 300 ms camera-schuiven rekenen we met de camera van de
+   BESTEMMING: de knoppen staan dan meteen stil op hun eindplek, dus een tik
+   halverwege de beweging landt gewoon op het juiste voorwerp (en de dom
+   hoeft ondertussen niet te verschuiven). */
 function projectie(x, z, y) {
-  return { x: schermX(x, z) / dpr, y: (schermY(x, z) - (y || 0) * HG * g) / dpr };
+  var cx = camX, cy = camY;
+  if (reis) { cx = reis.naar[0]; cy = reis.naar[1]; }
+  return { x: (cx + (x - z) * S * g) / dpr,
+           y: (cy + (x + z) * (S / 2) * g - (y || 0) * HG * g) / dpr };
 }
 
 /* ---------- naamkaartjes ---------- */
@@ -786,13 +829,23 @@ function bouwBakken() {
     });
   });
 }
+/* Waar staat een reizend voorwerp in elke ruimte? De voerkar staat in de gang
+   netjes langs de loper en in een kamer naast het bakje. */
+var RUST = {
+  kar: { keuken: { x: 32, z: 44 }, gang: { x: 60, z: 20 },
+         kamer1: { x: 44, z: 44 }, kamer2: { x: 44, z: 44 },
+         receptie: { x: 56, z: 24 } }
+};
+
 /* losse voorwerpen (de voerkar) uit het decor lichten: die kunnen reizen */
 function bouwDingen() {
   dingen = [];
   Rooms.lijst().forEach(function (r) {
     r.decor = r.decor.filter(function (it) {
       if (!it.sleutel && it.n !== 'kar') return true;
-      dingen.push({ sleutel: it.sleutel || it.n, n: it.n, kamer: r.id, x: it.x, z: it.z, y: it.y || 0 });
+      dingen.push({ sleutel: it.sleutel || it.n, n: it.n, kamer: r.id,
+                    x: it.x, z: it.z, y: it.y || 0,
+                    rust: RUST[it.sleutel || it.n] || null });
       return false;
     });
   });
@@ -810,10 +863,36 @@ function ding(sleutel) {
   for (var i = 0; i < dingen.length; i++) if (dingen[i].sleutel === sleutel) return dingen[i];
   return null;
 }
+/* Een voorwerp dat verhuist moet in de NIEUWE kamer op de vloer staan. De
+   voerkar stond bijvoorbeeld op z = 44, en de gang is maar 36 diep - dan
+   zweeft de kar naast het tapijt. Heeft het voorwerp voor die kamer een eigen
+   plek (RUST), dan gebruiken we die; anders vraagt Rooms.vrijVak het
+   dichtstbijzijnde vakje van het vloerraster dat op dit moment ook echt leeg
+   is. Daarna houden we het voorwerp altijd binnen de kamer. */
+function rustPlek(d, kamerId) {
+  var r = Rooms.get(kamerId);
+  if (!r || r.erf) return null;
+  if (d.rust && d.rust[kamerId]) return d.rust[kamerId];
+  var v = Rooms.vrijVak(kamerId, r.w * 0.45, r.d * 0.55);
+  return v ? { x: v.x, z: v.z } : { x: Math.round(r.w / 2), z: Math.round(r.d / 2) };
+}
+function inKamer(d) {
+  var r = Rooms.get(d.kamer);
+  if (!r || r.erf) return;
+  var m = 6;
+  d.x = Math.max(m, Math.min(r.w - m, d.x));
+  d.z = Math.max(m, Math.min(r.d - m, d.z));
+}
 function dingZet(sleutel, o) {
   var d = ding(sleutel);
   if (!d) return null;
+  var oudeKamer = d.kamer;
   for (var k in o) d[k] = o[k];
+  if (d.kamer !== oudeKamer && (o.x === undefined || o.z === undefined)) {
+    var p = rustPlek(d, d.kamer);
+    if (p) { d.x = p.x; d.z = p.z; }
+  }
+  inKamer(d);
   vuil = true;
   return d;
 }
@@ -1002,9 +1081,105 @@ function toon(ja) {
 }
 function vuilMaken() { vuil = true; }
 
+/* =====================================================================
+   MIKPUNT: waar in de wereld hangt dit ding?
+   Een spel mag een voorwerp aanwijzen met een naam ('bel', 'kar', 'bed1'),
+   met een dier-id ('boef') of met losse coördinaten {x, z, kamer, y}.
+   ui.wolk, ui.somkaart en wereld.getalTag gebruiken dit allemaal.
+===================================================================== */
+function mik(obj, kamerId) {
+  if (!obj && obj !== 0) return null;
+  if (typeof obj === 'object') {
+    if (obj.dier) return mik(obj.dier, kamerId);
+    if (obj.x === undefined) return null;
+    return { kamer: obj.kamer || kamerId || kamerNu, x: obj.x, z: obj.z, y: obj.y || 0, volg: null };
+  }
+  var d = vind(obj);
+  if (d) {
+    return { kamer: d.kamer, x: d.x, z: d.z, y: 0, dier: obj,
+             volg: function () { var q = vind(obj); return q ? { x: q.x, z: q.z, kamer: q.kamer } : null; } };
+  }
+  var t = ding(obj);
+  if (t) {
+    return { kamer: t.kamer, x: t.x, z: t.z, y: t.y || 0, ding: obj,
+             volg: function () { var q = ding(obj); return q ? { x: q.x, z: q.z, kamer: q.kamer } : null; } };
+  }
+  var lijst = kamerId ? [kamerId] : [kamerNu].concat(Rooms.lijst().map(function (r) { return r.id; }));
+  for (var i = 0; i < lijst.length; i++) {
+    var r = Rooms.get(lijst[i]);
+    if (!r) continue;
+    var sl = Rooms.slot(lijst[i], obj);
+    if (sl) return { kamer: lijst[i], x: sl.x, z: sl.z, y: 0, volg: null };
+    for (var j = 0; j < r.decor.length; j++)
+      if (r.decor[j].n === obj || r.decor[j].meubel === obj)
+        return { kamer: lijst[i], x: r.decor[j].x, z: r.decor[j].z, y: r.decor[j].y || 0, volg: null };
+  }
+  return null;
+}
+
+/* een cijfer ÓP een voorwerp (het aantal in een bakje, het bedrag op de
+   toonbank, het nummer van een haakje). n = null haalt het weg. */
+function getalTag(obj, n, o) {
+  o = o || {};
+  /* een eigen id gaat vóór: zo kun je meerdere cijfers bij één voorwerp
+     hangen (spookmunten) en ze later met dezelfde sleutel weghalen */
+  var sleutel = 'getal_' + (o.id || (typeof obj === 'string' ? obj
+                  : ((obj && obj.id) || (obj.x + '_' + obj.z))));
+  if (n === null || n === undefined || n === false) { Hits.weg(sleutel); return null; }
+  var p = mik(obj, o.kamer);
+  if (!p) return null;
+  Hits.maak({
+    id: sleutel, door: o.door || 'wereld', kamer: p.kamer,
+    x: p.x, z: p.z, y: o.y === undefined ? 8 : o.y,
+    /* een doosje, geen knop: een cijfer op een bakje hoort niet in de
+       tab-volgorde en is niet aan te tikken */
+    kind: 'tag', tagnaam: 'div', klas: 'hotgetal' + (o.klas ? ' ' + o.klas : ''),
+    html: '<span class="getal">' + n + '</span>', titel: o.titel || String(n),
+    /* standaard laag in de rij (het is maar een cijfertje), maar een spel mag
+       hem hoger zetten als het cijfer belangrijker is dan een knop erbij */
+    prio: o.prio === undefined ? 4 : o.prio,
+    volg: p.volg ? function () {
+      var q = p.volg();
+      return q ? { x: q.x, z: q.z, y: o.y === undefined ? 8 : o.y } : null;
+    } : null
+  });
+  return sleutel;
+}
+
+/* Hoe groot is een voxel op het scherm? Handig als een spel zelf een rijtje
+   wil uitzetten: horizontaal telt (x - z), verticaal (x + z) en de hoogte y.
+     css-x  ~  2k * (x - z)        met k = g / devicePixelRatio
+     css-y  ~  k  * (x + z - 2y)
+   Twee knoppen staan pas echt naast elkaar bij ongeveer 30 voxels verschil
+   in (x - z), of 50 in (x + z - 2y). */
+function schaal() {
+  var k = g / (dpr || 1);
+  return { g: g, dpr: dpr, k: k,
+           pxPerVoxelX: 2 * k,      /* per stap in (x - z) */
+           pxPerVoxelY: k,          /* per stap in (x + z) */
+           pxPerHoogte: 2 * k };    /* per stap in y */
+}
+
+/* de vloer van de kamer als rechthoek op het scherm (css-px in het kader) */
+function vloerRect() {
+  var r = kamer();
+  if (!r) return null;
+  var pts = [[0, 0], [r.w, 0], [r.w, r.d], [0, r.d]], i, p, x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  for (i = 0; i < pts.length; i++) {
+    p = projectie(pts[i][0], pts[i][1], 0);
+    if (p.x < x0) x0 = p.x;
+    if (p.x > x1) x1 = p.x;
+    if (p.y < y0) y0 = p.y;
+    if (p.y > y1) y1 = p.y;
+  }
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
 function debug() {
   var o = { kamer: kamerNu, rustig: rustModus, tonen: tonen, g: g, canvas: [W, H],
-            cam: [camX, camY], reis: !!reis, dieren: {}, bakken: {}, dingen: {} };
+            cam: [camX, camY], reis: !!reis, dieren: {}, bakken: {}, dingen: {},
+            kader: host ? [Math.round(host.clientWidth), Math.round(host.clientHeight)] : null,
+            box: (kamer() || {}).box || null, vloer: vloerRect() };
   for (var i = 0; i < dieren.length; i++) {
     var d = dieren[i];
     o.dieren[d.id] = { staat: d.staat, pose: d.pose, naam: d.naam, kamer: d.kamer,
@@ -1042,6 +1217,7 @@ var api = { sync: sync, setFood: setFood, setBak: setBak, bakStand: bakStand,
             feed: feed, mood: mood, solo: solo, slaap: slaap,
             ga: ga, reis: reisNaar, zet: zet, naar: naar, actief: function () { return kamerNu; },
             dingZet: dingZet, dingPlek: ding, vuil: vuilMaken, herbouw: herbouw,
+            mik: mik, getalTag: getalTag, vloer: vloerRect, schaal: schaal,
             heeft: heeft, toon: toon, debug: debug, dier: vind,
             klaar: function () { return aan; } };
 

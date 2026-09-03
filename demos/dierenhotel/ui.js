@@ -140,11 +140,15 @@ function paneel(html, klas) {
   var host = $('#scene');
   if (!host) return null;
   host.innerHTML = '<div class="card ' + (klas || '') + '" id="paneel">' + html + '</div>';
+  /* met een blad ernaast wordt het diorama kleiner; zonder blad mag de
+     wereld het hele scherm hebben (HOTEL.md 9) */
+  document.body.classList.add('metpaneel');
   return $('#paneel');
 }
 function leegPaneel() {
   var host = $('#scene');
   if (host) host.innerHTML = '';
+  document.body.classList.remove('metpaneel');
 }
 function inPaneel() { var h = $('#scene'); return !!(h && h.firstChild); }
 
@@ -241,6 +245,219 @@ function hulpNa2s(fn) {
   return function () { if (t) { clearTimeout(t); t = null; } };
 }
 
+/* =====================================================================
+   REKENEN ÍN DE WERELD  (HOTEL.md 9)
+   Geen rekenpaneel naast het diorama meer: sommen, aantallen en keuzes
+   hangen als kleine wolkjes en kaartjes aan een voorwerp of een dier.
+   Per stap één korte regel (richtlijn: 6 woorden), verder pictogrammen en
+   getallen. Alles gaat via de hotspot-laag, dus het schuift automatisch
+   mee met de camera, wijkt uit voor andere knoppen en blijft in beeld.
+===================================================================== */
+var wolkNr = 0, somNr = 0;
+
+/* ---------- spreekwolkje aan een voorwerp of dier ----------
+   Ui.wolk('boef', { icoon:'🍪', getal:2, tekst:'nog twee', tik:fn })   */
+function wolk(obj, o) {
+  o = o || {};
+  var p = World.mik(obj, o.kamer);
+  if (!p) return null;
+  var id = o.id || ('wolk_' + (typeof obj === 'string' ? obj : 'x' + (++wolkNr)));
+  var hoog = o.hoog === undefined ? (p.dier ? 52 : 20) : o.hoog;
+  var tekst = o.tekst === undefined || o.tekst === null ? '' : String(o.tekst);
+  var getal = o.getal === undefined || o.getal === null ? '' : String(o.getal);
+  var zeg = (o.icoon ? o.icoon + ' ' : '') + (getal ? getal + ' ' : '') + tekst;
+  Hits.maak({
+    id: id, door: o.door || 'wolk', kamer: p.kamer, x: p.x, z: p.z, y: hoog,
+    klas: 'hotwolk' + (o.klas ? ' ' + o.klas : ''),
+    html: '<span class="ico">' + (o.icoon || '') + '</span>' +
+          (getal ? '<span class="get">' + esc(getal) + '</span>' : '') +
+          (tekst ? '<span class="zeg">' + esc(tekst) + '</span>' : ''),
+    titel: zeg || 'praatje', prio: o.prio === undefined ? 9 : o.prio,
+    /* loopt het dier naar een andere kamer, dan gaat het wolkje mee */
+    volg: p.volg ? function () {
+      var q = p.volg();
+      return q ? { x: q.x, z: q.z, y: hoog, kamer: q.kamer } : null;
+    } : null,
+    /* Tikken leest het wolkje voor - alleen als het kind daar zelf op tikt. */
+    aan: function () { if (o.tik) o.tik(); else spreek(zeg); }
+  });
+  return id;
+}
+function wolkWeg(id) { Hits.weg(id); }
+
+/* ---------- klein cijferpad, verankerd aan het voorwerp ----------
+   Het enige 2D-ding dat mag (HOTEL.md 9): twee rijen van zes toetsen,
+   elke toets minstens 48 px, en het staat vlak onder de sommenkaart. */
+var PAD_KEYS = [['1', '2', '3', '4', '5', 'del'], ['6', '7', '8', '9', '0', 'ok']];
+function padHtml() {
+  var h = '<div class="padrij">', i, j, k;
+  for (i = 0; i < PAD_KEYS.length; i++) {
+    for (j = 0; j < PAD_KEYS[i].length; j++) {
+      k = PAD_KEYS[i][j];
+      h += '<button type="button" class="padk' + (k === 'ok' ? ' ok' : k === 'del' ? ' del' : '') +
+        '" data-pk="' + k + '">' + (k === 'del' ? '⌫' : k === 'ok' ? '✓' : k) + '</button>';
+    }
+    if (i === 0) h += '</div><div class="padrij">';
+  }
+  return h + '</div>';
+}
+
+/* ---------- sommenkaartje aan een voorwerp ----------
+   Ui.somkaart('kassa', '3 × €2 =', { open:true, onOk:fn })
+   Geeft een handvat terug: .zet(tekst) .klaar() .weg() .open()          */
+function somkaart(obj, som, o) {
+  o = o || {};
+  var p = World.mik(obj, o.kamer);
+  if (!p) return null;
+  var id = o.id || ('som' + (++somNr));
+  var st = { val: '', klaar: false, open: !!o.open, extra: '' };
+  var hoog = o.hoog === undefined ? 22 : o.hoog;
+
+  function kaart() {
+    Hits.maak({
+      id: id, door: o.door || 'som', kamer: p.kamer, x: p.x, z: p.z, y: hoog,
+      klas: 'hotsom' + (st.klaar ? ' af' : '') + (o.klas ? ' ' + o.klas : ''),
+      vast: true, prio: 14,
+      html: '<span class="somlijn">' + esc(String(som)) + '</span>' +
+            '<span class="somvak' + (st.klaar ? ' ok' : '') + '">' +
+            (st.klaar ? '✓' : (st.val === '' ? '&nbsp;' : esc(st.val))) + '</span>' +
+            (st.extra ? '<span class="somhulp">' + st.extra + '</span>' : ''),
+      titel: String(som) + ' ' + (st.val || '?'),
+      aan: function () { if (!st.klaar && o.pad !== false) padAan(); }
+    });
+  }
+  /* Het pad hoort ONDER de kamer te liggen, in de lucht onder de vloer: zo
+     dekt het de kamer niet af. We rekenen de hoogte terug uit de onderrand
+     van het kamerkader (schermhoogte v = (x+z) - 2y). */
+  function padY() {
+    if (o.padHoog !== undefined) return o.padHoog;
+    var r = Rooms.get(p.kamer);
+    var vDoel = (r && r.box ? r.box[3] : 180) + 44;
+    return Math.round(((p.x + p.z) - vDoel) / 2);
+  }
+  function padAan() {
+    if (st.klaar || o.pad === false) return;
+    st.open = true;
+    Hits.maak({
+      id: id + '_pad', door: o.door || 'som', kamer: p.kamer, x: p.x, z: p.z,
+      y: padY(),
+      tagnaam: 'div', klas: 'hotpad', vast: true, prio: 20,
+      html: padHtml(), titel: 'cijfers',
+      aan: function (spot, ev) {
+        var b = ev.target && ev.target.closest ? ev.target.closest('[data-pk]') : null;
+        if (!b) return;
+        var k = b.getAttribute('data-pk');
+        if (k === 'del') st.val = st.val.slice(0, -1);
+        else if (k === 'ok') { if (o.onOk) o.onOk(st.val === '' ? null : parseInt(st.val, 10), api); return; }
+        else if (st.val.length < (o.max || 2)) st.val += k;
+        kaart();
+      }
+    });
+  }
+  var api = {
+    id: id,
+    getal: function () { return st.val === '' ? null : parseInt(st.val, 10); },
+    /* alleen de somregel vervangen; het kaartje en het pad blijven staan */
+    regel: function (t) { som = t === undefined || t === null ? som : String(t); kaart(); return api; },
+    zet: function (t) { st.val = t === null || t === undefined ? '' : String(t); kaart(); return api; },
+    hulp: function (h) { st.extra = h || ''; kaart(); return api; },
+    open: function () { padAan(); return api; },
+    klaar: function () {
+      st.klaar = true;
+      Hits.weg(id + '_pad');
+      kaart();
+      return api;
+    },
+    weg: function () { Hits.weg(id + '_pad'); Hits.weg(id); }
+  };
+  kaart();
+  if (st.open) padAan();
+  return api;
+}
+
+/* ---------- sleepbron met teller ----------
+   Een zak koekjes, een buidel munten, een kist met bedjes: het ding waar je
+   dingen VANDAAN haalt, met het aantal erop. Slepen doet ctx.sleep; geef je
+   de sleep-opties mee als `sleep`, dan hangt dit ze zelf aan de knop (en
+   opnieuw als de knop tussendoor is herbouwd).
+   Ui.bron('zak', { icoon:'🍪', aantal:12, hand:2, sleep:{dropSel:...} })   */
+function bron(obj, o) {
+  o = o || {};
+  var p = World.mik(obj, o.kamer);
+  if (!p) return null;
+  var id = o.id || ('bron_' + (typeof obj === 'string' ? obj : 'x' + (++wolkNr)));
+  var hoog = o.hoog === undefined ? 16 : o.hoog;
+  var h = { id: id, el: null };
+  /* Eén tik = één keer afleveren. Het sleepmechanisme meldt een tik al via
+     onTap; de klik die de browser daarna nog stuurt zetten we stil. Zonder
+     dit legt één tik twee munten neer. */
+  var sl = null;
+  function viaSleep() { if (h.el) h.el.__bronTik = 1; }
+  if (o.sleep) {
+    sl = {};
+    for (var k in o.sleep) sl[k] = o.sleep[k];
+    sl.onTap = function () {
+      viaSleep();
+      if (o.sleep.onTap) o.sleep.onTap.apply(null, arguments);
+      else if (o.tik) o.tik(h);
+    };
+    sl.onDrop = function (t) {
+      viaSleep();
+      if (o.sleep.onDrop) o.sleep.onDrop.apply(null, arguments);
+    };
+  }
+  function teken() {
+    Hits.maak({
+      id: id, door: o.door || 'bron', kamer: p.kamer, x: p.x, z: p.z, y: hoog,
+      klas: 'hotbron' + (o.klas ? ' ' + o.klas : ''),
+      prio: o.prio === undefined ? 10 : o.prio,
+      html: '<span class="ico">' + (o.icoon || '') + '</span>' +
+            (o.aantal === undefined || o.aantal === null ? ''
+              : '<span class="get">' + o.aantal + '</span>') +
+            (o.hand ? '<span class="hand">' + o.hand + '</span>' : ''),
+      titel: o.titel || 'pak hier',
+      volg: p.volg ? function () {
+        var q = p.volg();
+        return q ? { x: q.x, z: q.z, y: hoog, kamer: q.kamer } : null;
+      } : null,
+      aan: function () {
+        if (h.el && h.el.__bronTik) { h.el.__bronTik = 0; return; }   /* al via slepen */
+        if (o.tik) o.tik(h);
+      }
+    });
+    h.el = document.querySelector('[data-hot="' + id + '"]');
+    if (h.el && sl && h.el.__bron !== id) {
+      h.el.__bron = id;
+      makeDraggable(h.el, sl);
+    }
+  }
+  h.zet = function (aantal, hand) {
+    if (aantal !== undefined) o.aantal = aantal;
+    if (hand !== undefined) o.hand = hand;
+    teken();
+    return h;
+  };
+  h.weg = function () { Hits.weg(id); };
+  teken();
+  return h;
+}
+
+/* ---------- voorlezen: alleen als er op getikt wordt ----------
+   Werkt met de spraakstem van het apparaat zelf (offline). Kan het niet,
+   dan gebeurt er simpelweg niets. Nooit automatisch, nooit herhalend. */
+function spreek(tekst) {
+  try {
+    if (!tekst || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
+    var u = new window.SpeechSynthesisUtterance(String(tekst));
+    u.lang = 'nl-NL';
+    u.rate = 0.95;
+    u.pitch = 1.05;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+    return true;
+  } catch (e) { return false; }
+}
+
 /* ---------- kleine dingen ---------- */
 function chip(tekst, klas) { return '<div class="chip ' + (klas || '') + '">' + tekst + '</div>'; }
 function nuMs() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
@@ -249,5 +466,8 @@ return { paneel: paneel, leegPaneel: leegPaneel, inPaneel: inPaneel,
          pad: pad, telMee: telMee, telRij: telRij, getallenlijn: getallenlijn,
          voorbeeld: voorbeeld, hulpNa2s: hulpNa2s, chip: chip,
          woord: woord, hoofd: hoofd, esc: esc, toast: toast,
-         sheet: openSheet, sluit: closeSheet, nu: nuMs };
+         sheet: openSheet, sluit: closeSheet, nu: nuMs,
+         /* rekenen ín de wereld (HOTEL.md 9) */
+         wolk: wolk, wolkWeg: wolkWeg, somkaart: somkaart, spreek: spreek,
+         bron: bron };
 })();
