@@ -96,7 +96,7 @@ slot (`bed1`, `bed2`, `bak`, `tobbe`) of de sleutel van een los voorwerp (`kar`,
 | `ding(sleutel)` / `dingZet(sleutel, {kamer,x,z,y})` | los voorwerp opvragen / verzetten (de voerkar). Geef je alleen `kamer` mee, dan krijgt het voorwerp vanzelf een nette plek op de vloer van die ruimte; een plek buiten de kamer wordt naar binnen gehaald. |
 | `vuil()` | zeg dat het beeld opnieuw getekend moet worden |
 | `mik(obj[, kamerId])` | waar hangt dit voorwerp/dier? → `{kamer,x,z,y,volg}` |
-| `schaal()` | `{g, dpr, k, pxPerVoxelX, pxPerVoxelY, pxPerHoogte}` — hoeveel css-px is één voxel |
+| `schaal()` | `{g, dpr, k, pxPerVoxelX, pxPerVoxelY, pxPerHoogte}` — hoeveel css-px is één voxel. `dpr` is de **tekendichtheid van het canvas**, niet `devicePixelRatio`: world.js tekent vaak dichter en laat de css terugschalen (HOTEL.md §1). Reken dus altijd met `k` (= `g / dpr`) en nooit zelf met `devicePixelRatio`. |
 | `behoefteKlaar(gastId[, wens])` | de wens van een gast vervullen zoals het hotel dat doet |
 | `getalTag(obj, n[, o])` | **een cijfer ÓP het voorwerp** (bakje, haakje, toonbank); `n = null` haalt het weg; `o.prio` (standaard 4) bepaalt wie er blijft staan als een kamer vol raakt |
 | `voegBed(kamerId, {x,z,rot})` | **een bed erbij** → de plek, of `null` als het niet past |
@@ -132,8 +132,10 @@ Wat er automatisch gebeurt:
   half neergezet meubel;
 * een bed erbij verhoogt meteen `ctx.state.maxGasten()`, dus de bel laat een
   gast extra binnen;
-* alles wordt bewaard in de opslag (v6) en staat na "Verder spelen" weer op
-  zijn plek. Je hoeft zelf niets te onthouden.
+* alles wordt bewaard in de opslag (v7) en staat na "Verder spelen" weer op
+  zijn plek. Je hoeft zelf niets te onthouden. Verbouwt een ticket een kamer
+  (K1 maakte de vier speelkamers 1,5× groter), dan schuiven bewaarde meubels
+  mee in de migratie in `state.js` — jij hoeft er niets voor te doen.
 
 ### `ctx.hotspots` — knoppen en sleep-doelen IN de wereld
 ```js
@@ -193,7 +195,7 @@ naar de wereld (de voerkar op een deur), want de hotspot-laag is gewoon DOM.
 | `bedden()`, `bedVrij()`, `gastInBed(k, s)`, `maxGasten()` | de bedden |
 | `munten()`, `sterren()`, `munt(n)`, `ster(n, waarvoor)` | de economie |
 | `gezien(k)`, `zetGezien(k)` | is deze uitleg al eens gezien? |
-| `bewaar()` | opslaan (v6) |
+| `bewaar()` | opslaan (v7) |
 | `ruw()` | het hele `state`-object (mag je lezen; schrijf alleen in je eigen laatje) |
 | `spelData(id)` | jouw eigen laatje in de opslag |
 
@@ -295,15 +297,25 @@ Wat dat voor jou betekent:
   voorwerp is dan van jou (bijvoorbeeld de voerkar, die zijn eigen "duw mij"-
   knop neerzet). Wil je het icoontje toch laten staan, zet dan
   `hotspot.blijf = true`.
-* In isometrie liggen dingen snel over elkaar heen. Op het scherm geldt
-  (bij de gebruikte schalen) ongeveer: **horizontaal ≈ (x − z) × 2 px**,
-  **verticaal ≈ (x + z − 2·y) px**. Een knop is ~50–70 px breed en 48 px hoog,
-  dus twee knoppen staan pas echt naast elkaar als hun `x − z` zo'n **30 voxels**
-  verschilt, of hun `x + z − 2y` zo'n **50**. Zet je voorwerpen dus uit elkaar,
-  of verdeel ze over twee richtingen (zoals de L-vormige balie in de receptie).
+* In isometrie liggen dingen snel over elkaar heen. Op het scherm geldt met
+  `k = ctx.wereld.schaal().k` (css-px per voxel-px; 0,58 op een kleine telefoon
+  tot 2,0 op een laptop, en sinds K1 **per kamer verschillend**):
+  **horizontaal ≈ (x − z) × 2k px**, **verticaal ≈ (x + z − 2·y) × k px**. Een knop is ~50–70 px breed en 48 px hoog, dus twee
+  knoppen staan pas echt naast elkaar als hun `x − z` zo'n **50/(2k) voxels**
+  verschilt (≈ 30 bij k = 1, ≈ 43 op de kleinste telefoon), of hun
+  `x + z − 2y` zo'n **50/k**. Zet je voorwerpen dus uit elkaar, of verdeel ze
+  over twee richtingen (zoals de L-vormige balie in de receptie).
   Reken het even na vóór je vier knoppen op één tafel legt: staat er een knop met
   een grotere diepte bovenop, dan gaat de tik dáárheen — dat is de bedoeling van
   de regel, maar het voelt als een bug in je spel.
+* Zet vaste plekken in je spel **niet** in losse voxels neer maar als breuk van
+  de kamer: `Rooms.plek(kamerId, fx, fz)` geeft `{kamer, x, z}` en
+  `Rooms.hoogte(kamerId, f)` een hoogte (y) die met de kamer meeschaalt. Wordt
+  een kamer verbouwd (K1: de receptie ging van 80 × 80 naar 120 × 120), dan
+  schuift jouw opstelling automatisch mee en blijven de afstanden op het scherm
+  gelijk — een 1,5× grotere kamer bij een 0,78× kleinere `k` geeft zelfs iets
+  méér lucht tussen de knoppen. `games/sleutels.js` en `games/voerkar.js` zijn
+  hiervan het voorbeeld.
 
 ### En nog iets over portret
 In portret staat je rekenblad **onder** de kamer. Wil je iets van het blad naar

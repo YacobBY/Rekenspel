@@ -3,8 +3,10 @@
 
    Eén ruimte vult altijd het kader: we zoomen NOOIT uit, we verhuizen.
    Van kamer naar kamer schuift de camera in 300 ms door (kamer-camera,
-   HOTEL.md 1). De voxelschaal blijft een heel getal, dus de blokjes
-   blijven altijd even scherp.
+   HOTEL.md 1). De voxelschaal g blijft een heel getal (2..4), dus de blokjes
+   zijn nooit uitgerekt; past een kamer bij die schaal niet op het scherm,
+   dan tekenen we het canvas op een hogere dichtheid en schaalt de css hem
+   terug (zie maatVan).
 
    Techniek:
      * dezelfde voxelmotor als de dieren (Art.kit): zelfde licht,
@@ -144,15 +146,24 @@ Dier.prototype.kies = function () {
   else this.zet('stil', Math.round((12 + this.rnd() * 46) * this.rustig));
 };
 
+/* De stapmaat van dit dier in de kamer waar het nu is. De dieren zijn niet
+   groter geworden, de kamers wel (K1: de vier speelkamers 1,5x). Zonder deze
+   factor doet een gast anderhalf keer zo lang over een kamer; mét is het op
+   het scherm precies dezelfde loop als vroeger (rooms.js, veld loop). */
+function loopMaat(d) {
+  var r = Rooms.get(d.kamer);
+  return (r && r.loop) || 1;
+}
 Dier.prototype.rijd = function () {
   var dx = this.tx - this.x, dz = this.tz - this.z;
   var d = Math.sqrt(dx * dx + dz * dz);
   if (d < 0.02) { this.v = 0; return true; }
-  var acc = this.vmax / 5.5;
-  var rem = this.v * this.v / (2 * acc) + this.vmax * 0.4;
+  var vmax = this.vmax * loopMaat(this);
+  var acc = vmax / 5.5;
+  var rem = this.v * this.v / (2 * acc) + vmax * 0.4;
   this.v += (d <= rem ? -acc * 1.5 : acc);
-  if (this.v > this.vmax) this.v = this.vmax;
-  if (this.v < this.vmax * 0.14) this.v = this.vmax * 0.14;
+  if (this.v > vmax) this.v = vmax;
+  if (this.v < vmax * 0.14) this.v = vmax * 0.14;
   var stap = Math.min(this.v, d);
   this.x += dx / d * stap; this.z += dz / d * stap;
   this.gang += stap * this.stapLengte;
@@ -361,8 +372,9 @@ Dier.prototype.grofTik = function () {
   if (this.staat === 'loop') {
     var dx = this.tx - this.x, dz = this.tz - this.z;
     var d = Math.sqrt(dx * dx + dz * dz);
-    if (d < this.vmax) { this.x = this.tx; this.z = this.tz; this.px = this.x; this.pz = this.z; this.aangekomen(); }
-    else { this.x += dx / d * this.vmax; this.z += dz / d * this.vmax; this.px = this.x; this.pz = this.z; }
+    var vm = this.vmax * loopMaat(this);
+    if (d < vm) { this.x = this.tx; this.z = this.tz; this.px = this.x; this.pz = this.z; this.aangekomen(); }
+    else { this.x += dx / d * vm; this.z += dz / d * vm; this.px = this.x; this.pz = this.z; }
     return;
   }
   if (this.staat === 'eet') {
@@ -399,17 +411,17 @@ function kamer() { return Rooms.get(kamerNu) || Rooms.lijst()[0]; }
 function camDoel(r) {
   var b = r.box;
   var cx = W / 2 - (b[0] + b[1]) / 2 * g;
-  /* Past de kamerdoos in de hoogte? Dan netjes midden. Past hij niet, dan
-     houden we de VLOER helemaal in beeld en snijden we bovenaan een stukje
-     kale wand af - nooit de vloer waar de dieren en de bakjes staan. */
-  var hoog = (b[3] - b[2]) * g;
-  var mid = H / 2 - (b[2] + b[3]) / 2 * g;
-  /* Past hij: de kamer staat een tikje hoger dan precies midden, zodat er
-     onderin ruimte is voor het cijferpad. Dat zetje is altijd een heel
-     aantal CSS-pixels (een veelvoud van de pixelverhouding), zodat de
-     voxels precies even scherp blijven staan als daarvoor. */
-  var zet = Math.round((H - hoog) * 0.16 / dpr) * dpr;
-  var cy = hoog <= H ? mid - zet : H - 4 - b[3] * g;
+  var hoog = (b[3] - b[2]) * g, over = H - hoog;
+  /* ONDER de kamer hoort een strook: daar hangt het cijferpad (ui.js zet het
+     44 voxel-px onder de kamerdoos) en daar staat de dekenkist van de bedden.
+     Is er hoogte over, dan reserveren we KADER_ONDER css-px onderaan en staat
+     de kamer daar netjes midden boven; is er minder over, dan gaat alles wat
+     over is naar die strook en staat de kamer bovenaan.
+     Past de doos niet (een heel laag kader), dan houden we de VLOER helemaal
+     in beeld en snijden we bovenaan kale wand af - nooit de vloer waar de
+     dieren en de bakjes staan. */
+  var onder = Math.min(KADER_ONDER * dpr, Math.max(0, over));
+  var cy = over >= 0 ? (over - onder) / 2 - b[2] * g : H - 4 - b[3] * g;
   return [cx, cy];
 }
 function camZet() {
@@ -418,28 +430,41 @@ function camZet() {
 }
 
 /* =====================================================================
-   HET KADER PAST ZICH AAN DE KAMER AAN
-   De voxelschaal is een heel getal (nooit uitzoomen), dus we kunnen de
-   kamer niet groter maken dan g toestaat. Wat we WEL doen: het kader net
-   zo hoog maken als de hoogste kamer plus een strook eronder voor het
-   cijferpad. Anders staat de kamer klein in een zee van lucht.
+   HET KADER EN DE VOXELMAAT (HOTEL.md 1)
+   Drie getallen horen bij elkaar, per RUIMTE:
+     q      css-px per voxel-px    - hoe groot staat de kamer op het scherm
+     g      canvas-px per voxel-px - de VOXELMAAT, altijd een heel getal 2..4
+     dicht  canvas-px per css-px   - de tekendichtheid van het canvas
+   q = g / dicht. Sinds K1 zijn de vier speelkamers 1,5x groter dan de gang
+   en de tuin, en dus heeft elke ruimte zijn EIGEN maat: hij vult het kader
+   in de breedte en zijn vloer past altijd in de hoogte. We zoomen dus nog
+   steeds nooit uit (je ziet nooit het hele hotel), we verhuizen - en bij het
+   verhuizen verandert de maat mee, want een kleine gang hoort niet klein in
+   beeld te staan omdat de receptie breed is.
+   Daarna kiezen we de dichtstbijzijnde HELE g: is die groter dan het scherm
+   zelf kan geven (op een telefoon is g = 2 al te groot voor een kamer van
+   500 voxel-px breed), dan tekenen we het canvas op een hógere dichtheid dan
+   het scherm en laat de css hem terugschalen. Zo blijft g heel (de blokjes
+   zijn nooit uitgerekt) en past de kamer altijd.
+   De hoogte van het KADER is wél voor alle ruimtes gelijk (anders springt de
+   pagina bij elke deur): hij is zo hoog dat de kleinst uitvallende doos nog
+   60% vult, en niet hoger dan er op het scherm over is.
 ===================================================================== */
 var KADER_ONDER = 132;          /* css-px onder de kamer: daar past het pad */
-function hoogsteKamer() {
-  var h = 0;
-  Rooms.lijst().forEach(function (r) {
-    var b = r.box || Rooms.kader(r);
-    if (b[3] - b[2] > h) h = b[3] - b[2];
-  });
-  return h;
-}
-function breedsteKamer() {
-  var w = 0;
-  Rooms.lijst().forEach(function (r) {
-    var b = r.box || Rooms.kader(r);
-    if (b[1] - b[0] > w) w = b[1] - b[0];
-  });
-  return w || 370;
+var KADER_RAND = 4;             /* css-px lucht links en rechts van de doos */
+/* Wat er van een kamerdoos ALTIJD in beeld moet blijven: de vloer, de rand
+   eronder en een strook wand van WAND_ZICHT voxel-px. Daarboven staat kale
+   wand; die mag in een laag kader (liggende telefoon) wegvallen, precies
+   zoals de camera dat altijd deed. Het prikbord is 23 voxels hoog (46
+   voxel-px), het sleutelbord 19, dus met 56 blijven ze heel. */
+var WAND_ZICHT = 56;
+function doosVan(r) { return r.box || Rooms.kader(r); }
+function doosBreed(r) { var b = doosVan(r); return b[1] - b[0]; }
+function doosHoog(r) { var b = doosVan(r); return b[3] - b[2]; }
+/* de hoogte die er van deze doos echt in het kader moet passen */
+function nodigHoog(r) {
+  var b = doosVan(r), lucht = Math.max(0, -b[2] - WAND_ZICHT);
+  return (b[3] - b[2]) - lucht;
 }
 /* hoeveel hoogte gaat er op aan balken boven en onder het kader? */
 function chroomHoogte() {
@@ -451,32 +476,51 @@ function chroomHoogte() {
 function ruimteHoogte() {
   return Math.max(200, window.innerHeight - chroomHoogte() - 6);
 }
-/* De hele voxelschaal: hij moet in de BREEDTE passen (nooit een kamer
-   afsnijden) en zo goed als mogelijk ook in de hoogte. Van de hoogte mogen
-   we een klein stukje kale wand missen (15%), want de camera houdt dan de
-   vloer in beeld. */
-function kiesSchaal(nw) {
+/* ... en hoeveel daarvan mag het kader echt gebruiken (de balken van het
+   hotel moeten er ook nog bij: staand 78%, liggend 90% van het scherm) */
+function ruimVoorKader() {
+  var staand = window.innerHeight >= window.innerWidth;
+  return Math.min(ruimteHoogte(), Math.round(window.innerHeight * (staand ? 0.78 : 0.90)));
+}
+/* de maat van ÉÉN ruimte in een kader van cssW breed en hoogPx hoog */
+function maatVan(r, cssW, hoogPx) {
   var d = Math.min(3, window.devicePixelRatio || 1);
-  var gB = Math.floor(nw / breedsteKamer());
-  var gH = Math.floor((ruimteHoogte() * d + hoogsteKamer() * 0.35) / hoogsteKamer());
-  return Math.max(2, Math.min(4, gB, Math.max(2, gH)));
+  /* Deze doos past: in de breedte helemaal, in de hoogte tot op de kale wand.
+     KADER_RAND is het strookje lucht dat we vrijhouden - onderaan houdt de
+     camera diezelfde 4 px ook echt vrij (camDoel) als hij wand afsnijdt. */
+  var q = Math.min((Math.max(240, cssW) - KADER_RAND) / doosBreed(r),
+                   Math.max(120, hoogPx - KADER_RAND) / nodigHoog(r));
+  var ng = Math.max(2, Math.min(4, Math.round(q * d)));
+  /* Zou de kamer met die hele maat veel kleiner uitvallen dan er ruimte is
+     (meer dan een tiende), dan nemen we de eerstvolgende hele maat: liever
+     een kamer die het kader vult dan een kamer die klein en scherp in een
+     hoekje staat (l1: wereld + balken vullen 75% van het scherm). */
+  if (ng / d < q * 0.9) ng = Math.max(2, Math.min(4, Math.ceil(q * d)));
+  /* nooit UITrekken: de dichtheid is minstens die van het scherm zelf */
+  var dicht = Math.max(d, ng / q);
+  return { q: ng / dicht, g: ng, dicht: dicht };
+}
+/* Hoe hoog wordt het kader? Voor álle ruimtes hetzelfde, anders springt de
+   pagina bij elke deur. Zo hoog als er over is, maar nooit zó hoog dat de
+   kleinst uitvallende doos minder dan 60% vult (dan kijk je in een zee van
+   lucht) - en de hoogste doos mag er alleen kale wand bij inschieten. */
+function kaderHoogte(cssW, ruim) {
+  var laagste = 0;
+  Rooms.lijst().forEach(function (r) {
+    var h = doosHoog(r) * maatVan(r, cssW, ruim).q;
+    if (!laagste || h < laagste) laagste = h;
+  });
+  return Math.max(200, Math.min(ruim, Math.round(laagste / 0.60)));
 }
 /* geeft true als de hoogte van het kader veranderd is */
-function pasKader(ng) {
+function pasKader(cssW) {
   if (!host) return false;
   if (document.body && document.body.classList.contains('metpaneel')) {
     /* een spel met een rekenblad ernaast: laat de opmaak het regelen */
     if (host.style.height) { host.style.height = ''; host.style.maxHeight = ''; return true; }
     return false;
   }
-  var staand = window.innerHeight >= window.innerWidth;
-  var ruim = Math.round(window.innerHeight * (staand ? 0.78 : 0.90));
-  var kamerCss = hoogsteKamer() * ng / Math.min(3, window.devicePixelRatio || 1);
-  /* Zo hoog als er op het scherm over is, maar nooit zó hoog dat de kamer
-     minder dan 60% van het kader vult (dan kijk je weer in een zee van
-     lucht), en het liefst met de strook eronder waar het cijferpad staat. */
-  var boven = Math.min(ruim, ruimteHoogte(), Math.round(kamerCss / 0.60));
-  var wil = Math.max(200, boven);
+  var wil = kaderHoogte(cssW, ruimVoorKader());
   if (host.style.height === wil + 'px') return false;
   host.style.height = wil + 'px';
   host.style.maxHeight = wil + 'px';
@@ -487,12 +531,11 @@ function meet() {
   if (!host) return false;
   var r = host.getBoundingClientRect();
   if (r.width < 8 || r.height < 8) return false;
-  dpr = Math.min(3, window.devicePixelRatio || 1);
-  var ng = kiesSchaal(Math.max(240, Math.round(r.width * dpr)));
-  if (pasKader(ng)) r = host.getBoundingClientRect();
-  var nw = Math.max(240, Math.round(r.width * dpr)), nh = Math.max(180, Math.round(r.height * dpr));
-  if (nw === W && nh === H && ng === g) return false;
-  W = nw; H = nh; g = ng;
+  if (pasKader(r.width)) r = host.getBoundingClientRect();
+  var m = maatVan(kamer(), r.width, r.height);
+  var nw = Math.max(240, Math.round(r.width * m.dicht)), nh = Math.max(180, Math.round(r.height * m.dicht));
+  if (nw === W && nh === H && m.g === g && m.dicht === dpr) return false;
+  W = nw; H = nh; g = m.g; dpr = m.dicht;
   cv.width = W; cv.height = H;
   cv.style.width = r.width + 'px'; cv.style.height = r.height + 'px';
   ctx.imageSmoothingEnabled = false;
@@ -875,9 +918,9 @@ function bouwBakken() {
 /* Waar staat een reizend voorwerp in elke ruimte? De voerkar staat in de gang
    netjes langs de loper en in een kamer naast het bakje. */
 var RUST = {
-  kar: { keuken: { x: 32, z: 44 }, gang: { x: 60, z: 20 },
-         kamer1: { x: 44, z: 44 }, kamer2: { x: 44, z: 44 },
-         receptie: { x: 56, z: 24 } }
+  kar: { keuken: Rooms.plek('keuken', 0.4, 0.579), gang: { x: 60, z: 20 },
+         kamer1: Rooms.plek('kamer1', 0.579, 0.579), kamer2: Rooms.plek('kamer2', 0.579, 0.579),
+         receptie: Rooms.plek('receptie', 0.7, 0.3) }
 };
 
 /* losse voorwerpen (de voerkar) uit het decor lichten: die kunnen reizen */
@@ -1103,15 +1146,18 @@ function solo(id, act) {
 function naar(kamerId, meteen) {
   var r = Rooms.get(kamerId);
   if (!r || kamerId === kamerNu) return false;
-  var vanaf = [camX, camY];
   var oudIdx = 0, nieuwIdx = 0, L = Rooms.lijst(), i;
   for (i = 0; i < L.length; i++) { if (L[i].id === kamerNu) oudIdx = i; if (L[i].id === kamerId) nieuwIdx = i; }
   kamerNu = kamerId;
+  /* Elke ruimte heeft zijn eigen voxelmaat (maatVan): eerst opmeten, dan pas
+     het camera-doel uitrekenen. Anders schuift de camera in de maat van de
+     vorige kamer en springt het beeld aan het eind van de reis. */
+  meet();
   var doel = camDoel(r);
   if (meteen || rustModus || !W) { camZet(); reis = null; vuil = true; return true; }
   var schuif = (nieuwIdx >= oudIdx ? 1 : -1) * W * 0.40;
   reis = { t0: (window.performance && performance.now ? performance.now() : Date.now()),
-           van: [doel[0] + schuif, vanaf[1]], naar: doel, alfa: 0.35 };
+           van: [doel[0] + schuif, doel[1]], naar: doel, alfa: 0.35 };
   camX = Math.round(reis.van[0]); camY = Math.round(reis.van[1]);
   vuil = true;
   return true;
@@ -1191,8 +1237,8 @@ function getalTag(obj, n, o) {
 
 /* Hoe groot is een voxel op het scherm? Handig als een spel zelf een rijtje
    wil uitzetten: horizontaal telt (x - z), verticaal (x + z) en de hoogte y.
-     css-x  ~  2k * (x - z)        met k = g / devicePixelRatio
-     css-y  ~  k  * (x + z - 2y)
+     css-x  ~  2k * (x - z)        met k = g / dicht  (NIET devicePixelRatio:
+     css-y  ~  k  * (x + z - 2y)    het canvas staat vaak dichter, zie meet())
    Twee knoppen staan pas echt naast elkaar bij ongeveer 30 voxels verschil
    in (x - z), of 50 in (x + z - 2y). */
 function schaal() {
@@ -1219,7 +1265,11 @@ function vloerRect() {
 }
 
 function debug() {
-  var o = { kamer: kamerNu, rustig: rustModus, tonen: tonen, g: g, canvas: [W, H],
+  var o = { kamer: kamerNu, rustig: rustModus, tonen: tonen, g: g,
+            /* dicht = canvas-px per css-px (kan een breuk zijn, zie maatVan),
+               q = css-px per voxel-px. Reken NOOIT met devicePixelRatio zelf:
+               het canvas staat vaak op een hogere dichtheid dan het scherm. */
+            dpr: dpr, q: g / (dpr || 1), canvas: [W, H],
             cam: [camX, camY], reis: !!reis, dieren: {}, bakken: {}, dingen: {},
             kader: host ? [Math.round(host.clientWidth), Math.round(host.clientHeight)] : null,
             box: (kamer() || {}).box || null, vloer: vloerRect() };

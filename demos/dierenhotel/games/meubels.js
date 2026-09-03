@@ -66,18 +66,21 @@ var VERSIERING = [
 /* ---------- waar in de receptie hangt het rekenwerk? ----------
    De balie is een L, dus deze plekken liggen op het scherm ver uit
    elkaar (GAMES-API.md 4: horizontaal ~ (x-z)*2 px). */
+/* Als BREUK van de kamer (Rooms.plek): de receptie ging met K1 van 80 x 80
+   naar 120 x 120 en dan schuift de hele opstelling mee. De breuken zijn de
+   oude voxels gedeeld door 80. */
 var KASSA = 'kassa';                     /* het sommenkaartje op de kassa */
-var BANK = { x: 44, z: 60 };             /* de toonbank, voor de balie */
-var BUIDELPLEK = { x: 6, z: 70 };        /* je geldbuidel op de zijvleugel */
-var OKPLEK = { x: 76, z: 20 };           /* klaar-met-tellen */
-var TERUGPLEK = { x: 30, z: 78 };        /* een munt terugpakken / het boek */
-var SPOOKPLEK = { x: 60, z: 50 };        /* de spookmunten */
+var BANK = Rooms.plek('receptie', 0.55, 0.75);        /* toonbank, voor de balie */
+var BUIDELPLEK = Rooms.plek('receptie', 0.075, 0.875);/* buidel op de zijvleugel */
+var OKPLEK = Rooms.plek('receptie', 0.95, 0.25);      /* klaar-met-tellen */
+var TERUGPLEK = Rooms.plek('receptie', 0.375, 0.975); /* munt terug / het boek */
+var SPOOKPLEK = Rooms.plek('receptie', 0.75, 0.625);  /* de spookmunten */
 var MUNTSOORT = [1, 2, 5, 10];
 
 /* =====================================================================
    KLEINE HULPJES
 ===================================================================== */
-/* mijn laatje in de opslag (gaat automatisch mee in kws-hotel-v6) */
+/* mijn laatje in de opslag (gaat automatisch mee in kws-hotel-v7) */
 function D() {
   var q = C.data();
   if (!q.mijn) q.mijn = [];                  /* [{id,type}] van wat ik neerzette */
@@ -723,7 +726,7 @@ function hertekenStraks(k) {
 
 /* de doos staat vooraan in de ruimte, uit de weg van de deur */
 function doosPlek(r) {
-  if (!r) return { x: 30, z: 60 };
+  if (!r) return { x: 30, z: 60 };   /* nooit: er is altijd een kamer */
   return { x: Math.round(r.w * 0.26), z: Math.round(r.d * 0.88) };
 }
 

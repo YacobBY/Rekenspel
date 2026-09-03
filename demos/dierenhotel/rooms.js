@@ -19,6 +19,8 @@
      Rooms.slots(kamerId, soort)  - bed- / bak- / vrije plekken
      Rooms.slot(kamerId, slotId)  - één plek
      Rooms.plekken(kamerId)       - dwaalplekken voor de dieren
+     Rooms.plek(kamerId, fx, fz)  - een plek als breuk van w en d
+     Rooms.hoogte(kamerId, f)     - een hoogte (y) die met de kamer meeschaalt
      Rooms.model(naam)            - voxels van een decorstuk
      Rooms.vloerKleur(kamer,x,z)  - kleur van een vloervakje
 ---------------------------------------------------------------- */
@@ -298,30 +300,68 @@ function model(naam) {
    deuren:  {naar, wand:'x'|'z', at, breed}  - at = begin van het gat
    decor:   {n, x, z, y?, ver?}              - ver = altijd achteraan
    slots:   {id, soort:'bed'|'bak'|'vrij', x, z}
-===================================================================== */
-/* De wandhoogtes zijn zo gekozen dat elke kamerdoos even hoog uitvalt
-   (~290 voxel-px). Daardoor staat elke ruimte even groot in beeld en hoeft
-   het kader niet te springen als je van kamer wisselt. */
+   loop:    de stapmaat van de dieren in deze ruimte (1 = de oude maat)
+
+   MATEN (K1: de vier speelkamers zijn 1,5x groter dan de eerste opzet,
+   want ze voelden te klein; de gang en de tuin bleven zoals ze waren):
+
+     ruimte    w x d      wand  kamerdoos (breed x hoog in voxel-px)
+     receptie  120 x 120   54   500 x 370
+     gang      120 x  36   56   332 x 290
+     kamer1    114 x 114   58   476 x 366
+     kamer2    114 x 114   58   476 x 366
+     keuken    120 x 114   56   488 x 368
+     tuin      130 x 130    0   360 x 290  (vast kader, het erf loopt door)
+
+   De doos is [-d*S-10, w*S+10, -wand*HG-12, (w+d)*S/2+10] (zie kader()).
+   De wandhoogtes zijn niet veranderd; door de diepere vloer zijn de dozen van
+   de vier kamers wel hoger geworden (290 -> ~368 voxel-px). Ze staan daardoor
+   op een iets kleinere voxelmaat in beeld dan de gang en de tuin: elke ruimte
+   heeft sinds K1 zijn EIGEN voxelmaat, zodat hij het kader precies vult
+   (world.js maatVan, HOTEL.md 1). Twee regels blijven staan:
+     1. de kamerdoos past altijd in de BREEDTE van het kader; in een laag
+        kader (een liggende telefoon) mag bovenaan kale wand wegvallen, maar
+        nooit de vloer en nooit het prikbord of het sleutelbord.
+     2. de wand blijft hoger dan alles wat ervoor staat (het hoogste meubel
+        is de voerkast, 29 voxels).
+
+   LOOPMAAT: de dieren zijn niet groter geworden, de kamers wel. Met dezelfde
+   stap zou een gast anderhalf keer zo lang over een kamer doen (en dat is te
+   lang wachten voor een kind), dus krijgen de vier grote kamers loop: 1,5.
+   Omdat de camera die kamers op ongeveer 1/1,5 van de voxelmaat zet, loopt
+   een dier daardoor op het SCHERM precies even hard als in de gang en in de
+   tuin - en een kamer oversteken duurt net zo lang als vroeger.
+
+   Inrichting bij een verbouwing: alles wat op de vloer staat schuift mee met
+   de maat (x en z x 1,5), behalve de afstand tot de wand waar iets tegenaan
+   hangt of staat (prikbord z=1, sleutelbord x=1, voerkast z=6). Meubels
+   worden zelf niet groter, dus de balie is nu een L van twee + twee stukken:
+   zo blijven de vier dingen erop op het SCHERM ver uit elkaar. */
 var RUIMTES = [
   {
-    id: 'receptie', naam: 'Receptie', icoon: '🛎️', w: 80, d: 80,
-    wand: 54, vloer: 'hout',
-    matten: [{ x0: 30, z0: 52, x1: 66, z1: 76, kl: ['#E9BFC9', '#E3B4C0'] }],
-    deuren: [{ naar: 'gang', wand: 'z', at: 58, breed: 12 }],
-    /* De balie is een L: een deel langs x en een vleugel langs z. Daardoor
-       liggen de vier dingen erop ook op het SCHERM ver uit elkaar - anders
-       dekken de hotspot-knoppen elkaar af (isometrie duwt alles op één rij). */
+    id: 'receptie', naam: 'Receptie', icoon: '🛎️', w: 120, d: 120,
+    wand: 54, vloer: 'hout', loop: 1.5,
+    matten: [{ x0: 45, z0: 78, x1: 99, z1: 114, kl: ['#E9BFC9', '#E3B4C0'] }],
+    deuren: [{ naar: 'gang', wand: 'z', at: 87, breed: 12 }],
+    /* De balie is een L: een arm langs x (x 21..94) en een vleugel langs z
+       (z 39..112). Daardoor liggen de vier dingen erop ook op het SCHERM ver
+       uit elkaar - anders dekken de hotspot-knoppen elkaar af (isometrie duwt
+       alles op één rij). Een balie-stuk is 38 voxels lang en groeit niet mee
+       met de kamer, dus elke arm bestaat nu uit TWEE stukken die precies op
+       elkaar sluiten (35 voxels hart-op-hart). */
     decor: [
-      { n: 'balie', x: 30, z: 40 },
-      { n: 'baliez', x: 10, z: 62 },
-      { n: 'bel', x: 22, z: 40, y: 14 },
-      { n: 'kassa', x: 44, z: 40, y: 14 },
-      { n: 'boek', x: 10, z: 50, y: 14 },
-      { n: 'lamp', x: 10, z: 70, y: 14, sleutel: 'balielamp' },
-      { n: 'prikbord', x: 26, z: 1, ver: 1 },
-      { n: 'sleutelbordz', x: 1, z: 56, ver: 1 },
-      { n: 'plant', x: 70, z: 12 },
-      { n: 'plant', x: 72, z: 54 }
+      { n: 'balie', x: 40, z: 60 },
+      { n: 'balie', x: 75, z: 60 },
+      { n: 'baliez', x: 15, z: 58 },
+      { n: 'baliez', x: 15, z: 93 },
+      { n: 'bel', x: 33, z: 60, y: 14 },
+      { n: 'kassa', x: 66, z: 60, y: 14 },
+      { n: 'boek', x: 15, z: 75, y: 14 },
+      { n: 'lamp', x: 15, z: 105, y: 14, sleutel: 'balielamp' },
+      { n: 'prikbord', x: 39, z: 1, ver: 1 },
+      { n: 'sleutelbordz', x: 1, z: 84, ver: 1 },
+      { n: 'plant', x: 105, z: 18 },
+      { n: 'plant', x: 108, z: 81 }
     ],
     slots: []
   },
@@ -342,47 +382,47 @@ var RUIMTES = [
     slots: []
   },
   {
-    id: 'kamer1', naam: 'Kamer 1', icoon: '🛏️', w: 76, d: 76,
-    wand: 58, vloer: 'zacht',
-    matten: [{ x0: 34, z0: 30, x1: 62, z1: 58, kl: ['#DFCBEA', '#D6BFE4'] }],
-    deuren: [{ naar: 'gang', wand: 'z', at: 48, breed: 12 }],
+    id: 'kamer1', naam: 'Kamer 1', icoon: '🛏️', w: 114, d: 114,
+    wand: 58, vloer: 'zacht', loop: 1.5,
+    matten: [{ x0: 51, z0: 45, x1: 93, z1: 87, kl: ['#DFCBEA', '#D6BFE4'] }],
+    deuren: [{ naar: 'gang', wand: 'z', at: 72, breed: 12 }],
     decor: [
-      { n: 'plant', x: 68, z: 8 },
-      { n: 'mand', x: 62, z: 66 }
+      { n: 'plant', x: 102, z: 12 },
+      { n: 'mand', x: 93, z: 99 }
     ],
     slots: [
-      { id: 'bed1', soort: 'bed', x: 20, z: 18 },
-      { id: 'bed2', soort: 'bed', x: 20, z: 50 },
-      { id: 'bak', soort: 'bak', x: 56, z: 22 }
+      { id: 'bed1', soort: 'bed', x: 30, z: 27 },
+      { id: 'bed2', soort: 'bed', x: 30, z: 75 },
+      { id: 'bak', soort: 'bak', x: 84, z: 33 }
     ]
   },
   {
-    id: 'kamer2', naam: 'Kamer 2', icoon: '🛏️', w: 76, d: 76,
-    wand: 58, vloer: 'zacht',
-    matten: [{ x0: 34, z0: 30, x1: 62, z1: 58, kl: ['#CBE3D6', '#BFDBCB'] }],
-    deuren: [{ naar: 'gang', wand: 'z', at: 48, breed: 12 }],
+    id: 'kamer2', naam: 'Kamer 2', icoon: '🛏️', w: 114, d: 114,
+    wand: 58, vloer: 'zacht', loop: 1.5,
+    matten: [{ x0: 51, z0: 45, x1: 93, z1: 87, kl: ['#CBE3D6', '#BFDBCB'] }],
+    deuren: [{ naar: 'gang', wand: 'z', at: 72, breed: 12 }],
     decor: [
-      { n: 'plant', x: 8, z: 66 },
-      { n: 'mand', x: 62, z: 66 }
+      { n: 'plant', x: 12, z: 99 },
+      { n: 'mand', x: 93, z: 99 }
     ],
     slots: [
-      { id: 'bed1', soort: 'bed', x: 20, z: 18 },
-      { id: 'bed2', soort: 'bed', x: 20, z: 50 },
-      { id: 'bak', soort: 'bak', x: 56, z: 22 }
+      { id: 'bed1', soort: 'bed', x: 30, z: 27 },
+      { id: 'bed2', soort: 'bed', x: 30, z: 75 },
+      { id: 'bak', soort: 'bak', x: 84, z: 33 }
     ]
   },
   {
-    id: 'keuken', naam: 'Keuken', icoon: '🍪', w: 80, d: 76,
-    wand: 56, vloer: 'tegel',
+    id: 'keuken', naam: 'Keuken', icoon: '🍪', w: 120, d: 114,
+    wand: 56, vloer: 'tegel', loop: 1.5,
     deuren: [
-      { naar: 'gang', wand: 'x', at: 50, breed: 12 },
-      { naar: 'tuin', wand: 'z', at: 60, breed: 12 }
+      { naar: 'gang', wand: 'x', at: 75, breed: 12 },
+      { naar: 'tuin', wand: 'z', at: 90, breed: 12 }
     ],
     decor: [
-      { n: 'kast', x: 22, z: 6 },
-      { n: 'zak', x: 44, z: 12 },
-      { n: 'kar', x: 32, z: 44 },
-      { n: 'plant', x: 72, z: 62 }
+      { n: 'kast', x: 33, z: 6 },
+      { n: 'zak', x: 66, z: 18 },
+      { n: 'kar', x: 48, z: 66 },
+      { n: 'plant', x: 108, z: 93 }
     ],
     slots: []
   },
@@ -437,6 +477,29 @@ function deurPunt(r, dr) {
   var m = dr.at + dr.breed / 2;
   if (dr.wand === 'z') return { x: m, z: 0, ix: m, iz: 8, wand: 'z', breed: dr.breed, naar: dr.naar, poort: !!dr.poort };
   return { x: 0, z: m, ix: 8, iz: m, wand: 'x', breed: dr.breed, naar: dr.naar, poort: !!dr.poort };
+}
+
+/* =====================================================================
+   EEN PLEK ALS BREUK VAN DE KAMER
+   Het hotel en de minigames willen "rechts achterin" of "links vooraan"
+   kunnen zeggen zonder de maten van een kamer te kennen. plek() rekent
+   breuken van r.w en r.d om naar voxels, zodat een verbouwing (K1: de
+   receptie ging van 80 naar 120 voxels) alles automatisch meeschuift.
+     Rooms.plek('receptie', 0.875, 0.25)  ->  { kamer, x: 105, z: 30 }
+   Voor hoogtes (de y-as) is er hoogte(): die schaalt met de breedte van de
+   kamer, zodat een wolkje op het scherm even ver boven zijn voorwerp blijft
+   hangen als de kamer groter wordt.
+     Rooms.hoogte('receptie', 0.6)        ->  72   (was 48 bij w = 80)   */
+function plek(kamerId, fx, fz, y) {
+  var r = BY_ID[kamerId];
+  if (!r) return { kamer: kamerId, x: 0, z: 0, y: y || 0 };
+  var p = { kamer: kamerId, x: Math.round(r.w * fx), z: Math.round(r.d * fz) };
+  if (y !== undefined) p.y = y;
+  return p;
+}
+function hoogte(kamerId, f) {
+  var r = BY_ID[kamerId];
+  return Math.round((r ? r.w : 80) * f);
 }
 
 /* de sta-plek van een plek: waar gaat een dier staan om hem te gebruiken */
@@ -715,6 +778,7 @@ return {
   pad: pad, deur: deur, slots: slots, slot: slot,
   plekken: function (id) { return (BY_ID[id] || {}).plekkenLijst || [[0, 0]]; },
   model: model, vloerKleur: vloerKleur, kader: kader,
+  plek: plek, hoogte: hoogte,
   meubelZet: meubelZet, voegBed: voegBed, meubelWeg: meubelWeg,
   nrStand: nrStand, zetNr: zetNr, nrUitIds: nrUitIds,
   meubels: meubels, herstel: herstel, MEUBEL: MEUBEL,

@@ -65,15 +65,23 @@ var PLAFOND   = { 3: 20, 4: 100, 5: 1000 };   /* getalbereik per groep */
 var MAXBLANCO = { 3: 2, 4: 2, 5: 3 };         /* lege haakjes per opdracht */
 
 /* ---------- waar hangt alles in de receptie? (voxels) ----------
-   De haakjes liggen op de schuine lijn x + z = 100: daar hebben twee
-   plaatjes met 26 voxels verschil in (x - z) op het scherm 52 px tussen
-   zich, ook op de kleinste schaal. Ze staan bovendien VÓÓR de gast en
-   het meubilair (grote x+z), dus de laag schuift hén niet weg maar de
-   rest om hen heen. */
-var HAAK_SOM = 100, HAAK_DX = 13, HAAK_DX3 = 16, HAAK_Y = 48;
-var GAST_PLEK = { x: 60, z: 68 };             /* vrij vakje voor de balie */
-var KEY_PLEK = { x: 54, z: 80 };              /* de sleutel ligt naast zijn poot */
-var ELS_PLEK = { x: 20, z: 78, y: 6 };
+   Alles staat als BREUK van de kamer (Rooms.plek / Rooms.hoogte), want de
+   receptie is met K1 1,5x groter geworden (120 x 120 in plaats van 80 x 80)
+   en dan schuift de hele opstelling automatisch mee. De breuken zijn precies
+   de oude voxels gedeeld door 80.
+   De haakjes liggen op de schuine lijn x + z = 0,625 (w + d) = 150: daar
+   hebben twee plaatjes met 2 x 0,1625 w = 39 voxels verschil in (x - z) op
+   het scherm ruim 52 px tussen zich, ook op de kleinste schaal. Ze staan
+   bovendien VÓÓR de gast en het meubilair (grote x+z), dus de laag schuift
+   hén niet weg maar de rest om hen heen. */
+function vox(f) { return Rooms.hoogte('receptie', f); }   /* breuk -> voxels */
+var HAAK_MID = vox(0.625);                    /* midden van de rij (x en z) */
+var HAAK_SOM = 2 * HAAK_MID;                  /* de schuine lijn x + z */
+var HAAK_DX = vox(0.1625), HAAK_DX3 = vox(0.2);
+var HAAK_Y = vox(0.6);
+var GAST_PLEK = Rooms.plek('receptie', 0.75, 0.85);   /* vrij vakje voor de balie */
+var KEY_PLEK = Rooms.plek('receptie', 0.675, 0.975); /* de sleutel naast zijn poot */
+var ELS_PLEK = Rooms.plek('receptie', 0.25, 0.975, vox(0.075));
 /* De hoogtes zijn zo gekozen dat op het scherm niets elkaar afdekt:
    de sommenkaart hangt boven de rij haakjes, de rij hangt boven het wolkje
    van de gast, en het wolkje net boven zijn kop (het dier zelf blijft dus
@@ -82,8 +90,8 @@ var ELS_PLEK = { x: 20, z: 78, y: 6 };
    is het kaartje ~85 px hoog in plaats van ~45, dus hij hangt zeven stappen
    hoger: anders raakt zijn onderrand de haakjes en schuift de knoppenlaag de
    rij uit elkaar (gemeten met sleutels/plek.js: één stap is ~2 px). */
-var KAART_HOOG = 62;                          /* sommenkaart boven het bord */
-var WOLK_HOOG = 37, KEY_HOOG = 4;
+var KAART_HOOG = vox(0.775);                  /* sommenkaart boven het bord */
+var WOLK_HOOG = vox(0.4625), KEY_HOOG = vox(0.05);
 
 var C = null;     /* de ctx */
 var P = null;     /* de opdracht - hij woont in C.data(), dus hij blijft bewaard */
@@ -102,7 +110,7 @@ function zaadje(n) {
 }
 
 /* Meer haakjes passen niet: elk plaatje is een tikdoel van 48 px in de
-   wereld en de receptie is bij dpr 1 maar ~90 voxels breed in beeld.
+   wereld en er is maar een strook van ~390 css-px breed voor de rij.
    Getallen van drie cijfers (groep 5) hebben een breder plaatje, dus daar
    hangen er vier. */
 function aantalHaken(N, band) {
@@ -342,7 +350,7 @@ function naarKamer(gastId, blij) {
 ===================================================================== */
 function drieCijfers(b) { return b.van + (b.n - 1) * b.stap >= 100; }
 function haakPlek(i, n, dx) {
-  var x = Math.round(50 + (dx || HAAK_DX) * (i - (n - 1) / 2));
+  var x = Math.round(HAAK_MID + (dx || HAAK_DX) * (i - (n - 1) / 2));
   return { x: x, z: HAAK_SOM - x, y: HAAK_Y, kamer: 'receptie' };
 }
 

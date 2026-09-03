@@ -49,18 +49,30 @@ var K = null;          /* de kar-toestand */
 var LAY = null;        /* de indeling van dit beeld: kader + plaatser */
 var HAND = [1, 2, 5];
 
-/* De bakjes staan als echte voxelbakjes op de keukenvloer. Deze plekken zijn
-   nagerekend tegen rooms.js: minstens 15 voxels van de kast (22,6), de zak
-   (44,12), de kar (32,44), de plant (72,62) én van elkaar, en 12 van een
-   deuropening. Anders schuift rooms.js ze zelf naar een ander vloervakje.
-   Ze liggen in twee "kolommen" (links x-z = -40, rechts x-z = +48), zodat de
+/* De bakjes staan als echte voxelbakjes op de keukenvloer. Ze staan als BREUK
+   van de kamer (Rooms.plek): de keuken werd met K1 1,5x groter (120 x 114 in
+   plaats van 80 x 76) en dan schuiven de bakjes mee. De breuken zijn de oude
+   voxels gedeeld door 80 en 76, dus alle onderlinge afstanden zijn 1,5x zo
+   groot geworden en blijven ruim boven wat rooms.js eist: minstens 15 voxels
+   van de kast (33,6), de zak (66,18), de kar (48,66), de plant (108,93) én
+   van elkaar, en 12 van een deuropening. Anders schuift rooms.js ze zelf naar
+   een ander vloervakje.
+   Ze liggen in twee "kolommen" (links x-z = -60, rechts x-z = +72), zodat de
    kaartjes met de naam erop ook op het scherm in twee kolommen staan. */
-var VAK_PLEK = [[4, 44], [52, 4], [20, 60], [68, 20], [32, 72], [76, 28]];
-var POT_PLEK = [48, 48];
-var KEUKEN_D = 76;         /* diepte van de keuken (rooms.js) */
+var VAKBREUK = [[0.05, 0.5789], [0.65, 0.0526], [0.25, 0.7895],
+                [0.85, 0.2632], [0.4, 0.9474], [0.95, 0.3684]];
+var VAK_PLEK = VAKBREUK.map(function (b) {
+  var p = Rooms.plek('keuken', b[0], b[1]);
+  return [p.x, p.z];
+});
+var POT_PLEK = (function () { var p = Rooms.plek('keuken', 0.6, 0.6316); return [p.x, p.z]; })();
+var KEUKEN_D = (Rooms.get('keuken') || {}).d || 114;   /* diepte van de keuken */
 var RIJ = 52;              /* hoogte van één rij kaartjes in css-pixels */
                            /* (op een krap scherm 50: dan past er nog een rij bij) */
 var DIEP_UI = 150;         /* tekendiepte van kaart en knoppen: vóór de bakjes */
+/* de knoppen van het spel zijn 'vast': ze staan op een schermplek (zetOp),
+   dus deze kamerplek is alleen hun vertrekpunt - midden in de keuken */
+var KAR_KNOP = Rooms.plek('keuken', 0.5, 0.5);
 
 /* dezelfde dierpictogrammen als de rest van het hotel (games/tobbe.js) */
 var SOORT_ICO = { puppy: '🐶', poes: '🐱', konijn: '🐰', gans: '🦆' };
@@ -630,7 +642,7 @@ function teken() {
 
 function knop(id, ico, woord, klas, prio, titel, fn, X, Y) {
   C.hotspots.maak({
-    id: id, kamer: 'keuken', x: 40, z: 38, y: 0,
+    id: id, kamer: 'keuken', x: KAR_KNOP.x, z: KAR_KNOP.z, y: 0,
     html: chip(ico, woord, null), klas: klas, prio: prio, vast: true,
     titel: titel, aan: fn
   });

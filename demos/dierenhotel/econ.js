@@ -75,14 +75,17 @@ var BANK = 'kassa', BUIDEL = 'boek';        /* kassa en buidel op de balie */
    elke hoogte). Daarom: ÉÉN werkkaart. Het bonnetje ligt op die plek zolang er
    munten geteld worden en gaat weg bij de wisselgeldvraag, die dezelfde plek
    inneemt (dekking bonnetje-door-wisselkaart: 0%). */
-var WERKPLEK = { x: 70, z: 20, kamer: 'receptie' };
-var WERKHOOG = 16;
+/* Breuken van de kamer (Rooms.plek): sinds K1 is de receptie 120 x 120 in
+   plaats van 80 x 80, en dan schuift de hele balieopstelling mee. */
+var WERKPLEK = Rooms.plek('receptie', 0.875, 0.25);
+var WERKHOOG = Rooms.hoogte('receptie', 0.2);
 /* Waar de munten neerkomen en het bedrag als cijfer staat: op de linkervleugel
    van de balie, naast de buidel. Midden op de balie (30,44) lag het bedrag
    precies achter de werkkaart (op 320x640 zelfs volledig: de kaart is daar
    breder dan het halve kader), en dan leest een kind "EUR2" terwijl de kaart
    "EUR23" zegt. Links van de kaart is het in alle schermen vrij. */
-/* (12,40) = de linkerhoek van de balie: precies tussen de wachtende familie
+/* 0,15 x 0,50 van de kamer (12,40 in de oude receptie van 80 x 80, 18,60 nu)
+   = de linkerhoek van de balie: precies tussen de wachtende familie
    (links vooraan) en de werkkaart (rechts achterin). Midden op de balie
    (30,44) lag het bedrag achter de kaart: op 420x860 voor 11x23 px, op
    320x640 helemaal - en dan las een kind "EUR2" waar "EUR23" stond.
@@ -96,8 +99,8 @@ var WERKHOOG = 16;
                         liever het bedrag hélemaal leesbaar dan half achter de
                         bel - de naam van de gast staat toch ook in de zin op
                         de kaart en in het wolkje van de familie. */
-var TOONBANK = { x: 12, z: 40, kamer: 'receptie' };
-var TOONHOOG = 18;
+var TOONBANK = Rooms.plek('receptie', 0.15, 0.5);
+var TOONHOOG = Rooms.hoogte('receptie', 0.225);
 
 function rekening(o) {
   var tot = o.totaal || o.nachten * o.prijs;
@@ -133,7 +136,7 @@ function spook(bedrag, lbl) {
      lagen ze precies achter het kaartje. */
   var munten = splits(bedrag), i;
   for (i = 0; i < munten.length && i < 6; i++) {
-    World.getalTag({ x: 40 + (i % 3) * 15, z: 70 + (i > 2 ? 6 : 0), kamer: 'receptie' },
+    World.getalTag(Rooms.plek('receptie', 0.5 + (i % 3) * 0.1875, 0.875 + (i > 2 ? 0.075 : 0)),
                    '\u20AC' + munten[i],
                    { id: 'spook' + i, door: 'rekening', y: 4, klas: 'hotspook',
                      titel: lbl || 'zo ziet het uit' });
@@ -228,7 +231,7 @@ function muntStap() {
 
   /* de toonbank: sleep of tik de munten hierheen, het bedrag staat erop */
   Hits.maak({
-    id: 'rek_bank', door: 'rekening', kamer: 'receptie', x: TOONBANK.x, z: TOONBANK.z, y: 18,
+    id: 'rek_bank', door: 'rekening', kamer: 'receptie', x: TOONBANK.x, z: TOONBANK.z, y: TOONHOOG,
     icoon: '\uD83E\uDDFE', getal: '\u20AC' + betaald,
     kind: 'drop', drop: 'toonbank', klas: 'hotbron', prio: 11,
     titel: 'de toonbank', aan: function () { legNeer(); }
@@ -236,7 +239,7 @@ function muntStap() {
   /* de buidel van de familie: de volgende munt staat erop */
   var volgende = R.hand.length ? R.hand[0] : null;
   R.bronH = Ui.bron(BUIDEL, {
-    id: 'rek_buidel', door: 'rekening', hoog: 18,
+    id: 'rek_buidel', door: 'rekening', hoog: TOONHOOG,
     icoon: volgende ? '\uD83E\uDE99' : '\uD83D\uDC4D',
     aantal: volgende ? '\u20AC' + volgende.v : '',
     hand: R.hand.length || null,
@@ -253,14 +256,16 @@ function muntStap() {
   });
   /* klaar-met-tellen staat naast de toonbank */
   Hits.maak({
-    id: 'rek_ok', door: 'rekening', kamer: 'receptie', x: 62, z: 22, y: 14,
+    id: 'rek_ok', door: 'rekening', kamer: 'receptie',
+    x: Rooms.plek('receptie', 0.775, 0.275).x, z: Rooms.plek('receptie', 0.775, 0.275).z,
+    y: Rooms.hoogte('receptie', 0.175),
     icoon: '\u2714', label: 'klaar', klas: 'hotwolk goed', prio: 10,
     titel: 'klaar met tellen', aan: function () { klaarMetTellen(); }
   });
 }
 function mikx(obj) {
   var p = World.mik(obj, 'receptie');
-  return p || { x: 44, z: 40 };
+  return p || Rooms.plek('receptie', 0.55, 0.5);
 }
 
 function wisselKaart() {

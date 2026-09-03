@@ -547,9 +547,13 @@ function planbord(dag, dieren) {
 }
 
 /* =====================================================================
-   OPBERGEN - v6, met migratie van de oude Kwispelsteeg (v5)
+   OPBERGEN - v7, met migratie van v6 en van de oude Kwispelsteeg (v5)
+   De ketting: kws-spel-v5 (de opvang) -> hotel v6 -> hotel v7. Elke laag
+   leest de laag eronder, dus een oud spel blijft altijd doorspeelbaar.
 ===================================================================== */
-var OPSLAG_SLEUTEL = 'kws-hotel-v6';
+var OPSLAG_V = 7;
+var OPSLAG_SLEUTEL = 'kws-hotel-v7';
+var OPSLAG_V6 = 'kws-hotel-v6';      /* van vóór de verbouwing (K1) */
 var OUDE_SLEUTEL = 'kws-spel-v5';
 var startKeuze = false;
 
@@ -557,7 +561,7 @@ function bewaarSpel() {
   if (!startKeuze || !state) return;
   try {
     localStorage.setItem(OPSLAG_SLEUTEL, JSON.stringify({
-      v: 6,
+      v: OPSLAG_V,
       s: {
         dag: state.dag, ronde: state.ronde, munten: state.munten, sterren: state.sterren,
         band: state.band, kunnen: state.kunnen, signaal: state.signaal,
@@ -584,7 +588,7 @@ function vulAan(s) {
                signaal: [], gasten: [], wachtlijst: [], famIdx: 0, meubels: [], meubelNr: 0, taken: [],
                brieven: [], scoops: 20, levering: 4, snoeppot: 0, checkin: null,
                rekening: null, uitcheck: [], kar: null, spel: {}, gezien: {},
-               kamerNu: 'receptie', dagBericht: null, nieuweGast: null, v: 6 };
+               kamerNu: 'receptie', dagBericht: null, nieuweGast: null, v: OPSLAG_V };
   for (var k in leeg) if (s[k] === undefined || s[k] === null) s[k] = leeg[k];
   if (!s.wachtlijst.length) s.wachtlijst = GASTEN_POOL.map(function (a) { return Object.assign({}, a); });
   /* Half afgebroken check-in netjes rechtzetten: hoort er een gast bij, dan
@@ -607,14 +611,39 @@ function vulAan(s) {
   return s;
 }
 
-function leesSpel() {
+function leesLaag(sleutel, v) {
   try {
-    var r = localStorage.getItem(OPSLAG_SLEUTEL);
+    var r = localStorage.getItem(sleutel);
     if (!r) return null;
     var d = JSON.parse(r);
-    if (!d || d.v !== 6 || !d.s) return null;
-    return vulAan(d.s);
+    if (!d || d.v !== v || !d.s) return null;
+    return d.s;
   } catch (e) { return null; }
+}
+/* v6 -> v7: de receptie, kamer1, kamer2 en de keuken zijn 1,5x zo groot
+   geworden (K1, HOTEL.md 1). Alles wat het kind daar heeft neergezet schuift
+   mee: x en z x 1,5, en daarna naar het dichtstbijzijnde vrije vakje van het
+   vloerraster (Rooms.vrijVak - dat raster staat sinds de verbouwing op andere
+   plekjes). Wat in de gang of de tuin staat blijft staan: die ruimtes zijn
+   niet verbouwd. */
+var V7_GROEI = { receptie: 1.5, kamer1: 1.5, kamer2: 1.5, keuken: 1.5 };
+function naarV7(s) {
+  (s.meubels || []).forEach(function (m) {
+    var f = m && V7_GROEI[m.kamer];
+    if (!f || typeof m.x !== 'number' || typeof m.z !== 'number') return;
+    var x = Math.round(m.x * f), z = Math.round(m.z * f);
+    var v = (window.Rooms && Rooms.vrijVak) ? Rooms.vrijVak(m.kamer, x, z) : null;
+    m.x = v ? v.x : x;
+    m.z = v ? v.z : z;
+  });
+  s.v = OPSLAG_V;
+  return s;
+}
+function leesSpel() {
+  var s = leesLaag(OPSLAG_SLEUTEL, OPSLAG_V);
+  if (s) return vulAan(s);
+  s = leesLaag(OPSLAG_V6, 6);
+  return s ? vulAan(naarV7(s)) : null;
 }
 
 /* de oude Kwispelsteeg-opvang (v5) mag mee naar het hotel:
@@ -649,7 +678,8 @@ function leesOudSpel() {
     return s;
   } catch (e) { return null; }
 }
-/* Let op: de oude opslag (kws-spel-v5) blijft staan. Die hoort bij de
+/* Let op: de oude opslag (kws-spel-v5) en de hotel-opslag van vóór de
+   verbouwing (kws-hotel-v6) blijven staan. Die hoort bij de
    Kwispelsteeg-opvang zelf; die demo mag hier niets van merken. Zodra
    het hotel één keer bewaard heeft, wordt er niet meer naar gekeken. */
 
@@ -681,7 +711,7 @@ var State = {
   bewaar: bewaarSpel,
   ruw: function () { return state; },
   gezien: function (k) { return !!(state && state.gezien && state.gezien[k]); },
-  /* eigen laatje per spelletje; gaat automatisch mee in de opslag v6 */
+  /* eigen laatje per spelletje; gaat automatisch mee in de opslag (v7) */
   spelData: function (id) {
     if (!state) return {};
     state.spel = state.spel || {};

@@ -144,14 +144,22 @@ function bouwEl(s) {
   if (s._meet !== inh) { s._meet = inh; s._w = 0; s._h = 0; }
 }
 
-/* de knopmaat één keer opmeten (na een inhoudswijziging), daarna onthouden */
+/* De knopmaat één keer opmeten (na een inhoudswijziging), daarna onthouden.
+   LET OP: een knop die nog op display:none staat meet 0 bij 0. Dat gebeurt
+   precies één beeld lang als je een kamer binnenkomt (zijn knoppen stonden
+   uit). Die 0 mogen we NIET onthouden: dan blijft de noodmaat van 56 x 48
+   hangen, klemt de laag de knop op de verkeerde plek en schuift hij kaartjes
+   uit elkaar die elkaar niet eens raken. We onthouden dus alleen een echte
+   maat en meten anders het volgende beeld opnieuw. */
 function maat(s) {
-  if (!s._w) {
-    s._w = s.el.offsetWidth || 56;
-    s._h = s.el.offsetHeight || 48;
+  if (!s._w || !s._h) {
+    var w = s.el.offsetWidth, h = s.el.offsetHeight;
+    if (w && h) { s._w = w; s._h = h; } else { s._w = 0; s._h = 0; }
   }
   return s;
 }
+function breed(s) { return s._w || 56; }
+function hoog(s) { return s._h || 48; }
 function hermeet() {
   var h = zorgHost();
   hostW = h ? h.clientWidth : 0;
@@ -182,6 +190,8 @@ function plaats(kamer, pr) {
     s = reg[orde[i]];
     if (!s) continue;
     if (s.kamer && s.kamer !== kamer) { if (s.el.style.display !== 'none') s.el.style.display = 'none'; continue; }
+    /* meteen aanzetten: anders meet hij straks 0 bij 0 (zie maat()) */
+    if (s.el.style.display === 'none') s.el.style.display = '';
     zicht.push(s);
   }
   /* te veel knoppen in één kamer: de minst belangrijke blijven weg
@@ -216,7 +226,7 @@ function plaats(kamer, pr) {
   for (i = 0; i < zicht.length; i++) {
     s = maat(zicht[i]);
     var p = pr(s.x, s.z, s.y || 0);
-    var hw = s._w / 2, hh = s._h / 2;
+    var hw = breed(s) / 2, hh = hoog(s) / 2;
     if (hostW > 3 * rand && hostH > 3 * rand) {
       p.x = Math.max(hw + 2, Math.min(hostW - hw - 2, p.x));
       p.y = Math.max(hh + 2, Math.min(hostH - hh - 2, p.y));
@@ -244,10 +254,10 @@ function plaats(kamer, pr) {
     i = orde2[oi];
     s = zicht[i];
     if (s.vast || s.kind === 'tag') {
-      gedaan.push({ x: plekken[i].x, y: plekken[i].y, w: s._w, h: s._h });
+      gedaan.push({ x: plekken[i].x, y: plekken[i].y, w: breed(s), h: hoog(s) });
       continue;
     }
-    var q = plekken[i], w = s._w, hgt = s._h;
+    var q = plekken[i], w = breed(s), hgt = hoog(s);
     var ox = q.x, oy = q.y, poging, gekozen = null;
     for (poging = 0; poging < UITWIJK.length; poging++) {
       var kx = ox + UITWIJK[poging][0] * (w + 4);

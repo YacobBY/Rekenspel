@@ -66,7 +66,7 @@ function decorPlek(kamerId, naam) {
 /* waar hoort dit dier te staan met zijn behoefte? */
 function plekVanBehoefte(g) {
   var b = g.behoefte;
-  if (b === 'kamer' || !g.kamer) return { kamer: 'receptie', x: 30, z: 62 };
+  if (b === 'kamer' || !g.kamer) return Rooms.plek('receptie', 0.375, 0.775);
   if (b === 'eten') {
     var s = Rooms.slots(g.kamer, 'bak')[0];
     return s ? { kamer: g.kamer, x: s.sx, z: s.sz } : null;
@@ -381,7 +381,8 @@ var ciKaart = null;
    het kaartje 260 px breed en de keuzestrook eronder nog 62 px hoog, en dat
    blok stond precies over de gast die aan de balie wacht - de speeltest zag
    50% van het naamplaatje verdwijnen bij vraag 1 en 100% bij vraag 2.
-   Nu: kaart rechts achterin (70,20), gast links vooraan (WACHTPLEK).
+   Nu: kaart rechts achterin (0,875 x 0,25 van de kamer = 105,30 sinds K1),
+   gast links vooraan (WACHTPLEK).
    Gemeten met het breedste naamplaatje uit de pool ("Stampertje", 88 px):
      420x860  0% van het plaatje, 0% van het dier
      860x420  0% / 0%
@@ -397,13 +398,28 @@ var ciKaart = null;
    er geen vrij plekje meer voor de deurknop, en hits.js laat een knop dan
    staan waar hij staat; de kaart ligt er dan bovenop (de kaart is dieper in
    beeld). De deurknop blijft met zijn hart in beeld en dus aan te tikken. */
-var CI_PLEK = { x: 70, z: 20, kamer: 'receptie' };
-var CI_HOOG = 16;
+/* Alle plekken in de receptie zijn BREUKEN van de kamer (Rooms.plek): de
+   receptie is met K1 1,5x groter geworden en dan schuift dit mee. De breuken
+   zijn precies de oude voxels van de kamer van 80 x 80 (70/80, 20/80). */
+var CI_PLEK = Rooms.plek('receptie', 0.875, 0.25);
+var CI_HOOG = Rooms.hoogte('receptie', 0.2);   /* was 16 bij w = 80 */
+/* In een LAAG kader (liggende telefoon: 200 px) moeten de kaart (~92 px) en
+   de keuzestrook eronder (~64 px) er samen onder passen. Passen ze niet, dan
+   klemt de knoppenlaag de strook tegen de onderrand en ligt hij over de tekst
+   van de kaart. We tillen de kaart daar een paar hoogtestappen op; één stap
+   is 2k schermpixels (World.schaal), net zoals games/tobbe.js dat doet. */
+function ciHoog() {
+  var f = document.getElementById('world');
+  var h = (f && f.clientHeight) || 480;
+  if (h >= 300) return CI_HOOG;
+  var s = World.schaal ? World.schaal() : null, k = (s && s.k) || 1;
+  return CI_HOOG + Math.ceil(20 / (2 * k));
+}
 /* En daarom wacht de gast links vóór de balie in plaats van midden ervoor:
    met het kaartje rechts achterin en het dier links vooraan zijn ze in elk
    beeld los van elkaar te zien (gemeten met het breedste naamplaatje: 0%
    van het plaatje én 0% van het dier bedekt, staand en liggend). */
-var WACHTPLEK = { x: 20, z: 74 };
+var WACHTPLEK = Rooms.plek('receptie', 0.25, 0.925);
 
 /* De drie keuzes bij vraag 2. LET OP de koppeling met het bevroren
    vergelijk(): dat vergelijkt dagen × per dag MET de voorraad.
@@ -430,7 +446,7 @@ function paintCheckin() {
     /* twee korte zinnen: eerst wat er nu elke dag opgaat, dan wat deze gast
        erbij eet - en de vraag zelf ("Samen?") */
     ciKaart = Ui.somkaart(CI_PLEK, v.samen + ' + ' + v.extra + ' =', {
-      id: 'ci_som', door: 'checkin', open: true, max: 2, hoog: CI_HOOG,
+      id: 'ci_som', door: 'checkin', open: true, max: 2, hoog: ciHoog(),
       icoon: '🥄',
       regel: ['De gasten eten ' + scheppen(v.samen) + ' per dag',
               g.naam + ' eet ' + v.extra + ' erbij. Samen?'],
@@ -443,7 +459,7 @@ function paintCheckin() {
        steeds over scheppen eten. */
     var tot = v.dagen * v.nieuw;
     ciKaart = Ui.somkaart(CI_PLEK, v.dagen + ' × ' + v.nieuw + (v.fouten2 > 0 ? ' = ' + tot : ''), {
-      id: 'ci_som', door: 'checkin', pad: false, hoog: CI_HOOG,
+      id: 'ci_som', door: 'checkin', pad: false, hoog: ciHoog(),
       icoon: '🥄',
       regel: ['Elke dag ' + scheppen(v.nieuw) + ', ' + dagen(v.dagen) + ' lang',
               '📦 In huis: ' + scheppen(v.voorraad) + '. Genoeg?'],
@@ -461,9 +477,9 @@ function paintCheckin() {
       tik: function () { if (vrij) naarKamer(vrij.kamer); }
     });
     if (vrij && World.actief() !== vrij.kamer) {
-      Ui.wolk({ x: 62, z: 4, kamer: 'receptie' }, {
+      Ui.wolk(Rooms.plek('receptie', 0.775, 0.05), {
         id: 'ci_wijs', door: 'checkin', icoon: Rooms.get(vrij.kamer).icoon,
-        tekst: Rooms.get(vrij.kamer).naam, hoog: 16, prio: 10,
+        tekst: Rooms.get(vrij.kamer).naam, hoog: ciHoog(), prio: 10,
         tik: function () { naarKamer(vrij.kamer); }
       });
     }
@@ -783,7 +799,7 @@ function toonBord() {
     return;
   }
   t.forEach(function (q, i) {
-    Ui.wolk({ x: 6 + i * 26, z: 2 + i * 26, kamer: 'receptie' }, {
+    Ui.wolk(Rooms.plek('receptie', 0.075 + i * 0.325, 0.025 + i * 0.325), {
       id: 'bord_' + i, door: 'bord', icoon: q.klaar ? '✅' : q.icoon,
       tekst: kortTaak(q), hoog: 22, prio: 10,
       tik: function () { doeTaak(q); }
@@ -791,9 +807,9 @@ function toonBord() {
   });
   /* de berichtjes van vandaag: hooguit twee korte regels bij de balie */
   (state.dagBericht || []).slice(0, 2).forEach(function (b, i) {
-    Ui.wolk({ x: 30, z: 40, kamer: 'receptie' }, {
+    Ui.wolk(Rooms.plek('receptie', 0.375, 0.5), {
       id: 'dag_' + i, door: 'bord', icoon: b.icoon, tekst: b.tekst,
-      hoog: 30 + i * 12, prio: 9,
+      hoog: Rooms.hoogte('receptie', 0.375 + i * 0.15), prio: 9,
       tik: function () { Ui.wolkWeg('dag_' + i); World.vuil(); }
     });
   });
@@ -989,8 +1005,9 @@ function herstelWereld() {
   /* de gast die halverwege de check-in aan de balie stond, staat er weer */
   if (state.nieuweGast) {
     state.nieuweGast.waar = 'receptie';
-    World.zet(state.nieuweGast.id, 'receptie', 30, 62);
-    World.ga(state.nieuweGast.id, 30, 62, 'wacht');
+    var np = Rooms.plek('receptie', 0.375, 0.775);
+    World.zet(state.nieuweGast.id, 'receptie', np.x, np.z);
+    World.ga(state.nieuweGast.id, np.x, np.z, 'wacht');
   }
   World.toon(true);
   World.naar(state.kamerNu || 'receptie', true);
@@ -1013,10 +1030,28 @@ function render() {
   if (takenSig !== voor && bordOpen) toonBord();
 }
 
+/* Kantelt of verandert het scherm, dan verandert de voxelmaat van de kamer
+   (world.js maatVan) - en daarmee alles wat in SCHERMpixels is uitgemeten,
+   zoals de keuzestrook onder een sommenkaart (ui.js keuzeY, in hoogtestappen
+   van 2k px). We leggen de hotspots dan opnieuw neer, net zoals
+   games/bedden.js dat voor zijn rijen doet. */
+var maatT = null;
+function opMaat() {
+  clearTimeout(maatT);
+  maatT = setTimeout(function () {
+    maatT = null;
+    if (!state) return;
+    render();
+    if (state.checkin) paintCheckin();
+  }, 180);
+}
+
 function start() {
   herstelWereld();
   bouwTaken(true);
   render();
+  window.addEventListener('resize', opMaat);
+  window.addEventListener('orientationchange', opMaat);
   /* een halve check-in gaat vóór: die maak je eerst af */
   if (state.checkin) paintCheckin();
   else if (state.ronde === 'ochtend') prikbord();

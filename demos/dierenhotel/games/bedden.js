@@ -51,6 +51,16 @@ var KAMER = 'kamer1';       /* waar het icoontje hangt */
 var K = KAMER;              /* waar we nu spelen (kamer2 als kamer1 vol is) */
 var MAX_RIJEN = 3;          /* zoveel rijen passen er op deze vloer */
 var MAX_PER_RIJ = 10;       /* zoveel bedjes passen er in één strookje */
+/* Sinds K1 is de vloer 1,5x groter (114 x 114) en levert het vloerraster 19
+   plekjes in plaats van 6. De OPDRACHT blijft even groot: rijen x bedden per
+   rij komt uit ctx.state.sommen.tafel en die sommen mogen niet veranderen
+   (HOTEL.md 5). We rekenen daarom met hooguit MAX_CAP plekjes per opdracht -
+   de extra vloer is beenruimte, geen grotere som. (Er passen wél meer BEDDEN
+   in een kamer, en dat mag: de gastenpool is 9 lang, dus N verandert niet.)
+   Wil je ooit een rij van 6 of 7 (band 5, 7 x 6): zet MAX_CAP hoger EN
+   MAX_PER_RIJ / MAX_RIJEN erbij, en meet de rijen na - 6 rijen x rijStap (24
+   voxels op een tablet) is 144 voxels en dat past niet meer in 114. */
+var MAX_CAP = 6;
 var GOLF = 260;             /* ms tussen twee bedden van de deken-golf */
 
 /* schermafstanden (px) tussen de kaartjes: een knop is 48 px hoog */
@@ -89,8 +99,11 @@ function schaal() {
   if (_sch && nu - _schT < 250) return _sch;      /* even onthouden: teken()
                                                      vraagt hem tien keer */
   var g = 2, dp = 1, S = 2, H = 2, w;
-  try { w = window.World && World.debug(); if (w && w.g) g = w.g; } catch (e) {}
-  try { dp = Math.min(3, window.devicePixelRatio || 1); } catch (e) {}
+  /* g EN de tekendichtheid komen uit world.js: het canvas staat vaak op een
+     hogere dichtheid dan het scherm zelf (world.js maatVan), dus met
+     devicePixelRatio zou een rij bedjes op de verkeerde plek liggen. */
+  try { w = window.World && World.debug(); if (w && w.g) g = w.g; if (w && w.dpr) dp = w.dpr; } catch (e) {}
+  if (!dp) { try { dp = Math.min(3, window.devicePixelRatio || 1); } catch (e) { dp = 1; } }
   try { if (window.Art && Art.kit) { S = Art.kit.S || S; H = Art.kit.HG || H; } } catch (e) {}
   _schT = nu;
   _sch = { u: S * g / dp,          /* px per voxel in (x - z): zijwaarts */
@@ -104,7 +117,16 @@ function frameHoogte() {
   var e = document.getElementById('world');
   return (e && e.clientHeight) || 480;
 }
-function maxStroken() { return frameHoogte() < 430 ? 3 : MAX_RIJEN + 1; }
+/* Hoeveel stroken passen er in dit kader? Een strook is STAP_PX hoog en de
+   sommenkaart (46 px) en de dekenkist (40 px) moeten er in hun kleinste maat
+   bij. Sinds K1 is het kader wat lager (de kamers werden breder, dus vullen
+   ze het kader eerder in de breedte - world.js pasKader), dus rekenen we het
+   uit in plaats van een vaste grens van 430 px te gebruiken. Uitkomst per
+   kader: 200 px -> 3, 282 -> 3, 321 -> 4, 379 -> 4, 715 -> 4. */
+function maxStroken() {
+  var over = frameHoogte() - 48 - 46 - 40;
+  return Math.max(3, Math.min(MAX_RIJEN + 1, Math.floor(over / STAP_PX) + 1));
+}
 function marges() {
   var h = frameHoogte(), n = aantalStroken();
   var ruim = Math.max(0, (h - ((n - 1) * STAP_PX + 48)) / 2);
@@ -112,14 +134,20 @@ function marges() {
            onder: Math.max(40, Math.min(ONDER_PX, ruim - 24)) };
 }
 
-/* de diagonale stap tussen twee rijen, in voxels */
+/* De diagonale stap tussen twee rijen, in voxels. NIET afronden op hele
+   voxels: de voxelmaat is sinds K1 vaak een breuk (world.js maatVan), en met
+   een hele voxelstap komen de strookjes dan 50, 50, 51 px onder elkaar in
+   plaats van precies STAP_PX. Met een breuk staan ze op de pixel gelijk. */
 function rijStap() {
   var s = schaal();
-  return Math.max(Math.ceil(STAP_PX / (2 * s.v)), 24);
+  return Math.max(STAP_PX / (2 * s.v), 24);
 }
 function rijPlek(r) {
   var stap = rijStap(), n = aantalStroken();
-  var begin = Math.max(2, Math.round((76 - (n - 1) * stap) / 2));
+  /* de rijen liggen op de diagonaal, netjes midden op de vloer van DEZE
+     kamer (sinds K1 is die 114 x 114 in plaats van 76 x 76) */
+  var breed = ((C && C.wereld.kamer(K)) || {}).w || 114;
+  var begin = Math.max(2, (breed - (n - 1) * stap) / 2);
   return { kamer: K, x: begin + r * stap, z: begin + r * stap };
 }
 /* een plek die op het scherm dx px opzij en dy px omhoog van rij r ligt */
@@ -137,6 +165,9 @@ function plekPx(r, dx, dy) {
    plaatsing van besteVak() hier droog na en tellen hoeveel er echt passen.
 ===================================================================== */
 function capaciteit(kamerId) {
+  return Math.min(MAX_CAP, ruweCapaciteit(kamerId));
+}
+function ruweCapaciteit(kamerId) {
   var vrij = C.wereld.slots(kamerId, 'vrij').map(function (v) { return { x: v.x, z: v.z }; });
   var bedden = C.wereld.slots(kamerId, 'bed').map(function (b) { return { x: b.x, z: b.z }; });
   var n = 0, i, j, dm, d, best, beste, p;
@@ -471,7 +502,7 @@ function schuif() {
 function deurPlek() {
   var r = C.wereld.kamer(K) || {};
   var d = (r.deuren || [])[0];
-  var w = r.w || 76, dp = r.d || 76;
+  var w = r.w || 114, dp = r.d || 114;
   if (!d) return { x: w / 2, z: 0, ix: w / 2, iz: 10 };
   var m = d.at + (d.breed || 12) / 2;
   if (d.wand === 'z') return { x: Math.min(m, w - 2), z: 0, ix: Math.min(m, w - 2), iz: 10 };
