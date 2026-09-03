@@ -253,6 +253,10 @@ function start(id) {
   /* het prikbord dicht: de taakkaartjes staan anders over de knoppen van
      het spel heen (de bel en de avondronde doen dat al net zo) */
   if (window.Hotel && Hotel.bordDicht) Hotel.bordDicht();
+  /* zolang dit spel speelt kiest het als eerste zijn plekken; de knoppen van
+     het hotel wijken ervoor uit (hits.js) en de wens-wolkjes gaan even weg */
+  Hits.voorrang(def.id);
+  if (window.Hotel) Hotel.render();
   hersteek();
   if (def.kamer && World.actief() !== def.kamer) World.naar(def.kamer);
   try { if (def.start) def.start(ctxVoor(def)); }
@@ -270,8 +274,10 @@ function stop() {
   actief = null;
   try { if (def && def.stop) def.stop(); } catch (e) {}
   if (def) Hits.wisEigenaar(def.id);
+  Hits.voorrang(null);
   Ui.leegPaneel();
   hersteek();
+  if (window.Hotel) Hotel.render();      /* de wens-wolkjes komen weer terug */
 }
 
 function debug() {

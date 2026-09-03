@@ -74,7 +74,7 @@ function beginScherm() {
     herbereken();
     Hotel.start();
     bewaarSpel();
-    if (!s) toast('Welkom in het hotel! Geef ze allemaal een bed. 🛏', 'happy');
+    if (!s) toast('🛏 Geef iedereen een bed', 'happy');
   };
   $('#nieuwBtn').onclick = function () {
     closeSheet();

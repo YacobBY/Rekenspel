@@ -123,18 +123,34 @@ function rijU() { var u = 0; P.forEach(function (p) { u += p.x - p.z; }); return
 function rijD() { var d = 0; P.forEach(function (p) { d += p.x + p.z; }); return d / P.length; }
 function uVan(i) { return P[i].x - P[i].z; }
 
-/* in de lucht boven de tobbe-rij: ver = (x - z), vPx = pixels omhoog (negatief) */
-function inDeLucht(ver, vPx) {
-  var som = rijD();
-  return { kamer: 'tuin', x: Math.round((som + ver) / 2), z: Math.round((som - ver) / 2),
-           y: Math.round(-vPx / 2) };
+/* Hoeveel css-pixels is één voxel? Dat verschilt per kamer en per stand van
+   het scherm (de tuin is groot, dus in portret staat hij ver weg). Met
+   ctx.wereld.schaal() rekenen we onze plekken in ECHTE pixels uit; zo klopt
+   dezelfde opstelling staand én liggend. */
+function sch() {
+  var s = C.wereld.schaal ? C.wereld.schaal() : null;
+  if (!s || !s.pxPerVoxelY) return { pxPerVoxelX: 2, pxPerVoxelY: 1, pxPerHoogte: 2 };
+  return s;
 }
-/* Op het gras, vóór of achter de rij: uPx = pixels naar rechts, vPx = omlaag.
-   Links/rechts rekenen we vanaf het MIDDEN van het erf (x = z) en niet vanaf
-   de tobbe-rij: zo staat de sommenkaart met zijn knoppen altijd netjes
-   midden in beeld, ook als de tobbes links staan. */
-function opGras(uPx, vPx) {
-  var som = rijD() + vPx, ver = uPx / 2;
+/* boven de tobbe-rij: ver = (x - z) in voxels, hoogPx = echte pixels omhoog */
+function inDeLucht(ver, hoogPx) {
+  var s = sch(), som = rijD(), y = Math.round(hoogPx / s.pxPerHoogte);
+  var r = C.wereld.kamer('tuin'), boven = (r.box ? r.box[2] : -10) + 34 / s.pxPerVoxelY;
+  if (som - 2 * y < boven) y = Math.round((som - boven) / 2);   /* niet buiten het kader */
+  return { kamer: 'tuin', x: Math.round((som + ver) / 2), z: Math.round((som - ver) / 2), y: y };
+}
+/* De voorste rij (sommenkaart, ✓, ↩, kraantje, kannetje) ligt op het gras
+   vóór de tobbes: een vast plankje, midden in beeld (x = z), ver genoeg onder
+   de cijfers op de tobbes en altijd binnen de onderrand van het kader. */
+function voorRijDiepte() {
+  var s = sch(), r = C.wereld.kamer('tuin'), diepste = 0;
+  P.forEach(function (p) { diepste = Math.max(diepste, p.x + p.z); });
+  var wens = diepste + 62 / s.pxPerVoxelY;
+  var onder = (r.box ? r.box[3] : 220) - 46 / s.pxPerVoxelY;
+  return Math.min(wens, onder);
+}
+function opGras(uPx) {
+  var s = sch(), som = voorRijDiepte(), ver = uPx / s.pxPerVoxelX;
   return { kamer: 'tuin', x: Math.round((som + ver) / 2),
            z: Math.round((som - ver) / 2), y: 0 };
 }
@@ -143,18 +159,18 @@ function opGras(uPx, vPx) {
    tobbes staan daar ~65 px uit elkaar en een knop is al 48-56 px breed, dus
    dan zou de laag de tobbe-knoppen van hun eigen tobbe wegschuiven. Zo blijft
    de tobbe-rij rustig en staat het gereedschap op een vast plankje. */
-function kraanPlek() { return opGras(150, 64); }
-function kanPlek() { return opGras(-150, 64); }
+function kraanPlek() { return opGras(150); }
+function kanPlek() { return opGras(-150); }
 /* de sommenkaart staat vóór de rij, op het gras */
-function somPlek() { return opGras(0, 64); }
+function somPlek() { return opGras(0); }
 /* de VRAAG (met het cijferpad eronder) hangt hoog bóven de rij: het pad zelf
    komt onder de kamer te hangen, en dan dekken ze elkaar niet af */
-function vraagPlek() { return inDeLucht(0, -120); }
+function vraagPlek() { return inDeLucht(0, 110); }
 /* Alle wolkjes van het spel komen op dezelfde plek boven de tobbes te hangen.
    Een wolkje is 130-160 px breed; hing het aan de buitenste tobbe, dan zou de
    laag het tegen de rand van het kader duwen. Eén vaste plek leest ook
    rustiger: het kind weet waar het praatje verschijnt. */
-function zegPlek() { return inDeLucht(0, -120); }
+function zegPlek() { return inDeLucht(0, 110); }
 
 /* Een plekje voor een tobbe erbij: uit het vrije vloerraster van de tuin,
    zó gekozen dat de knoppen elkaar niet afdekken (GAMES-API.md 4:
@@ -177,6 +193,28 @@ function kiesPlek(gekozen) {
   return best;
 }
 
+/* De extra tobbes van de wasplaats zijn INVENTARIS van het spel, geen aankoop
+   uit het meubelboek: ze kosten het kind niets en zijn daar niet te koop of op
+   te pakken (het meubelboek werkt alleen met wat in zijn eigen laatje staat).
+   Om ze ook in de gedeelde meubellijst herkenbaar te houden krijgt elke tobbe
+   van dit spel het merkje `spa`, en de ids staan in ons eigen laatje. Zo is
+   een badkuip die het kind zelf voor 8 munten koopt altijd te onderscheiden
+   van een tobbe die de wasplaats zelf heeft neergezet. */
+function gekochteKuip(id) {
+  /* alles wat het meubelboek in zijn eigen laatje heeft staan is écht gekocht */
+  var mijn = (C.state.spelData('meubels') || {}).mijn || [], i;
+  for (i = 0; i < mijn.length; i++) if (mijn[i].id === id) return true;
+  return false;
+}
+function merkSpa(id) {
+  if (gekochteKuip(id)) return null;        /* van het kind, niet van ons */
+  var lijst = (C.state.ruw() && C.state.ruw().meubels) || [], i;
+  for (i = 0; i < lijst.length; i++) {
+    if (lijst[i].id === id) { lijst[i].spa = 1; return lijst[i]; }
+  }
+  return null;
+}
+
 /* Het erf heeft al één tobbe; de rest zetten we er één keer bij met
    ctx.wereld.plaatsMeubel('badkuip'). De ids onthouden we in ons eigen
    laatje, zodat er na "Verder spelen" nooit een tweede rij bij komt. */
@@ -192,12 +230,16 @@ function zorgTobbes(M) {
   C.wereld.kamerMeubels('tuin').forEach(function (m) {
     if (m.n === 'tobbe' || d.kuipen.indexOf(m.id) >= 0) uit.push({ x: m.x, z: m.z, id: m.id });
   });
+  /* na "Verder spelen" bouwt het hotel de meubellijst opnieuw op; onze eigen
+     tobbes krijgen hun merkje dan meteen terug */
+  d.kuipen.forEach(function (id) { merkSpa(id); });
   while (uit.length < M) {
     var p = kiesPlek(uit);
     if (!p) break;
     var m = C.wereld.plaatsMeubel('tuin', 'badkuip', p.x, p.z);
     if (!m) break;
     d.kuipen.push(m.id);
+    merkSpa(m.id);                       /* van de wasplaats, niet gekocht */
     uit.push({ x: m.x, z: m.z, id: m.id });
   }
   uit.sort(function (a, b) { return (a.x - a.z) - (b.x - b.z); });
@@ -214,7 +256,7 @@ function nieuweStand(N, band, dag) {
             stap: r.soort === 'eerlijk' ? 'vullen' : 'vraag',
             rek: r.soort === 'eerlijk' ? r.T : (r.soort === 'dubbel' ? r.basis : 0),
             tob: [], kan: 0, inbad: [], hand: 1, missers: 0, lijn: 0,
-            hulp: 0, wens: 0, mors: -1, zeg: null, t0: 0 };
+            hulp: 0, wens: 0, ster: 0, mors: -1, zeg: null, t0: 0 };
   for (i = 0; i < r.M; i++) { s.tob.push(0); s.inbad.push([]); }
   if (r.soort === 'half') s.tob[0] = r.T;
   return s;
@@ -267,6 +309,15 @@ function stop() {
 
 function bewaar() { if (C) C.state.bewaar(); }
 
+/* De ster (en het vinkje op het prikbord) hoort bij de hele ronde: het
+   rekenwerk plus de badbeurt. Hij valt hooguit één keer per ronde. */
+function ster() {
+  if (!S || S.ster) return false;
+  S.ster = 1;
+  C.taakKlaar('bad', { sterren: 1 });
+  return true;
+}
+
 /* =====================================================================
    4. TEKENEN - alles hangt aan een voorwerp in de tuin
 ===================================================================== */
@@ -306,7 +357,8 @@ function tekenTobbes() {
         }).join('') + '</span>';
     }
     C.hotspots.maak({
-      id: 'tb_kuip' + i, kamer: 'tuin', x: p.x, z: p.z, y: 26,
+      id: 'tb_kuip' + i, kamer: 'tuin', x: p.x, z: p.z,
+      y: Math.round(52 / sch().pxPerHoogte),
       html: html, kind: 'drop', drop: 'tobbe', data: { tob: i },
       klas: 'hotkar', prio: 12,
       titel: 'tobbe ' + (i + 1) + ': ' + n + (S.lijn ? ' van ' + S.per : ''),
@@ -399,21 +451,21 @@ function teken() {
   }
   /* "zo is het goed": tikken mag altijd. Staan er nog schepjes op het rek,
      dan zegt het wolkje dat rustig ("🥄 2 nog op het rek"). */
-  var k = opGras(96, 64);
+  var k = opGras(96);
   C.hotspots.maak({
     id: 'tb_klaar', kamer: 'tuin', x: k.x, z: k.z, y: 0,
     icoon: '✓', klas: 'hotwolk goed', prio: 13, titel: 'zo is het goed',
     aan: function () { check(); }
   });
   if (S.missers >= 2) {
-    var e = opGras(-96, 64);
+    var e = opGras(-96);
     C.hotspots.maak({
       id: 'tb_els', kamer: 'tuin', x: e.x, z: e.z, y: 0,
       icoon: '🩺', klas: 'hotwolk hulp', prio: 8, titel: 'buurvrouw Els doet het voor',
       aan: function () { hulp(); }
     });
   } else if (S.rek < S.T || S.tob.some(function (n) { return n > 0; })) {
-    var o = opGras(-96, 64);
+    var o = opGras(-96);
     C.hotspots.maak({
       id: 'tb_opnieuw', kamer: 'tuin', x: o.x, z: o.z, y: 0,
       icoon: '↩', klas: 'hotwolk', prio: 7, titel: 'opnieuw beginnen',
@@ -679,7 +731,8 @@ function spookNeer() {
   if (S.rest > 0) {
     var l = kanPlek();
     C.wereld.getalTag({ x: l.x, z: l.z, kamer: 'tuin' }, S.rest,
-                      { id: 'tb_sk', y: -16, klas: 'hotspook', titel: 'zoveel blijft over' });
+                      { id: 'tb_sk', y: Math.round(30 / sch().pxPerHoogte),
+                        klas: 'hotspook', titel: 'zoveel blijft over' });
   }
 }
 function hulp() {
@@ -741,7 +794,7 @@ function tekenBaden() {
                     getal: wacht.length, tekst: 'in de tobbe', hoog: bp.y, prio: 10 });
   }
   if (S.stap === 'baden' && !wacht.length && inBadIds().length) {
-    var k = opGras(96, 64);
+    var k = opGras(96);
     C.hotspots.maak({
       id: 'tb_klaar', kamer: 'tuin', x: k.x, z: k.z, y: 0,
       icoon: '✓', klas: 'hotwolk goed', prio: 13, titel: 'klaar met badderen',
@@ -810,7 +863,15 @@ function inBad(id, i) {
   var p = P[i];
   C.wereld.reis(id, 'tuin', { x: Math.max(12, p.x - 7), z: p.z + 7, na: 'blij' });
   C.wereld.setMood(id, 'bouncy');
-  if (g.behoefte === 'bad') { g.blij = true; S.wens = 1; }   /* hotel.js: wens vervuld */
+  if (g.behoefte === 'bad') {
+    /* Eerst het taakje afvinken (dat is ook de ster voor deze ronde), DAARNA
+       pas de wens afmelden. behoefteKlaar tekent het prikbord meteen opnieuw,
+       en een kaartje dat op dat moment nog niet is afgevinkt zou zonder
+       vinkje van het bord verdwijnen - dan mist het kind zijn succesje. */
+    ster();
+    C.wereld.behoefteKlaar(id, 'bad');   /* zet g.blij en werkt het bord bij */
+    S.wens = 1;
+  }
   g.waar = 'tuin';
   C.snd.plop(1);
   /* het praatje komt op de vaste boodschapplek boven de tobbes: hing het
@@ -830,7 +891,7 @@ function klaarMetBaden() {
   if (!S || S.stap !== 'baden' || !inBadIds().length) return;
   S.stap = 'af';
   zeg(null);
-  C.taakKlaar('bad', { sterren: 1 });
+  ster();                       /* had een badgast al een ster? dan niet nog een */
   C.snd.hoera();
   bewaar();
   if (window.Hotel) Hotel.render();

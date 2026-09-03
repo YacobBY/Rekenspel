@@ -398,7 +398,19 @@ function kamer() { return Rooms.get(kamerNu) || Rooms.lijst()[0]; }
 
 function camDoel(r) {
   var b = r.box;
-  return [W / 2 - (b[0] + b[1]) / 2 * g, H / 2 - (b[2] + b[3]) / 2 * g];
+  var cx = W / 2 - (b[0] + b[1]) / 2 * g;
+  /* Past de kamerdoos in de hoogte? Dan netjes midden. Past hij niet, dan
+     houden we de VLOER helemaal in beeld en snijden we bovenaan een stukje
+     kale wand af - nooit de vloer waar de dieren en de bakjes staan. */
+  var hoog = (b[3] - b[2]) * g;
+  var mid = H / 2 - (b[2] + b[3]) / 2 * g;
+  /* Past hij: de kamer staat een tikje hoger dan precies midden, zodat er
+     onderin ruimte is voor het cijferpad. Dat zetje is altijd een heel
+     aantal CSS-pixels (een veelvoud van de pixelverhouding), zodat de
+     voxels precies even scherp blijven staan als daarvoor. */
+  var zet = Math.round((H - hoog) * 0.16 / dpr) * dpr;
+  var cy = hoog <= H ? mid - zet : H - 4 - b[3] * g;
+  return [cx, cy];
 }
 function camZet() {
   var c = camDoel(kamer());
@@ -421,8 +433,36 @@ function hoogsteKamer() {
   });
   return h;
 }
+function breedsteKamer() {
+  var w = 0;
+  Rooms.lijst().forEach(function (r) {
+    var b = r.box || Rooms.kader(r);
+    if (b[1] - b[0] > w) w = b[1] - b[0];
+  });
+  return w || 370;
+}
+/* hoeveel hoogte gaat er op aan balken boven en onder het kader? */
+function chroomHoogte() {
+  var app = document.getElementById('app');
+  if (!app || !host) return 200;
+  return Math.max(110, app.offsetHeight - host.offsetHeight);
+}
+/* hoeveel hoogte is er over voor het kader zelf? */
+function ruimteHoogte() {
+  return Math.max(200, window.innerHeight - chroomHoogte() - 6);
+}
+/* De hele voxelschaal: hij moet in de BREEDTE passen (nooit een kamer
+   afsnijden) en zo goed als mogelijk ook in de hoogte. Van de hoogte mogen
+   we een klein stukje kale wand missen (15%), want de camera houdt dan de
+   vloer in beeld. */
+function kiesSchaal(nw) {
+  var d = Math.min(3, window.devicePixelRatio || 1);
+  var gB = Math.floor(nw / breedsteKamer());
+  var gH = Math.floor((ruimteHoogte() * d + hoogsteKamer() * 0.35) / hoogsteKamer());
+  return Math.max(2, Math.min(4, gB, Math.max(2, gH)));
+}
 /* geeft true als de hoogte van het kader veranderd is */
-function pasKader(ng, breedte) {
+function pasKader(ng) {
   if (!host) return false;
   if (document.body && document.body.classList.contains('metpaneel')) {
     /* een spel met een rekenblad ernaast: laat de opmaak het regelen */
@@ -430,10 +470,13 @@ function pasKader(ng, breedte) {
     return false;
   }
   var staand = window.innerHeight >= window.innerWidth;
-  var ruim = Math.round(window.innerHeight * (staand ? 0.66 : 0.86));
+  var ruim = Math.round(window.innerHeight * (staand ? 0.78 : 0.90));
   var kamerCss = hoogsteKamer() * ng / Math.min(3, window.devicePixelRatio || 1);
-  var wil = Math.round(Math.min(ruim, kamerCss + KADER_ONDER));
-  wil = Math.max(200, wil);
+  /* Zo hoog als er op het scherm over is, maar nooit zó hoog dat de kamer
+     minder dan 60% van het kader vult (dan kijk je weer in een zee van
+     lucht), en het liefst met de strook eronder waar het cijferpad staat. */
+  var boven = Math.min(ruim, ruimteHoogte(), Math.round(kamerCss / 0.60));
+  var wil = Math.max(200, boven);
   if (host.style.height === wil + 'px') return false;
   host.style.height = wil + 'px';
   host.style.maxHeight = wil + 'px';
@@ -445,8 +488,8 @@ function meet() {
   var r = host.getBoundingClientRect();
   if (r.width < 8 || r.height < 8) return false;
   dpr = Math.min(3, window.devicePixelRatio || 1);
-  var ng = Math.max(2, Math.min(4, Math.round(Math.max(240, Math.round(r.width * dpr)) / 370)));
-  if (pasKader(ng, r.width)) r = host.getBoundingClientRect();
+  var ng = kiesSchaal(Math.max(240, Math.round(r.width * dpr)));
+  if (pasKader(ng)) r = host.getBoundingClientRect();
   var nw = Math.max(240, Math.round(r.width * dpr)), nh = Math.max(180, Math.round(r.height * dpr));
   if (nw === W && nh === H && ng === g) return false;
   W = nw; H = nh; g = ng;

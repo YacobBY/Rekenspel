@@ -33,6 +33,17 @@ var host = null, reg = Object.create(null), orde = [], laatsteKamer = null, teve
    dus alleen als het kader van maat verandert of als er andere tekst in een
    knop komt te staan. */
 var hostW = 0, hostH = 0;
+/* Wie mag als eerste zijn plek kiezen? Zolang er een spel speelt is dat het
+   spel: knoppen van het hotel (en zeker de wens-wolkjes) wijken dan uit, en
+   niet andersom. De stekkerdoos zet dit bij start/stop. */
+var voorrang = null;
+function zetVoorrang(wie) { voorrang = wie || null; }
+function laagVan(s) {
+  if (s.vast || s.kind === 'tag') return 3;      /* cijfers en het pad staan vast */
+  if (voorrang && s.door === voorrang) return 2; /* het spel dat nu speelt */
+  if (s.klas && s.klas.indexOf('hotwens') >= 0) return 0;   /* wolkjes wijken het eerst */
+  return 1;
+}
 /* Uitwijkplekjes voor knoppen die elkaar afdekken: eerst de echte plek, dan
    omhoog (zoals de naamplaatjes al deden), dan schuin, dan opzij. In stappen
    van een hele knop, en altijd binnen het kader. */
@@ -177,7 +188,11 @@ function plaats(kamer, pr) {
      (HOTEL.md: hooguit een handvol dingen per kamer om aan te raken) */
   teveel = Math.max(0, zicht.length - MAX_PER_KAMER);
   if (teveel > 0) {
-    zicht.sort(function (a, b) { return b.prio - a.prio; });
+    zicht.sort(function (a, b) {
+      var la = laagVan(a), lb = laagVan(b);
+      if (la !== lb) return lb - la;
+      return b.prio - a.prio;
+    });
     for (i = MAX_PER_KAMER; i < zicht.length; i++)
       if (zicht[i].el.style.display !== 'none') zicht[i].el.style.display = 'none';
     zicht = zicht.slice(0, MAX_PER_KAMER);
@@ -214,16 +229,24 @@ function plaats(kamer, pr) {
         precies zoals de naamplaatjes dat al deden. Zo is elke knop altijd
         apart aan te tikken, ook als de kamer krap in beeld staat. */
   var gedaan = [], j, g;
-  /* Cijfers die ÓP een voorwerp horen (en het cijferpad) blijven staan waar
-     ze horen: die plakken we eerst vast, daarna wijkt de rest eromheen. */
-  for (i = zicht.length - 1; i >= 0; i--) {
+  /* De volgorde waarin iedereen zijn plek kiest: eerst wat vastzit (cijfers
+     op een voorwerp, het cijferpad), dan het spel dat nu speelt, dan de
+     gewone hotelknoppen, en als laatste de wens-wolkjes. Binnen elke laag
+     kiest het voorste voorwerp eerst. Wie later kiest, wijkt uit. */
+  var orde2 = [];
+  for (i = 0; i < zicht.length; i++) orde2.push(i);
+  orde2.sort(function (a, b) {
+    var la = laagVan(zicht[a]), lb = laagVan(zicht[b]);
+    if (la !== lb) return lb - la;
+    return zicht[b]._d - zicht[a]._d;
+  });
+  for (var oi = 0; oi < orde2.length; oi++) {
+    i = orde2[oi];
     s = zicht[i];
-    if (!s.vast && s.kind !== 'tag') continue;
-    gedaan.push({ x: plekken[i].x, y: plekken[i].y, w: s._w, h: s._h });
-  }
-  for (i = zicht.length - 1; i >= 0; i--) {
-    s = zicht[i];
-    if (s.vast || s.kind === 'tag') continue;
+    if (s.vast || s.kind === 'tag') {
+      gedaan.push({ x: plekken[i].x, y: plekken[i].y, w: s._w, h: s._h });
+      continue;
+    }
     var q = plekken[i], w = s._w, hgt = s._h;
     var ox = q.x, oy = q.y, poging, gekozen = null;
     for (poging = 0; poging < UITWIJK.length; poging++) {
@@ -263,10 +286,11 @@ function debug() {
   var uit = { kamer: laatsteKamer, teveel: teveel, kader: [hostW, hostH], spots: [] };
   lijst().forEach(function (s) {
     if (!s.el) return;
-    uit.spots.push({ id: s.id, kamer: s.kamer, d: s._d, z: s._zi, kind: s.kind,
+    uit.spots.push({ id: s.id, kamer: s.kamer, door: s.door || null, d: s._d, z: s._zi, kind: s.kind,
                      zichtbaar: s.el.style.display !== 'none', klas: s.klas || null,
                      px: s._px, py: s._py, w: s._w, h: s._h, drop: s.drop || null });
   });
+  uit.voorrang = voorrang;
   uit.spots.sort(function (a, b) { return (a.z || 0) - (b.z || 0); });
   return uit;
 }
@@ -280,6 +304,7 @@ function watRaakt(x, y) {
 }
 
 return { maak: maak, weg: weg, wisEigenaar: wisEigenaar, plaats: plaats, hermeet: hermeet,
+         voorrang: zetVoorrang,
          pak: pak, laat: laat, geleend: geleend,
          lijst: lijst, debug: debug, watRaakt: watRaakt, MAX: MAX_PER_KAMER };
 })();

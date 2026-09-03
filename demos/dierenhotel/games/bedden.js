@@ -29,10 +29,14 @@
      groep 4  alleen de tafels 1, 2, 3, 4, 5 en 10
      groep 5  alle tafels t/m 10, plus de SCHUIFWAND: de rijen in twee
               stukken rekenen (3 rijen van 7 = 2 x 7 + 1 x 7)
-   Wat de KAMER begrenst is het aantal rijen: op de vloer passen drie rijen
-   plus een lege reserverij, dus het aantal rijen knijpen we tot wat er past.
-   De tafel zelf - het aantal bedden per rij - blijft precies zoals de band
-   hem geeft.
+   Wat de KAMER begrenst is de grootte van de opdracht. Er passen drie rijen
+   plus een lege reserverij op de vloer, en er passen maar zoveel bedden in
+   een kamer als het vloerraster toelaat (capaciteit()). De opdracht belooft
+   dus nooit meer bedden dan er echt bij kunnen: eerst zakt de tafel naar de
+   eerstvolgende die de band WEL kent, daarna het aantal rijen. Is kamer 1
+   vol, dan lopen we door naar de volgende slaapkamer; zit het hele hotel
+   vol, dan zegt het spel dat vriendelijk ("🛏 vol ✓") en belooft het niets -
+   en zonder nieuw bed is er ook geen ster.
 
    Over het neerzetten: de wereld is isometrisch en de knoppenlaag schuift
    knoppen die elkaar afdekken uit elkaar (GAMES-API.md 4). Een rij zou dan
@@ -43,7 +47,8 @@
 (function () {
 'use strict';
 
-var KAMER = 'kamer1';
+var KAMER = 'kamer1';       /* waar het icoontje hangt */
+var K = KAMER;              /* waar we nu spelen (kamer2 als kamer1 vol is) */
 var MAX_RIJEN = 3;          /* zoveel rijen passen er op deze vloer */
 var MAX_PER_RIJ = 10;       /* zoveel bedjes passen er in één strookje */
 var GOLF = 260;             /* ms tussen twee bedden van de deken-golf */
@@ -93,6 +98,20 @@ function schaal() {
            h: H * g / dp };        /* px per voxel omhoog                 */
   return _sch;
 }
+/* hoe hoog is het wereldkader nu? (korte kaders: één rij minder, en de
+   kaartjes eromheen schuiven dichter naar de rijen toe) */
+function frameHoogte() {
+  var e = document.getElementById('world');
+  return (e && e.clientHeight) || 480;
+}
+function maxStroken() { return frameHoogte() < 430 ? 3 : MAX_RIJEN + 1; }
+function marges() {
+  var h = frameHoogte(), n = aantalStroken();
+  var ruim = Math.max(0, (h - ((n - 1) * STAP_PX + 48)) / 2);
+  return { boven: Math.max(46, Math.min(BOVEN_PX, ruim - 30)),
+           onder: Math.max(40, Math.min(ONDER_PX, ruim - 24)) };
+}
+
 /* de diagonale stap tussen twee rijen, in voxels */
 function rijStap() {
   var s = schaal();
@@ -101,29 +120,92 @@ function rijStap() {
 function rijPlek(r) {
   var stap = rijStap(), n = aantalStroken();
   var begin = Math.max(2, Math.round((76 - (n - 1) * stap) / 2));
-  return { kamer: KAMER, x: begin + r * stap, z: begin + r * stap };
+  return { kamer: K, x: begin + r * stap, z: begin + r * stap };
 }
 /* een plek die op het scherm dx px opzij en dy px omhoog van rij r ligt */
 function plekPx(r, dx, dy) {
   var s = schaal(), p = rijPlek(r), d = dx / (2 * s.u);
-  return { kamer: KAMER, x: p.x + d, z: p.z - d, y: 6 + (dy || 0) / s.h };
+  return { kamer: K, x: p.x + d, z: p.z - d, y: 6 + (dy || 0) / s.h };
+}
+
+/* =====================================================================
+   HOEVEEL BEDDEN PASSEN ER ECHT NOG BIJ?
+   De opdracht mag nooit meer bedden beloven dan de vloer kan dragen, want
+   elk bedje wordt straks een ECHT bed. Een bed dat neergezet wordt haalt de
+   vakjes binnen 18 voxels van zich af uit het vloerraster (rooms.js), dus
+   het aantal vrije vakjes is niet het aantal bedden. We spelen de greedy
+   plaatsing van besteVak() hier droog na en tellen hoeveel er echt passen.
+===================================================================== */
+function capaciteit(kamerId) {
+  var vrij = C.wereld.slots(kamerId, 'vrij').map(function (v) { return { x: v.x, z: v.z }; });
+  var bedden = C.wereld.slots(kamerId, 'bed').map(function (b) { return { x: b.x, z: b.z }; });
+  var n = 0, i, j, dm, d, best, beste, p;
+  while (vrij.length) {
+    beste = -1; best = -1;
+    for (i = 0; i < vrij.length; i++) {
+      dm = 1e9;
+      for (j = 0; j < bedden.length; j++) {
+        d = Math.abs(bedden[j].x - vrij[i].x) + Math.abs(bedden[j].z - vrij[i].z);
+        if (d < dm) dm = d;
+      }
+      if (dm > best) { best = dm; beste = i; }
+    }
+    if (beste < 0) break;
+    p = vrij[beste];
+    bedden.push(p);
+    n++;
+    vrij = vrij.filter(function (v) {
+      return Math.abs(v.x - p.x) + Math.abs(v.z - p.z) >= 18;
+    });
+  }
+  return n;
+}
+
+/* In welke kamer spelen we? Het liefst de kamer van het icoontje; is die vol,
+   dan lopen we door naar de volgende slaapkamer die nog plek heeft. Zo blijft
+   de groeilus van het hotel doorlopen (HOTEL.md 2). */
+function kiesKamer() {
+  var beste = { kamer: KAMER, cap: capaciteit(KAMER) };
+  if (beste.cap >= 2) return beste;
+  C.wereld.kamers().forEach(function (r) {
+    if (r.id === KAMER || !C.wereld.slots(r.id, 'bed').length) return;
+    var c = capaciteit(r.id);
+    if (c > beste.cap) beste = { kamer: r.id, cap: c };
+  });
+  return beste;
 }
 
 /* =====================================================================
    DE OPDRACHT: rijen x bedden-per-rij, uit ctx.state.sommen.tafel
 ===================================================================== */
-function opdracht() {
+function opdracht(cap) {
   var band = C.state.band();
   var s = C.state.sommen.tafel(band) || {};
+  var set = (s.tafels && s.tafels.length ? s.tafels : [1, 2, 5, 10]).slice()
+              .sort(function (a, b) { return a - b; });
   var perRij = Math.max(1, Math.min(MAX_PER_RIJ, s.a || 2));
   var rijen = Math.max(1, Math.min(MAX_RIJEN, s.b || 2));
-  return { band: band, perRij: perRij, rijen: rijen, doel: rijen * perRij };
+  /* De kamer is de baas. Een rij kan nooit breder zijn dan wat er nog past,
+     dus zakken we naar de eerstvolgende tafel die de band WEL kent (nooit een
+     zelfbedacht getal, IDEAS.md); daarna knijpen we het aantal rijen. */
+  var i, kleiner;
+  while (perRij > cap) {
+    kleiner = 0;
+    for (i = 0; i < set.length; i++) if (set[i] < perRij && set[i] <= cap) kleiner = set[i];
+    if (!kleiner) { perRij = Math.max(1, Math.min(perRij, cap)); break; }
+    perRij = kleiner;
+  }
+  rijen = Math.max(1, Math.min(rijen, Math.floor(cap / perRij) || 1,
+                                MAX_RIJEN, maxStroken() - 1));
+  return { band: band, perRij: perRij, rijen: rijen, doel: rijen * perRij, cap: cap };
 }
 function signatuur(o) {
-  return [o.band, C.state.dag(), C.state.N(), o.rijen, o.perRij].join('|');
+  return [o.band, C.state.dag(), C.state.N(), K, o.cap, o.rijen, o.perRij].join('|');
 }
 function nieuweOpdracht(o, sig) {
   D.sig = sig;
+  D.kamer = K;
+  D.cap = o.cap;
   D.band = o.band;
   D.rijen = o.rijen;
   D.perRij = o.perRij;
@@ -134,7 +216,8 @@ function nieuweOpdracht(o, sig) {
   D.nieuw = 0;
   D.over = 0;
   D.spook = false;
-  D.fase = 'leg';            /* leg -> feest -> af */
+  D.fase = 'leg';            /* leg -> feest -> af (of 'vol') */
+  D.vol = 0;
   /* de schuifwand hoort bij groep 5 (verdeelstrategie, HOTEL.md 5) */
   D.wand = o.band >= 5 && o.rijen >= 2 ? o.rijen - 1 : 0;
 }
@@ -171,7 +254,7 @@ function legIn(r) {
   }
   if (kistOver() <= 0) {                       /* de kist is leeg */
     C.snd.zacht();
-    wolk('bd_op', plekPx(aantalStroken() - 1, 0, -ONDER_PX), { icoon: '🧺', getal: 0, klas: 'hulp' });
+    wolk('bd_op', plekPx(aantalStroken() - 1, 0, -marges().onder), { icoon: '🧺', getal: 0, klas: 'hulp' });
     tik(function () { if (C) C.ui.wolkWeg('bd_op'); }, 1800);
     return;
   }
@@ -216,10 +299,10 @@ function wolk(id, obj, o) {
    Hotel.render() weer terug. */
 function rustigeKamer() {
   if (!C) return;
-  ['bed_' + KAMER + '_bed1', 'bed_' + KAMER + '_bed2',
-   'mand_' + KAMER, 'bak_' + KAMER + '_bak'].forEach(function (id) { C.hotspots.weg(id); });
-  C.wereld.kamerMeubels(KAMER).forEach(function (m) {
-    if (m.soort === 'bed') C.hotspots.weg('bed_' + KAMER + '_' + m.id);
+  ['bed_' + K + '_bed1', 'bed_' + K + '_bed2',
+   'mand_' + K, 'bak_' + K + '_bak'].forEach(function (id) { C.hotspots.weg(id); });
+  C.wereld.kamerMeubels(K).forEach(function (m) {
+    if (m.soort === 'bed') C.hotspots.weg('bed_' + K + '_' + m.id);
   });
 }
 
@@ -247,7 +330,7 @@ function teken() {
     p = rijPlek(r);
     (function (rr) {
       C.hotspots.maak({
-        id: 'bd_rij' + rr, kamer: KAMER, x: p.x, z: p.z, y: 6,
+        id: 'bd_rij' + rr, kamer: K, x: p.x, z: p.z, y: 6,
         kind: 'drop', drop: 'bedrij', data: { rij: rr },
         klas: 'hotbron', html: strookHtml(rr), prio: 13,
         /* vast = dit strookje wijkt nooit uit; de andere knoppen (ook die
@@ -265,10 +348,10 @@ function teken() {
   goot = Math.max(88, ((el && el.offsetWidth) || 160) / 2 + 52);
 
   /* de dekenkist: sleepbron met de teller erop, aan het voeteneind */
-  var kp = plekPx(laatste, 0, -ONDER_PX);
+  var kp = plekPx(laatste, 0, -marges().onder);
   C.hotspots.bron(kp, {
     id: 'bd_kist', icoon: '🧺', aantal: kistOver(), hoog: kp.y,
-    klas: D.klaar ? 'leeg' : '', prio: 12, kamer: KAMER,
+    klas: D.klaar ? 'leeg' : '', prio: 12, kamer: K,
     titel: 'dekenkist met ' + kistOver() + ' bedjes',
     tik: function () { if (!D.klaar) C.snd.tik(); },
     sleep: {
@@ -284,7 +367,7 @@ function teken() {
   if (!D.klaar && totaal() > 0) {
     var up = plekPx(laatste, -goot, 0);
     C.hotspots.maak({
-      id: 'bd_undo', kamer: KAMER, x: up.x, z: up.z, y: up.y,
+      id: 'bd_undo', kamer: K, x: up.x, z: up.z, y: up.y,
       icoon: '↩', klas: 'hotwolk', prio: 11, titel: 'eentje terug in de kist',
       aan: terug
     });
@@ -292,8 +375,9 @@ function teken() {
 
   /* de som schrijft zichzelf: zoveel volle rijen x zoveel per rij */
   if (!D.klaar) {
-    kaart = C.ui.somkaart(plekPx(0, 0, BOVEN_PX), (vol || '?') + ' × ' + D.perRij + ' =',
-      { id: 'bd_som', door: 'bedden', pad: false, hoog: plekPx(0, 0, BOVEN_PX).y, kamer: KAMER });
+    var sp = plekPx(0, 0, marges().boven);
+    kaart = C.ui.somkaart(sp, (vol || '?') + ' × ' + D.perRij + ' =',
+      { id: 'bd_som', door: 'bedden', pad: false, hoog: sp.y, kamer: K });
     if (kaart) kaart.zet(vol ? vol * D.perRij : '');
   }
 
@@ -301,7 +385,7 @@ function teken() {
      één getal, geen woord */
   var wacht = C.wereld.dieren().filter(function (g) { return !g.bed; })[0];
   var wd = wacht ? C.wereld.dier(wacht.id) : null;
-  if (wd && wd.kamer === KAMER && !D.klaar)
+  if (wd && wd.kamer === K && !D.klaar)
     wolk('bd_wolk', wacht.id, { icoon: '🛏', getal: D.doel, hoog: 52, prio: 12 });
   else C.ui.wolkWeg('bd_wolk');
 
@@ -310,7 +394,7 @@ function teken() {
     var a = D.wand, b = D.rijen - D.wand;
     var wp = plekPx(D.wand, goot, STAP_PX / 2);
     C.hotspots.maak({
-      id: 'bd_wand', kamer: KAMER, x: wp.x, z: wp.z, y: wp.y,
+      id: 'bd_wand', kamer: K, x: wp.x, z: wp.z, y: wp.y,
       klas: 'hotwolk hulp', prio: 11,
       html: '<span class="ico">🚧</span><span class="get" style="font-size:.95rem;line-height:1.02">' +
             (a * D.perRij) + '<br>+' + (b * D.perRij) + '</span>',
@@ -323,7 +407,7 @@ function teken() {
   if (!D.klaar) {
     var kl = plekPx(0, goot, 56);
     C.hotspots.maak({
-      id: 'bd_klaar', kamer: KAMER, x: kl.x, z: kl.z, y: kl.y,
+      id: 'bd_klaar', kamer: K, x: kl.x, z: kl.z, y: kl.y,
       icoon: '🐾', getal: D.doel, klas: 'hotwolk goed', prio: 14,
       titel: D.doel + ' gasten mogen erin', aan: check
     });
@@ -333,7 +417,7 @@ function teken() {
   if (D.missers >= 2 && !D.klaar) {
     var hp = plekPx(laatste, -goot, -STAP_PX);
     C.hotspots.maak({
-      id: 'bd_hulp', kamer: KAMER, x: hp.x, z: hp.z, y: hp.y,
+      id: 'bd_hulp', kamer: K, x: hp.x, z: hp.z, y: hp.y,
       icoon: '🐑', klas: 'hotwolk hulp', prio: 11, titel: 'kamerhulp Wolkje',
       aan: hulp
     });
@@ -350,10 +434,11 @@ function alleenSom() {
     C.hotspots.weg(id);
   });
   C.ui.wolkWeg('bd_wolk');
-  wolk('bd_goed', plekPx(0, goot, 0), {
-    icoon: '🛏', getal: '+' + (D.nieuw || 0), klas: 'goed', prio: 14,
-    tik: function () { C.sluit(); }
-  });
+  wolk('bd_goed', plekPx(0, goot, 0), D.nieuw
+    ? { icoon: '🛏', getal: '+' + D.nieuw, klas: 'goed', prio: 14,
+        tik: function () { C.sluit(); } }
+    : { icoon: '🛏', tekst: 'vol ✓', klas: 'goed', prio: 14,
+        tik: function () { C.sluit(); } });
   C.wereld.vuil();
 }
 
@@ -367,7 +452,7 @@ function schuif() {
 
 /* de deur van deze kamer, alleen uit de gedocumenteerde kamerdata */
 function deurPlek() {
-  var r = C.wereld.kamer(KAMER) || {};
+  var r = C.wereld.kamer(K) || {};
   var d = (r.deuren || [])[0];
   var w = r.w || 76, dp = r.d || 76;
   if (!d) return { x: w / 2, z: 0, ix: w / 2, iz: 10 };
@@ -400,7 +485,7 @@ function check() {
     mik = plekPx(leeg, -goot, 0);
     getal = '+' + Math.min(over, D.perRij);
   } else if (over > 0) {                   /* nog bedjes in de kist */
-    mik = plekPx(aantalStroken() - 1, -goot, -ONDER_PX);
+    mik = plekPx(aantalStroken() - 1, -goot, -marges().onder);
     getal = '+' + over;
   } else {                                 /* een rij te veel: er mag er een terug */
     mik = plekPx(Math.max(0, vol - 1), -goot, 0);
@@ -420,7 +505,7 @@ function wachtInDeuropening() {
   var zonder = C.wereld.dieren().filter(function (g) { return !g.bed; });
   if (!zonder.length) return null;
   var g = zonder[zonder.length - 1], p = deurPlek();
-  C.wereld.reis(g.id, KAMER, { x: p.ix, z: p.iz, na: 'wacht' });
+  C.wereld.reis(g.id, K, { x: p.ix, z: p.iz, na: 'wacht' });
   return g;
 }
 
@@ -446,11 +531,15 @@ function gelukt() {
     if (!C) return;
     D.nieuw = gelegd.length;
     D.over = Math.max(0, D.doel - gelegd.length);
-    C.taakKlaar('bedden', { sterren: 1 });
+    /* Een ster hoort bij bedden die er echt bij zijn gekomen. Past er
+       onverwacht toch niets meer (een ander spel heeft de kamer intussen
+       volgezet), dan zeggen we dat vriendelijk en beloven we niets. */
+    if (gelegd.length) C.taakKlaar('bedden', { sterren: 1 });
     C.hotspots.laat();                    /* de deur is weer gewoon de deur */
     teken();
-    wolk('bd_goed', plekPx(0, goot, 0),
-         { icoon: '🛏', getal: '+' + D.nieuw, klas: 'goed', prio: 14 });
+    wolk('bd_goed', plekPx(0, goot, 0), gelegd.length
+      ? { icoon: '🛏', getal: '+' + D.nieuw, klas: 'goed', prio: 14 }
+      : { icoon: '🛏', tekst: 'vol ✓', klas: 'goed', prio: 14 });
     gastenErin(gelegd);
     bewaarStraks();
     /* even nagenieten, dan de kaartjes weg en de kamer terug aan het hotel */
@@ -464,17 +553,17 @@ function gelukt() {
 }
 function somAf() {
   if (kaart) { kaart.weg(); kaart = null; }
-  var p = plekPx(0, 0, BOVEN_PX);
+  var p = plekPx(0, 0, marges().boven);
   kaart = C.ui.somkaart(p, D.rijen + ' × ' + D.perRij + ' =',
-    { id: 'bd_som', door: 'bedden', pad: false, hoog: p.y, kamer: KAMER });
+    { id: 'bd_som', door: 'bedden', pad: false, hoog: p.y, kamer: K });
   if (kaart) { kaart.zet(D.doel); kaart.klaar(); }
 }
 
 /* het vrije vakje dat het verst van alle bedden af ligt: zo staan de nieuwe
    bedden mooi verdeeld door de kamer in plaats van tegen elkaar aan */
 function besteVak() {
-  var vrij = C.wereld.slots(KAMER, 'vrij').slice();
-  var bedden = C.wereld.slots(KAMER, 'bed');
+  var vrij = C.wereld.slots(K, 'vrij').slice();
+  var bedden = C.wereld.slots(K, 'bed');
   var beste = null, best = -1, i, j, dm, d;
   for (i = 0; i < vrij.length; i++) {
     dm = 1e9;
@@ -495,7 +584,7 @@ function bouwBedden(hoeveel, klaar) {
     if (!C) return;
     if (gelegd.length >= hoeveel) { klaar(gelegd); return; }
     var v = besteVak();
-    var b = v ? C.wereld.voegBed(KAMER, { x: v.x, z: v.z }) : null;
+    var b = v ? C.wereld.voegBed(K, { x: v.x, z: v.z }) : null;
     if (!b) { klaar(gelegd); return; }
     gelegd.push(b);
     rustigeKamer();
@@ -514,8 +603,8 @@ function gastenErin(gelegd) {
     if (!g) return;
     tik(function () {
       if (!C) return;
-      var s = C.wereld.slot(KAMER, b.id);
-      if (s) C.wereld.reis(g.id, KAMER, { x: s.sx, z: s.sz, na: 'blij' });
+      var s = C.wereld.slot(K, b.id);
+      if (s) C.wereld.reis(g.id, K, { x: s.sx, z: s.sz, na: 'blij' });
       C.wereld.setMood(g.id, 'bouncy');
     }, 300 + i * 480);
   });
@@ -535,7 +624,7 @@ function hulp() {
   D.spook = true;
   teken();
   var p = plekPx(r, -(goot - 26), 0);
-  C.wereld.getalTag({ kamer: KAMER, x: p.x, z: p.z }, D.perRij,
+  C.wereld.getalTag({ kamer: K, x: p.x, z: p.z }, D.perRij,
                     { id: 'bd_spook', y: p.y, klas: 'hotspook', titel: 'zoveel in een rij' });
   wolk('bd_wolkje', plekPx(r, -goot, STAP_PX), {
     icoon: '🐑', getal: D.perRij, klas: 'hulp', prio: 14,
@@ -556,19 +645,35 @@ function hulp() {
 /* =====================================================================
    START / STOP
 ===================================================================== */
+/* De kamers zitten helemaal vol met bedden. Dat is geen fout maar een
+   compliment: één kaartje, en het spel doet zichzelf weer dicht. */
+function vol() {
+  D.vol = 1;
+  D.klaar = false;
+  D.fase = 'vol';
+  wolk('bd_vol', 'mand', { icoon: '🛏', tekst: 'vol ✓', hoog: 20, klas: 'goed',
+                           prio: 14, tik: function () { C.sluit(); } });
+  C.snd.zacht();
+  tik(function () { if (C) C.sluit(); }, 2600);
+}
 function start(ctx) {
   C = ctx;
   D = C.data();
-  var o = opdracht(), sig = signatuur(o);
-  if (D.sig !== sig || !D.rij) nieuweOpdracht(o, sig);
-  t0 = C.ui.nu();
   bezig = false;
-  C.wereld.naar(KAMER);
+  t0 = C.ui.nu();
+  var keus = kiesKamer();
+  K = keus.kamer;
+  C.wereld.naar(K);
+  /* Is er nergens meer plek voor een bed? Dan beloven we ook niets: één
+     vriendelijk kaartje ("vol"), geen opdracht, geen ster. */
+  if (keus.cap < 2) { vol(); return; }
+  var o = opdracht(keus.cap), sig = signatuur(o);
+  if (D.sig !== sig || !D.rij) nieuweOpdracht(o, sig);
   if (D.klaar) { if (D.fase !== 'af') D.fase = 'af'; somAf(); }
   else {
     /* de deur van de kamer is zolang het "klaar"-moment (GAMES-API.md 2) */
-    (C.wereld.kamer(KAMER).deuren || []).forEach(function (d) {
-      C.hotspots.pak('deur_' + KAMER + '_' + d.naar, check);
+    (C.wereld.kamer(K).deuren || []).forEach(function (d) {
+      C.hotspots.pak('deur_' + K + '_' + d.naar, check);
     });
   }
   /* draait het scherm, dan verandert de voxelmaat: opnieuw uitleggen */
@@ -594,7 +699,7 @@ function stop() {
   }
   if (C) {
     if (kaart) kaart.weg();
-    ['bd_wolk', 'bd_fout', 'bd_goed', 'bd_op', 'bd_wolkje'].forEach(function (id) {
+    ['bd_wolk', 'bd_fout', 'bd_goed', 'bd_op', 'bd_wolkje', 'bd_vol'].forEach(function (id) {
       C.ui.wolkWeg(id);
     });
     spookWeg();

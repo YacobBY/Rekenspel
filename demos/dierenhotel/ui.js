@@ -288,16 +288,21 @@ function wolkWeg(id) { Hits.weg(id); }
 /* ---------- klein cijferpad, verankerd aan het voorwerp ----------
    Het enige 2D-ding dat mag (HOTEL.md 9): twee rijen van zes toetsen,
    elke toets minstens 48 px, en het staat vlak onder de sommenkaart. */
-var PAD_KEYS = [['1', '2', '3', '4', '5', 'del'], ['6', '7', '8', '9', '0', 'ok']];
+/* Twee rijen van zes op een telefoon; op een breed scherm passen alle
+   toetsen op één rij, en dan is het pad half zo hoog en dekt het de vloer
+   van de kamer niet af. */
+var PAD_KEYS = ['1', '2', '3', '4', '5', 'del', '6', '7', '8', '9', '0', 'ok'];
+function padBreed() {
+  var w = document.getElementById('world');
+  return !!(w && w.clientWidth >= 660);
+}
 function padHtml() {
-  var h = '<div class="padrij">', i, j, k;
+  var perRij = padBreed() ? 12 : 6, h = '<div class="padrij">', i, k;
   for (i = 0; i < PAD_KEYS.length; i++) {
-    for (j = 0; j < PAD_KEYS[i].length; j++) {
-      k = PAD_KEYS[i][j];
-      h += '<button type="button" class="padk' + (k === 'ok' ? ' ok' : k === 'del' ? ' del' : '') +
-        '" data-pk="' + k + '">' + (k === 'del' ? '⌫' : k === 'ok' ? '✓' : k) + '</button>';
-    }
-    if (i === 0) h += '</div><div class="padrij">';
+    if (i && i % perRij === 0) h += '</div><div class="padrij">';
+    k = PAD_KEYS[i];
+    h += '<button type="button" class="padk' + (k === 'ok' ? ' ok' : k === 'del' ? ' del' : '') +
+      '" data-pk="' + k + '">' + (k === 'del' ? '⌫' : k === 'ok' ? '✓' : k) + '</button>';
   }
   return h + '</div>';
 }

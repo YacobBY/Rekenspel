@@ -299,10 +299,13 @@ function model(naam) {
    decor:   {n, x, z, y?, ver?}              - ver = altijd achteraan
    slots:   {id, soort:'bed'|'bak'|'vrij', x, z}
 ===================================================================== */
+/* De wandhoogtes zijn zo gekozen dat elke kamerdoos even hoog uitvalt
+   (~290 voxel-px). Daardoor staat elke ruimte even groot in beeld en hoeft
+   het kader niet te springen als je van kamer wisselt. */
 var RUIMTES = [
   {
     id: 'receptie', naam: 'Receptie', icoon: '🛎️', w: 80, d: 80,
-    wand: 34, vloer: 'hout',
+    wand: 54, vloer: 'hout',
     matten: [{ x0: 30, z0: 52, x1: 66, z1: 76, kl: ['#E9BFC9', '#E3B4C0'] }],
     deuren: [{ naar: 'gang', wand: 'z', at: 58, breed: 12 }],
     /* De balie is een L: een deel langs x en een vleugel langs z. Daardoor
@@ -324,7 +327,7 @@ var RUIMTES = [
   },
   {
     id: 'gang', naam: 'Gang', icoon: '🚪', w: 120, d: 36,
-    wand: 32, vloer: 'loper',
+    wand: 56, vloer: 'loper',
     deuren: [
       { naar: 'receptie', wand: 'x', at: 10, breed: 12 },
       { naar: 'kamer1', wand: 'z', at: 24, breed: 12 },
@@ -340,7 +343,7 @@ var RUIMTES = [
   },
   {
     id: 'kamer1', naam: 'Kamer 1', icoon: '🛏️', w: 76, d: 76,
-    wand: 34, vloer: 'zacht',
+    wand: 58, vloer: 'zacht',
     matten: [{ x0: 34, z0: 30, x1: 62, z1: 58, kl: ['#DFCBEA', '#D6BFE4'] }],
     deuren: [{ naar: 'gang', wand: 'z', at: 48, breed: 12 }],
     decor: [
@@ -355,7 +358,7 @@ var RUIMTES = [
   },
   {
     id: 'kamer2', naam: 'Kamer 2', icoon: '🛏️', w: 76, d: 76,
-    wand: 34, vloer: 'zacht',
+    wand: 58, vloer: 'zacht',
     matten: [{ x0: 34, z0: 30, x1: 62, z1: 58, kl: ['#CBE3D6', '#BFDBCB'] }],
     deuren: [{ naar: 'gang', wand: 'z', at: 48, breed: 12 }],
     decor: [
@@ -370,7 +373,7 @@ var RUIMTES = [
   },
   {
     id: 'keuken', naam: 'Keuken', icoon: '🍪', w: 80, d: 76,
-    wand: 34, vloer: 'tegel',
+    wand: 56, vloer: 'tegel',
     deuren: [
       { naar: 'gang', wand: 'x', at: 50, breed: 12 },
       { naar: 'tuin', wand: 'z', at: 60, breed: 12 }
@@ -386,7 +389,7 @@ var RUIMTES = [
   {
     id: 'tuin', naam: 'Tuin', icoon: '🌳', w: 130, d: 130,
     wand: 0, vloer: 'gras', erf: 1,
-    kader: [-170, 190, -10, 220],
+    kader: [-170, 190, -70, 220],
     deuren: [{ naar: 'keuken', wand: 'x', at: 34, breed: 12, poort: 1 }],
     decor: [
       { n: 'boom', x: 16, z: 68 }, { n: 'hok', x: 67, z: 19 },
