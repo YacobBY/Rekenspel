@@ -187,9 +187,12 @@ function pBed() {                          /* ligt in de x-richting */
   K.bx(v, -15, 4, -7, 31, 3, 15, KUSSEN);
   K.bx(v, -17, 0, -8, 3, 13, 17, HOUT);
   K.bx(v, 14, 0, -8, 3, 9, 17, HOUT);
-  K.bx(v, -13, 7, -7, 9, 2, 15, KUSSEN);
-  K.bx(v, -3, 7, -7, 16, 2, 15, DEKEN);
-  K.verf(v, -3, -3, 7, 8, -7, 7, DEKEN_D);
+  /* Kussen aan de kant waar de kop van een slapend dier ligt (world.js legt
+     het dier met zijn snuit naar de hoge x), dekens aan de voetenkant. Zelfde
+     blokken, zelfde omtrek: alleen het kussen en de deken zijn verwisseld. */
+  K.bx(v, 4, 7, -7, 9, 2, 15, KUSSEN);
+  K.bx(v, -13, 7, -7, 16, 2, 15, DEKEN);
+  K.verf(v, 2, 2, 7, 8, -7, 7, DEKEN_D);
   K.verf(v, -16, 13, 3, 3, -8, 8, HOUT_L);
   return v;
 }
@@ -441,7 +444,14 @@ function deurPunt(r, dr) {
 
 /* de sta-plek van een plek: waar gaat een dier staan om hem te gebruiken */
 function afSlot(s) {
-  if (s.soort === 'bed') { s.sx = s.x + 2; s.sz = s.z + 12; }
+  /* Een bed is 33 voxels lang en 17 breed, dus de sta-plek hoort NAAST de
+     lange kant - anders staat het dier midden op de matras. Een gedraaid
+     bed (bedz) is lang in de z-richting: dan gaat het dier er in de
+     x-richting naast staan. */
+  if (s.soort === 'bed') {
+    if (s.draai || s.model === 'bedz') { s.sx = s.x + 12; s.sz = s.z + 2; }
+    else { s.sx = s.x + 2; s.sz = s.z + 12; }
+  }
   else if (s.soort === 'bak') { s.sx = s.x - 13; s.sz = s.z; }
   else { s.sx = s.x; s.sz = s.z; }
   return s;

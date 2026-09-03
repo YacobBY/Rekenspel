@@ -139,12 +139,18 @@ function verf(v, x0, x1, y0, y1, z0, z1, c) {
    oog altijd op het buitenste vlak terechtkomt) */
 function ogen(v, p, x, y, z1, z2, o) {
   o = o || {};
-  var h = o.h || 2, w = o.w || 2, dik = o.dik || 2, yy = y;
+  var h = o.h || 2, w = o.w || 2, dik = o.dik || 2, yy = y, kl = OOG;
   if (p.oog === 1) { yy = y + h - 1; h = 1; }         /* blij: knijpoogjes */
   else if (p.oog === 2) { h = Math.max(1, h - 1); }   /* sip: half dicht */
   else if (p.oog === -1) { yy = y - 1; }              /* naar het bakje kijken */
-  verf(v, x, x + dik - 1, yy, yy + h - 1, z1, z1 + w - 1, OOG);
-  verf(v, x, x + dik - 1, yy, yy + h - 1, z2 - w + 1, z2, OOG);
+  else if (p.oog === 3) {                             /* slapen: oog dicht */
+    /* Één laag hoog en een tikje breder dan een open oog: een zacht
+       wimperstreepje. De gans geeft h = 1 mee, dus alleen "h = 1" zou
+       daar helemaal niets veranderen. */
+    yy = y; h = 1; w = w + 1; kl = NEUS;
+  }
+  verf(v, x, x + dik - 1, yy, yy + h - 1, z1, z1 + w - 1, kl);
+  verf(v, x, x + dik - 1, yy, yy + h - 1, z2 - w + 1, z2, kl);
   if (h > 1 && o.glans !== false) {
     verf(v, x, x + dik - 1, yy + h - 1, yy + h - 1, z1, z1, WIT);
     verf(v, x, x + dik - 1, yy + h - 1, yy + h - 1, z2, z2, WIT);
@@ -312,8 +318,14 @@ function konijn(p) {
   verf(v, 26 + hx, 27 + hx, 15 + hy, 15 + hy, 7, 8, C.e);
   verf(v, 26 + hx, 27 + hx, 13 + hy, 13 + hy, 7, 8, WIT);
 
-  /* lange oren: rechtop, vooruit of slap langs de kop */
-  if (p.oor === 'hang') {
+  /* lange oren: rechtop, vooruit, slap langs de kop - of plat langs de rug
+     als het konijn ligt te slapen (anders staan ze in bed nog overeind) */
+  if (p.lig) {
+    ell(v, 15 + hx, 16, 2.4, 4.8, 1.6, 1.6, C.d, { e: 3.0 });
+    ell(v, 15 + hx, 16, 12.6, 4.8, 1.6, 1.6, C.d, { e: 3.0 });
+    verf(v, 12 + hx, 18 + hx, 17, 17, 2, 3, C.e);
+    verf(v, 12 + hx, 18 + hx, 17, 17, 12, 13, C.e);
+  } else if (p.oor === 'hang') {
     ell(v, 18 + hx, 13 + hy, 1.6, 1.8, 4.6, 1.6, C.d, { e: 3.0 });
     ell(v, 18 + hx, 13 + hy, 13.4, 1.8, 4.6, 1.6, C.d, { e: 3.0 });
     verf(v, 19 + hx, 20 + hx, 9 + hy, 17 + hy, 0, 1, C.e);
@@ -401,6 +413,10 @@ var POSE = {
   loopB: { hx: 1, hy: 0,  oor: 'rust',    staart: 'r',    mond: 0, oog: 0, stap: 2 },
   zit:   { hx: 0, hy: 1,  oor: 'rust',    staart: 'laag', mond: 0, oog: 0, zit: 1 },
   zitsip:{ hx: 0, hy: 0,  oor: 'hang',    staart: 'laag', mond: 2, oog: 2, zit: 1 },
+  /* lig = languit op de matras: pootjes ingetrokken, oren en staart slap,
+     ogen dicht (oog 3). Geen eigen model per dier: dezelfde voxels als
+     altijd, alleen platgeduwd door liggen() hieronder. */
+  lig:   { hx: 0, hy: -1, oor: 'hang',    staart: 'laag', mond: 0, oog: 3, lig: 1 },
   snuif: { hx: 1, hy: -6, oor: 'vooruit', staart: 'mid',  mond: 0, oog: -1 }
 };
 /* alleen deze houdingen bepalen hoe groot een dier-canvas moet zijn */
@@ -469,11 +485,29 @@ function bake(vox) {
   return out;
 }
 
+/* ---------- liggen: opgerold op de matras ----------
+   Geen tweede model per dier: dezelfde voxels, één ingreep. De pootjes (de
+   onderste POOT lagen) worden bijna plat geduwd, waardoor het lijf op de
+   matras zakt - precies een dier dat zijn pootjes intrekt en gaat liggen.
+   Alles boven de pootjes schuift als geheel mee omlaag, dus de hals blijft
+   aan de kop vastzitten en de snuit blijft naar de kijker wijzen (met het
+   oog dicht: POSE.lig heeft oog 3). Het licht wordt ná deze stap gebakken,
+   dus er valt geen schaduw de verkeerde kant op. */
+var POOT = 7;
+function liggen(v) {
+  var i, y, plat = Math.round(POOT * 0.3);
+  for (i = 0; i < v.length; i++) {
+    y = v[i][1];
+    v[i][1] = y <= POOT ? Math.round(y * 0.3) : y - POOT + plat;
+  }
+  return v;
+}
+
 var poseCache = Object.create(null), komCache = [];
 function bouw(kind, pose) {
   var p = POSE[pose] || POSE.rust;
   var v = (SOORT[kind] || hond)(p);
-  return p.zit ? zitten(v) : v;
+  return p.lig ? liggen(v) : p.zit ? zitten(v) : v;
 }
 function faces(kind, pose) {
   var k = kind + '/' + pose;

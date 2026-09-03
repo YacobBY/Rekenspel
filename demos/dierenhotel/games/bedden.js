@@ -614,7 +614,11 @@ function bouwBedden(hoeveel, klaar) {
   stap();
 }
 
-/* de gasten die nog geen bed hebben lopen naar hun nieuwe bed toe */
+/* De gasten die nog geen bed hebben lopen naar hun nieuwe bed toe. Een net
+   gelegd bed is nog van niemand, dus het dier gaat er BLIJ NAAST staan: op
+   de sta-plek van het bed, nooit op de matras. Slapen doet het pas als de
+   check-in dit bed aan deze gast geeft - dan legt World.slaap() het netjes
+   midden op de matras. */
 function gastenErin(gelegd) {
   var zonder = C.wereld.dieren().filter(function (g) { return !g.bed; });
   if (!zonder.length || !gelegd.length) return;
@@ -624,7 +628,8 @@ function gastenErin(gelegd) {
     tik(function () {
       if (!C) return;
       var s = C.wereld.slot(K, b.id);
-      if (s) C.wereld.reis(g.id, K, { x: s.sx, z: s.sz, na: 'blij' });
+      if (!s) return;
+      C.wereld.reis(g.id, K, { x: s.sx, z: s.sz, na: 'blij' });
       C.wereld.setMood(g.id, 'bouncy');
     }, 300 + i * 480);
   });
