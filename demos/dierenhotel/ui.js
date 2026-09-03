@@ -373,7 +373,8 @@ function somkaart(obj, som, o) {
   var keuzes = (o.keuzes && o.keuzes.length) ? o.keuzes : null;
   var st = { val: '', klaar: false, open: !!o.open && !keuzes, extra: '',
              zin: zinLijst(o.regel) };
-  var hoog = o.hoog === undefined ? 22 : o.hoog;
+  var hoogBasis = o.hoog === undefined ? 22 : o.hoog;
+  var hoog = hoogBasis;        /* + lift zodra het pad de kaart zou afdekken */
 
   function zinHtml() {
     var h = '', i;
@@ -416,9 +417,63 @@ function somkaart(obj, som, o) {
     var vDoel = (r && r.box ? r.box[3] : 180) + 44;
     return Math.round(((p.x + p.z) - vDoel) / 2);
   }
+  /* De kaart mag niet achter zijn eigen cijferpad verdwijnen. Op een smal
+     scherm (kader 296x324) is het kader zo laag dat het pad tot over de
+     somregel komt; dan tillen we de kaart precies genoeg op. Meten na het
+     tekenen, hooguit twee keer - daarna staat het. */
+  function kaartVrijStraks() {
+    /* hits.js zet de plek pas in de volgende tekenbeurt: eerst laten tekenen */
+    if (World.vuil) World.vuil();
+    setTimeout(function () { kaartVrij(0); }, 90);
+  }
+  function kaartVrij(ronde) {
+    var k = document.querySelector('[data-hot="' + id + '"]');
+    var pd = document.querySelector('[data-hot="' + id + '_pad"]');
+    if (!k || !pd) return;
+    var rk = k.getBoundingClientRect(), rp = pd.getBoundingClientRect();
+    if (!rk.height || !rp.height) return;
+    var over = rk.bottom - rp.top + 4;
+    if (over <= 0) return;
+    var s = World.schaal ? World.schaal() : null;
+    var kf = (s && s.k) || 1;
+    hoog += Math.ceil(over / (2 * kf));
+    kaart();
+    if (World.vuil) World.vuil();
+    if ((ronde || 0) < 1) setTimeout(function () { kaartVrij(1); }, 90);
+  }
+  /* Kantelt het scherm, dan verandert de vorm van het pad (twee rijen van zes
+     op een telefoon, één rij van twaalf op een breed scherm). De html van een
+     hotspot blijft anders staan zoals hij gemaakt is: een pad van twaalf
+     toetsen stak zo 273 px buiten een staand kader. Dus: bij een nieuwe
+     schermmaat het pad opnieuw tekenen en de kaart opnieuw vrij zetten. */
+  var padLuister = null, padWas = null;
+  function padUit() {
+    if (!padLuister) return;
+    window.removeEventListener('resize', padLuister);
+    window.removeEventListener('orientationchange', padLuister);
+    padLuister = null;
+  }
+  function padOpnieuw() {
+    /* Is het kaartje inmiddels opgeruimd (Hits.wisEigenaar na een check-in of
+       een spel dat stopt)? Dan hoort deze luisteraar er ook niet meer te zijn:
+       anders tekent hij bij het kantelen een verdwenen kaartje terug. */
+    if (!document.querySelector('[data-hot="' + id + '"]')) { padUit(); return; }
+    if (!st.open || st.klaar || keuzes || o.pad === false) return;
+    var breed = padBreed();
+    hoog = hoogBasis;           /* de lift hoort bij het oude kader */
+    kaart();
+    if (breed !== padWas) padAan();     /* andere vorm: pad opnieuw tekenen */
+    else kaartVrijStraks();             /* zelfde vorm, ander kader: opnieuw meten */
+  }
   function padAan() {
     if (st.klaar || o.pad === false) return;
     st.open = true;
+    padWas = padBreed();
+    if (!padLuister) {
+      padLuister = function () { setTimeout(padOpnieuw, 90); };
+      window.addEventListener('resize', padLuister);
+      window.addEventListener('orientationchange', padLuister);
+    }
     Hits.maak({
       id: id + '_pad', door: o.door || 'som', kamer: p.kamer, x: p.x, z: p.z,
       y: padY(),
@@ -434,6 +489,7 @@ function somkaart(obj, som, o) {
         kaart();
       }
     });
+    kaartVrijStraks();
   }
   /* ---------- keuzestrook: 2-3 knoppen MÉT woord, aan de onderrand ----------
      Nooit losse pictogrammen door de kamer: alle keuzes staan in één strook
@@ -500,12 +556,16 @@ function somkaart(obj, som, o) {
     open: function () { if (!keuzes) padAan(); return api; },
     klaar: function () {
       st.klaar = true;
+      padUit();
       Hits.weg(id + '_pad');
       Hits.weg(id + '_keuzes');
       kaart();
       return api;
     },
-    weg: function () { Hits.weg(id + '_pad'); Hits.weg(id + '_keuzes'); Hits.weg(id); }
+    weg: function () {
+      padUit();
+      Hits.weg(id + '_pad'); Hits.weg(id + '_keuzes'); Hits.weg(id);
+    }
   };
   kaart();
   if (keuzes) keuzeAan();

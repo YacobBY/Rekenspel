@@ -539,6 +539,10 @@ body.metpaneel .world{aspect-ratio:4/3;max-height:44vh}
   border-radius:999px;background:#FFFDF6EE;box-shadow:0 2px 0 rgba(74,59,51,.14)}
 .hot.hotgetal .getal{font-size:.95rem;font-weight:700;color:#5A4A3E;line-height:1.15}
 .hot.hotgetal.veel .getal{color:#C9788F}
+/* het bedrag op de toonbank: een gewoon doosje (dus het wijkt uit voor de
+   sommenkaart) met een cijfer erin, niet aan te tikken */
+.hot.hotbedrag{cursor:default;background:#FFFDF6;border-color:#F0E4D2}
+.hot.hotbedrag .getal{font-size:1.05rem}
 .hot.hotspook{background:#FFFFFFAA;border-style:dashed;border-color:#C9A075;opacity:.75}
 .hot.hotspook .getal{color:#8a7c5e}
 
@@ -552,13 +556,30 @@ body.metpaneel .world{aspect-ratio:4/3;max-height:44vh}
   font-weight:700;display:grid;place-items:center;padding:0 4px}
 .hot.hotbron.leeg{opacity:.55;cursor:default}
 
+/* Een smalle telefoon (kader 296 px) heeft geen ruimte voor een kaartje van
+   266 px: dan staat het over het dier heen. Kleiner lettertype, smallere zin
+   (mag afbreken) en een kleiner antwoordvakje maken het kaartje ~190 px, en
+   dan blijft de gast links ernaast in beeld. Het cijferpad krijgt toetsen van
+   44 px met kleinere kieren, zodat de rij (6 toetsen) binnen het kader past. */
 @media (max-width:360px){
-  /* liever twee regels dan een kaartje dat buiten het kader steekt */
-  .hot.hotsom .somzin{white-space:normal;overflow:visible}
+  .hot.hotsom .somzin{white-space:normal;overflow:visible;max-width:150px;font-size:.64rem;gap:3px}
+  .hot.hotsom .somzin .ico{font-size:1rem}
+  .hot.hotsom .somlijn{font-size:.9rem}
+  .hot.hotsom .somvak{min-width:34px;min-height:30px;font-size:1.05rem;border-width:2px}
+  .hot.hotsom.metzin{padding:5px 7px 12px;gap:1px}
+  .hot.hotpad{padding:3px;gap:2px}
+  .padrij{gap:2px}
+  .padk{min-width:44px;min-height:44px;font-size:1.05rem}
+  .hot.hotkeuzes{padding:4px}
+  .kzrij{gap:4px}
+  .kzk{padding:2px 5px}
+  .hot.hotkeuzes .lbl{font-size:.6rem}
 }
 @media (max-width:520px){
   .hot.hotsom .somlijn{font-size:1rem}
-  .hot.hotsom .somzin{font-size:.76rem}
+  /* .7rem houdt de langste zin (34 tekens) op ÉÉN regel én de kaart onder de
+     240 px, zodat het naamplaatje van de gast ernaast vrij blijft */
+  .hot.hotsom .somzin{font-size:.7rem}
   .hot.hotwolk{max-width:274px}
   .hot.hotwolk .zeg{max-width:216px;font-size:.74rem}
   .hot.hotkeuzes .lbl{font-size:.64rem}

@@ -347,8 +347,11 @@ Uit de speeltest van het fundament: rekenpanelen naast het diorama voelen als
   een overzicht als het meubelboek — niet voor sommen.
 * **Elke sommenkaart draagt één gewone zin** (`regel`, VERPLICHT, ≤ 8 woorden
   **én ≤ 40 tekens**, met een werkwoord of een vraagwoord, pictogram vooraan op
-  dezelfde regel). Op één regel past ongeveer **34 tekens** (gemeten op 320, 420
-  en 860 px); 35-40 tekens wordt een tweede regel op een smal scherm. Schrijf je
+  dezelfde regel). Op één regel past ongeveer **34 tekens** (gemeten op 420 en
+  860 px breed); 35-40 tekens wordt een tweede regel. Op een smalle telefoon
+  (kader < 360 px) is het kaartje 170 px en breekt élke zin af naar twee
+  regels - anders staat de kaart over het dier heen. Het cijferpad krijgt daar
+  toetsen van 44 px (elders 48). Schrijf je
   meer, dan waarschuwt de console. Een kale som ("4 × 2", "🪑 + 🛋 =") staat er
   nooit zonder zin. Feedback blijft pictogram + getal ("nog 2 🍪").
   *Herzien 2026-09-03 na speeltest: een kind van zes kon "4 × 2 ? 20" niet

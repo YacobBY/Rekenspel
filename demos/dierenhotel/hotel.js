@@ -370,7 +370,8 @@ function scoopjes(n) {
 /* =====================================================================
    CHECK-IN ÍN DE WERELD (HOTEL.md 9)
    Op de balie ligt ÉÉN sommenkaartje. Daarop staat eerst een gewone zin die
-   de getallen in hotelwoorden noemt ("Samen 0 per dag, Boef eet 2"), daaronder
+   de getallen in hotelwoorden noemt ("De gasten eten 0 scheppen per dag" /
+   "Boef eet 2 erbij. Samen?"), daaronder
    de som met het cijferpad. Bij vraag 2 hoort geen pad maar één strook met
    drie knoppen mét woord: losse pijltjes door de kamer bleken onleesbaar.
 ===================================================================== */
@@ -380,16 +381,22 @@ var ciKaart = null;
    het kaartje 260 px breed en de keuzestrook eronder nog 62 px hoog, en dat
    blok stond precies over de gast die aan de balie wacht - de speeltest zag
    50% van het naamplaatje verdwijnen bij vraag 1 en 100% bij vraag 2.
-   Nu: kaart rechts achterin (70,20), gast links vooraan (WACHTPLEK). Gemeten
-   met het breedste naamplaatje uit de pool ("Stampertje", 88 px) op 420x860,
-   860x420, 1000x640 en 320x640: 0-2% van het plaatje en 0% van het dier zelf
-   bedekt, kaart én strook binnen het kader, strook tegen de kaart aan (gat
-   0-6 px). Hoger dan 16 mag niet: dan loopt het plaatje wél onder de kaart
-   (13%). Over de tekst van de kaart ligt nergens iets (0% in staand én
-   liggend). Wel het omgekeerde: op een liggende telefoon (kader 836x200) is er
-   geen vrij plekje meer voor de deurknop, en hits.js laat een knop dan staan
-   waar hij staat; de kaart ligt er dan bovenop (de kaart is dieper in beeld).
-   De deurknop blijft met zijn hart in beeld en dus aan te tikken. */
+   Nu: kaart rechts achterin (70,20), gast links vooraan (WACHTPLEK).
+   Gemeten met het breedste naamplaatje uit de pool ("Stampertje", 88 px):
+     420x860  0% van het plaatje, 0% van het dier
+     860x420  0% / 0%
+     1000x640 0% / 0%
+     320x640  0% / 0%  (met de smalle-schermregels uit style.css: daar krimpt
+              het kaartje van 266 naar 170 px, anders staat het over het dier -
+              vóór die regels was het daar 70% van het plaatje en 91% van het
+              dier, en dat is precies wat de verifier vond)
+   Kaart én strook blijven in alle vier de kaders binnen beeld en de strook
+   blijft tegen de kaart aan (gat 0-6 px). Hoger dan 16 mag niet: dan loopt het
+   plaatje wél onder de kaart (13%). Over de tekst van de kaart ligt nergens
+   iets (0%). Wel het omgekeerde: op een liggende telefoon (kader 836x200) is
+   er geen vrij plekje meer voor de deurknop, en hits.js laat een knop dan
+   staan waar hij staat; de kaart ligt er dan bovenop (de kaart is dieper in
+   beeld). De deurknop blijft met zijn hart in beeld en dus aan te tikken. */
 var CI_PLEK = { x: 70, z: 20, kamer: 'receptie' };
 var CI_HOOG = 16;
 /* En daarom wacht de gast links vóór de balie in plaats van midden ervoor:

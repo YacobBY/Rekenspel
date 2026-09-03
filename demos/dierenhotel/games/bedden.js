@@ -285,6 +285,11 @@ function terug() {
 /* =====================================================================
    TEKENEN: alles hangt in de kamer
 ===================================================================== */
+/* Eén regel voor enkelvoud en meervoud: mv(1, 'bed', 'bedden') geeft
+   "1 bed", mv(3, ...) geeft "3 bedden". Zonder dit stond er "van 1 bedden"
+   op de kaart zodra een rij één bedje breed is (band 3, kleine kamer). */
+function mv(n, enk, meerv) { return n + ' ' + (n === 1 ? enk : meerv); }
+
 function wolk(id, obj, o) {
   o = o || {};
   o.id = id;
@@ -352,7 +357,7 @@ function teken() {
   C.hotspots.bron(kp, {
     id: 'bd_kist', icoon: '🧺', aantal: kistOver(), hoog: kp.y,
     klas: D.klaar ? 'leeg' : '', prio: 12, kamer: K,
-    titel: 'dekenkist met ' + kistOver() + ' bedjes',
+    titel: 'dekenkist met ' + mv(kistOver(), 'bedje', 'bedjes'),
     tik: function () { if (!D.klaar) C.snd.tik(); },
     sleep: {
       dropSel: '[data-drop="bedrij"]',
@@ -386,8 +391,8 @@ function teken() {
            zien hoeveel bedden er NU liggen. Een vraag ("Hoeveel bedden zijn
            dat?") zou dus boven een som staan die halverwege een ander getal
            laat zien; daarom beschrijft de tweede regel de stand. */
-        regel: ['Leg ' + D.rijen + (D.rijen === 1 ? ' rij van ' : ' rijen van ') +
-                D.perRij + ' bedden', 'Zo veel bedden staan er nu'] });
+        regel: ['Leg ' + mv(D.rijen, 'rij', 'rijen') + ' van ' +
+                mv(D.perRij, 'bed', 'bedden'), 'Zo veel bedden staan er nu'] });
     if (kaart) kaart.zet(vol ? vol * D.perRij : '');
   }
 
@@ -396,7 +401,8 @@ function teken() {
   var wacht = C.wereld.dieren().filter(function (g) { return !g.bed; })[0];
   var wd = wacht ? C.wereld.dier(wacht.id) : null;
   if (wd && wd.kamer === K && !D.klaar)
-    wolk('bd_wolk', wacht.id, { icoon: '🛏', getal: D.doel, tekst: 'bedden maken',
+    wolk('bd_wolk', wacht.id, { icoon: '🛏', getal: D.doel,
+                                tekst: D.doel === 1 ? 'bed maken' : 'bedden maken',
                                 hoog: 52, prio: 12 });
   else C.ui.wolkWeg('bd_wolk');
 
@@ -420,7 +426,7 @@ function teken() {
     C.hotspots.maak({
       id: 'bd_klaar', kamer: K, x: kl.x, z: kl.z, y: kl.y,
       icoon: '🐾', getal: D.doel, klas: 'hotwolk goed', prio: 14,
-      titel: D.doel + ' gasten mogen erin', aan: check
+      titel: D.doel === 1 ? '1 gast mag erin' : D.doel + ' gasten mogen erin', aan: check
     });
   } else C.hotspots.weg('bd_klaar');
 
@@ -567,7 +573,9 @@ function somAf() {
   var p = plekPx(0, 0, marges().boven);
   kaart = C.ui.somkaart(p, D.rijen + ' × ' + D.perRij + ' =',
     { id: 'bd_som', door: 'bedden', pad: false, hoog: p.y, kamer: K,
-      icoon: '🛏', regel: 'Nu staan er ' + D.doel + ' bedden' });
+      icoon: '🛏',
+      regel: (D.doel === 1 ? 'Nu staat er ' : 'Nu staan er ') +
+             mv(D.doel, 'bed', 'bedden') });
   if (kaart) { kaart.zet(D.doel); kaart.klaar(); }
 }
 
@@ -738,6 +746,8 @@ Games.register({
   unlock: function (N) { return N >= 1; },
   stub: false,
   start: start,
-  stop: stop
+  stop: stop,
+  /* haakje voor de speeltest: enkelvoud/meervoud naregenen */
+  mv: mv
 });
 })();

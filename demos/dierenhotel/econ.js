@@ -77,6 +77,27 @@ var BANK = 'kassa', BUIDEL = 'boek';        /* kassa en buidel op de balie */
    inneemt (dekking bonnetje-door-wisselkaart: 0%). */
 var WERKPLEK = { x: 70, z: 20, kamer: 'receptie' };
 var WERKHOOG = 16;
+/* Waar de munten neerkomen en het bedrag als cijfer staat: op de linkervleugel
+   van de balie, naast de buidel. Midden op de balie (30,44) lag het bedrag
+   precies achter de werkkaart (op 320x640 zelfs volledig: de kaart is daar
+   breder dan het halve kader), en dan leest een kind "EUR2" terwijl de kaart
+   "EUR23" zegt. Links van de kaart is het in alle schermen vrij. */
+/* (12,40) = de linkerhoek van de balie: precies tussen de wachtende familie
+   (links vooraan) en de werkkaart (rechts achterin). Midden op de balie
+   (30,44) lag het bedrag achter de kaart: op 420x860 voor 11x23 px, op
+   320x640 helemaal - en dan las een kind "EUR2" waar "EUR23" stond.
+   Gemeten met het bedrag op deze plek (doosje van 48 px):
+     420x860 / 860x420  niets ligt eroverheen, en het raakt het naamplaatje
+                        noch het dier
+     320x640            niets ligt eroverheen; het raakt wél het naamplaatje
+                        van de gast (23% van het dier). Op dat kader is de
+                        strook tussen gast en bel maar 24 px breed, dus een
+                        doosje van 48 px raakt daar altijd iets. De keuze:
+                        liever het bedrag hélemaal leesbaar dan half achter de
+                        bel - de naam van de gast staat toch ook in de zin op
+                        de kaart en in het wolkje van de familie. */
+var TOONBANK = { x: 12, z: 40, kamer: 'receptie' };
+var TOONHOOG = 18;
 
 function rekening(o) {
   var tot = o.totaal || o.nachten * o.prijs;
@@ -150,7 +171,7 @@ function somStap() {
      het wisselgeld. */
   if (R.pogingen >= 1) R.kaart.hulp(Ui.telMee(R.prijs, R.nachten, ''));
   if (R.pogingen >= 3) spook(R.totaal, 'zoveel is het samen');
-  World.getalTag({ x: 30, z: 44, kamer: 'receptie' }, null, { id: 'bank' });
+  World.getalTag(TOONBANK, null, { id: 'bank' });
 }
 
 function somOk(n) {
@@ -188,15 +209,26 @@ function muntStap() {
   }
 
   if (R.stap === 3) {
-    World.getalTag({ x: 30, z: 44, kamer: 'receptie' }, '\u20AC' + betaald,
-                   { id: 'bank', door: 'rekening', y: 18, titel: 'op de toonbank' });
+    /* Het bedrag op de toonbank is hier GEEN vaste cijfertag: een tag blijft
+       staan waar hij staat en verdween zo achter de werkkaart (de verifier las
+       "EUR2" waar "EUR23" stond). Als doosje in de gewone laag wijkt hij uit
+       voor de kaart, net als elke andere knop in de kamer. */
+    Hits.maak({ id: 'getal_bank', door: 'rekening', kamer: 'receptie',
+                x: TOONBANK.x, z: TOONBANK.z, y: TOONHOOG,
+                tagnaam: 'div', klas: 'hotgetal hotbedrag', prio: 13,
+                /* diep in beeld: dan kiest dit doosje zijn plek als eerste (de
+                   bel schuift dus opzij) en ligt het bovenop in plaats van
+                   half achter de bel - op 320x640 stond de bel over de euro */
+                d: 200,
+                html: '<span class="getal">\u20AC' + betaald + '</span>',
+                titel: 'op de toonbank ligt \u20AC' + betaald });
     wisselKaart();
     return;
   }
 
   /* de toonbank: sleep of tik de munten hierheen, het bedrag staat erop */
   Hits.maak({
-    id: 'rek_bank', door: 'rekening', kamer: 'receptie', x: 30, z: 44, y: 18,
+    id: 'rek_bank', door: 'rekening', kamer: 'receptie', x: TOONBANK.x, z: TOONBANK.z, y: 18,
     icoon: '\uD83E\uDDFE', getal: '\u20AC' + betaald,
     kind: 'drop', drop: 'toonbank', klas: 'hotbron', prio: 11,
     titel: 'de toonbank', aan: function () { legNeer(); }

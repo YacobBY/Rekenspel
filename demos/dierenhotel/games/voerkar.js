@@ -16,14 +16,25 @@
       "🫙 pot 0 · 2 erbij", en op de zak "🍪 3 · nog in de zak". Dus geen los
       wolkje dat ergens anders belandt of wegvalt, en nooit een tweede
       betekenis voor ↩. De knoppen dragen altijd een woord: "🛒 Klaar" en
-      "↩ Opnieuw", en na twee pogingen "🩺 Els helpt" (die blijft staan): Els
-      legt de goede aantallen als spookcijfers in de bakjes en de kaart zegt
-      "🩺 Iedereen 4, rest in de pot".
+      "↩ Opnieuw", en na twee pogingen "🩺 Els helpt" (die blijft staan): dan
+      zegt de tweede regel van de kaart "🩺 Iedereen 4, rest in de pot", en de
+      bakjes vertellen zelf hoeveel er bij of af moet.
    2. HET RONDJE door het hotel. Zodra de kar klopt zegt de kar wat er nu
       moet ("🛒 Breng 4 koekjes naar elke gast"), houdt de kar zelf de stand
       bij ("🛒 nog 2 kamers"), en in een kamer zónder kar staat bij het
       bakje "🛒 Sleep de kar hierheen". Bij het smullen: "😋 4 koekjes"
       (of "😋 4 koekjes elk" als er twee gasten in die kamer liggen).
+
+   Krap scherm? Dan past de indeling zich aan, in deze volgorde:
+     * vanaf vijf bakjes (of in een laag/klein kader) worden de kaartjes een
+       maatje kleiner en zet de correctie zich ONDER de naam - dat maakt een
+       kaartje ruim 50 px smaller zonder dat het hoger wordt;
+     * op een klein kader (320 px breed: 286 x 312 css-px) vervalt de
+       keuzestrook - een tik op de zak schakelt de schep dan door, en op de
+       zak staat welke ("pak 2");
+     * en vanaf vier bakjes op zo'n klein kader staat alleen het begin van de
+       naam op het kaartje ("🐰 Wolk"), zodat de opdrachtkaart en de
+       correcties leesbaar blijven.
 
    De getallen komen uit ctx.state.sommen.deel(N, band, dag) - in band 3 is
    dat exact de bevroren koekjesSom uit de geteste demo. Aan die som, aan de
@@ -71,20 +82,37 @@ var CHIP = 'hotbron hotwolk';
    een naam én een correctie erop er niet meer bij. Het woord blijft boven de
    11 px, dus leesbaar. `mini` is alleen het echt kleine scherm: daar past de
    keuzestrook met drie knoppen niet en wordt het één knop die doorschakelt. */
-var krap = false, mini = false;
+var krap = false, mini = false, kort = 0;
+/* de naam op het kaartje; op een heel klein kader met veel bakjes ingekort */
+function naamKort(n) {
+  return (kort && n.length > kort) ? n.slice(0, kort) : n;
+}
 /* `erbij` is het staartje na een misser ("· 8 te veel"): dat hoort ín het
    kaartje van dat bakje, niet in een los wolkje ernaast. Zo staat de
    correctie altijd bij de naam van het dier waar hij over gaat, hoeft er
    geen knop bij (hooguit 16 per kamer) en valt er nooit een wolkje weg. */
-function chip(ico, woord, getal, erbij) {
+function chip(ico, woord, getal, erbij, doel) {
   var i = krap ? ' style="font-size:1.15rem"' : '';
   var w = krap ? ' style="font-size:.72rem"' : '';
   var g = krap ? ' style="font-size:1rem"' : '';
+  /* Krap (of Els kijkt mee)? Dan zet de correctie zich ONDER de naam in
+     plaats van erachter. Het kaartje wordt daar ruim 50 px smaller van en
+     blijft toch 48 px hoog (de minimumhoogte van een tikdoel is ruimer dan
+     die twee regeltjes nodig hebben), dus er passen twee kaartjes naast
+     elkaar in plaats van één - en op die tweede regel is plek voor het
+     doelgetal van Els ("· 8 eraf → 4"), zonder dat dat een knop kost. */
+  var tweeRij = (krap || doel !== null && doel !== undefined) && woord && erbij;
+  var staart = erbij ? '· ' + erbij : '';
+  var mik = (doel === null || doel === undefined) ? ''
+    : '<span style="opacity:.62"> ' + C.ui.esc('→ ' + doel) + '</span>';
+  var zin = tweeRij ? C.ui.esc(woord) + '<br>' + C.ui.esc(staart) + mik
+                    : (woord ? C.ui.esc(woord) : '');
   return '<span class="ico"' + i + '>' + (ico || '') + '</span>' +
-    (woord ? '<span class="zeg"' + w + '>' + C.ui.esc(woord) + '</span>' : '') +
+    (zin ? '<span class="zeg"' + w + '>' + zin + '</span>' : '') +
     (getal === null || getal === undefined ? ''
       : '<span class="get"' + g + '>' + getal + '</span>') +
-    (erbij ? '<span class="zeg"' + w + '>' + C.ui.esc('· ' + erbij) + '</span>' : '');
+    (staart && !tweeRij
+      ? '<span class="zeg"' + w + '>' + C.ui.esc(staart) + mik + '</span>' : '');
 }
 
 /* ---------- welke gasten en welke kamers doen mee? ---------- */
@@ -191,7 +219,7 @@ function pakker(F) {
   }
   return {
     /* een plek die al vast staat (de opdrachtkaart, de keuzestrook, een
-       spookcijfer op een bakje, een deur van het hotel). `gewicht` zegt hoe
+       een deur van het hotel). `gewicht` zegt hoe
        erg het is om er tóch over te moeten: een deur van het hotel weegt
        lichter dan onze eigen tekst, want de kamerbalk onderin brengt je ook
        naar de gang. */
@@ -396,8 +424,10 @@ function volgendeHand() {
   return HAND[(HAND.indexOf(K.hand) + 1) % HAND.length];
 }
 function handKeuzes() {
-  if (mini) return [{ id: 'hand', icoon: '🍪', tekst: 'pak ' + K.hand,
-                      kies: function () { zetHand(volgendeHand()); } }];
+  /* Op een heel klein kader (320 px breed: 286 x 312) kost de strook een
+     hele rij, en die rij is nodig voor de bakjes. Dan schakelt een tik op de
+     zak de schep door en staat er "pak 2" op de zak zelf. */
+  if (mini) return null;
   return HAND.map(function (h) {
     return { id: 'h' + h, icoon: '🍪', tekst: 'pak ' + h,
              kies: function () { zetHand(h); } };
@@ -407,8 +437,8 @@ function handKeuzes() {
    .hand .btn.on op het startblad). Géén ✅: dat vinkje betekent in dit spel
    "klaar" ("✅ Alle bakjes vol!"), en één teken mag niet twee dingen zeggen. */
 function handAan() {
-  var el = document.querySelector('[data-hot="vk_kaart_keuzes"] [data-kz="' +
-    (mini ? 'hand' : 'h' + K.hand) + '"]');
+  if (mini) return;
+  var el = document.querySelector('[data-hot="vk_kaart_keuzes"] [data-kz="h' + K.hand + '"]');
   if (!el) return;
   el.style.background = 'var(--peach)';
   el.style.borderColor = 'var(--peach-d)';
@@ -424,21 +454,42 @@ function opdrachtKaart(F, g) {
      van dit beeldje), dan echt opmeten, en dán de kaart MET zijn keuzestrook
      als één blok op een vrije plek zetten. Zo weten we de maten precies en
      staat de strook altijd tegen de onderrand van de kaart. */
+  var keuzes = handKeuzes(), strook = !!keuzes;
   var a = plek(F, F.w / 2, 90, DIEP_UI);
   C.ui.somkaart({ x: a.x, z: a.z, kamer: 'keuken' }, som, {
     id: 'vk_kaart', icoon: '🍪', regel: zin, hoog: a.y, pad: false,
-    keuzes: handKeuzes()
+    keuzes: keuzes
   });
-  var mk = maat('vk_kaart', 260, 78), ms = maat('vk_kaart_keuzes', 180, 64);
+  /* ui.somkaart tekent de somregel altijd, ook als hij leeg is: dat geeft een
+     blanco regel onder de twee zinnen (band 3 heeft geen somregel). En zonder
+     keuzestrook zet hij er een leeg antwoordvakje bij, terwijl er niets te
+     typen valt. Beide halen we hier weg, vóór we de kaart opmeten. */
+  if (!som) {
+    var rij0 = document.querySelector('[data-hot="vk_kaart"] .somrij');
+    if (rij0) rij0.style.display = 'none';
+  }
+  if (!strook) {
+    var vak0 = document.querySelector('[data-hot="vk_kaart"] .somvak');
+    if (vak0) vak0.style.display = 'none';
+  }
+  var mk = maat('vk_kaart', 260, 78);
+  var ms = strook ? maat('vk_kaart_keuzes', 180, 64) : { w: 0, h: -5 };
   var blokH = mk.h + 5 + ms.h, blokW = Math.max(mk.w, ms.w);
   var wensX = F.portret ? F.w / 2 : Math.min(F.w * 0.24, 150);
+  /* gewicht 6: de opdracht is het enige dat een kind ECHT moet kunnen lezen,
+     dus als de keuken overvol staat gaat er liever iets anders overheen dan
+     dit kaartje (de plaatser kiest de minst zware overlap) */
   var b = LAY.P.zoek(wensX, 8 + blokH / 2, blokW, blokH, 'x');
+  b.g = 6;
   var kY = b.Y - (blokH - mk.h) / 2, sY = kY + mk.h / 2 + ms.h / 2 + 5;
-  var q = plek(F, b.X, kY, DIEP_UI), t = plek(F, b.X, sY, DIEP_UI);
+  var q = plek(F, b.X, kY, DIEP_UI);
   /* tikken leest de opdracht voor - nooit automatisch (HOTEL.md 9) */
   C.hotspots.maak({ id: 'vk_kaart', x: q.x, z: q.z, y: q.y, titel: zin.join('. '),
     aan: function () { C.ui.spreek(zin[0] + '. ' + zin[1].replace(/^\S+\s/, '')); } });
-  C.hotspots.maak({ id: 'vk_kaart_keuzes', x: t.x, z: t.z, y: t.y });
+  if (strook) {
+    var t = plek(F, b.X, sY, DIEP_UI);
+    C.hotspots.maak({ id: 'vk_kaart_keuzes', x: t.x, z: t.z, y: t.y });
+  }
   handAan();
   /* Het blok kaart+strook is hoger dan een rij en eindigt dus meestal midden
      in de rij eronder. Die rij claimen we er helemaal bij (alleen onder het
@@ -492,7 +543,7 @@ function bakjeNeer(F, q, gast) {
   var sl = Rooms.slot('keuken', q.slot);
   if (!sl) return null;
   var ico = pot ? '🫙' : dierIco(gast);
-  var woord = pot ? 'pot' : q.naam;
+  var woord = pot ? 'pot' : naamKort(q.naam);
   var doel = pot ? K.rest : K.per;
   var mis = doel - aantal;
   /* Na een misser staat er in dit kaartje bij hoeveel er nog bij of af moet:
@@ -501,22 +552,28 @@ function bakjeNeer(F, q, gast) {
      (een kamer houdt hooguit 16 knoppen). Het kaartje krijgt dan de zachte
      hulp-kleur van de oude wolkjes. */
   var zeg = (K.feedback && mis) ? Math.abs(mis) + (mis > 0 ? ' erbij' : ' eraf') : null;
+  /* Els erbij? Dan staat haar doelgetal er lichtgrijs achter: "· 8 eraf → 4".
+     Dat is haar oude spookcijfer, maar nu ín het kaartje - dus zonder knop en
+     dus zonder dat het bij zes bakjes wegvalt door het plafond van 16.
+     In een laag kader (liggend: 826 x 190) en op een klein kader met vier of
+     meer bakjes is er geen millimeter over: daar laten we het doelgetal weg
+     en zegt alleen de kaart het ("🩺 Iedereen 4, rest in de pot"). Anders
+     valt er een kaartje over een ander heen, en dat is erger dan één getal
+     minder. */
+  var mik = (K.spook && zeg && F.h >= 240 && !kort) ? doel : null;
   C.wereld.setBak('keuken', q.slot, niveau(aantal));
   C.hotspots.maak({
     id: 'vk_' + q.gast, kamer: 'keuken', x: sl.x, z: sl.z, y: 10,
-    html: chip(ico, woord, aantal, zeg), kind: 'drop', drop: 'vak',
+    html: chip(ico, woord, aantal, zeg, mik), kind: 'drop', drop: 'vak',
     data: { id: q.gast }, klas: CHIP + (zeg ? ' hulp' : ''),
     prio: pot ? 9 : 10, vast: true,
     titel: (pot ? 'de snoeppot: ' + aantal + ' koekjes'
                 : q.naam + ' heeft ' + aantal + ' koekjes') +
-           (zeg ? ', ' + zeg : ''),
+           (zeg ? ', ' + zeg : '') + (mik !== null ? ', hier hoort ' + mik + ' in' : ''),
     aan: function () { verplaats(q.gast, K.hand); }
   });
-  /* Legt Els haar spookcijfer neer? Dat staat op de rij van het bakje zelf,
-     dus dan hangt het kaartje er precies één rij boven. */
-  var Y = K.spook ? rijY(F, csY(F, sl.x + sl.z)) - RIJ
-                  : rijY(F, csY(F, sl.x + sl.z) - 26);
-  var b = zetOp('vk_' + q.gast, csX(F, 2 * (sl.x - sl.z)), Y, sl.x + sl.z, 150, 48);
+  var b = zetOp('vk_' + q.gast, csX(F, 2 * (sl.x - sl.z)),
+                rijY(F, csY(F, sl.x + sl.z) - 26), sl.x + sl.z, 150, 48);
   return { b: b, sl: sl, aantal: aantal, doel: doel, ico: ico };
 }
 
@@ -524,14 +581,20 @@ function teken() {
   if (!C || !K || K.vol) return;
   C.hotspots.wisAlles();
   var g = gasten(), F = kader(), gm = {};
+  /* Vanaf vijf bakjes worden de kaartjes een maatje kleiner, ook op een groot
+     scherm: met een naam ÉN een correctie erop ("🐶 Boef 12 · 8 eraf") passen
+     zes kaartjes anders niet meer naast elkaar. En op een echt klein kader
+     (320 px breed: 286 x 312) korten we vanaf vier bakjes de naam in tot vier
+     letters - dan blijven de opdrachtkaart en de correcties leesbaar, wat
+     belangrijker is dan de hele naam. */
+  if (g.length >= 5) krap = true;
+  kort = F.mini && g.length >= 4 ? 4 : 0;
   LAY = { F: F, P: pakker(F) };
   g.forEach(function (a) { gm[a.id] = a; });
 
   /* 1. de uitgangen blijven vrij, daarna de opdracht: het enige kaartje */
   deurenVrij(F);
   opdrachtKaart(F, g);
-  /* 2. de spookcijfers van Els staan ÓP de bakjes: die plek blijft vrij */
-  if (K.spook) spookNeer(F);
   /* 3. de knoppen; ze dragen altijd een woord */
   /* Staand liggen de knoppen onderaan het kader, onder de bakjes. Liggend is
      het kader maar 190 px hoog: dan staan ze naast elkaar op de onderste rij
@@ -546,18 +609,21 @@ function teken() {
   knop('vk_opnieuw', '↩', 'Opnieuw', 'hotwolk', 7, 'alles opnieuw verdelen', leeg,
        F.portret ? F.w * 0.26 : F.w - 175, rij);
   /* Els blijft staan zolang er twee pogingen op zitten - ook terwijl haar
-     spookcijfers in de bakjes liggen, precies zoals de basisversie het deed:
-     een kind mag haar zo vaak vragen als het wil. */
+     hulpregel op de kaart staat, precies zoals de basisversie het deed: een
+     kind mag haar zo vaak vragen als het wil. */
+  /* Els staat staand niet in het MIDDEN van een rij: op een smal kader zou
+     hij de rij dan in twee te kleine helften knippen. Links, één rij boven de
+     twee knoppen: dan blijft de rechterhelft van die rij bruikbaar. */
   if (K.missers >= 2)
     knop('vk_els', '🩺', 'Els helpt', 'hotwolk hulp', 8, 'buurvrouw Els doet het voor',
-         hulp, F.portret ? F.w * 0.5 : F.w - 295,
-         F.portret ? laatsteRij(F) : rij);
+         hulp, F.portret ? F.w * 0.3 : F.w - 295,
+         F.portret ? laatsteRij(F) - RIJ : rij);
   /* 4. de zak */
   zakNeer(F);
   /* 5. de bakjes, in dezelfde volgorde als de gasten. Staat er een misser
      open (K.feedback), dan draagt elk bakje zelf zijn correctie: er komt geen
-     los wolkje bij, dus je ziet ze ALLEMAAL, ook met zes bakjes en ook
-     terwijl de spookcijfers van Els erin liggen. */
+     los wolkje en geen los spookcijfer bij, dus je ziet ze ALLEMAAL - ook met
+     zes bakjes en ook terwijl Els meekijkt. */
   (K.slots || []).forEach(function (q) { bakjeNeer(F, q, gm[q.gast]); });
   C.wereld.vuil();
 }
@@ -591,7 +657,6 @@ function verplaats(id, aantal) {
 function leeg() {
   gasten().forEach(function (a) { K.vak[a.id] = 0; });
   K.pot = 0; K.zak = K.T; K.feedback = null; K.spook = 0; K.zakZeg = null;
-  spookWeg();
   teken();
   C.snd.terug();
 }
@@ -617,7 +682,6 @@ function check() {
   K.feedback = null;
   K.spook = 0;
   K.zakZeg = null;
-  spookWeg();
   C.state.ruw().snoeppot += K.pot;
   C.state.tel(K.missers === 0, C.ui.nu() - K.t0);
   C.taakKlaar('voer', { sterren: 1 });
@@ -626,40 +690,17 @@ function check() {
   rondje();
 }
 
-/* ---------- Els doet het voor: de goede aantallen als spookcijfers ---------- */
-function spookWeg() {
-  (K.slots || []).forEach(function (q) { C.wereld.getalTag({ x: 0, z: 0 }, null, { id: 'vs_' + q.gast }); });
-}
-function spookNeer(F) {
-  /* De pot vooraan: als een kamer vol knoppen zit (zes bakjes) valt er
-     misschien een spookcijfer af, en dan is de rest in de pot juist het
-     cijfer dat je wél wil zien. De hulpzin op het kaartje zegt het altijd. */
-  var l = (K.slots || []).slice().sort(function (a, b) {
-    return (a.gast === '__pot' ? 0 : 1) - (b.gast === '__pot' ? 0 : 1);
-  });
-  var mijn = C.hotspots.lijst().filter(function (q) {
-    return q && q.door === C.id && q.kamer === 'keuken';
-  }).length;
-  /* wat er straks nog bij komt: knoppen, zak, bakjes en de pot */
-  var ruimte = Math.max(1, 16 - mijn - 3 - l.length);
-  l.slice(0, ruimte).forEach(function (q) {
-    var sl = Rooms.slot('keuken', q.slot);
-    if (!sl) return;
-    var doel = q.gast === '__pot' ? K.rest : K.per;
-    /* het cijfer staat op de rij van het bakje zelf; het kaartje met de naam
-       hangt er precies één rij boven (bakjeNeer) */
-    var Y = rijY(F, csY(F, sl.x + sl.z));
-    C.wereld.getalTag({ x: sl.x, z: sl.z, kamer: 'keuken' }, doel,
-                      { id: 'vs_' + q.gast, klas: 'hotspook', prio: 6,
-                        y: ((sl.x + sl.z) - (Y - F.fy) / F.k) / 2,
-                        titel: 'hier hoort ' + doel + ' in' });
-    var m = maat('getal_vs_' + q.gast, 26, 24);
-    LAY.P.houd(csX(F, 2 * (sl.x - sl.z)), Y, m.w, m.h);
-  });
-}
+/* ---------- Els doet het voor ----------
+   Vroeger legde Els een spookcijfer ÓP elk bakje (wereld.getalTag). Dat was
+   één knop per bakje: bij zes gasten viel de helft ervan weg door het plafond
+   van 16 knoppen per kamer (hits.js) én de deuren van de keuken erbij. Nu
+   zegt Els het waar het kind toch al kijkt en waar het geen knop kost:
+     * op het opdrachtkaartje: "🩺 Iedereen 4, rest in de pot" (zinnen());
+     * in elk bakje zelf: "🐶 Boef 12 · 8 eraf" (bakjeNeer).
+   Samen is dat precies haar voordoen: het doelgetal én wat je moet doen. */
 function hulp() {
   K.spook = 1;
-  teken();                       /* spookcijfers + de hulpzin op het kaartje */
+  teken();                       /* de hulpzin op het kaartje + de bakjes */
   C.state.zetGezien('voerkar_els');
   C.snd.brief();
 }

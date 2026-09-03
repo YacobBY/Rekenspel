@@ -64,6 +64,10 @@ var CAP = { 3: { eerlijk: 5 },
 var HAND = [1, 2, 5];
 var DIER_ICO = { puppy: '🐶', poes: '🐱', konijn: '🐰', gans: '🦆' };
 
+/* Eén regel voor enkelvoud en meervoud: mv(1, 'schepje', 'schepjes') geeft
+   "1 schepje", mv(6, ...) geeft "6 schepjes". */
+function mv(n, enk, meerv) { return n + ' ' + (n === 1 ? enk : meerv); }
+
 function straks(ms, fn) { var t = setTimeout(fn, ms); klok.push(t); return t; }
 function stopKlok() { klok.forEach(function (t) { clearTimeout(t); }); klok = []; }
 
@@ -384,6 +388,12 @@ function peil(n, mors) {
     s += '<span style="position:absolute;left:0;right:0;bottom:' + mp +
       '%;border-top:3px dashed ' + (n === S.per ? '#5EBE97' : '#E58FA8') + '"></span>';
   }
+  /* het aantal ook ÍN het glaasje: zo is de knop nooit een leeg chipje, en
+     tijdens de hulp van Els (dan liggen er spookcijfers op de tobbe in plaats
+     van het echte cijfer) blijft de inhoud te zien */
+  s += '<span style="position:absolute;left:0;right:0;top:8px;text-align:center;' +
+    'font-size:.72rem;font-weight:700;color:#3F4F57;text-shadow:0 1px 0 #FFFFFFAA">' +
+    n + '</span>';
   s += '</span>';
   if (n > 0) s += '<span style="font-size:.7rem;line-height:1">' + (mors ? '💦' : '🫧') + '</span>';
   return s;
@@ -423,7 +433,7 @@ function tekenRek() {
   C.hotspots.bron({ x: kist.x, z: kist.z, kamer: 'tuin' }, {
     id: 'tb_rek', icoon: '🧴', aantal: S.rek, hand: S.rek ? S.hand : null, hoog: 14,
     klas: S.rek ? '' : 'leeg', prio: 10,
-    titel: 'rek met ' + S.rek + ' schepjes, pak ' + S.hand,
+    titel: 'rek met ' + mv(S.rek, 'schepje', 'schepjes') + ', pak ' + S.hand,
     tik: function () { wisselHand(); },
     sleep: {
       dropSel: '[data-drop="tobbe"]',
@@ -455,7 +465,7 @@ function tekenSom() {
        vinkje en het kraantje, en die rij is in portret maar ~386 px breed
        (tobbe/breedte.js: 137 px past, 146 px is de grens). */
     regel: af ? ['Overal ' + S.per + ' erin', 'Zo is het goed!']
-              : [S.T + ' in ' + S.M + ' tobbes', 'Verdeel het eerlijk']
+              : [S.T + ' in ' + mv(S.M, 'tobbe', 'tobbes'), 'Verdeel het eerlijk']
   });
   if (kaart) kaart.zet(totaal);
   somNakijken();
@@ -503,7 +513,7 @@ function teken() {
   if (S.rek === S.T && !S.missers) {
     C.ui.wolk({ x: (decorPlek('kist') || P[0]).x, z: (decorPlek('kist') || P[0]).z, kamer: 'tuin' },
               { id: 'tb_recept', door: 'tobbe', icoon: '🧴', getal: S.T,
-                tekst: S.M + ' tobbes', hoog: 52, prio: 9 });
+                tekst: mv(S.M, 'tobbe', 'tobbes'), hoog: 52, prio: 9 });
   }
   /* "zo is het goed": tikken mag altijd. Staan er nog schepjes op het rek,
      dan zegt het wolkje dat rustig ("🥄 2 nog op het rek"). */
@@ -556,10 +566,15 @@ function tekenVraag() {
         /* Bij een ONEVEN aantal is "de helft van 9" niet 4: er blijft een
            schepje over (band 5, HOTEL.md 5). Dan zegt de zin dat ook, anders
            staat er een leesbare leugen boven de som. */
+        /* Bij een ONEVEN aantal is "de helft van 9" niet 4: er blijft een
+           schepje over (band 5, HOTEL.md 5). Dat staat op de eerste regel, de
+           vraag zelf is een hele vraag (geen "Hoeveel in elke? 1 over" meer).
+           Gemeten met tobbe/breedte.js: 177-186 px, ruim binnen de ~200 px
+           die hier boven de tobbes past. */
         regel: S.rest
-          ? [S.T + ' in twee helften',
-             'Hoeveel in elke? ' + S.rest + ' over']
-          : ['De helft van ' + S.T + ' schepjes', 'Hoeveel is dat?'],
+          ? [S.T + ' halveren, ' + S.rest + ' over', 'Hoeveel in elke helft?']
+          : ['De helft van ' + mv(S.T, 'schepje', 'schepjes'),
+             'Hoeveel in elke helft?'],
         onOk: function (n, k) { antwoord(n, S.per, k); } });
   }
   tekenZeg();
@@ -857,7 +872,9 @@ function tekenBaden() {
     /* één praatje tegelijk: staat er een wolkje van "😌 lekker warm", dan
        hoeft de uitleg er niet ook nog bij te hangen */
     C.ui.wolk(bp, { id: 'tb_bad', door: 'tobbe', kamer: 'tuin', icoon: '🛁',
-                    getal: wacht.length, tekst: 'mogen in de tobbe', hoog: bp.y, prio: 10 });
+                    getal: wacht.length,
+                    tekst: wacht.length === 1 ? 'mag in de tobbe' : 'mogen in de tobbe',
+                    hoog: bp.y, prio: 10 });
   }
   if (S.stap === 'baden' && !wacht.length && inBadIds().length) {
     var k = opGras(96);
@@ -979,6 +996,7 @@ Games.register({
   stop: stop,
   /* haakjes voor de speeltest (het hotel gebruikt ze niet) */
   proef: function (N, band, dag) { return recept(N, band, dag); },
+  mv: mv,                             /* enkelvoud/meervoud naregenen */
   debug: function () { return S ? JSON.parse(JSON.stringify(S)) : null; },
   doe: function (wat, a, b) {          /* speeltest: tikken zonder muis */
     if (wat === 'schep') return schep(a, b === undefined ? 1 : b);
