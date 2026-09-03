@@ -967,8 +967,12 @@ function morgen() {
     g.behoefte = g.bed ? 'eten' : 'kamer';
     if (g.bed && badBeurt && i === 0) g.behoefte = 'bad';
     if (g.bed) {
+      /* Opstaan doe je NAAST je bed, op de sta-plek. Zonder plek erbij zette
+         World.zet het dier op een willekeurig dwaalvakje - dan stond het 's
+         ochtends ineens ergens anders in de kamer. */
       g.waar = g.kamer;
-      World.zet(g.id, g.kamer);
+      var sb = Rooms.slot(g.kamer, g.bed);
+      World.zet(g.id, g.kamer, sb ? sb.sx : null, sb ? sb.sz : null);
       stuurNaarBehoefte(g);
     }
   });

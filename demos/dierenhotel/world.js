@@ -259,17 +259,17 @@ Dier.prototype.aangekomen = function () {
     vuil = true;
     return;
   }
+  /* Onderweg naar bed? Dan stapt het dier er nu in - wat er ook als 'na'
+     bij de aankomst hoorde. Anders bleef een dier dat met een ander slotje
+     (blij, wacht, stil) bij zijn bed aankwam NAAST het bed staan. */
+  if (this.slaapDoel && this.slaapDoel.kamer === this.kamer) {
+    var sd = this.slaapDoel;
+    if (inBed(this, sd.kamer, sd.slot)) return;   /* inBed wist slaapDoel zelf */
+    this.slaapDoel = null;                        /* bed weg: gewoon aankomen */
+  }
   if (this.na === 'eet') { this.zet('eet', 0); this.hap = 0; }
   else if (this.na === 'sip') { this.zet('sip', 0); this.face = 1; }
-  else if (this.na === 'wacht') {
-    this.zet('wacht', 0); this.face = 1;
-    /* onderweg naar bed? dan stapt het dier er nu in */
-    if (this.slaapDoel && this.slaapDoel.kamer === this.kamer) {
-      var sd = this.slaapDoel;
-      this.slaapDoel = null;
-      inBed(this, sd.kamer, sd.slot);
-    }
-  }
+  else if (this.na === 'wacht') { this.zet('wacht', 0); this.face = 1; }
   else if (this.na === 'snuif') this.zet('snuif', 12 + Math.floor(this.rnd() * 20));
   else if (this.na === 'blij') this.zet('blij', 46 + Math.floor(this.rnd() * 34));
   else if (this.na === 'slaap') { this.zet('slaap', 0); this.face = 1; }
@@ -326,8 +326,8 @@ Dier.prototype.tik = function () {
     this.zij = 0;
     return;
   }
-  if (this.staat === 'slaap') {                     /* in bed: rustig ademen */
-    this.pose = this.t % 60 < 30 ? 'zit' : 'zitsip';
+  if (this.staat === 'slaap') {                     /* op de matras: rustig ademen */
+    this.pose = 'lig';
     this.bob = Math.sin(this.t * 0.045) * 0.6;
     this.zij = 0;
     return;
@@ -390,10 +390,24 @@ Dier.prototype.grofTik = function () {
   else this.zet('stil', 20 + Math.floor(this.rnd() * 40));
 };
 
+/* Ligt dit dier op DIT moment in zijn eigen bed? Alleen dan mag het blijven
+   liggen als de wereld alles stilzet. */
+Dier.prototype.inZijnBed = function () {
+  if (this.staat !== 'slaap' || !this.bedPlek) return false;
+  if (this.kamer !== this.bedPlek.kamer) return false;
+  var s = Rooms.slot(this.bedPlek.kamer, this.bedPlek.slot);
+  return !!s && this.x === s.x && this.z === s.z;
+};
 Dier.prototype.stilzetten = function (pose) {
-  this.staat = 'stil'; this.pose = pose || 'rust';
   this.bob = 0; this.zij = 0; this.v = 0; this.pluis.length = 0;
   this.px = this.x; this.pz = this.z;
+  /* Een slaper blijft slapen. In rustmodus zet elke World.sync (de bel, een
+     bed geven, uitchecken) alles stil; zonder deze regel schoot een gast
+     daar rechtop overeind terwijl hij 7 voxels boven zijn matras bleef
+     hangen. Wie NIET in bed ligt, komt altijd met beide pootjes op de vloer. */
+  if (this.inZijnBed()) { this.pose = 'lig'; vuil = true; return; }
+  this.staat = 'stil'; this.pose = pose || 'rust';
+  this.lift = 0;
   vuil = true;
 };
 
@@ -712,6 +726,35 @@ function grondschaduw(x, z, r) {
   ctx.fill();
   ctx.restore();
 }
+/* 💤 boven een slaper: drie z-jes van blokjes, klein naar groot, recht boven
+   zijn kop. Ze schuiven maar een paar voxels op, dus ze blijven binnen de
+   omtrek van zijn EIGEN bed en komen nooit boven het bed van de buurman.
+   Stil beeld: geen animatie die nooit stopt; ze zijn weg zodra hij opstaat.
+   Z_KOP = waar de kop zit (voxels op de schermas), per z-je [dx, dy boven de
+   matras, celmaat]. face < 0 = gespiegeld dier, dus ook de z-jes de andere
+   kant op. De kleur is hetzelfde zachte bruin als een neusje: leesbaar op
+   een lichte wand, nooit hard. */
+var ZZZ_KL = '#7E6255', Z_KOP = 8, ZZZ = [[0, 17.5, 0.85], [2, 20.5, 1.15], [4, 24, 1.5]];
+function tekenZ(px, py, m) {                /* dakje, twee schuine blokjes, vloertje */
+  ctx.fillRect(px, py, m * 4, m);
+  ctx.fillRect(px + m * 2, py + m, m, m);
+  ctx.fillRect(px + m, py + m * 2, m, m);
+  ctx.fillRect(px, py + m * 3, m * 4, m);
+}
+function tekenZzz(d, x, z) {
+  var bx = schermX(x, z), by = schermY(x, z) + (d.lift + d.bob) * g;
+  var kop = d.face < 0 ? -1 : 1, i, q, m;
+  ctx.save();
+  ctx.globalAlpha = 0.8;
+  ctx.fillStyle = ZZZ_KL;
+  for (i = 0; i < ZZZ.length; i++) {
+    q = ZZZ[i];
+    m = Math.max(1, Math.round(q[2] * g));
+    tekenZ(Math.round(bx + kop * (Z_KOP + q[0]) * S * g) - (kop < 0 ? m * 4 : 0),
+           Math.round(by - q[1] * HG * g), m);
+  }
+  ctx.restore();
+}
 function tekenDier(d, mengen) {
   var x = d.px + (d.x - d.px) * mengen, z = d.pz + (d.z - d.pz) * mengen;
   var a = K.dierAnker;
@@ -720,6 +763,7 @@ function tekenDier(d, mengen) {
   var p = K.dier(d.kind, d.pose, g);
   if (d.face < 0) putSpiegel(p, camX + ox, camY + oy, schermX(x, z) + d.zij * g);
   else put(p, camX + ox, camY + oy);
+  if (d.staat === 'slaap') tekenZzz(d, x, z);
 }
 function tekenPluis(d) {
   var i, q, m;
@@ -1015,7 +1059,9 @@ function zet(id, kamerId, x, z) {
   d.x = x === undefined || x === null ? q[0] : x;
   d.z = z === undefined || z === null ? q[1] : z;
   d.px = d.x; d.pz = d.z;
-  d.route = null; d.eindDoel = null; d.lift = 0;
+  /* wie ergens neergezet wordt, is niet meer op weg naar zijn bed en
+     zweeft ook niet meer op matrashoogte */
+  d.route = null; d.eindDoel = null; d.slaapDoel = null; d.lift = 0;
   d.zet('stil', 12);
   vuil = true;
 }
@@ -1023,7 +1069,7 @@ function zet(id, kamerId, x, z) {
 function ga(id, x, z, na) {
   var d = vind(id);
   if (!d) return;
-  d.route = null; d.eindDoel = null; d.lift = 0;
+  d.route = null; d.eindDoel = null; d.slaapDoel = null; d.lift = 0;
   if (rustModus) { d.x = x; d.z = z; d.px = x; d.pz = z; d.stilzetten('rust'); return; }
   d.ga(x, z, na || 'stil');
   vuil = true;
@@ -1034,7 +1080,7 @@ function reisNaar(id, kamerId, doel) {
   var d = vind(id);
   if (!d) return [];
   var p = Rooms.pad(d.kamer, kamerId);
-  d.lift = 0;
+  d.lift = 0; d.slaapDoel = null;
   if (!p.length) return [];
   d.route = p.slice(1);
   d.eindDoel = doel || null;
@@ -1051,23 +1097,40 @@ function reisNaar(id, kamerId, doel) {
   return p;
 }
 
-/* in bed: het dier ligt op de matras en slaapt rustig */
+/* ---------- in bed: het dier ligt ÓP de matras en slaapt rustig ----------
+   MATRAS = de bovenkant van de matras van pBed (rooms.js): dat kussenblok
+   ligt op y 4..6, dus het dier begint op 7. Eén voxel te laag en het dier
+   zakt in het bed weg. lift rekent in tekenpixels, vandaar de HG.
+   Een GEDRAAID bed (bedz) is lang in de z-richting. face = -1 spiegelt het
+   dier op het scherm, en dat is in deze isometrie precies een kwartslag
+   draaien (model-x wordt wereld-z). Zo ligt het dier ook dán in de lengte
+   van het bed en niet dwars erover. */
+var MATRAS = 7;
+function gedraaidBed(s) { return !!(s && (s.draai || s.model === 'bedz')); }
 function inBed(d, kamerId, slotId) {
   var s = Rooms.slot(kamerId, slotId);
-  if (!s) return;
+  if (!s) return false;
   d.route = null; d.eindDoel = null; d.slaapDoel = null;
-  d.kamer = kamerId;
-  d.x = s.x - 1; d.z = s.z; d.px = d.x; d.pz = d.z;
-  d.lift = -6 * HG;
-  d.zet('slaap', 0); d.face = 1;
+  d.kamer = kamerId; d.bedPlek = { kamer: kamerId, slot: slotId };
+  d.x = s.x; d.z = s.z; d.px = d.x; d.pz = d.z;
+  d.lift = -MATRAS * HG;
+  d.zet('slaap', 0); d.face = gedraaidBed(s) ? -1 : 1;
+  /* de houding hier meteen zetten: in rustmodus tikt er niets, dus anders
+     bleef een slaper in rustmodus rechtop staan */
+  d.pose = 'lig'; d.bob = 0; d.zij = 0;
   vuil = true;
+  return true;
 }
 function slaap(id, kamerId, slotId) {
   var d = vind(id);
   if (!d) return;
   var s = Rooms.slot(kamerId, slotId);
   if (!s) return;
-  if (d.kamer === kamerId) {
+  /* In rustmodus loopt er niemand: dan gaat het dier meteen liggen, anders
+     bleef het aan de zijkant van het bed staan. Verder wandelt het naar de
+     STA-PLEK naast het bed en stapt het bij aankomst in (slaapDoel).
+     reisNaar() wist een oud slaapDoel, dus dit hoort er ná. */
+  if (d.kamer === kamerId || rustModus) {
     inBed(d, kamerId, slotId);
   } else {
     reisNaar(id, kamerId, { x: s.sx, z: s.sz, na: 'wacht' });
@@ -1104,7 +1167,7 @@ function feed(ids) {
     if (!d) return;
     var b = bakVan(d);
     if (!b) return;
-    d.route = null; d.eindDoel = null; d.lift = 0;
+    d.route = null; d.eindDoel = null; d.slaapDoel = null; d.lift = 0;
     if (rustModus) { d.stilzetten('blijA'); b.eten = 0; return; }
     var p = d.eetPlek();
     d.ga(p[0], p[1], 'eet');
@@ -1117,10 +1180,11 @@ function mood(id, m) {
   var d = vind(id);
   if (!d) return;
   if (m === 'sad') {
+    if (d.staat === 'slaap') return;              /* wie slaapt, laten we slapen */
     if (rustModus) { var q = d.sipPlek(); d.x = q[0]; d.z = q[1]; d.face = 1; d.stilzetten('zitsip'); return; }
     if (d.staat === 'sip' || (d.staat === 'loop' && d.na === 'sip')) return;
-    if (d.staat === 'slaap') return;
     var p = d.sipPlek();
+    d.slaapDoel = null;
     d.ga(p[0], p[1], 'sip');
   } else if (m === 'happy') {
     if (rustModus) { d.stilzetten('blijA'); return; }
@@ -1138,7 +1202,7 @@ function solo(id, act) {
   if (!d) return;
   var p = vrijePlek(d);
   if (rustModus) { d.x = p[0]; d.z = p[1]; d.stilzetten('blijA'); return; }
-  d.route = null; d.eindDoel = null; d.lift = 0;
+  d.route = null; d.eindDoel = null; d.slaapDoel = null; d.lift = 0;
   d.ga(p[0], p[1], 'blij');
   vuil = true;
 }
