@@ -50,6 +50,9 @@ var C = null;          /* de ctx */
 var S = null;          /* de spelstand (leeft in C.data(), wordt bewaard) */
 var P = [];            /* de plekken van de tobbes in de tuin */
 var kaart = null;      /* de sommenkaart met het cijferpad (vraagstap) */
+var somLift = 0;       /* hoogtecorrectie van de sommenkaart (somPast) */
+var somRondes = 0;     /* hoe vaak we die correctie al bijstelden */
+var somCheckT = null;  /* het tikje dat de correctie nakijkt */
 var klok = [];         /* lopende tikjes; stop() ruimt ze op */
 
 var PLAFOND = { 3: 10, 4: 20, 5: 36 };
@@ -161,8 +164,47 @@ function opGras(uPx) {
    de tobbe-rij rustig en staat het gereedschap op een vast plankje. */
 function kraanPlek() { return opGras(150); }
 function kanPlek() { return opGras(-150); }
-/* de sommenkaart staat vóór de rij, op het gras */
+/* de sommenkaart staat vóór de rij, op het gras. Met de zin erboven (HOTEL.md
+   9) is de kaart ~100 px hoog in plaats van ~45, dus hij hangt een paar pixels
+   boven de rij: anders klemt zijn onderrand tegen de onderkant van het kader
+   (gemeten in liggend, kader 966x378 - zie tobbe/plek.js). */
 function somPlek() { return opGras(0); }
+/* somLift = de correctie die na het tekenen nodig bleek (zie somPast) */
+function somHoog() {
+  var f = document.getElementById('world');
+  var hf = (f && f.clientHeight) || 480;
+  /* kort kader (liggend): onder de rij is geen 55 px meer, dus omhoog.
+     Hoog kader (portret): juist een stukje omlaag, dan raakt de kaart de
+     knoppen op de tobbes niet. */
+  return Math.round((hf < 430 ? 26 : -16) / sch().pxPerHoogte) + somLift;
+}
+/* De hotspot-laag klemt elke knop binnen het kader (hits.js), dus een kaart
+   die te laag (of te hoog) hangt wordt tegen de rand geplakt en staat dan
+   niet meer bij de tobbes. Na het tekenen meten we dat één keer na en tillen
+   we de kaart precies genoeg op of laten we hem zakken; somLift onthoudt de
+   correctie, zodat het niet elk beeld opnieuw hoeft. */
+function somPast() {
+  somCheckT = null;
+  if (!C || !S) return;
+  var el = document.querySelector('[data-hot="tb_som"]');
+  var host = document.getElementById('worldHits');
+  if (!el || !host || !el.offsetHeight) return;
+  var r = el.getBoundingClientRect(), h = host.getBoundingClientRect();
+  var per = Math.max(1, sch().pxPerHoogte), stap = 0;
+  if (r.bottom > h.bottom - 8) stap = Math.ceil((r.bottom - (h.bottom - 8)) / per);
+  else if (r.top < h.top + 8) stap = -Math.ceil(((h.top + 8) - r.top) / per);
+  if (!stap || somRondes > 5) return;
+  var nieuw = Math.max(-40, Math.min(40, somLift + stap));
+  if (nieuw === somLift) return;
+  somLift = nieuw;
+  somRondes++;
+  C.hotspots.maak({ id: 'tb_som', y: somHoog() });
+  somNakijken();
+}
+function somNakijken() {
+  if (somCheckT) return;
+  somCheckT = straks(90, somPast);
+}
 /* de VRAAG (met het cijferpad eronder) hangt hoog bóven de rij: het pad zelf
    komt onder de kamer te hangen, en dan dekken ze elkaar niet af */
 function vraagPlek() { return inDeLucht(0, 110); }
@@ -278,6 +320,7 @@ function start(ctx) {
     d.stand = S;
   }
   S.t0 = C.ui.nu();
+  somLift = 0; somRondes = 0; somCheckT = null;
   P = zorgTobbes(S.M);
   if (P.length < 2) {                       /* zou niet moeten kunnen */
     C.ui.wolk('tobbe', { id: 'tb_leeg', door: 'tobbe', kamer: 'tuin',
@@ -305,6 +348,7 @@ function stop() {
   stopKlok();
   if (C) { C.hotspots.wisAlles(); C.hotspots.laat(); }
   C = null; S = null; P = []; kaart = null;
+  somLift = 0; somRondes = 0; somCheckT = null;
 }
 
 function bewaar() { if (C) C.state.bewaar(); }
@@ -398,11 +442,23 @@ function tekenSom() {
   var lijn = delen.join(' + ') + ' =';
   var totaal = delen.reduce(function (a, b) { return a + b; }, 0);
   var af = S.stap !== 'vullen' && S.stap !== 'vraag';
+  /* één gewone zin boven de som (HOTEL.md 9): "3 + 3 =" alleen zegt een
+     kind van zes niets; de zin noemt de schepjes en de tobbes. */
   kaart = C.ui.somkaart(somPlek(), lijn, {
-    id: 'tb_som', door: 'tobbe', kamer: 'tuin', pad: false, hoog: 0,
-    klas: af ? 'af' : ''
+    id: 'tb_som', door: 'tobbe', kamer: 'tuin', pad: false, hoog: somHoog(),
+    klas: af ? 'af' : '', icoon: '🧴',
+    /* Deze kaart vult zichzelf in (pad: false): hij telt mee wat er NU in de
+       tobbes zit. Daarom staat er geen vraag boven - "Hoeveel elk?" boven een
+       som die "1 + 1 = 2" laat zien is een vraag met een fout antwoord. De
+       zin beschrijft dus de opdracht; het vragen gebeurt op de vraagkaart met
+       het cijferpad. Kort houden: de kaart staat in de voorste rij naast het
+       vinkje en het kraantje, en die rij is in portret maar ~386 px breed
+       (tobbe/breedte.js: 137 px past, 146 px is de grens). */
+    regel: af ? ['Overal ' + S.per + ' erin', 'Zo is het goed!']
+              : [S.T + ' in ' + S.M + ' tobbes', 'Verdeel het eerlijk']
   });
   if (kaart) kaart.zet(totaal);
+  somNakijken();
 }
 
 function tekenKraan() {
@@ -486,7 +542,9 @@ function tekenVraag() {
                 tekst: 'morgen dubbel', hoog: 52, prio: 9 });
     kaart = C.ui.somkaart(vraagPlek(), S.basis + ' + ' + S.basis + ' =',
       { id: 'tb_vraag', door: 'tobbe', kamer: 'tuin', open: true, max: 2,
-        hoog: vraagPlek().y, onOk: function (n, k) { antwoord(n, S.T, k); } });
+        hoog: vraagPlek().y, icoon: '🧴',
+        regel: ['Morgen twee keer ' + S.basis, 'Hoeveel samen?'],
+        onOk: function (n, k) { antwoord(n, S.T, k); } });
   } else {
     var p = kraanPlek();
     C.ui.wolk({ x: p.x, z: p.z, kamer: 'tuin' },
@@ -494,7 +552,15 @@ function tekenVraag() {
                 tekst: 'in twee helften', hoog: 26, prio: 9 });
     kaart = C.ui.somkaart(vraagPlek(), 'helft van ' + S.T + ' =',
       { id: 'tb_vraag', door: 'tobbe', kamer: 'tuin', open: true, max: 2,
-        hoog: vraagPlek().y, onOk: function (n, k) { antwoord(n, S.per, k); } });
+        hoog: vraagPlek().y, icoon: '🚰',
+        /* Bij een ONEVEN aantal is "de helft van 9" niet 4: er blijft een
+           schepje over (band 5, HOTEL.md 5). Dan zegt de zin dat ook, anders
+           staat er een leesbare leugen boven de som. */
+        regel: S.rest
+          ? [S.T + ' in twee helften',
+             'Hoeveel in elke? ' + S.rest + ' over']
+          : ['De helft van ' + S.T + ' schepjes', 'Hoeveel is dat?'],
+        onOk: function (n, k) { antwoord(n, S.per, k); } });
   }
   tekenZeg();
 }
@@ -791,7 +857,7 @@ function tekenBaden() {
     /* één praatje tegelijk: staat er een wolkje van "😌 lekker warm", dan
        hoeft de uitleg er niet ook nog bij te hangen */
     C.ui.wolk(bp, { id: 'tb_bad', door: 'tobbe', kamer: 'tuin', icoon: '🛁',
-                    getal: wacht.length, tekst: 'in de tobbe', hoog: bp.y, prio: 10 });
+                    getal: wacht.length, tekst: 'mogen in de tobbe', hoog: bp.y, prio: 10 });
   }
   if (S.stap === 'baden' && !wacht.length && inBadIds().length) {
     var k = opGras(96);

@@ -110,6 +110,22 @@ function totaalVan(types) {
 function iconen(types) {
   return types.map(function (t) { var w = item(t); return w ? w.icoon : '?'; }).join('');
 }
+/* de zin boven de som (HOTEL.md 9, VERPLICHT): één gewone regel met een
+   werkwoord of een vraagwoord, hooguit 8 woorden, pictogram vooraan */
+function kap(t) { return String(t).charAt(0).toUpperCase() + String(t).slice(1); }
+function naamVan(type) { var w = item(type); return w ? w.naam : 'meubel'; }
+/* "Mandje kost €3" of "Plant en mandje kosten €4" */
+function prijsZin(types, totaal) {
+  if (types.length === 1)
+    return kap(naamVan(types[0])) + ' kost ' + eur(totaalVan(types));
+  return kap(types.map(naamVan).join(' en ')) + ' kosten ' + eur(totaal);
+}
+/* "Plant €1 en mandje €3" */
+function somZin(types) {
+  return kap(types.map(function (t) {
+    return naamVan(t) + ' ' + eur(item(t).prijs);
+  }).join(' en '));
+}
 /* samen doortellen: "6 … 7 … 8" (nooit een lap tekst, nooit een kruis) */
 function doorTellen(van, stappen) {
   var l = [], i;
@@ -374,7 +390,8 @@ function betaalTeken() {
   /* het kaartje op de kassa: de som of de prijs, met het cijferpad eronder */
   if (b.stap === 'som') {
     b.kaart = C.ui.somkaart(KASSA, b.types.map(function (t) { return eur(item(t).prijs); }).join(' + ') + ' =',
-      { id: 'mb_som', door: 'meubels', open: true, max: 2,
+      { id: 'mb_som', door: 'meubels', open: true, max: 2, icoon: '🛒',
+        regel: [somZin(b.types), 'Hoeveel euro is dat samen?'],
         onOk: function (n) { somOk(n); } });
     if (b.somPog >= 1) b.kaart.hulp(doorTellen(item(b.types[0]).prijs, item(b.types[1]).prijs));
     if (b.somPog >= 3) spookZet(b.totaal, 'zoveel is het samen');
@@ -382,13 +399,20 @@ function betaalTeken() {
     var betaald = C.econ.som(b.bank);
     b.kaart = C.ui.somkaart(KASSA, eur(betaald) + ' − ' + eur(b.totaal) + ' =',
       { id: 'mb_wissel', door: 'meubels', open: true, max: 2, hoog: 26,
+        icoon: '👛',
+        regel: ['Je gaf ' + eur(betaald) + ', het kost ' + eur(b.totaal),
+                'Hoeveel krijg je terug?'],
         onOk: function (n) { wisselOk(n); } });
     if (b.wisPog >= 1) b.kaart.hulp(doorTellen(b.totaal, betaald - b.totaal));
     if (b.wisPog >= 3) spookZet(betaald - b.totaal, 'zoveel krijg je terug');
   } else {
-    /* de prijs als afgevinkt sommenkaartje: dat is de regel waar je naar kijkt */
+    /* de prijs als afgevinkt sommenkaartje: dat is de regel waar je naar kijkt.
+       De pictogram-som ("🪑 =") staat er nooit zonder zin erboven. */
     b.kaart = C.ui.somkaart(KASSA, iconen(b.types) + ' =',
-      { id: 'mb_bon', door: 'meubels', pad: false, hoog: 24 });
+      { id: 'mb_bon', door: 'meubels', pad: false, hoog: 24,
+        icoon: b.types.length > 1 ? '🛒' : item(b.types[0]).icoon,
+        /* het pictogram hoort bij het WOORD munten, niet vooraan de regel */
+        regel: [prijsZin(b.types, b.totaal), 'Leg de 🪙 munten op de toonbank'] });
     b.kaart.zet(eur(b.totaal));
     if (b.hulp) b.kaart.hulp(b.hulp);
     if (b.spook) spookZet(b.spook.bedrag, b.spook.lbl);

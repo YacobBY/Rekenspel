@@ -78,7 +78,11 @@ var ELS_PLEK = { x: 20, z: 78, y: 6 };
    de sommenkaart hangt boven de rij haakjes, de rij hangt boven het wolkje
    van de gast, en het wolkje net boven zijn kop (het dier zelf blijft dus
    te zien). Zie de meetlat in de speeltest: verticaal = (x + z) - 2y. */
-var KAART_HOOG = 55;                          /* sommenkaart boven het bord */
+/* De sommenkaart hangt boven de rij haakjes. Met de zin erboven (HOTEL.md 9)
+   is het kaartje ~85 px hoog in plaats van ~45, dus hij hangt zeven stappen
+   hoger: anders raakt zijn onderrand de haakjes en schuift de knoppenlaag de
+   rij uit elkaar (gemeten met sleutels/plek.js: één stap is ~2 px). */
+var KAART_HOOG = 62;                          /* sommenkaart boven het bord */
 var WOLK_HOOG = 37, KEY_HOOG = 4;
 
 var C = null;     /* de ctx */
@@ -367,9 +371,14 @@ function teken() {
   deurPlaatjes();
 
   /* 2. één sommenkaartje aan het sleutelbord: de rij + de sleutel in je hand */
+  /* de rij staat er nooit kaal (HOTEL.md 9): één gewone vraag erboven, met
+     het pictogram vooraan op dezelfde regel */
   U.kaart = C.ui.somkaart('sleutelbordz', rijTekst(b), {
     id: 'sl_kaart', door: 'sleutels', pad: false, hoog: KAART_HOOG,
-    klas: P.klaar ? 'af' : ''
+    klas: P.klaar ? 'af' : '', icoon: '🔑',
+    regel: s ? (P.variant === 'kamers' ? 'Welk kamernummer hoort in het gat?'
+                                       : 'Welk nummer hoort in het gat?')
+             : 'De rij is nu af'
   });
   if (U.kaart) {
     if (s) U.kaart.zet('🔑' + s.nummer); else U.kaart.klaar();
@@ -384,6 +393,11 @@ function teken() {
         nieuwe kamer door), en dan staat het in de verkeerde ruimte. */
   if (s) {
     C.ui.wolk({ x: GAST_PLEK.x, z: GAST_PLEK.z, kamer: 'receptie' }, {
+      /* pictogram, nummer EN woorden in hetzelfde wolkje (HOTEL.md 9). Het
+         blijft kort: in portret is de receptie ~386 px breed en duwt een
+         breder wolkje de bel van het hotel in de rij haakjes (192 px past
+         nog, 204 px niet - sleutels/plek.js). De hele opdracht staat als zin
+         op de sommenkaart. */
       id: 'sl_tag', door: 'sleutels', icoon: '🔑', getal: s.nummer,
       tekst: U.buren ? 'kijk bij de buren' : 'hang mij op',
       klas: U.buren ? 'hulp' : '', hoog: WOLK_HOOG, prio: 10

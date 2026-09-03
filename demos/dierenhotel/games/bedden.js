@@ -377,16 +377,27 @@ function teken() {
   if (!D.klaar) {
     var sp = plekPx(0, 0, marges().boven);
     kaart = C.ui.somkaart(sp, (vol || '?') + ' × ' + D.perRij + ' =',
-      { id: 'bd_som', door: 'bedden', pad: false, hoog: sp.y, kamer: K });
+      { id: 'bd_som', door: 'bedden', pad: false, hoog: sp.y, kamer: K,
+        /* één gewone zin boven de som, met het pictogram vooraan op
+           dezelfde regel (HOTEL.md 9): een kale "? × 4 =" leest een kind
+           van zes niet. */
+        icoon: '🛏',
+        /* Deze kaart telt zichzelf mee (pad: false): het antwoordvakje laat
+           zien hoeveel bedden er NU liggen. Een vraag ("Hoeveel bedden zijn
+           dat?") zou dus boven een som staan die halverwege een ander getal
+           laat zien; daarom beschrijft de tweede regel de stand. */
+        regel: ['Leg ' + D.rijen + (D.rijen === 1 ? ' rij van ' : ' rijen van ') +
+                D.perRij + ' bedden', 'Zo veel bedden staan er nu'] });
     if (kaart) kaart.zet(vol ? vol * D.perRij : '');
   }
 
-  /* de opdracht hangt boven de gast die op een bed wacht: één pictogram,
-     één getal, geen woord */
+  /* de opdracht hangt boven de gast die op een bed wacht: het pictogram staat
+     in hetzelfde wolkje als zijn woorden (HOTEL.md 9) */
   var wacht = C.wereld.dieren().filter(function (g) { return !g.bed; })[0];
   var wd = wacht ? C.wereld.dier(wacht.id) : null;
   if (wd && wd.kamer === K && !D.klaar)
-    wolk('bd_wolk', wacht.id, { icoon: '🛏', getal: D.doel, hoog: 52, prio: 12 });
+    wolk('bd_wolk', wacht.id, { icoon: '🛏', getal: D.doel, tekst: 'bedden maken',
+                                hoog: 52, prio: 12 });
   else C.ui.wolkWeg('bd_wolk');
 
   /* de schuifwand van groep 5: de rijen in twee stukken rekenen */
@@ -555,7 +566,8 @@ function somAf() {
   if (kaart) { kaart.weg(); kaart = null; }
   var p = plekPx(0, 0, marges().boven);
   kaart = C.ui.somkaart(p, D.rijen + ' × ' + D.perRij + ' =',
-    { id: 'bd_som', door: 'bedden', pad: false, hoog: p.y, kamer: K });
+    { id: 'bd_som', door: 'bedden', pad: false, hoog: p.y, kamer: K,
+      icoon: '🛏', regel: 'Nu staan er ' + D.doel + ' bedden' });
   if (kaart) { kaart.zet(D.doel); kaart.klaar(); }
 }
 
@@ -627,7 +639,7 @@ function hulp() {
   C.wereld.getalTag({ kamer: K, x: p.x, z: p.z }, D.perRij,
                     { id: 'bd_spook', y: p.y, klas: 'hotspook', titel: 'zoveel in een rij' });
   wolk('bd_wolkje', plekPx(r, -goot, STAP_PX), {
-    icoon: '🐑', getal: D.perRij, klas: 'hulp', prio: 14,
+    icoon: '🐑', getal: D.perRij, tekst: 'in elke rij', klas: 'hulp', prio: 14,
     tik: function () {
       C.ui.wolkWeg('bd_wolkje');
       if (!D || D.klaar) return;

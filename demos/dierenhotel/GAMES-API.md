@@ -345,8 +345,16 @@ Uit de speeltest van het fundament: rekenpanelen naast het diorama voelen als
 * **Geen rekenblad meer naast de wereld.** Sommen, aantallen en keuzes hangen
   aan een voorwerp of dier. `ctx.ui.paneel` blijft alleen voor het startblad en
   een overzicht als het meubelboek — niet voor sommen.
-* **Eén korte regel per stap** (richtlijn ≤ 6 woorden), verder pictogrammen en
-  getallen. Feedback is pictogram + getal ("nog 2 🍪"), nooit een tekstlap.
+* **Elke sommenkaart draagt één gewone zin** (`regel`, VERPLICHT, ≤ 8 woorden
+  **én ≤ 40 tekens**, met een werkwoord of een vraagwoord, pictogram vooraan op
+  dezelfde regel). Op één regel past ongeveer **34 tekens** (gemeten op 320, 420
+  en 860 px); 35-40 tekens wordt een tweede regel op een smal scherm. Schrijf je
+  meer, dan waarschuwt de console. Een kale som ("4 × 2", "🪑 + 🛋 =") staat er
+  nooit zonder zin. Feedback blijft pictogram + getal ("nog 2 🍪").
+  *Herzien 2026-09-03 na speeltest: een kind van zes kon "4 × 2 ? 20" niet
+  lezen. Een "?" tussen twee uitdrukkingen mag daarom niet meer.*
+* **Keuzes zijn knoppen mét woord** (`keuzes`), in één strook aan het kaartje -
+  nooit alleen een pictogram, nooit los verspreid door de kamer.
 * **Slepen gebeurt in de wereld**: koekjes uit de zak naar de bakjes, munten uit
   de buidel naar de toonbank, sleutels naar de haakjes.
 * **Het cijferpad is het enige 2D-ding** en hangt klein aan het voorwerp.
@@ -357,20 +365,40 @@ jóuw spel, en `stop()` ruimt het allemaal weer op — wolkjes, sommenkaartjes,
 cijfers op voorwerpen en sleepbronnen.
 
 ```js
-/* spreekwolkje aan een dier of voorwerp */
+/* spreekwolkje aan een dier of voorwerp. Zelfde tekstbudget als de zin op een
+   sommenkaart: tot ~34 tekens staat de tekst naast het pictogram op één regel,
+   35-40 tekens wordt een tweede regel. */
 var id = ctx.ui.wolk('boef', { icoon: '🍪', getal: 2, tekst: 'nog twee',
                                hoog: 52,          /* voxels boven het object */
                                tik: function () { ... } });   /* zonder tik: voorlezen */
 ctx.ui.wolkWeg(id);
 
-/* sommenkaartje met verankerd cijferpad */
+/* sommenkaartje met verankerd cijferpad.
+   `regel` is de zin boven de som en is VERPLICHT; `icoon` staat vooraan op
+   diezelfde regel (dus niet als eigen wolkje ernaast). */
 var kaart = ctx.ui.somkaart('kassa', '3 × €2 =', {
+  regel: 'Muis wil 3 zakjes, €2 per zakje',   /* VERPLICHT: ≤ 8 woorden, ≤ 40 tekens */
+  icoon: '🛍',           /* vooraan IN de zin, zelfde regel */
   open: true,            /* pad meteen open */
   max: 2,                /* hoeveel cijfers */
-  pad: false,            /* of juist géén pad: alleen een regel */
+  pad: false,            /* of juist géén pad: alleen de zin en de som */
   onOk: function (n, k) { if (n === 6) k.zet(n).klaar(); else k.hulp('2 … 4 … 6'); }
 });
 kaart.zet('6');  kaart.hulp('2 … 4 … 6');  kaart.klaar();  kaart.weg();
+
+/* twee korte regels mogen als er nog een getal bij hoort (bijvoorbeeld de
+   voorraad). Meer dan twee niet: een kaartje is geen lap tekst. */
+ctx.ui.somkaart('bel', '4 × 2', {
+  icoon: '🍽',
+  regel: ['We eten 4 dagen lang 2 scheppen', '📦 In huis: 20 scheppen. Genoeg?'],
+  /* `keuzes` = één strook knoppen MÉT woord, tegen de onderrand van de kaart.
+     Met keuzes heeft de kaart geen antwoordvakje en geen cijferpad. */
+  keuzes: [
+    { id: 'meer',    icoon: '⬇', tekst: 'te weinig',   kies: function () { ... } },
+    { id: 'precies', icoon: '⚖', tekst: 'precies',     kies: function () { ... } },
+    { id: 'minder',  icoon: '⬆', tekst: 'blijft over', kies: function () { ... } }
+  ]
+});
 
 /* een cijfer ÓP een voorwerp, en weer weg */
 ctx.wereld.getalTag('bak', 4);
@@ -391,9 +419,9 @@ ctx.ui.spreek('Hoeveel samen?');
 Wat het fundament zelf al zo doet (kijk hier af):
 | flow | in de wereld |
 |---|---|
-| check-in | wolkje boven de gast ("Hoeveel samen?") + sommenkaart op de balie met pad; vraag 2 met drie keuzeknoppen ⬇️ ⚖️ ⬆️ |
+| check-in | ÉÉN sommenkaart vóór de balie (niet op de bel: daar staat de gast), met twee korte zinnen ("🥄 De gasten eten 0 scheppen per dag" / "Boef eet 2 erbij. Samen?") + som + pad; vraag 2 dezelfde kaart met één keuzestrook ("⬇ te weinig", "⚖ precies", "⬆ blijft over") |
 | voerkar | de zak is een `bron`, de vakjes zijn **echte bakjes** op de keukenvloer met het aantal als cijfer, fout = wolkje "+2 🍪", Els legt spookcijfers neer |
-| rekening | sommenkaart aan de kassa, munten uit de buidel naar de toonbank, bedrag als cijfer op de toonbank, spookmunten na de 3e poging |
+| rekening | één werkkaart vóór de balie met de zin "🛏 Boef sliep 3 nachten, €5 per nacht"; het afgevinkte bonnetje ligt op de kassa terwijl je munten telt en gaat weg bij de wisselgeldvraag (twee kaartjes passen niet in een liggend kader van 200 px) |
 | prikbord | maximaal 3 taakkaartjes bij het bord, pictogram + ≤ 6 woorden |
 
 ### Nog een paar handigheidjes
@@ -412,8 +440,13 @@ ctx.wereld.behoefteKlaar(gast.id, 'bad');     /* of een specifieke */
 /* een cijfer dat beslist moet blijven staan als de kamer vol knoppen zit */
 ctx.wereld.getalTag('bak', 4, { prio: 12 });
 
-/* alleen de somregel vervangen, kaart en pad blijven staan */
-kaart.regel('5 + 5 =');
+/* de zin boven de som vervangen (string of twee korte zinnen) */
+kaart.regel('Muis wil er nog 2 bij');
+kaart.regel(['Muis eet 3 koekjes', 'In de zak: 9']);
+
+/* alleen de SOMREGEL vervangen, kaart, pad en keuzestrook blijven staan.
+   LET OP: dit heette vroeger kaart.regel(); die naam is nu de zin erboven. */
+kaart.som('5 + 5 =');
 ```
 
 ### Een taakje op het prikbord
@@ -445,8 +478,13 @@ taakkaartjes niet over jouw knoppen heen staan.
 Twee dingen om op te letten:
 * Zet je wolkjes en kaartjes niet allemaal op hetzelfde voorwerp: de laag schuift
   ze dan uit elkaar (dat mag, maar het leest rustiger als je ze zelf spreidt).
-* Een `somkaart` en zijn pad staan **vast**: ze wijken niet uit voor andere
-  knoppen, andere knoppen wijken voor hén. Gebruik er dus hooguit één tegelijk.
+* Een `somkaart`, zijn pad en zijn keuzestrook staan **vast**: ze wijken niet uit
+  voor andere knoppen, andere knoppen wijken voor hén. Gebruik er dus hooguit
+  één tegelijk.
+* Vergeet je `regel`, dan tekent de kaart wél (je spel breekt nooit halverwege),
+  maar er komt één `console.warn` per kaartje: *"somkaart … heeft geen regel"*.
+  Datzelfde gebeurt bij een zin van meer dan 8 woorden of 40 tekens. Een speeltest of
+  nakijkronde ziet zo meteen welk kaartje nog een zin mist.
 * Het pad komt automatisch ónder de kamer terecht (het kader is daar hoger dan
   de kamer zelf), dus het dekt de vloer niet af. Zet er zelf geen `padHoog` op
   tenzij je het echt ergens anders wil.

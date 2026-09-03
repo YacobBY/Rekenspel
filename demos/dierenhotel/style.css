@@ -318,7 +318,7 @@ body.sleept .placed{pointer-events:none}
   cursor:pointer;line-height:1.05;touch-action:none;
 }
 .hot .ico{font-size:1.3rem;line-height:1}
-.hot .lbl{font-size:.6rem;font-weight:700;max-width:82px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.hot .lbl{font-size:.6rem;font-weight:700;max-width:112px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .hot .bdg{position:absolute;top:-8px;right:-8px;background:var(--peach-d);color:#fff;
   border:2px solid #fff;border-radius:999px;min-width:22px;height:22px;font-size:.7rem;
   font-weight:700;display:grid;place-items:center;padding:0 4px}
@@ -328,7 +328,9 @@ body.sleept .placed{pointer-events:none}
 .hot.hotdeur{background:rgba(240,228,210,.95)}
 .hot.hotbed.vrij{border-style:dashed;background:rgba(255,253,246,.8)}
 .hot.hotbak.vol{background:#EAFBF3;border-color:var(--mint)}
-.hot.hotwens{background:#fff;border-radius:999px;border-color:var(--pink);padding:0}
+.hot.hotwens{background:#fff;border-radius:18px;border-color:var(--pink);padding:2px 8px;gap:1px}
+/* het woord staat ALTIJD bij het pictogram (HOTEL.md 9), niet alleen in de toast */
+.hot.hotwens .lbl{font-size:.62rem;max-width:112px}
 .hot.hotgame{background:var(--sun);border-color:#fff}
 .hot.hotgame.aan{box-shadow:0 0 0 4px #FFF3C4, 0 3px 0 rgba(74,59,51,.18)}
 .hot.hotlamp.aan{background:#FFE9A8;box-shadow:0 0 0 5px rgba(255,233,168,.5), 0 3px 0 rgba(74,59,51,.18)}
@@ -428,7 +430,7 @@ body.sleept .placed{pointer-events:none}
 
 @media (max-width:520px){
   .hot{min-width:48px;min-height:48px;padding:2px 5px}
-  .hot .lbl{font-size:.55rem;max-width:64px}
+  .hot .lbl{font-size:.55rem;max-width:96px}
   .coin{width:52px;height:52px;font-size:1rem}
   .coin.c5{width:58px;height:58px}
   .coin.note{width:80px;height:52px}
@@ -463,14 +465,18 @@ body.metpaneel .world{aspect-ratio:4/3;max-height:44vh}
   body:not(.metpaneel) .world{aspect-ratio:16/9}
 }
 
-/* spreekwolkje: één korte regel, pictogram en getal groot */
+/* spreekwolkje: één korte regel, pictogram en getal groot.
+   Pictogram, getal en zin staan in ÉÉN rij met een klein kiertje; de wolk is
+   zo breed dat een zin van acht korte woorden ernaast op één regel blijft
+   (speeltest: 190 px perste "Boef eet 2 koekjes per dag" tot een smalle
+   kolom naast het pictogram). */
 .hot.hotwolk{background:#FFFDF6;border-color:#fff;border-radius:20px 20px 20px 6px;
-  flex-direction:row;gap:5px;padding:5px 11px;max-width:190px;
+  flex-direction:row;align-items:center;gap:6px;padding:5px 11px;max-width:290px;
   box-shadow:0 3px 0 rgba(74,59,51,.16), 0 6px 14px rgba(74,59,51,.10)}
-.hot.hotwolk .ico{font-size:1.4rem}
-.hot.hotwolk .get{font-size:1.3rem;font-weight:700;color:#5A4A3E;line-height:1}
-.hot.hotwolk .zeg{font-size:.78rem;font-weight:700;line-height:1.1;text-align:left;
-  max-width:120px;white-space:normal}
+.hot.hotwolk .ico{font-size:1.4rem;flex:none}
+.hot.hotwolk .get{font-size:1.3rem;font-weight:700;color:#5A4A3E;line-height:1;flex:none}
+.hot.hotwolk .zeg{font-size:.78rem;font-weight:700;line-height:1.15;text-align:left;
+  max-width:228px;white-space:normal}
 .hot.hotwolk.goed{background:#E4F7EC;border-color:#BFEBD5}
 .hot.hotwolk.hulp{background:#FFF8E7;border-color:#F0DCB0}
 
@@ -479,6 +485,21 @@ body.metpaneel .world{aspect-ratio:4/3;max-height:44vh}
   background-color:#FCFAF0;border-color:#EAE0C8;
   background-image:repeating-linear-gradient(180deg, rgba(255,255,255,0) 0 21px, #C2D8EA 21px 22px);
   box-shadow:0 3px 0 rgba(74,59,51,.12), 0 8px 16px rgba(74,59,51,.08)}
+/* met een zin erboven wordt het kaartje een kolommetje: zin(nen), dan de
+   somregel met het antwoordvakje, dan eventueel de hulp */
+/* onderaan wat extra lucht: het cijferpad hangt vlak onder de kaart en raakt
+   met zijn bovenrand de laatste 6 px van het kaartje - die moeten leeg zijn,
+   anders knabbelt het pad aan de hulpregel */
+.hot.hotsom.metzin{flex-direction:column;align-items:flex-start;gap:2px;padding-bottom:14px}
+/* De zin blijft op één regel zolang hij past (gemeten: tot ~34 tekens op een
+   telefoon van 420 px). De max-width houdt het kaartje binnen het kader; op een
+   heel smal scherm (<=360 px) mag hij liever afbreken naar twee regels dan
+   buiten het kader vallen. */
+.hot.hotsom .somzin{display:flex;align-items:center;gap:5px;font-size:.8rem;font-weight:700;
+  line-height:1.2;color:#5A4A3E;white-space:nowrap;
+  max-width:min(84vw,340px);overflow:hidden;text-overflow:ellipsis}
+.hot.hotsom .somzin .ico{font-size:1.15rem;line-height:1;flex:none}
+.hot.hotsom .somrij{display:flex;align-items:center;gap:7px}
 .hot.hotsom .somlijn{font-size:1.15rem;font-weight:700;white-space:nowrap;color:#4A3B33}
 .hot.hotsom .somvak{min-width:40px;min-height:34px;border:3px solid #8FA9C4;border-radius:8px;
   background:#fff;box-shadow:inset 0 -4px 0 #EAF1F8;font-size:1.25rem;font-weight:700;
@@ -498,6 +519,21 @@ body.metpaneel .world{aspect-ratio:4/3;max-height:44vh}
 .padk.ok{background:var(--mint);border-color:var(--mint-d)}
 .padk.del{background:var(--pink);border-color:#F0BBB2}
 
+/* de keuzestrook: 2-3 knoppen met pictogram ÉN woord, tegen de onderrand van
+   het sommenkaartje. Nooit losse pictogrammen door de kamer, nooit een knop
+   met alleen een pijltje erop. */
+.hot.hotkeuzes{padding:5px;background:#FFFDF8;border-color:#fff;border-radius:16px;
+  box-shadow:0 4px 0 rgba(74,59,51,.16), 0 10px 22px rgba(74,59,51,.12)}
+.kzrij{display:flex;gap:5px;align-items:stretch}
+.kzk{min-width:48px;min-height:48px;padding:3px 9px;font-family:inherit;font-weight:700;
+  color:var(--ink);background:#fff;border:2px solid #C9D8E6;border-radius:12px;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  box-shadow:0 3px 0 #0001}
+.kzk:active{transform:translateY(2px);box-shadow:none}
+.hot.hotkeuzes .ico{font-size:1.1rem;line-height:1}
+.hot.hotkeuzes .lbl{font-size:.68rem;font-weight:700;line-height:1.1;
+  max-width:none;overflow:visible;text-overflow:clip;white-space:nowrap}
+
 /* een cijfer ÓP een voorwerp: klein, niet aan te tikken, wijkt nooit */
 .hot.hottag{pointer-events:none;min-width:0;min-height:0;padding:1px 6px;border-width:2px;
   border-radius:999px;background:#FFFDF6EE;box-shadow:0 2px 0 rgba(74,59,51,.14)}
@@ -516,8 +552,15 @@ body.metpaneel .world{aspect-ratio:4/3;max-height:44vh}
   font-weight:700;display:grid;place-items:center;padding:0 4px}
 .hot.hotbron.leeg{opacity:.55;cursor:default}
 
+@media (max-width:360px){
+  /* liever twee regels dan een kaartje dat buiten het kader steekt */
+  .hot.hotsom .somzin{white-space:normal;overflow:visible}
+}
 @media (max-width:520px){
   .hot.hotsom .somlijn{font-size:1rem}
-  .hot.hotwolk{max-width:160px}
-  .hot.hotwolk .zeg{max-width:96px;font-size:.74rem}
+  .hot.hotsom .somzin{font-size:.76rem}
+  .hot.hotwolk{max-width:274px}
+  .hot.hotwolk .zeg{max-width:216px;font-size:.74rem}
+  .hot.hotkeuzes .lbl{font-size:.64rem}
+  .kzk{padding:3px 7px}
 }

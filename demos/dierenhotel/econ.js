@@ -54,14 +54,29 @@ function som(arr) { return arr.reduce(function (a, c) { return a + c.v; }, 0); }
 /* =====================================================================
    DE REKENING - helemaal ín de wereld (HOTEL.md 9)
 
-   Aan de balie staat de kassa. Daar hangt één sommenkaartje met één regel
-   (2 x EUR2 =) en een klein cijferpad. De familie houdt een buidel vast:
+   Aan de balie staat de kassa; vóór de balie ligt één sommenkaartje waar je
+   aan rekent: bovenaan één gewone zin die zegt waar het geld voor is ("Boef
+   sliep 3 nachten, EUR5 per nacht"), daaronder de som (3 x EUR5 =) met een
+   klein cijferpad eronder. Een kaal sommetje zonder zin snapt een kind van zes
+   niet (HOTEL.md 9). De familie houdt een buidel vast:
    sleep of tik de munten naar de kassa, het bedrag staat als cijfer op de
    toonbank. Feedback is een wolkje met een pictogram en een getal; na de
    derde keer tellen liggen er spookmunten. Geen rekenblad, geen lappen tekst.
 ===================================================================== */
 var R = null;
 var BANK = 'kassa', BUIDEL = 'boek';        /* kassa en buidel op de balie */
+/* De kaart waar je AAN REKENT ligt rechts achterin, op dezelfde plek als het
+   check-inkaartje (hotel.js CI_PLEK) - de familie wacht links vooraan
+   (hotel.js WACHTPLEK). Op de kassa zelf (44,40) stond de kaart over de
+   familie (naamplaatje 97%, dier 100%) en in liggend beeld ook over de buidel
+   (100%); bij het wisselgeld lag hij bovendien over het bonnetje. Twee
+   kaartjes ónder elkaar kan niet: in liggend beeld is het kader maar 200 px
+   hoog, dus de hotspot-laag klemt ze tegen elkaar (gemeten 38-64% dekking bij
+   elke hoogte). Daarom: ÉÉN werkkaart. Het bonnetje ligt op die plek zolang er
+   munten geteld worden en gaat weg bij de wisselgeldvraag, die dezelfde plek
+   inneemt (dekking bonnetje-door-wisselkaart: 0%). */
+var WERKPLEK = { x: 70, z: 20, kamer: 'receptie' };
+var WERKHOOG = 16;
 
 function rekening(o) {
   var tot = o.totaal || o.nachten * o.prijs;
@@ -92,11 +107,14 @@ function spookWeg() {
 }
 function spook(bedrag, lbl) {
   spookWeg();
+  /* De spookmunten liggen op de vrije vloer vóór de balie, onder de werkkaart
+     en rechts van de wachtende familie: op hun oude plek (30..72, z 26..40)
+     lagen ze precies achter het kaartje. */
   var munten = splits(bedrag), i;
   for (i = 0; i < munten.length && i < 6; i++) {
-    World.getalTag({ x: 30 + (i % 4) * 14, z: 26 + (i > 3 ? 14 : 0), kamer: 'receptie' },
+    World.getalTag({ x: 40 + (i % 3) * 15, z: 70 + (i > 2 ? 6 : 0), kamer: 'receptie' },
                    '\u20AC' + munten[i],
-                   { id: 'spook' + i, door: 'rekening', y: 16, klas: 'hotspook',
+                   { id: 'spook' + i, door: 'rekening', y: 4, klas: 'hotspook',
                      titel: lbl || 'zo ziet het uit' });
   }
 }
@@ -112,10 +130,18 @@ function bouw() {
   else muntStap();
 }
 
+/* de zin boven de rekening: wie er sliep, hoeveel nachten, en de prijs per
+   nacht. Eén nacht blijft "1 nacht" - meervoud() doet dat. */
+function bonZin() {
+  return R.gast.naam + ' sliep ' + meervoud(R.nachten, 'nacht', 'nachten') +
+         ', \u20AC' + R.prijs + ' per nacht';
+}
+
 /* ---------- stap 1: nachten x prijs ---------- */
 function somStap() {
-  R.kaart = Ui.somkaart(BANK, R.nachten + ' \u00D7 \u20AC' + R.prijs + ' =', {
-    id: 'rek_som', door: 'rekening', open: true, max: 2,
+  R.kaart = Ui.somkaart(WERKPLEK, R.nachten + ' \u00D7 \u20AC' + R.prijs + ' =', {
+    id: 'rek_som', door: 'rekening', open: true, max: 2, hoog: WERKHOOG,
+    icoon: '\uD83D\uDECF', regel: bonZin(),
     onOk: function (n) { somOk(n); }
   });
   /* Zelfde ladder als in de winkel van Zilverhoef, en overal dezelfde:
@@ -146,11 +172,20 @@ function somOk(n) {
 /* ---------- stap 2 en 3: munten leggen en wisselgeld ---------- */
 function muntStap() {
   var betaald = som(R.bank);
-  /* de rekening blijft als afgevinkt kaartje staan: dat is de regel waar je
-     tijdens het tellen naar kijkt */
-  Ui.somkaart(BANK, R.nachten + ' \u00D7 \u20AC' + R.prijs + ' = ' + R.totaal, {
-    id: 'rek_bon', door: 'rekening', pad: false, hoog: 26
-  }).klaar();
+  /* Tijdens het TELLEN blijft de rekening als afgevinkt kaartje liggen op
+     precies de plek waar je hem net uitrekende: dat is de regel waar je dan
+     naar kijkt, en hij springt niet weg. Op de kassa zelf lag hij over de
+     buidel van de familie (liggend: buidel 100% bedekt, bonnetje 28% bedekt
+     door bel + buidel); op de werkplek is de somregel 0% bedekt.
+     Bij het wisselgeld gaat het bonnetje weg: de wisselkaart komt op dezelfde
+     plek en zegt zelf al wie wat gaf en wat het kost. Het betaalde bedrag
+     blijft als cijfer op de toonbank staan. */
+  if (R.stap !== 3) {
+    Ui.somkaart(WERKPLEK, R.nachten + ' \u00D7 \u20AC' + R.prijs + ' = ' + R.totaal, {
+      id: 'rek_bon', door: 'rekening', pad: false, hoog: WERKHOOG,
+      icoon: '\uD83D\uDECF', regel: bonZin()
+    }).klaar();
+  }
 
   if (R.stap === 3) {
     World.getalTag({ x: 30, z: 44, kamer: 'receptie' }, '\u20AC' + betaald,
@@ -198,8 +233,12 @@ function mikx(obj) {
 
 function wisselKaart() {
   var betaald = som(R.bank);
-  R.kaart = Ui.somkaart(BANK, '\u20AC' + betaald + ' \u2212 \u20AC' + R.totaal + ' =', {
-    id: 'rek_wissel', door: 'rekening', open: true, max: 2, hoog: 30,
+  R.kaart = Ui.somkaart(WERKPLEK, '\u20AC' + betaald + ' \u2212 \u20AC' + R.totaal + ' =', {
+    /* dezelfde werkplek vóór de balie als de eerste som en het bonnetje: het
+       bonnetje is bij deze stap weg, dus er staat niets onder of over */
+    id: 'rek_wissel', door: 'rekening', open: true, max: 2, hoog: WERKHOOG,
+    icoon: '\uD83D\uDC5B',
+    regel: R.gast.naam + ' gaf \u20AC' + betaald + ', het kost \u20AC' + R.totaal,
     onOk: function (n) { wisselOk(n); }
   });
   if (R.wisselPog === 1) R.kaart.hulp(R.totaal + ' \u2192 ' + betaald);

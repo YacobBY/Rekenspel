@@ -20,6 +20,24 @@
 var Hotel = (function () {
 'use strict';
 
+/* Bij elk behoefte-pictogram hoort ALTIJD het woord (HOTEL.md 9): een bolletje
+   met alleen 🛁 erop leest een kind van zes niet. De pictogrammen en de lange
+   tekst staan in BEHOEFTE (state.js, bevroren); hier staat het korte woord dat
+   naast het plaatje past. Komt er ooit een nieuwe behoefte bij, dan valt het
+   label terug op de naam van de behoefte zelf (en klaagt de console één keer),
+   zodat er nooit een woordloos bolletje in de wereld komt. */
+var WENSWOORD = { eten: 'eten', kamer: 'bed', bad: 'bad', spelen: 'spelen' };
+var wensKlacht = {};
+function wensWoord(behoefte) {
+  if (WENSWOORD[behoefte]) return WENSWOORD[behoefte];
+  if (!wensKlacht[behoefte] && window.console && console.warn) {
+    wensKlacht[behoefte] = 1;
+    console.warn('behoefte "' + behoefte + '" heeft geen kort woord in WENSWOORD ' +
+      '(hotel.js); het pictogram krijgt nu de naam van de behoefte als label (HOTEL.md 9).');
+  }
+  return String(behoefte || 'wens');
+}
+
 /* de plattegrond: waar hangt elke ruimte in het overzicht */
 var KAART = { receptie: [1, 2], gang: [2, 2], kamer1: [2, 1], kamer2: [2, 3],
               keuken: [3, 2], tuin: [4, 2] };
@@ -277,7 +295,8 @@ function hotspots() {
     var hoog = 58 + (wensNr % 2) * 13;
     wensNr++;
     Hits.maak({ id: 'wens_' + g.id, door: 'hotel', kamer: nu, x: 0, z: 0, y: hoog,
-                icoon: bh.icoon, titel: g.naam + ' ' + bh.tekst, klas: 'hotwens', prio: 6,
+                icoon: bh.icoon, label: wensWoord(g.behoefte),
+                titel: g.naam + ' ' + bh.tekst, klas: 'hotwens', prio: 6,
                 volg: function () {
                   var d = World.dier(g.id);
                   if (!d) return null;
@@ -316,7 +335,7 @@ function bel() {
   World.sync(alleDieren());
   var dp = Rooms.deur('receptie', 'gang');
   World.zet(g.id, 'receptie', dp ? dp.ix : 60, dp ? dp.iz : 60);
-  World.ga(g.id, 30, 62, 'wacht');
+  World.ga(g.id, WACHTPLEK.x, WACHTPLEK.z, 'wacht');
   naarKamer('receptie');
   paintCheckin();
   toast(g.naam + ' staat aan de balie! 🔔', 'happy');
@@ -335,6 +354,11 @@ function initCheckin(g) {
   };
 }
 
+/* "1 schep" en "2 scheppen", "1 dag" en "4 dagen": een zin met een fout
+   meervoud leest een kind van zes twee keer (HOTEL.md 9) */
+function scheppen(n) { return meervoud(n, 'schep', 'scheppen'); }
+function dagen(n) { return meervoud(n, 'dag', 'dagen'); }
+
 /* korte, woordloze hulp: pictogrammen en getallen (HOTEL.md 9) */
 function scoopjes(n) {
   var s = '', i;
@@ -342,18 +366,50 @@ function scoopjes(n) {
   for (i = 0; i < n; i++) s += '🥄';
   return s || '0';
 }
-function sprongen(v) {
-  var l = [], s = 0;
-  for (var i = 0; i < v.dagen; i++) { s += v.nieuw; l.push(s); }
-  return l.join(' … ');
-}
 
 /* =====================================================================
    CHECK-IN ÍN DE WERELD (HOTEL.md 9)
-   Boven de gast hangt één korte vraag, op de balie ligt één sommenkaartje
-   met een klein cijferpad. Verder alleen pictogrammen en getallen.
+   Op de balie ligt ÉÉN sommenkaartje. Daarop staat eerst een gewone zin die
+   de getallen in hotelwoorden noemt ("Samen 0 per dag, Boef eet 2"), daaronder
+   de som met het cijferpad. Bij vraag 2 hoort geen pad maar één strook met
+   drie knoppen mét woord: losse pijltjes door de kamer bleken onleesbaar.
 ===================================================================== */
 var ciKaart = null;
+
+/* WAAR HANGT DE KAART? Niet meer boven de bel (22,40): met een zin erboven is
+   het kaartje 260 px breed en de keuzestrook eronder nog 62 px hoog, en dat
+   blok stond precies over de gast die aan de balie wacht - de speeltest zag
+   50% van het naamplaatje verdwijnen bij vraag 1 en 100% bij vraag 2.
+   Nu: kaart rechts achterin (70,20), gast links vooraan (WACHTPLEK). Gemeten
+   met het breedste naamplaatje uit de pool ("Stampertje", 88 px) op 420x860,
+   860x420, 1000x640 en 320x640: 0-2% van het plaatje en 0% van het dier zelf
+   bedekt, kaart én strook binnen het kader, strook tegen de kaart aan (gat
+   0-6 px). Hoger dan 16 mag niet: dan loopt het plaatje wél onder de kaart
+   (13%). Over de tekst van de kaart ligt nergens iets (0% in staand én
+   liggend). Wel het omgekeerde: op een liggende telefoon (kader 836x200) is er
+   geen vrij plekje meer voor de deurknop, en hits.js laat een knop dan staan
+   waar hij staat; de kaart ligt er dan bovenop (de kaart is dieper in beeld).
+   De deurknop blijft met zijn hart in beeld en dus aan te tikken. */
+var CI_PLEK = { x: 70, z: 20, kamer: 'receptie' };
+var CI_HOOG = 16;
+/* En daarom wacht de gast links vóór de balie in plaats van midden ervoor:
+   met het kaartje rechts achterin en het dier links vooraan zijn ze in elk
+   beeld los van elkaar te zien (gemeten met het breedste naamplaatje: 0%
+   van het plaatje én 0% van het dier bedekt, staand en liggend). */
+var WACHTPLEK = { x: 20, z: 74 };
+
+/* De drie keuzes bij vraag 2. LET OP de koppeling met het bevroren
+   vergelijk(): dat vergelijkt dagen × per dag MET de voorraad.
+     'meer'    -> er is méér nodig dan er in huis is  -> TE WEINIG eten
+     'precies' -> het komt precies uit
+     'minder'  -> er is minder nodig dan er ligt      -> er BLIJFT OVER
+   De knoppen praten over het eten in huis, dus 'te weinig' hoort bij 'meer'.
+   De pijltjes zijn versiering; het woord doet het werk. */
+var CI_KEUZE = [
+  { id: 'meer',    icoon: '⬇', tekst: 'te weinig' },
+  { id: 'precies', icoon: '⚖', tekst: 'precies' },
+  { id: 'minder',  icoon: '⬆', tekst: 'blijft over' }
+];
 
 function paintCheckin() {
   Hits.wisEigenaar('checkin');
@@ -364,23 +420,32 @@ function paintCheckin() {
   if (!g) { state.checkin = null; return; }
 
   if (v.stap === 1) {
-    Ui.wolk(g.id, { id: 'ci_vraag', door: 'checkin', icoon: '🥄',
-                    tekst: 'Hoeveel samen?', prio: 11 });
-    ciKaart = Ui.somkaart('bel', v.samen + ' + ' + v.extra + ' =', {
-      id: 'ci_som', door: 'checkin', open: true, max: 2, hoog: 24,
+    /* twee korte zinnen: eerst wat er nu elke dag opgaat, dan wat deze gast
+       erbij eet - en de vraag zelf ("Samen?") */
+    ciKaart = Ui.somkaart(CI_PLEK, v.samen + ' + ' + v.extra + ' =', {
+      id: 'ci_som', door: 'checkin', open: true, max: 2, hoog: CI_HOOG,
+      icoon: '🥄',
+      regel: ['De gasten eten ' + scheppen(v.samen) + ' per dag',
+              g.naam + ' eet ' + v.extra + ' erbij. Samen?'],
       onOk: function (n) { v.invoer = (n === null ? '' : String(n)); antwoord1(); }
     });
     if (v.fouten1 > 0) ciKaart.hulp(scoopjes(v.samen) + ' + ' + scoopjes(v.extra));
   } else if (v.stap === 2) {
-    Ui.wolk(g.id, { id: 'ci_vraag', door: 'checkin', icoon: '🥣',
-                    tekst: 'Genoeg eten?', prio: 11 });
-    ciKaart = Ui.somkaart('bel', v.dagen + ' × ' + v.nieuw + '  ?  ' + v.voorraad, {
-      id: 'ci_som', door: 'checkin', pad: false, hoog: 24
+    /* Na een misser komt het product er zelf bij te staan (4 × 2 = 8): dat is
+       de hulp, geen los hintje. Zelfde pictogram als bij vraag 1: het gaat nog
+       steeds over scheppen eten. */
+    var tot = v.dagen * v.nieuw;
+    ciKaart = Ui.somkaart(CI_PLEK, v.dagen + ' × ' + v.nieuw + (v.fouten2 > 0 ? ' = ' + tot : ''), {
+      id: 'ci_som', door: 'checkin', pad: false, hoog: CI_HOOG,
+      icoon: '🥄',
+      regel: ['Elke dag ' + scheppen(v.nieuw) + ', ' + dagen(v.dagen) + ' lang',
+              '📦 In huis: ' + scheppen(v.voorraad) + '. Genoeg?'],
+      keuzeTitel: 'is er genoeg eten?',
+      keuzes: CI_KEUZE.map(function (k) {
+        return { id: k.id, icoon: k.icoon, tekst: k.tekst,
+                 kies: function () { antwoord2(k.id); } };
+      })
     });
-    if (v.fouten2 > 0) ciKaart.hulp(sprongen(v));
-    keuzeKnop('minder', '⬇️', 4, 62);
-    keuzeKnop('precies', '⚖️', 26, 58);
-    keuzeKnop('meer', '⬆️', 48, 54);
   } else if (v.stap === 3) {
     var vrij = bedVrij();
     Ui.wolk(g.id, {
@@ -397,15 +462,6 @@ function paintCheckin() {
     }
   }
   World.vuil();
-}
-
-/* de drie keuzes bij vraag 2 staan los van elkaar vóór de balie */
-function keuzeKnop(waarde, icoon, x, z) {
-  Hits.maak({
-    id: 'ci_' + waarde, door: 'checkin', kamer: 'receptie', x: x, z: z, y: 12,
-    icoon: icoon, klas: 'hotwolk', prio: 10, titel: waarde,
-    aan: function () { antwoord2(waarde); }
-  });
 }
 
 /* ---------- BEVROREN: antwoord 1 en 2 (zelfde rekencheck) ---------- */
@@ -427,7 +483,13 @@ function antwoord2(keus) {
   if (keus === vergelijk(v)) {
     v.stap = 3; paintCheckin(); Snd.ja(); toast('Goed gerekend! 🎉', 'happy');
     State.tel(v.fouten2 === 0, Ui.nu() - v.t0);
-  } else { v.fouten2++; paintCheckin(); Snd.zacht(); toast('👣 Tel met sprongen', 'kind'); }
+  } else {
+    /* de kaart rekent het product nu zelf voor; de toast zegt precies hetzelfde
+       (het oude "Tel met sprongen" wees naar een sprongenrijtje dat er niet
+       meer is). Alleen de tekst is anders - de telling blijft gelijk. */
+    v.fouten2++; paintCheckin(); Snd.zacht();
+    toast('🥄 ' + v.dagen + ' × ' + v.nieuw + ' = ' + (v.dagen * v.nieuw), 'kind');
+  }
 }
 
 /* ---------- het bed toewijzen ---------- */
@@ -794,7 +856,7 @@ function rekenAf(id) {
   /* de gast loopt zelf naar de balie: daar staat zijn familie te wachten */
   if (g.waar !== 'receptie') {
     g.waar = 'receptie';
-    World.reis(g.id, 'receptie', { x: 44, z: 62, na: 'wacht' });
+    World.reis(g.id, 'receptie', { x: WACHTPLEK.x, z: WACHTPLEK.z, na: 'wacht' });
   }
   var fam = FAMILIES[state.famIdx % FAMILIES.length];
   Econ.rekening({

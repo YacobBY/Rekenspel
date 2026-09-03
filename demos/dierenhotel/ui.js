@@ -249,9 +249,13 @@ function hulpNa2s(fn) {
    REKENEN ÍN DE WERELD  (HOTEL.md 9)
    Geen rekenpaneel naast het diorama meer: sommen, aantallen en keuzes
    hangen als kleine wolkjes en kaartjes aan een voorwerp of een dier.
-   Per stap één korte regel (richtlijn: 6 woorden), verder pictogrammen en
-   getallen. Alles gaat via de hotspot-laag, dus het schuift automatisch
-   mee met de camera, wijkt uit voor andere knoppen en blijft in beeld.
+   Elke sommenkaart draagt één gewone zin (richtlijn: 8 woorden, met een
+   werkwoord of een vraagwoord, pictogram vóór de zin op dezelfde regel)
+   vlak boven de som: een kale som staat er nooit alleen (speeltest: het
+   kind kon "4 × 2 ? 20" niet lezen). Keuzes zijn knoppen mét woord in één
+   strook aan de kaart, nooit losse pictogrammen door de kamer. Alles gaat
+   via de hotspot-laag, dus het schuift automatisch mee met de camera,
+   wijkt uit voor andere knoppen en blijft in beeld.
 ===================================================================== */
 var wolkNr = 0, somNr = 0;
 
@@ -307,28 +311,100 @@ function padHtml() {
   return h + '</div>';
 }
 
+/* ---------- de zin boven de som ----------
+   Eén gewone Nederlandse zin die de getallen in wereldwoorden noemt, met
+   een werkwoord of een vraagwoord erin. Hij hoort ÍN hetzelfde kaartje,
+   vlak boven de somregel; het pictogram staat vooraan op diezelfde regel.
+   Twee korte zinnen mogen (een tweede regel met bijvoorbeeld de voorraad),
+   meer niet: een kaartje is nooit een lap tekst. */
+/* Het budget: hooguit 8 woorden EN hooguit 40 tekens. De harde grens is het
+   aantal tekens - op een telefoon van 420 px past een zin van ongeveer 34
+   tekens naast zijn pictogram op één regel; daarboven breekt hij naar een
+   tweede regel (dat mag, meer dan twee regels niet). */
+var ZIN_MAX = 8, ZIN_TEKENS = 40;
+var zinKlacht = Object.create(null);
+function zinLijst(r) {
+  var l = (r === undefined || r === null) ? [] : (r.join ? r : [r]);
+  var uit = [], i, t;
+  for (i = 0; i < l.length && uit.length < 2; i++) {
+    t = (l[i] === undefined || l[i] === null) ? '' : String(l[i]).trim();
+    if (t) uit.push(t);
+  }
+  return uit;
+}
+function woordenTel(t) { return String(t).split(/\s+/).filter(Boolean).length; }
+/* De regel is voor games VERPLICHT. We tekenen wel gewoon door - een spel
+   halverwege stukmaken is erger - maar we klagen één keer per kaartje in de
+   console, zodat een speeltest of nakijkronde het meteen ziet. */
+function klaagZin(id, som, zin) {
+  if (!window.console || !console.warn) return;
+  var k, i;
+  if (!zin.length) {
+    k = id + '|leeg';
+    if (zinKlacht[k]) return;
+    zinKlacht[k] = 1;
+    console.warn('somkaart "' + id + '" heeft geen regel: de kale som "' + som +
+      '" hoort nooit zonder één gewone zin erboven (HOTEL.md 9).');
+    return;
+  }
+  for (i = 0; i < zin.length; i++) {
+    if (woordenTel(zin[i]) <= ZIN_MAX && zin[i].length <= ZIN_TEKENS) continue;
+    k = id + '|lang' + i;
+    if (zinKlacht[k]) continue;
+    zinKlacht[k] = 1;
+    console.warn('somkaart "' + id + '" heeft een regel van ' + woordenTel(zin[i]) +
+      ' woorden en ' + zin[i].length + ' tekens; hooguit ' + ZIN_MAX + ' woorden en ' +
+      ZIN_TEKENS + ' tekens (HOTEL.md 9): "' + zin[i] + '"');
+  }
+}
+
 /* ---------- sommenkaartje aan een voorwerp ----------
-   Ui.somkaart('kassa', '3 × €2 =', { open:true, onOk:fn })
-   Geeft een handvat terug: .zet(tekst) .klaar() .weg() .open()          */
+   Ui.somkaart('kassa', '3 × €2 =', { regel:'Boef sliep 3 nachten, €5 per nacht',
+                                      icoon:'🛏', open:true, onOk:fn })
+   Keuzes in plaats van cijfers (dan geen antwoordvakje en geen pad):
+   Ui.somkaart('bel', '4 × 2', { regel:[...], keuzes:[{id,icoon,tekst,kies}] })
+   Geeft een handvat terug: .regel(zin) .som(tekst) .zet(tekst) .hulp(h)
+                            .open() .klaar() .weg()                       */
 function somkaart(obj, som, o) {
   o = o || {};
   var p = World.mik(obj, o.kamer);
   if (!p) return null;
   var id = o.id || ('som' + (++somNr));
-  var st = { val: '', klaar: false, open: !!o.open, extra: '' };
+  var keuzes = (o.keuzes && o.keuzes.length) ? o.keuzes : null;
+  var st = { val: '', klaar: false, open: !!o.open && !keuzes, extra: '',
+             zin: zinLijst(o.regel) };
   var hoog = o.hoog === undefined ? 22 : o.hoog;
 
+  function zinHtml() {
+    var h = '', i;
+    for (i = 0; i < st.zin.length; i++)
+      h += '<span class="somzin">' +
+           (i === 0 && o.icoon ? '<span class="ico">' + o.icoon + '</span>' : '') +
+           esc(st.zin[i]) + '</span>';
+    return h;
+  }
+  /* met keuzes is de strook het antwoord: dan hoort er geen vakje op de
+     kaart. Zodra het klaar is komt er alleen een vinkje. */
+  function vakHtml() {
+    if (keuzes && !st.klaar) return '';
+    return '<span class="somvak' + (st.klaar ? ' ok' : '') + '">' +
+      (st.klaar ? '✓' : (st.val === '' ? '&nbsp;' : esc(st.val))) + '</span>';
+  }
   function kaart() {
+    klaagZin(id, som, st.zin);
+    var metzin = st.zin.length > 0;
     Hits.maak({
       id: id, door: o.door || 'som', kamer: p.kamer, x: p.x, z: p.z, y: hoog,
-      klas: 'hotsom' + (st.klaar ? ' af' : '') + (o.klas ? ' ' + o.klas : ''),
+      klas: 'hotsom' + (metzin ? ' metzin' : '') + (st.klaar ? ' af' : '') +
+            (o.klas ? ' ' + o.klas : ''),
       vast: true, prio: 14,
-      html: '<span class="somlijn">' + esc(String(som)) + '</span>' +
-            '<span class="somvak' + (st.klaar ? ' ok' : '') + '">' +
-            (st.klaar ? '✓' : (st.val === '' ? '&nbsp;' : esc(st.val))) + '</span>' +
+      html: zinHtml() + (metzin ? '<span class="somrij">' : '') +
+            '<span class="somlijn">' + esc(String(som)) + '</span>' + vakHtml() +
+            (metzin ? '</span>' : '') +
             (st.extra ? '<span class="somhulp">' + st.extra + '</span>' : ''),
-      titel: String(som) + ' ' + (st.val || '?'),
-      aan: function () { if (!st.klaar && o.pad !== false) padAan(); }
+      titel: (st.zin.length ? st.zin.join(' ') + ' ' : '') + String(som) +
+             (keuzes ? '' : ' ' + (st.val || '?')),
+      aan: function () { if (!st.klaar && !keuzes && o.pad !== false) padAan(); }
     });
   }
   /* Het pad hoort ONDER de kamer te liggen, in de lucht onder de vloer: zo
@@ -359,24 +435,81 @@ function somkaart(obj, som, o) {
       }
     });
   }
+  /* ---------- keuzestrook: 2-3 knoppen MÉT woord, aan de onderrand ----------
+     Nooit losse pictogrammen door de kamer: alle keuzes staan in één strook
+     tegen het kaartje aan. Dezelfde laag als het cijferpad (vast, hoge prio),
+     dus hij schuift met de kaart mee en wijkt niet uit voor andere knoppen. */
+  function keuzeHtml() {
+    var h = '<div class="kzrij">', i, k;
+    for (i = 0; i < keuzes.length; i++) {
+      k = keuzes[i];
+      h += '<button type="button" class="kzk" data-kz="' +
+        esc(k.id === undefined || k.id === null ? i : k.id) + '">' +
+        (k.icoon ? '<span class="ico">' + k.icoon + '</span>' : '') +
+        '<span class="lbl">' + esc(k.tekst || k.id || '') + '</span></button>';
+    }
+    return h + '</div>';
+  }
+  function hoogteVan(hid, terug) {
+    var el = document.querySelector('[data-hot="' + hid + '"]');
+    return (el && el.offsetHeight) ? el.offsetHeight : terug;
+  }
+  /* Van hart tot hart: een halve kaart plus een halve strook plus een kiertje.
+     Eén hoogtestap is 2k schermpixels (World.schaal), dus zo blijft de strook
+     tegen de kaart geplakt op elk scherm en bij elke kaarthoogte. */
+  function keuzeY() {
+    var s = World.schaal ? World.schaal() : null;
+    var k = (s && s.k) || 1;
+    var px = hoogteVan(id, 52) / 2 + hoogteVan(id + '_keuzes', 62) / 2 + 5;
+    return hoog - Math.round(px / (2 * k));
+  }
+  function keuzeAan() {
+    if (!keuzes || st.klaar) return;
+    Hits.maak({
+      id: id + '_keuzes', door: o.door || 'som', kamer: p.kamer, x: p.x, z: p.z,
+      y: keuzeY(),
+      tagnaam: 'div', klas: 'hotkeuzes', vast: true, prio: 20,
+      html: keuzeHtml(), titel: o.keuzeTitel || 'kies er één',
+      aan: function (spot, ev) {
+        var b = ev && ev.target && ev.target.closest ? ev.target.closest('[data-kz]') : null;
+        if (!b) return;
+        var w = b.getAttribute('data-kz'), i, k;
+        for (i = 0; i < keuzes.length; i++) {
+          k = keuzes[i];
+          if (String(k.id === undefined || k.id === null ? i : k.id) !== w) continue;
+          if (k.kies) k.kies(k, api);
+          return;
+        }
+      }
+    });
+    /* nu de strook er staat kennen we haar echte hoogte: één keer bijstellen */
+    Hits.maak({ id: id + '_keuzes', y: keuzeY() });
+  }
+
   var api = {
     id: id,
     getal: function () { return st.val === '' ? null : parseInt(st.val, 10); },
-    /* alleen de somregel vervangen; het kaartje en het pad blijven staan */
-    regel: function (t) { som = t === undefined || t === null ? som : String(t); kaart(); return api; },
+    /* de zin boven de som vervangen (string of twee korte zinnen) */
+    regel: function (t) { st.zin = zinLijst(t); kaart(); keuzeAan(); return api; },
+    /* alleen de somregel vervangen; kaartje, pad en strook blijven staan */
+    som: function (t) { som = t === undefined || t === null ? som : String(t); kaart(); keuzeAan(); return api; },
     zet: function (t) { st.val = t === null || t === undefined ? '' : String(t); kaart(); return api; },
-    hulp: function (h) { st.extra = h || ''; kaart(); return api; },
-    open: function () { padAan(); return api; },
+    hulp: function (h) { st.extra = h || ''; kaart(); keuzeAan(); return api; },
+    /* met een keuzestrook is er geen cijferpad: .open() doet dan niets, anders
+       zou een spel per ongeluk pad ÉN strook onder de kaart krijgen */
+    open: function () { if (!keuzes) padAan(); return api; },
     klaar: function () {
       st.klaar = true;
       Hits.weg(id + '_pad');
+      Hits.weg(id + '_keuzes');
       kaart();
       return api;
     },
-    weg: function () { Hits.weg(id + '_pad'); Hits.weg(id); }
+    weg: function () { Hits.weg(id + '_pad'); Hits.weg(id + '_keuzes'); Hits.weg(id); }
   };
   kaart();
-  if (st.open) padAan();
+  if (keuzes) keuzeAan();
+  else if (st.open) padAan();
   return api;
 }
 
