@@ -51,7 +51,12 @@ var BEHOEFTE = {
   eten:   { icoon: '🍪', tekst: 'wil eten',      plek: 'bak' },
   kamer:  { icoon: '🛏', tekst: 'wil een bed',   plek: 'bed' },
   bad:    { icoon: '🛁', tekst: 'wil in de tobbe', plek: 'tobbe' },
-  spelen: { icoon: '🧶', tekst: 'wil spelen',    plek: 'mand' }
+  spelen: { icoon: '🧶', tekst: 'wil spelen',    plek: 'mand' },
+  /* 🏊 en 🎁 horen bij het zwembad en de souvenirkraam. Het hotel deelt ze
+     alleen uit als er ook echt een spel is dat ze inlost (hotel.js:
+     wensMogelijk), zodat er nooit een wolkje staat waar je niets kunt doen. */
+  zwemmen:  { icoon: '🏊', tekst: 'wil zwemmen',      plek: 'zwembad' },
+  souvenir: { icoon: '🎁', tekst: 'wil een souvenir', plek: 'kraam' }
 };
 
 var ACT_EMOJI = { Wandeling: '🦮', Spelen: '🧶', Bad: '🛁', Plonzen: '💦',

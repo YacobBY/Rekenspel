@@ -26,7 +26,12 @@ var Hotel = (function () {
    naast het plaatje past. Komt er ooit een nieuwe behoefte bij, dan valt het
    label terug op de naam van de behoefte zelf (en klaagt de console één keer),
    zodat er nooit een woordloos bolletje in de wereld komt. */
-var WENSWOORD = { eten: 'eten', kamer: 'bed', bad: 'bad', spelen: 'spelen' };
+var WENSWOORD = { eten: 'eten', kamer: 'bed', bad: 'bad', spelen: 'spelen',
+                  zwemmen: 'zwemmen', souvenir: 'souvenir' };
+/* Waarmee is een wens INGELOST? 🛏 bed door een bed, 🍪 eten door gegeten, en
+   al het andere (🛁 bad, 🧶 spelen, 🏊 zwemmen, 🎁 souvenir) door g.blij. Eén
+   lijstje, zodat behoefteKlaar() en wensAf() nooit uit elkaar lopen. */
+var WENS_BLIJ = { bad: 1, spelen: 1, zwemmen: 1, souvenir: 1 };
 var wensKlacht = {};
 function wensWoord(behoefte) {
   if (WENSWOORD[behoefte]) return WENSWOORD[behoefte];
@@ -63,6 +68,27 @@ function decorPlek(kamerId, naam) {
   if (d) return { kamer: d.kamer, x: d.x, z: d.z };
   return null;
 }
+function klem(v, lo, hi) { return v < lo ? lo : (v > hi ? hi : v); }
+/* Een rustige plek in de TUIN: Rooms schuift hem naar een vrij vakje toe, dus
+   hij blijft goed ook als een ander ticket er decor bij zet. Dit is de
+   terugval voor 🏊 en 🎁 zolang het zwembad en de kraam er nog niet zijn. */
+function tuinPlek(x, z) {
+  var v = Rooms.vrijVak ? Rooms.vrijVak('tuin', x, z) : null;
+  return { kamer: 'tuin', x: v ? v.x : x, z: v ? v.z : z };
+}
+/* Het punt VÓÓR een rechthoek {x0,x1,z0,z1}: midden op de zijde die naar het
+   midden van de kamer kijkt, een paar voxels ervoor. Een kraam staat tegen een
+   rand, dus dat is precies "midden voor de toonbank". */
+function voorRand(kamerId, rc, af) {
+  var r = Rooms.get(kamerId);
+  if (!r || !rc || rc.x0 === undefined || rc.z0 === undefined) return null;
+  af = af === undefined ? 8 : af;
+  var cx = (rc.x0 + rc.x1) / 2, cz = (rc.z0 + rc.z1) / 2;
+  var dx = Math.min(rc.x0, r.w - rc.x1), dz = Math.min(rc.z0, r.d - rc.z1);
+  var p = dx <= dz ? { x: rc.x0 <= r.w / 2 ? rc.x1 + af : rc.x0 - af, z: cz }
+                   : { x: cx, z: rc.z0 <= r.d / 2 ? rc.z1 + af : rc.z0 - af };
+  return { kamer: kamerId, x: klem(p.x, 4, r.w - 4), z: klem(p.z, 4, r.d - 4) };
+}
 /* waar hoort dit dier te staan met zijn behoefte? */
 function plekVanBehoefte(g) {
   var b = g.behoefte;
@@ -78,6 +104,24 @@ function plekVanBehoefte(g) {
   if (b === 'spelen') {
     var m = decorPlek(g.kamer, 'mand');
     return m ? { kamer: m.kamer, x: m.x - 12, z: m.z } : null;
+  }
+  if (b === 'zwemmen') {
+    /* de startrand van het bad: op het dek, net vóór x0 (zwembad-spel, G1).
+       De kamer komt uit een ander ticket; zolang die er niet is (of er nog
+       geen weg naartoe loopt) wacht het dier gewoon in de tuin. */
+    var zb = Rooms.get('zwembad');
+    if (!zb || !(Rooms.pad(g.kamer, 'zwembad') || []).length) return tuinPlek(58, 106);
+    if (zb.bad && zb.bad.x0 !== undefined)
+      return { kamer: 'zwembad', x: klem(zb.bad.x0 - 6, 4, zb.w - 4),
+               z: klem((zb.bad.z0 + zb.bad.z1) / 2, 4, zb.d - 4) };
+    var v = Rooms.vrijVak ? Rooms.vrijVak('zwembad', 12, zb.d / 2) : null;
+    return { kamer: 'zwembad', x: v ? v.x : 12, z: v ? v.z : Math.round(zb.d / 2) };
+  }
+  if (b === 'souvenir') {
+    /* midden vóór de souvenirkraam in de tuin (kraam-spel, G5); de zone komt
+       uit een ander ticket, anders een vrij vakje in de tuin. */
+    var tu = Rooms.get('tuin');
+    return voorRand('tuin', tu && tu.zones ? tu.zones.kraam : null) || tuinPlek(106, 58);
   }
   return null;
 }
@@ -98,7 +142,7 @@ function wachtIn(kamerId) {
 function behoefteKlaar(g) {
   if (g.behoefte === 'kamer') return !!g.bed;
   if (g.behoefte === 'eten') return !!g.gegeten;
-  return !!g.blij;
+  return !!g.blij;      /* WENS_BLIJ: bad, spelen, zwemmen, souvenir */
 }
 
 /* het dier loopt zelf naar zijn plek en wacht daar geduldig */
@@ -604,15 +648,17 @@ function tikMand(kamerId) {
 }
 
 /* Een wens van een gast vervullen, op de manier die het hotel zelf ook
-   gebruikt: eten -> gegeten, bad/spelen -> blij. De spellen die de vlaggen
-   zelf al zetten (voerkar: gegeten, tobbe: blij) blijven gewoon werken. */
+   gebruikt: eten -> gegeten, de rest (bad, spelen, zwemmen, souvenir) -> blij.
+   De spellen die de vlaggen zelf al zetten (voerkar: gegeten, tobbe: blij)
+   blijven gewoon werken. Dit is de enige weg voor een spel: het krijgt hem
+   als ctx.wereld.behoefteKlaar(gastId, 'zwemmen') (registry.js). */
 function wensAf(gastId, welke) {
   var g = gastVan(gastId);
   if (!g && state.nieuweGast && state.nieuweGast.id === gastId) g = state.nieuweGast;
   if (!g) return false;
   var b = welke || g.behoefte;
   if (b === 'eten') g.gegeten = true;
-  else if (b === 'bad' || b === 'spelen') g.blij = true;
+  else if (WENS_BLIJ[b]) g.blij = true;
   else if (b === 'kamer') return !!g.bed;      /* alleen een bed lost dat op */
   Hits.weg('wens_' + g.id);
   State.bewaar();
@@ -640,11 +686,40 @@ function kassa() {
 ===================================================================== */
 /* Een gast wil pas in bad als er een ECHT tobbe-spel is aangemeld (dus geen
    plaatshouder meer). Zolang dat er niet is bestaat de wens 🛁 niet, en staat
-   er dus ook nooit een taakje op het prikbord dat je niet kunt afmaken. */
-function badMogelijk() {
-  var g = window.Games && Games.get('tobbe');
-  return !!(g && !g.stub && Games.ontgrendeld(g));
+   er dus ook nooit een taakje op het prikbord dat je niet kunt afmaken.
+
+   Datzelfde geldt voor elke NIEUWE wens: een spel meldt zelf welke wens het
+   inlost, in zijn eigen bestand, met één regel in Games.register:
+
+       Games.register({ id: 'zwembad', ..., wens: 'zwemmen' });
+       Games.register({ id: 'kraam',   ..., wens: ['souvenir', 'geld'] });
+
+   morgen() deelt zo'n wens pas uit als zo'n spel bestaat, niet als
+   plaatshouder is aangemeld (stub) en niet meer op slot zit (unlock). Er
+   verschijnt dus nooit een wolkje waar het kind niets mee kan. De wensen die
+   het hotel ZELF inlost (een bed, een bakje, de speelmand) hebben geen spel
+   nodig en staan in HOTEL_WENS. */
+var HOTEL_WENS = { kamer: 1, eten: 1, spelen: 1 };
+var WENS_SPEL = { bad: 'tobbe' };            /* wens uit golf 2: vast spel */
+function spelWil(def, type) {
+  var w = def && def.wens;
+  if (!w) return false;
+  if (typeof w === 'string') return w === type;
+  return !!(w.length && Array.prototype.indexOf.call(w, type) >= 0);
 }
+function speelbaar(def) {
+  return !!(def && !def.stub && Games.ontgrendeld(def));
+}
+function wensMogelijk(type) {
+  if (HOTEL_WENS[type]) return true;
+  if (!window.Games) return false;
+  if (WENS_SPEL[type] && speelbaar(Games.get(WENS_SPEL[type]))) return true;
+  var l = Games.lijst();
+  for (var i = 0; i < l.length; i++)
+    if (spelWil(l[i], type) && speelbaar(l[i])) return true;
+  return false;
+}
+function badMogelijk() { return wensMogelijk('bad'); }
 
 /* =====================================================================
    TAAKJES VAN DE SPELLEN
@@ -930,6 +1005,46 @@ function brievenMuur() {
 /* =====================================================================
    MORGEN: een nieuwe dag
 ===================================================================== */
+/* De nieuwe wensen (🏊 zwemmen, 🎁 souvenir) van deze ochtend uitdelen.
+
+   Vier regels, in deze volgorde:
+     1. alleen een wens waar een aangemeld spel bij hoort (wensMogelijk),
+     2. de oude wensen blijven precies zoals ze waren: wie geen bed heeft
+        houdt 🛏, de 🛁-gast van vandaag blijft de 🛁-gast, en de rest wil
+        gewoon 🍪 eten - alleen de uitgekozen gast ruilt zijn 🍪 om,
+     3. de ochtend raakt niet vol: hooguit één gast per dag, en pas boven de
+        vier gasten hooguit twee,
+     4. de even dagen zijn van de tobbe (badBeurt); de nieuwe wensen komen op
+        de ONEVEN dagen. Zo blijft 🍪 eten het gewone ochtendwolkje en is er
+        nooit meer dan één "uitje" per dag in het hotel.
+   Per oneven dag schuift een teller c één (of twee) plaatsen op. Eerst gaan
+   alle gasten langs met dezelfde wens, dan volgt de volgende wens: zo krijgt
+   elke gast elke wens, ook met twee gasten en twee wensen (een rondje dat
+   gast én wens tegelijk laat draaien loopt dan vast op één paar). Met één
+   gast is de ring twee lang: die gast krijgt om de andere keer een uitje, en
+   wil de andere ochtenden gewoon eten. Geeft { gastId: wens } terug. */
+var NIEUWE_WENS = ['zwemmen', 'souvenir'];
+function nieuweWensen(badBeurt) {
+  var uit = {};
+  if (state.dag % 2 === 0) return uit;                 /* de tobbe-dag */
+  var kan = NIEUWE_WENS.filter(function (t) { return wensMogelijk(t); });
+  if (!kan.length) return uit;
+  var kies = state.gasten.filter(function (g, i) {
+    return !!g.bed && !(badBeurt && i === 0);
+  });
+  if (!kies.length) return uit;
+  var hoeveel = state.gasten.length > 4 ? 2 : 1;
+  var beurt = (state.dag - 1) / 2;                     /* 1, 2, 3, ... */
+  var ring = Math.max(kies.length, 2);
+  for (var k = 0; k < hoeveel; k++) {
+    var c = beurt * hoeveel + k, i = c % ring;
+    if (i >= kies.length) continue;
+    var g = kies[i];
+    if (!uit[g.id]) uit[g.id] = kan[Math.floor(c / ring) % kan.length];
+  }
+  return uit;
+}
+
 function morgen() {
   var b = [];
   /* de avondronde is voorbij: de maan en de familie-wolkjes van gisteren
@@ -962,10 +1077,12 @@ function morgen() {
   });
   state.kar = null;
   var badBeurt = badMogelijk() && state.dag % 2 === 0;
+  var nieuw = nieuweWensen(badBeurt);
   state.gasten.forEach(function (g, i) {
     g.gegeten = false; g.blij = false;
     g.behoefte = g.bed ? 'eten' : 'kamer';
     if (g.bed && badBeurt && i === 0) g.behoefte = 'bad';
+    else if (g.bed && nieuw[g.id]) g.behoefte = nieuw[g.id];
     if (g.bed) {
       /* Opstaan doe je NAAST je bed, op de sta-plek. Zonder plek erbij zette
          World.zet het dier op een willekeurig dwaalvakje - dan stond het 's
@@ -1064,6 +1181,7 @@ function start() {
 return { start: start, render: render, naarKamer: naarKamer, bel: bel,
          prikbord: prikbord, avondronde: avondronde, morgen: morgen,
          brievenMuur: brievenMuur, plattegrond: plattegrond, badMogelijk: badMogelijk,
+         wensMogelijk: wensMogelijk, nieuweWensen: nieuweWensen,
          taakAf: taakAf, bouwTaken: bouwTaken, hotspots: hotspots, tikMand: tikMand,
          alleDieren: alleDieren, plekVanBehoefte: plekVanBehoefte,
          stuurNaarBehoefte: stuurNaarBehoefte, wachtIn: wachtIn,
