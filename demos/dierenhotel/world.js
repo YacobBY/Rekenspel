@@ -101,9 +101,13 @@ function Dier(a, i) {
   this.flikT = 0; this.flikPose = 'tril';
   this.route = null; this.eindDoel = null; this.bed = null;
   this.pluis = [];
+  this.hoogte = 0;          /* voxels boven de vloer (omhoog = +); lift = -hoogte * HG */
+  this.zwemT = 0;           /* eigen klok van de zwemhouding (deining, plonsjes) */
+  this.opdracht = null;     /* lopende belofte van loopNaar/stappen (zie OPDRACHTEN) */
 }
 
 Dier.prototype.zet = function (staat, duur, na) {
+  this.onderbreek(staat);
   this.staat = staat; this.t = 0; this.duur = duur || 0; this.na = na || null;
   if (staat !== 'loop') {
     this.v = 0;
@@ -111,6 +115,7 @@ Dier.prototype.zet = function (staat, duur, na) {
   }
 };
 Dier.prototype.ga = function (tx, tz, na) {
+  this.onderbreek('loop');
   this.tx = tx; this.tz = tz; this.na = na || 'stil';
   this.staat = 'loop'; this.t = 0;
   this.lift = 0;
@@ -158,14 +163,21 @@ function loopMaat(d) {
   var r = Rooms.get(d.kamer);
   return (r && r.loop) || 1;
 }
-Dier.prototype.rijd = function () {
+/* maat = tempo-factor van een opdracht (1 = de gewone loop van de motor),
+   verder = wat er NA dit punt nog te lopen is (doorglijden over de punten).
+   Tempo schaalt de hele beweging in de TIJD: snelheid maal tempo, versnelling
+   maal tempo^2 en een remweg in voxels die niet van het tempo afhangt. Dan
+   duurt tempo 2 precies de helft en tempo 0,5 precies het dubbele. Met
+   maat = 1 en verder = 0 rekent dit stuk exact zoals vroeger. */
+Dier.prototype.rijd = function (maat, verder) {
   var dx = this.tx - this.x, dz = this.tz - this.z;
   var d = Math.sqrt(dx * dx + dz * dz);
-  if (d < 0.02) { this.v = 0; return true; }
-  var vmax = this.vmax * loopMaat(this);
-  var acc = vmax / 5.5;
-  var rem = this.v * this.v / (2 * acc) + vmax * 0.4;
-  this.v += (d <= rem ? -acc * 1.5 : acc);
+  var m = maat > 0 ? maat : 1, na = verder > 0 ? verder : 0;
+  if (d < 0.02) { if (!na) this.v = 0; return true; }
+  var vmax = this.vmax * loopMaat(this) * m;
+  var acc = vmax / 5.5 * m;
+  var rem = this.v * this.v / (2 * acc) + vmax * 0.4 / m;
+  this.v += (d + na <= rem ? -acc * 1.5 : acc);
   if (this.v > vmax) this.v = vmax;
   if (this.v < vmax * 0.14) this.v = vmax * 0.14;
   var stap = Math.min(this.v, d);
@@ -287,6 +299,7 @@ Dier.prototype.tik = function () {
   this.pluisStap();
   var s;
 
+  if (this.opdracht || this.staat === 'zwem' || this.staat === 'spring') { this.opdrachtTik(); return; }
   if (this.staat === 'loop') {
     if (this.rijd()) this.aangekomen();
     return;
@@ -373,6 +386,7 @@ Dier.prototype.tik = function () {
 Dier.prototype.grofTik = function () {
   this.t++;
   if (this.pluis.length) this.pluis.length = 0;
+  if (this.opdracht || this.staat === 'zwem' || this.staat === 'spring') { this.opdrachtTik(); return; }
   if (this.staat === 'loop') {
     var dx = this.tx - this.x, dz = this.tz - this.z;
     var d = Math.sqrt(dx * dx + dz * dz);
@@ -403,6 +417,17 @@ Dier.prototype.inZijnBed = function () {
   return !!s && this.x === s.x && this.z === s.z;
 };
 Dier.prototype.stilzetten = function (pose) {
+  /* Een drijver blijft drijven: World.sync zet in rustmodus iedereen stil,
+     maar wie in het bad ligt hoort daar te blijven (net als een slaper in
+     zijn bed, hieronder). Wie het water uit moet, zet eerst lift op 0 - dat
+     doen ga, reis, stappen en pose - of vraagt een andere houding dan rust. */
+  if (this.staat === 'zwem' && this.lift > 0 && (!pose || pose === 'rust')) {
+    this.drijf(false);
+    this.pluis.length = 0; this.v = 0; this.px = this.x; this.pz = this.z;
+    vuil = true;
+    return;
+  }
+  this.onderbreek('stil');
   this.bob = 0; this.zij = 0; this.v = 0; this.pluis.length = 0;
   this.px = this.x; this.pz = this.z;
   /* Een slaper blijft slapen. In rustmodus zet elke World.sync (de bel, een
@@ -413,6 +438,256 @@ Dier.prototype.stilzetten = function (pose) {
   this.staat = 'stil'; this.pose = pose || 'rust';
   this.lift = 0;
   vuil = true;
+};
+
+/* =====================================================================
+   OPDRACHTEN MET EEN BELOFTE (P1c): loopNaar / stappen / pose
+
+   Een spel zegt "ga daarheen en zeg het als je er bent". Het dier krijgt
+   dan een opdracht: een rij punten in zijn eigen kamer, een houding
+   onderweg (lopen, zwem of spring), een tempo, en een perStap-haakje dat
+   bij elke landing afgaat. De belofte wordt true zodra het laatste punt
+   bereikt is en false zodra iets anders het dier overneemt (ga, zet, reis,
+   slaap, feest, solo, mood, een nieuwe opdracht, uitchecken of een
+   kamerwissel buitenom). Nooit een reject.
+
+   Hoogte: d.hoogte telt in VOXELS OMHOOG (springer > 0, zwemmer < 0);
+   d.lift is de tekenafstand in pixels OMLAAG, precies zoals bij het bed
+   (matras = -MATRAS * HG). Dus lift = -hoogte * HG: de motor tekent met
+   lift, de spellen en de tests lezen liever hoogte.
+   Tijd rekent in TIKKEN van de motor (STAP = 1/15 s, aan de klok en niet
+   aan de beeldjes), dus een sprong duurt op een trage telefoon net zo lang.
+===================================================================== */
+var POOT_HOOG = 7;                    /* art.js POOT: de pootjes zijn de onderste 7 lagen */
+var ZWEM_DIEP = POOT_HOOG;            /* zo diep zakt een zwemmer: pootjes onder water, buik erop */
+var SPRING_HOOG = { hond: 5, poes: 6, konijn: 7, gans: 4 };   /* top van de boog, in voxels */
+var SPRING_TIKKEN = 6;                /* tikken in de lucht per sprong (bij tempo 1) */
+var SQUASH = 3;                       /* tikken plat op de steen na de landing */
+var ZWEM_KL = ['#E6F5FF', '#FFFFFF', '#CFE9FF'];
+var OD_STAAT = ['stil', 'rust', 'zit', 'kijk', 'snuif', 'blij', 'wacht', 'sip', 'zwem', 'spring'];
+var OD_STIL = { zit: 'zit', kijk: 'kijk', snuif: 'snuif', blij: 'blijA', sip: 'zitsip', wacht: 'rust' };
+var OD_DUUR = { zit: 45, kijk: 30, snuif: 30, blij: 50 };
+
+/* Wie een nieuwe toestand krijgt, laat zijn opdracht vallen (belofte false)
+   en komt uit het water of uit de lucht met beide pootjes op de vloer.
+   Alleen wie in bed gaat houdt zijn hoogte: inBed zet die zelf op de matras. */
+Dier.prototype.onderbreek = function (staat) {
+  var mijn = this.staat === 'zwem' || this.staat === 'spring';
+  if (this.opdracht && !this.opdracht.zelf) { this.opdrachtStop(false); mijn = true; }
+  if (!mijn) return;
+  this.hoogte = 0; this.bob = 0;
+  if (staat !== 'slaap') this.lift = 0;
+};
+Dier.prototype.opdrachtStop = function (ok) {
+  var od = this.opdracht;
+  if (!od) return;
+  this.opdracht = null;
+  od.klaar(!!ok);
+};
+Dier.prototype.opdrachtStart = function (punten, o, klaar) {
+  o = o || {};
+  /* Een LEGE lijst is geen bevel: meteen true en het dier niet aanraken (dus
+     ook geen lopende opdracht, route, slaapDoel of hoogte weggooien - anders
+     zette stappen(id, []) een gast die naar zijn bed loopt stil). */
+  if (!punten.length) { klaar(true); return; }
+  this.opdrachtStop(false);                        /* de vorige belofte valt eerst */
+  this.route = null; this.eindDoel = null; this.slaapDoel = null;
+  this.lift = 0; this.hoogte = 0; this.bob = 0;
+  this.opdracht = { punten: punten, i: -1, kamer: this.kamer,
+                    pose: o.pose === 'zwem' || o.pose === 'spring' ? o.pose : null,
+                    tempo: o.tempo > 0 ? +o.tempo : 1, na: o.na || null,
+                    perStap: typeof o.perStap === 'function' ? o.perStap : null,
+                    klaar: klaar, wacht: 0, len: 1, zelf: false,
+                    rest: odRestLijst(punten) };
+  this.opdrachtVolgende();
+  vuil = true;
+};
+/* rest[i] = wat er NA punt i nog te lopen is, langs het pad. Eén keer per
+   opdracht gerekend (niet per tik): rijd remt daarmee alleen voor het
+   LAATSTE punt af, dus een rij punten is één doorlopende glijbeweging. */
+function odRestLijst(punten) {
+  var rest = [], i, s = 0, dx, dz;
+  rest[punten.length - 1] = 0;
+  for (i = punten.length - 1; i > 0; i--) {
+    dx = punten[i].x - punten[i - 1].x; dz = punten[i].z - punten[i - 1].z;
+    s += Math.sqrt(dx * dx + dz * dz);
+    rest[i - 1] = s;
+  }
+  return rest;
+}
+Dier.prototype.opdrachtVolgende = function () {
+  var od = this.opdracht, p = od.punten[++od.i];
+  od.len = Math.max(0.01, Math.sqrt((p.x - this.x) * (p.x - this.x) + (p.z - this.z) * (p.z - this.z)));
+  od.zelf = true; this.ga(p.x, p.z, 'opdracht'); od.zelf = false;   /* eigen ga: geen onderbreking */
+  if (od.pose === 'zwem') this.drijf(true);
+};
+/* Een sprong loopt met een VASTE snelheid (geen aanloop en geen remweg zoals
+   bij rijd), dan is de boog ook in de tijd een echte parabool. Een korte
+   sprong wordt over SPRING_TIKKEN tikken uitgesmeerd, anders zie je hem niet;
+   tempo maakt die tijd korter (2 = half) of langer (0,5 = dubbel). */
+function springTikken(od) { return Math.max(2, Math.round(SPRING_TIKKEN / od.tempo)); }
+Dier.prototype.vlieg = function (snel) {
+  var dx = this.tx - this.x, dz = this.tz - this.z;
+  var d = Math.sqrt(dx * dx + dz * dz);
+  if (d < 0.02) { this.v = 0; return true; }
+  var stap = Math.min(snel, d);
+  this.v = snel;
+  this.x += dx / d * stap; this.z += dz / d * stap;
+  this.face = (dx - dz) >= 0 ? 1 : -1;
+  return stap >= d - 0.02;
+};
+/* één tik van een lopende opdracht (of van een losse zwem/spring-houding) */
+Dier.prototype.opdrachtTik = function () {
+  this.px = this.x; this.pz = this.z;
+  var od = this.opdracht;
+  if (!od) { this.houdingTik(); return; }
+  if (od.kamer !== this.kamer) { this.opdrachtStop(false); return; }   /* kamer verlaten */
+  if (od.wacht > 0) {                              /* even plat op de steen */
+    od.wacht--;
+    this.pose = 'blijB'; this.bob = 1; this.zij = 0; this.v = 0;
+    if (od.wacht === 0) this.opdrachtVerder();
+    return;
+  }
+  var f, dx, dz;
+  if (od.pose === 'spring') {
+    var er = this.vlieg(Math.max(0.05, Math.min(this.vmax * loopMaat(this) * od.tempo,
+                                                od.len / springTikken(od))));
+    dx = this.tx - this.x; dz = this.tz - this.z;
+    f = 1 - Math.sqrt(dx * dx + dz * dz) / od.len;
+    this.springHouding(f < 0 ? 0 : f > 1 ? 1 : f);
+    if (er) this.opdrachtLanding();                /* springen = stop en squash per steen */
+    return;
+  }
+  this.glijTik(od);
+};
+/* LOPEN EN ZWEMMEN: één doorlopende glijbeweging over alle punten. De
+   snelheid gaat over de punten heen mee (geen stop per punt) en wat er van
+   de stap van deze tik overblijft als het dier een punt raakt, loopt door
+   naar het volgende punt. Zo kost een baantje van 43 punten precies zo lang
+   als één rechte lijn van dezelfde lengte, en gaat perStap nog steeds
+   precies één keer per punt af, op volgorde. */
+Dier.prototype.glijTik = function (od) {
+  var d0 = Math.sqrt((this.tx - this.x) * (this.tx - this.x) + (this.tz - this.z) * (this.tz - this.z));
+  var over, dx, dz, d, stap;
+  if (!this.rijd(od.tempo, od.rest[od.i])) {       /* nog onderweg naar dit punt */
+    if (od.pose === 'zwem') this.drijf(true);      /* het zwemlijf over de loopdeining heen */
+    return;
+  }
+  over = this.v - d0;                              /* rest van de stap van deze tik */
+  while (true) {
+    this.opdrachtLanding();
+    if (this.opdracht !== od || od.wacht > 0) return;   /* klaar, ingehaald of even wachten */
+    dx = this.tx - this.x; dz = this.tz - this.z;
+    d = Math.sqrt(dx * dx + dz * dz);
+    if (d < 0.02) continue;                        /* twee keer hetzelfde punt */
+    if (over < 0.02) return;
+    stap = Math.min(over, d);
+    this.x += dx / d * stap; this.z += dz / d * stap;
+    this.gang += stap * this.stapLengte;
+    this.face = (dx - dz) >= 0 ? 1 : -1;
+    over -= stap;
+    if (stap < d - 0.02) return;                   /* volgend punt komt volgende tik */
+  }
+};
+Dier.prototype.opdrachtLanding = function () {
+  var od = this.opdracht, p = od.punten[od.i];
+  var glij = od.pose !== 'spring' && od.i < od.punten.length - 1;   /* doorglijden */
+  this.x = p.x; this.z = p.z;
+  if (!glij) { this.v = 0; this.bob = 0; this.zij = 0; }
+  if (od.pose === 'zwem') this.drijf(glij);         /* blijft drijven tussen twee slagen */
+  else {
+    this.hoogte = 0; this.lift = 0;
+    if (od.pose === 'spring') { this.pose = 'blijB'; this.bob = 1; }
+  }
+  vuil = true;
+  if (od.perStap) {
+    try { od.perStap(od.i, p); }
+    catch (e) { if (window.console) console.error('perStap', e); }
+  }
+  if (this.opdracht !== od) return;                /* perStap nam het dier over */
+  od.wacht = od.pose === 'spring' ? Math.max(1, Math.round(SQUASH / od.tempo)) : 0;
+  if (!od.wacht) this.opdrachtVerder();
+};
+Dier.prototype.opdrachtVerder = function () {
+  var od = this.opdracht;
+  if (od.i >= od.punten.length - 1) this.opdrachtKlaar();
+  else this.opdrachtVolgende();
+};
+Dier.prototype.opdrachtKlaar = function () {
+  var od = this.opdracht;
+  this.opdracht = null;
+  this.hoogte = 0; this.lift = 0; this.bob = 0; this.v = 0;
+  this.eindHouding(od.na || (od.pose === 'zwem' ? 'zwem' : 'wacht'));
+  od.klaar(true);
+  vuil = true;
+};
+/* na het laatste punt: blijven drijven, blijven hupsen, of gewoon aankomen */
+Dier.prototype.eindHouding = function (na) {
+  if (na === 'zwem' || na === 'spring') { this.zet(na, 0); this.houdingTik(); return; }
+  if (na === 'zit' || na === 'kijk') { this.zet(na, OD_DUUR[na]); return; }
+  this.na = na;
+  this.aangekomen();
+};
+
+/* ---------- de twee nieuwe houdingen (combinaties van bestaande frames) ---------- */
+/* zwem: de buik op de waterlijn en de pootjes eronder (de badvloer ligt lager,
+   dus het water verbergt ze), zachte deining, peddelen met de pootjes en
+   onderweg een paar lichte plonsjes bij de voorpootjes. */
+Dier.prototype.drijf = function (beweegt) {
+  var t = ++this.zwemT;                            /* eigen klok: loopt door over de punten heen */
+  var s = Math.sin(t * 0.42 + this.fase);
+  this.hoogte = -ZWEM_DIEP; this.lift = ZWEM_DIEP * HG;
+  this.bob = s * 0.9;
+  this.zij = Math.sin(t * 0.21 + this.fase) * 0.6;
+  this.pose = beweegt ? (s > 0 ? 'loopA' : 'loopB') : (t % 40 < 20 ? 'loopA' : 'rust');
+  if (beweegt) { if (t % 5 === 0) this.plons(1 + (t % 10 === 0 ? 1 : 0), true); }
+  else if (t % 30 === 0) this.plons(1, false);
+};
+/* Zwemt dit dier NU, en zo ja: zit het in het water van deze kamer? Alleen
+   dan legt het tekenwerk een waterband over zijn onderste helft (tekenWater).
+   Een kamer met een bad (rooms.js, veld bad) weet precies waar het water
+   ligt, dus een dier dat op het dek in de zwemhouding staat krijgt geen
+   band; in een kamer zonder bad (de tobbe in de tuin, een testkamer) hoort
+   de houding zelf het water te maken. */
+Dier.prototype.inWater = function () {
+  if (this.hoogte >= 0) return false;
+  if (this.staat !== 'zwem' && !(this.opdracht && this.opdracht.pose === 'zwem')) return false;
+  var r = Rooms.get(this.kamer), b = r && r.bad;
+  if (!b) return true;
+  return this.x >= b.x0 && this.x < b.x1 && this.z >= b.z0 && this.z < b.z1;
+};
+/* plonsjes (spat) of een rimpel (geen spat), in de kleur van het water */
+Dier.prototype.plons = function (n, spat) {
+  if (rustModus) return;                           /* rustmodus: geen deeltjes */
+  if (this.kamer !== kamerNu) return;              /* buiten beeld: grofTik veegt ze toch weg */
+  var i, vx = this.face * 4;
+  for (i = 0; i < n; i++) {
+    this.pluis.push({
+      x: this.x + vx + (this.rnd() - 0.5) * 3, z: this.z + (this.rnd() - 0.5) * 6,
+      y: spat ? 0.5 : 0,
+      vx: (this.rnd() - 0.5) * 0.5, vy: spat ? 0.45 + this.rnd() * 0.4 : 0,
+      g: spat ? 0.09 : 0, t: spat ? 9 : 12,
+      c: ZWEM_KL[Math.floor(this.rnd() * ZWEM_KL.length)], s: spat ? 1.1 : 1.5
+    });
+  }
+};
+/* spring: een boogje tussen twee punten; f = hoever de sprong is (0..1) */
+Dier.prototype.springHouding = function (f) {
+  var h = (SPRING_HOOG[this.kind] || 5) * 4 * f * (1 - f);
+  this.hoogte = h; this.lift = -h * HG;
+  this.bob = 0; this.zij = 0;
+  this.pose = f < 0.25 ? 'loopA' : f < 0.75 ? 'blijA' : 'loopB';
+};
+/* zwem/spring als LOSSE houding (World.pose): drijven, of ter plekke hupsen,
+   tot de duur om is (dan blijft het dier staan) of tot het volgende bevel */
+Dier.prototype.houdingTik = function () {
+  if (this.staat === 'zwem') this.drijf(false);
+  else if (this.staat === 'spring') {
+    var f = (this.t % (SPRING_TIKKEN + SQUASH)) / SPRING_TIKKEN;
+    if (f < 1) this.springHouding(f);
+    else { this.hoogte = 0; this.lift = 0; this.pose = 'blijB'; this.bob = 1; }
+  }
+  if (this.duur && this.t >= this.duur) { this.zet('wacht', 0); this.face = 1; }
 };
 
 /* =====================================================================
@@ -763,6 +1038,72 @@ function tekenZzz(d, x, z) {
   }
   ctx.restore();
 }
+/* WATER OVER EEN ZWEMMER (P1c-F1). Het badwater is in de VLOERPLAAT gebakken
+   en ligt dus ONDER het dier: een zwemmer leek daardoor te waden. Daarom
+   komt er na het dier een doorschijnende band water over zijn onderste deel
+   (ongeveer 40% van het plaatje): de buik op de waterlijn, de pootjes
+   eronder in het water.
+   De waterlijn is de vloer onder het dier (schermY): het dier zakt precies
+   ZWEM_DIEP voxels, dus zijn buik ligt er altijd op. De band deint NIET mee -
+   het water blijft liggen, het dier deint erin - en wordt afgesneden op het
+   plaatje van het dier zelf, dus er ligt nooit een plas naast hem: over het
+   badwater heen zou een tweede laag water alleen maar een vlek geven.
+   De snijlijn met het water is een ellips (het oppervlak in vogelvlucht: aan
+   de achterkant van het dier ligt de lijn hoger op het scherm dan aan de
+   voorkant), daaronder alles blauw. Het water komt ALLEEN op de voxels van
+   het dier zelf ('source-atop' op een hulpdoek), dus er ligt nooit een vlek
+   water naast hem op de badrand of op de tegels. Kleur = het badwater van
+   rooms.js (BADWATER[0]). Het hulpdoek wordt één keer gemaakt en daarna
+   hergebruikt: geen nieuw canvas of object per beeldje. De rimpels en
+   plonsjes komen er daarna nog bovenop (tekenPluis). */
+var WATER_KL = '#9CD1E4', WATER_A = 0.75;
+var waterCv = null, waterCx = null;
+function waterDoek(w, h) {
+  if (!waterCv) { waterCv = document.createElement('canvas'); waterCx = waterCv.getContext('2d'); }
+  if (waterCv.width < w || waterCv.height < h) {        /* alleen groeien, nooit per beeldje */
+    waterCv.width = Math.max(w, waterCv.width);
+    waterCv.height = Math.max(h, waterCv.height);
+  }
+  return waterCx;
+}
+function tekenWater(d, x, z, p, ox, oy) {
+  var w = p.cv.width, h = p.cv.height;
+  if (w < 2 || h < 2) return;
+  var top = schermY(x, z) - (camY + oy + p.dy);         /* de waterlijn IN het plaatje */
+  if (top >= h) return;                                 /* alles al onder water */
+  if (top < 0) top = 0;
+  var cx = w / 2, rx = w / 2, ry = Math.max(2, Math.min(rx * 0.42, 5 * g));
+  var c = waterDoek(w, h);
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.globalCompositeOperation = 'source-over';
+  c.globalAlpha = 1;
+  c.clearRect(0, 0, w, h);
+  c.drawImage(p.cv, 0, 0);
+  c.globalCompositeOperation = 'source-atop';           /* alleen op het dier zelf */
+  c.globalAlpha = WATER_A;
+  c.fillStyle = WATER_KL;
+  c.beginPath();
+  c.moveTo(cx + rx, top);
+  c.ellipse(cx, top, rx, ry, 0, 0, 6.2832);             /* de snijlijn met het water */
+  c.rect(0, top, w, h - top);                           /* alles onder de waterlijn */
+  c.fill();
+  /* Alleen het stuk vanaf de bovenkant van de ellips terugtekenen: hoger op
+     het dier blijft precies staan wat de motor net getekend heeft (een tweede
+     keer tekenen maakt de zachte randpuntjes van het plaatje donkerder). */
+  var ty = Math.round(top - ry), hy, mx;
+  if (ty < 0) ty = 0;
+  hy = h - ty;
+  if (hy < 1) return;
+  if (d.face < 0) {
+    mx = schermX(x, z) + d.zij * g;
+    ctx.save();
+    ctx.translate(mx, 0); ctx.scale(-1, 1);
+    ctx.drawImage(waterCv, 0, ty, w, hy, Math.round(camX + ox + p.dx - mx),
+                  Math.round(camY + oy + p.dy) + ty, w, hy);
+    ctx.restore();
+  } else ctx.drawImage(waterCv, 0, ty, w, hy, Math.round(camX + ox + p.dx),
+                       Math.round(camY + oy + p.dy) + ty, w, hy);
+}
 function tekenDier(d, mengen) {
   var x = d.px + (d.x - d.px) * mengen, z = d.pz + (d.z - d.pz) * mengen;
   var a = K.dierAnker;
@@ -771,6 +1112,7 @@ function tekenDier(d, mengen) {
   var p = K.dier(d.kind, d.pose, g);
   if (d.face < 0) putSpiegel(p, camX + ox, camY + oy, schermX(x, z) + d.zij * g);
   else put(p, camX + ox, camY + oy);
+  if (d.inWater()) tekenWater(d, x, z, p, ox, oy);
   if (d.staat === 'slaap') tekenZzz(d, x, z);
 }
 function tekenPluis(d) {
@@ -1296,6 +1638,7 @@ function sync(lijstGasten) {
     d.blijStijl = stijlVan(i);
     nieuw.push(d);
   }
+  for (i = 0; i < oud.length; i++) if (nieuw.indexOf(oud[i]) < 0) oud[i].opdrachtStop(false);
   for (i = 0; i < oud.length; i++)
     if (nieuw.indexOf(oud[i]) < 0 && oud[i].tag && oud[i].tag.parentNode)
       oud[i].tag.parentNode.removeChild(oud[i].tag);
@@ -1334,6 +1677,10 @@ function reisNaar(id, kamerId, doel) {
   var d = vind(id);
   if (!d) return [];
   var p = Rooms.pad(d.kamer, kamerId);
+  /* Geen pad (dezelfde kamer, of een kamer die niet bestaat)? Dan is dit geen
+     bevel: laat een zwemmer of een lopende opdracht met rust, anders stond
+     zijn lift één tik op 0 en wipte hij een beeldje uit het water (P1c-F1). */
+  if (!p.length && (d.opdracht || d.staat === 'zwem')) return [];
   d.lift = 0; d.slaapDoel = null;
   if (!p.length) return [];
   d.route = p.slice(1);
@@ -1460,6 +1807,89 @@ function solo(id, act) {
   d.ga(p[0], p[1], 'blij');
   vuil = true;
 }
+
+/* ---------- P1c: bewegen met een belofte (zie OPDRACHTEN bij Dier) ----------
+   loopNaar(id, x, z, o) en stappen(id, punten, o) met o = {pose, tempo,
+   perStap, na} geven een Promise<boolean>: true als het dier het laatste punt
+   heeft gehaald, false zodra een ander bevel het dier overneemt (nooit een
+   reject). pose(id, naam, duur) zet één houding.
+   In rustmodus beweegt er niets: het dier gaat langs de punten (perStap per
+   punt, op volgorde), staat op het laatste en de belofte is meteen true. */
+function odPunt(p) {
+  var q = Array.isArray(p) ? { x: +p[0], z: +p[1] } : { x: +(p || {}).x, z: +(p || {}).z };
+  return isFinite(q.x) && isFinite(q.z) ? q : null;
+}
+function odLijst(punten) {
+  var lijst = [], i, q;
+  for (i = 0; i < (punten || []).length; i++) { q = odPunt(punten[i]); if (q) lijst.push(q); }
+  return lijst;
+}
+/* rustmodus: geen loopjes en geen deeltjes, wel dezelfde haakjes en hetzelfde
+   eindresultaat als een echte opdracht */
+function odRust(d, lijst, o, klaar) {
+  var i, p, haak = typeof o.perStap === 'function' ? o.perStap : null;
+  d.opdrachtStop(false);
+  d.route = null; d.eindDoel = null; d.slaapDoel = null;
+  d.lift = 0; d.hoogte = 0;                        /* uit het water, uit de lucht */
+  d.pluis.length = 0;
+  if (!lijst.length) { klaar(true); return; }
+  for (i = 0; i < lijst.length; i++) {
+    p = lijst[i];
+    d.face = (p.x - d.x) - (p.z - d.z) >= 0 ? 1 : -1;
+    d.x = p.x; d.z = p.z; d.px = d.x; d.pz = d.z;
+    d.tx = d.x; d.tz = d.z;                        /* geen loopdoel laten hangen */
+    if (haak) { try { haak(i, p); } catch (e) { if (window.console) console.error('perStap', e); } }
+  }
+  var na = o.na || (o.pose === 'zwem' ? 'zwem' : 'wacht');
+  if (na === 'zwem' || na === 'spring') { d.zet(na, 0); d.houdingTik(); }
+  else d.stilzetten(OD_STIL[na] || 'rust');
+  vuil = true;
+  klaar(true);
+}
+function stappen(id, punten, o) {
+  o = o || {};
+  var d = vind(id), lijst = odLijst(punten);
+  return new Promise(function (klaar) {
+    try {
+      if (!d) { klaar(false); return; }            /* onbekend dier: meteen false */
+      if (!lijst.length) { klaar(true); return; }  /* geen punten = geen bevel: niets afbreken */
+      if (rustModus) odRust(d, lijst, o, klaar);
+      else d.opdrachtStart(lijst, o, klaar);
+    } catch (e) {
+      if (window.console) console.error('stappen', e);
+      klaar(false);
+    }
+  });
+}
+function loopNaar(id, x, z, o) { return stappen(id, [{ x: x, z: z }], o); }
+/* Een houding zetten: een dun laagje over zet() voor de toestanden die de
+   motor al kent (stil/rust, zit, kijk, snuif, blij, wacht, sip) plus de
+   nieuwe zwem en spring. duur in tikken (15 per seconde); 0 betekent voor
+   zwem, spring, wacht en sip: tot het volgende bevel. */
+function poseZet(id, naam, duur) {
+  var d = vind(id);
+  if (!d) return false;
+  naam = naam === 'rust' ? 'stil' : (naam || 'stil');
+  if (OD_STAAT.indexOf(naam) < 0) return false;    /* onbekende houding: niets veranderen */
+  d.route = null; d.eindDoel = null; d.slaapDoel = null;
+  d.lift = 0; d.hoogte = 0;
+  duur = duur > 0 ? Math.round(duur) : (OD_DUUR[naam] || 0);
+  if (naam === 'zwem' || naam === 'spring') { d.zet(naam, duur); d.houdingTik(); }
+  else if (rustModus) d.stilzetten(OD_STIL[naam] || 'rust');
+  else if (naam === 'stil') d.zet('stil', duur || 10);
+  else { d.zet(naam, duur); if (naam === 'sip' || naam === 'wacht') d.face = 1; }
+  vuil = true;
+  return true;
+}
+/* Voor de spellen: registry.js (ctxVoor) laat elke uitbreiding uit deze lijst
+   één keer per spel over de ctx lopen, dus registry.js hoeft niet mee te
+   veranderen. Dezelfde drie staan ook op World zelf (zie api, onderaan). */
+(window.CTX_UITBREIDINGEN = window.CTX_UITBREIDINGEN || []).push(function (c) {
+  if (!c || !c.wereld) return;
+  c.wereld.loopNaar = loopNaar;
+  c.wereld.stappen = stappen;
+  c.wereld.pose = poseZet;
+});
 
 function naar(kamerId, meteen) {
   var r = Rooms.get(kamerId);
@@ -1641,6 +2071,9 @@ api.decor = decorZet;
 api.decorWeg = decorWeg;
 api.decorLijst = decorLijst;
 api.decorWisEigenaar = decorWisEigenaar;
+
+/* P1c: bewegen met een belofte, ook rechtstreeks via World (zie stappen) */
+api.loopNaar = loopNaar; api.stappen = stappen; api.pose = poseZet;
 
 begin();
 if (!aan) {
