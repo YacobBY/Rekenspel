@@ -111,6 +111,9 @@ function plekVanBehoefte(g) {
        geen weg naartoe loopt) wacht het dier gewoon in de tuin. */
     var zb = Rooms.get('zwembad');
     if (!zb || !(Rooms.pad(g.kamer, 'zwembad') || []).length) return tuinPlek(58, 106);
+    if (zb.dek && zb.dek.start)          /* het dek VÓÓR de waterlijn (P1a-F1) */
+      return { kamer: 'zwembad', x: klem(zb.dek.start.x, 4, zb.w - 4),
+               z: klem(zb.dek.start.z, 4, zb.d - 4) };
     if (zb.bad && zb.bad.x0 !== undefined)
       return { kamer: 'zwembad', x: klem(zb.bad.x0 - 6, 4, zb.w - 4),
                z: klem((zb.bad.z0 + zb.bad.z1) / 2, 4, zb.d - 4) };
@@ -608,7 +611,14 @@ function tikBak(kamerId, slotId) {
   if (niv > 0) {
     var eters = gasten.map(function (g) { return g.id; });
     if (eters.length) {
-      gasten.forEach(function (g) { g.gegeten = true; g.behoefte = 'spelen'; });
+      /* Voeren lost ALLEEN de eet-wens in. Een gast die op een 🛁, 🏊 of 🎁
+         wacht heeft straks ook gegeten, maar houdt zijn eigen wens: die kreeg
+         hij omdat er echt een spel voor is (wensMogelijk), en het kind hoort
+         hem niet kwijt te raken door eerst het bakje te vullen. */
+      gasten.forEach(function (g) {
+        g.gegeten = true;
+        if (!g.behoefte || g.behoefte === 'eten') g.behoefte = 'spelen';
+      });
       Art.feast(eters);
       toast('Smakelijk eten! 😋', 'happy');
       Econ.sterren(1, 'voeren');

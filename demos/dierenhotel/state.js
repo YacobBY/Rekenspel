@@ -644,11 +644,17 @@ function naarV7(s) {
   s.v = OPSLAG_V;
   return s;
 }
+/* De migratie en de standaardwaarden horen MEE in de try. Een oude of met de
+   hand aangepaste blob kan velden hebben waar vulAan of naarV7 op stuk loopt
+   (gasten die geen lijst zijn, meubels zonder kamer); dat hoort net zo te
+   eindigen als kapotte JSON: geen save, maar wel een startscherm. */
 function leesSpel() {
-  var s = leesLaag(OPSLAG_SLEUTEL, OPSLAG_V);
-  if (s) return vulAan(s);
-  s = leesLaag(OPSLAG_V6, 6);
-  return s ? vulAan(naarV7(s)) : null;
+  try {
+    var s = leesLaag(OPSLAG_SLEUTEL, OPSLAG_V);
+    if (s) return vulAan(s);
+    s = leesLaag(OPSLAG_V6, 6);
+    return s ? vulAan(naarV7(s)) : null;
+  } catch (e) { return null; }
 }
 
 /* de oude Kwispelsteeg-opvang (v5) mag mee naar het hotel:
