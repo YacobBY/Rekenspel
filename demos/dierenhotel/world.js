@@ -1216,7 +1216,9 @@ function bouwBakken() {
 var RUST = {
   kar: { keuken: Rooms.plek('keuken', 0.4, 0.579), gang: { x: 60, z: 20 },
          kamer1: Rooms.plek('kamer1', 0.579, 0.579), kamer2: Rooms.plek('kamer2', 0.579, 0.579),
-         receptie: Rooms.plek('receptie', 0.7, 0.3) }
+         receptie: Rooms.plek('receptie', 0.7, 0.3),
+         /* zwembad: midden op het dek vóór het water; wasserij: midden */
+         zwembad: Rooms.plek('zwembad', 0.5, 0.8), wasserij: Rooms.plek('wasserij', 0.45, 0.6) }
 };
 
 /* losse voorwerpen (de voerkar) uit het decor lichten: die kunnen reizen */

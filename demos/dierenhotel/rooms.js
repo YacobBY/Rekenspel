@@ -347,6 +347,8 @@ function model(naam, params) {
      kamer2    114 x 114   58   476 x 366
      keuken    120 x 114   56   488 x 368
      tuin      130 x 130    0   360 x 290  (vast kader, het erf loopt door)
+     zwembad   144 x  88   50   484 x 354  (golf 3: bad in de vloer, lang langs x)
+     wasserij  100 x  90   52   400 x 316  (golf 3: naast de keuken)
 
    De doos is [-d*S-10, w*S+10, -wand*HG-12, (w+d)*S/2+10] (zie kader()).
    De wandhoogtes zijn niet veranderd; door de diepere vloer zijn de dozen van
@@ -451,7 +453,8 @@ var RUIMTES = [
     wand: 56, vloer: 'tegel', loop: 1.5,
     deuren: [
       { naar: 'gang', wand: 'x', at: 75, breed: 12 },
-      { naar: 'tuin', wand: 'z', at: 90, breed: 12 }
+      { naar: 'tuin', wand: 'z', at: 90, breed: 12 },
+      { naar: 'wasserij', wand: 'x', at: 30, breed: 12 }
     ],
     decor: [
       { n: 'kast', x: 33, z: 6 },
@@ -465,13 +468,79 @@ var RUIMTES = [
     id: 'tuin', naam: 'Tuin', icoon: '🌳', w: 130, d: 130,
     wand: 0, vloer: 'gras', erf: 1,
     kader: [-170, 190, -70, 220],
-    deuren: [{ naar: 'keuken', wand: 'x', at: 34, breed: 12, poort: 1 }],
+    /* De doorgang naar het zwembad is een opening in het achterhek (z = 10,
+       x 38..50; bouwTuin laat daar het hekpaaltje weg). Een gedraaid
+       poortje (poortz) is er nog niet: dat is een model voor de modelhaak. */
+    deuren: [
+      { naar: 'keuken', wand: 'x', at: 34, breed: 12, poort: 1 },
+      { naar: 'zwembad', wand: 'z', at: 38, breed: 12, poort: 1 }
+    ],
+    /* GERESERVEERDE VLOERZONES (golf 3, alleen data - de spellen zetten er
+       zelf hun stenen en hun kraam neer; bouwTuin houdt ze vrij van pollen).
+       Zichtbaar in het vaste kader is x - z in -85..95 en x + z <= 220.
+       Beide zones liggen daarbinnen, los van elkaar (hinkel x <= 100 < 104
+       kraam) en vrij van de vaste inrichting: hok (x 56..78, z 9..31),
+       kist (x 89..101, z 17..29), bal (120,76: z >= 72), boom (x <= 25,
+       z 59..77), tobbe (32,94) en de twee doorgangen ((8,40) en (44,8)).
+         hinkel  x 24..100, z 34..50 : strook langs de achterrand, vlak vóór
+                 het hok; 76 voxels lang = plaats voor 11+ stapstenen langs x.
+         kraam   x 104..126, z 36..68 : langs de rechter zijrand; een kraam
+                 met de lange kant langs z (10 x 30) plus een gast ervoor. */
+    zones: { hinkel: { x0: 24, x1: 100, z0: 34, z1: 50 },
+             kraam: { x0: 104, x1: 126, z0: 36, z1: 68 } },
     decor: [
       { n: 'boom', x: 16, z: 68 }, { n: 'hok', x: 67, z: 19 },
       { n: 'tobbe', x: 32, z: 94 }, { n: 'bal', x: 120, z: 76 },
       { n: 'kist', x: 95, z: 23 }, { n: 'poort', x: 10, z: 40, ver: 1 }
     ],
     slots: [{ id: 'tobbe', soort: 'vrij', x: 32, z: 94 }]
+  },
+  {
+    /* Het zwembad (golf 3, G1): een langwerpig bad IN de vloer, lang langs x,
+       tegen de achterwand (z = 0). Het water is een vloerregel (vloerKleur),
+       geen model: x 18..134 (116 voxels = 81% van de breedte), z 12..44, met
+       een lichte stenen rand van 4 voxels eromheen (x 14..138, z 8..48).
+       Het instapmatje ligt op de startrand (x < 14, in de zwembaan z = 28);
+       een baan van L meter ligt lineair op x = 18 + 116 * p / L.
+       De dieren lopen in rechte lijnen (world.js rijd), dus het dwaalraster
+       ligt ALLEEN in de strook vóór het water (z >= 50, zie bouwAf): tussen
+       twee dwaalplekken kruist een gast dan nooit het bad. De deur naar de
+       tuin zit daarom ook in die strook: in de linkerwand (x = 0), z 60..72. */
+    id: 'zwembad', naam: 'Zwembad', icoon: '🏊', w: 144, d: 88,
+    wand: 50, vloer: 'tegel', loop: 1.5,
+    bad: { x0: 18, x1: 134, z0: 12, z1: 44 },
+    /* WACHTPLEKKEN OP HET DEK (staan, niet zwemmen). Een gast die naar het
+       zwembad gaat, wacht op dek.start (bij de startrand) of dek.over (bij de
+       overkant). Beide liggen op het dek VÓÓR het water: 12 voxels van de
+       waterlijn (z = 44) en 12 van de vloerrand, dus een gast van ~17 voxels
+       breed staat er heel op de tegels. Ze liggen ook in dezelfde convexe
+       strook als de dwaalplekken en de deur, zodat elke rechte wandeling van
+       een dek-plek naar een dwaalplek of naar de deur buiten het bad blijft
+       (p1a.js toetst dat paarsgewijs én met een echte dwalende gast).
+       Het water zelf is er alleen voor een spel dat het dier zélf stuurt
+       (zwembaan z = 28); zet nooit een sta- of dwaalplek in het bad. */
+    dek: { start: { x: 12, z: 56 }, over: { x: 132, z: 56 } },
+    deuren: [{ naar: 'tuin', wand: 'x', at: 60, breed: 12 }],
+    decor: [
+      { n: 'mat', x: 9, z: 28 },                   /* de startvlonder op het dek */
+      { n: 'plant', x: 136, z: 80 }
+    ],
+    slots: []
+  },
+  {
+    /* De wasserij (golf 3, G4 Wasmandtoren): naast de keuken (deur in de
+       linkerwand van de keuken, z 30..42; hier in de achterwand, x 62..74).
+       Kast tegen de achterwand als wasrek, een tobbe als wastobbe (geen
+       'mand': daar hangt het hotel de speelmand-knop aan); de berg wasgoed
+       en de kratten komen uit het spel zelf. */
+    id: 'wasserij', naam: 'Wasserij', icoon: '🧺', w: 100, d: 90,
+    wand: 52, vloer: 'tegel', loop: 1.25,
+    deuren: [{ naar: 'keuken', wand: 'z', at: 62, breed: 12 }],
+    decor: [
+      { n: 'kast', x: 28, z: 6 },
+      { n: 'tobbe', x: 80, z: 74 }
+    ],
+    slots: []
   }
 ];
 
@@ -482,14 +551,19 @@ var HEK_X = 10, HEK_Z = 10;
   for (i = 0; i < RUIMTES.length; i++) if (RUIMTES[i].id === 'tuin') t = RUIMTES[i];
   if (!t) return;
   var groot = [[16, 68], [67, 19], [32, 94], [120, 76], [95, 23]];
+  /* gaten in het hek: het poortje naar de keuken (z 34..46) en de doorgang
+     naar het zwembad (x 38..50) */
   for (i = HEK_Z; i <= 130; i += 14) if (i < 34 || i > 46) t.decor.push({ n: 'hekz', x: HEK_X, z: i, ver: 1 });
-  for (i = HEK_X + 14; i <= 130; i += 14) t.decor.push({ n: 'hekx', x: i, z: HEK_Z, ver: 1 });
-  var r = prng(90210);
+  for (i = HEK_X + 14; i <= 130; i += 14) if (i < 38 || i > 50) t.decor.push({ n: 'hekx', x: i, z: HEK_Z, ver: 1 });
+  var r = prng(90210), zn = t.zones || {}, k;
   for (i = 0; i < 30; i++) {
     var u = Math.round(r() * 300 - 150), w = 24 + Math.round(r() * 220);
     var px = (u + w) / 2, pz = (w - u) / 2, vrij = px > HEK_X + 2 && pz > HEK_Z + 2;
     for (j = 0; j < groot.length && vrij; j++)
       if (Math.abs(px - groot[j][0]) + Math.abs(pz - groot[j][1]) < 22) vrij = false;
+    /* de gereserveerde zones blijven kaal: daar komen stenen en een kraam */
+    for (k in zn) if (vrij && px > zn[k].x0 - 4 && px < zn[k].x1 + 4 &&
+                      pz > zn[k].z0 - 4 && pz < zn[k].z1 + 4) vrij = false;
     if (vrij) t.decor.push({ n: 'pol' + (i % 5), x: px, z: pz });
   }
 })();
@@ -567,6 +641,14 @@ function bouwAf(r) {
         if (Math.abs(r.slots[i].x - x) + Math.abs(r.slots[i].z - z) < 18) ok = false;
       for (i = 0; i < r.deurPunten.length && ok; i++)
         if (Math.abs(r.deurPunten[i].ix - x) + Math.abs(r.deurPunten[i].iz - z) < 14) ok = false;
+      /* Een zwembad: geen vakje in het water, en ook niet op het dek erachter
+         of ernaast. De dieren lopen in rechte lijnen, dus alles waar een gast
+         uit zichzelf staat of naartoe loopt, ligt in de strook VÓÓR het water
+         (z > z1 + 5): de dwaalplekken, de deur (8, 66) én de wachtplekken
+         r.dek (z = 56). Die strook is convex, dus geen enkele wandeling
+         tussen die punten kruist het bad. Wie een dier op het instapmatje of
+         in het water wil hebben, zet het er zelf neer (World.zet/ga). */
+      if (ok && r.bad && z < r.bad.z1 + 6) ok = false;
       if (ok) vrij.push({ id: 'v' + x + '_' + z, soort: 'vrij', x: x, z: z });
     }
   }
@@ -789,6 +871,9 @@ var ZACHT = ['#E6D3B8', '#DFC9AC'];
 var LOPER = ['#E9DCC6', '#E2D3BA'], LOPER_M = ['#D68FA0', '#CE8496'];
 var GRAS = ['#AFD595', '#AAD190', '#B4D89A', '#ACD392'];
 var WEI = ['#9DC486', '#98C081'];
+/* het zwembad: water, een donkerder waterrand en een bijna witte steenrand */
+var BADWATER = ['#9CD1E4', '#A9D8E6', '#93CBE0', '#A2D4E5'];
+var BADKANT = ['#5AA3C2', '#66ABC8'], BADRAND = ['#FFFDF3', '#FCF8EA'];
 
 function hash2(x, z) {
   return (Math.imul(x * 73856093 ^ z * 19349663, 2654435761) >>> 24);
@@ -804,6 +889,16 @@ function vloerKleur(r, x, z) {
   if (r.vloer === 'gras') {
     if (x < HEK_X || z < HEK_Z) return WEI[k & 1];
     return GRAS[k & 3];
+  }
+  if (r.bad) {
+    /* het zwembad: water in de vloer, de buitenste 4 voxels van het water
+       donkerder en de steenrand eromheen bijna wit - zo zie je ook met zes
+       jaar in één oogopslag waar de tegels ophouden en het water begint */
+    var b = r.bad;
+    if (x >= b.x0 && x < b.x1 && z >= b.z0 && z < b.z1)
+      return (x < b.x0 + 4 || x >= b.x1 - 4 || z < b.z0 + 4 || z >= b.z1 - 4)
+        ? BADKANT[k & 1] : BADWATER[k & 3];
+    if (x >= b.x0 - 4 && x < b.x1 + 4 && z >= b.z0 - 4 && z < b.z1 + 4) return BADRAND[((x >> 2) + (z >> 2)) & 1];
   }
   if (r.vloer === 'tegel') return TEGEL[((x >> 2) + (z >> 2)) & 1];
   if (r.vloer === 'loper') {
