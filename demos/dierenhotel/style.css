@@ -12,13 +12,32 @@
    de standaard van de browser, en dan blijft een leeg wacht-bolletje staan. */
 [hidden]{display:none!important}
 html,body{margin:0;padding:0}
+/* Een telefoon mag niet meeveren met de pagina (de "rubber band" van iOS) en
+   een dubbeltik hoort niet in te zoomen: dat kost 300 ms bij élke tik.
+   touch-action:manipulation laat schuiven en knijpen wél door; alleen de
+   sleepbronnen en sleepdoelen zetten het helemaal uit (.hot, .coin, ...). */
+html{overscroll-behavior:none;touch-action:manipulation}
+/* staat er een blad open, dan schuift de pagina eronder niet mee */
+html.sheet-open{overflow:hidden}
 body{
   font-family:"Comic Sans MS","Comic Neue","Chalkboard SE","Segoe UI Rounded",ui-rounded,"Trebuchet MS",system-ui,sans-serif;
   background:radial-gradient(1200px 600px at 50% -10%, var(--bg2), var(--bg)) fixed;
   color:var(--ink); font-size:18px; line-height:1.4;
   min-height:100vh; overscroll-behavior:none;
 }
-#app{max-width:960px;margin:0 auto;padding:6px 12px 24px}
+/* dvh = de hoogte die er ECHT is, ook als de adresbalk van de telefoon
+   half over het scherm staat. Browsers zonder dvh houden de 100vh hierboven. */
+@supports (min-height:100dvh){ body{min-height:100dvh} }
+#app{max-width:960px;margin:0 auto;padding:6px 12px 10px}
+/* de ronde hoeken en de camera-inkeping van de telefoon vrijhouden */
+@supports (padding:max(0px)){
+  #app{
+    padding-top:max(6px, env(safe-area-inset-top));
+    padding-right:max(12px, env(safe-area-inset-right));
+    padding-bottom:max(10px, env(safe-area-inset-bottom));
+    padding-left:max(12px, env(safe-area-inset-left));
+  }
+}
 b{font-weight:700}
 
 /* ---------- topbar ---------- */
@@ -32,10 +51,10 @@ b{font-weight:700}
 .badge.tap{min-height:48px;min-width:48px;justify-content:center}
 .badge.tap{cursor:pointer;font-family:inherit;color:inherit}
 .badge.tap:active{transform:translateY(2px)}
-.rondebalk{display:flex;gap:6px;justify-content:center;align-items:center;margin:2px 0 6px;flex-wrap:nowrap}
+.rondebalk{display:flex;gap:6px;justify-content:center;align-items:center;margin:2px 0 4px;flex-wrap:nowrap}
 .ronde{background:var(--sun);border-radius:999px;padding:5px 12px;font-weight:700;font-size:.82rem;white-space:nowrap}
 .btn.mini2{font-size:.8rem;padding:6px 10px;min-height:48px;background:#fff;border:2px solid var(--bg2);white-space:nowrap}
-.foot{text-align:center;color:var(--ink2);font-size:.8rem;margin-top:22px}
+.foot{text-align:center;color:var(--ink2);font-size:.8rem;margin-top:8px}
 
 /* =====================================================================
    HET DIORAMA - één tuin met de dieren erin.
@@ -271,12 +290,16 @@ body.sleept .placed{pointer-events:none}
 
 /* ---------- overlay / toast ---------- */
 .overlay{position:fixed;inset:0;background:#4a3b3355;display:flex;align-items:center;justify-content:center;
-  padding:14px;z-index:50;overflow:auto}
+  padding:14px;z-index:50;overflow:auto;overscroll-behavior:contain}
 .overlay.hidden{display:none}
 .sheet{background:var(--card);border-radius:26px;box-shadow:0 20px 50px #0003;padding:18px;max-width:560px;
-  width:100%;max-height:92vh;overflow:auto;animation:pop .25s ease-out}
+  width:100%;max-height:92vh;overflow:auto;animation:pop .25s ease-out;overscroll-behavior:contain}
+@supports (max-height:92dvh){ .sheet{max-height:92dvh} }
+/* het toastje is een mededeling, nooit een knop: het vangt geen tikken */
 .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:var(--ink);color:#fff;
-  padding:12px 20px;border-radius:999px;z-index:80;font-size:1rem;box-shadow:0 8px 24px #0004;max-width:92vw;text-align:center}
+  padding:12px 20px;border-radius:999px;z-index:80;font-size:1rem;box-shadow:0 8px 24px #0004;max-width:92vw;
+  text-align:center;pointer-events:none}
+@supports (bottom:max(0px)){ .toast{bottom:max(18px, calc(env(safe-area-inset-bottom) + 10px))} }
 .toast.hidden{display:none}
 .toast.happy{background:var(--mint-d)}
 .toast.kind{background:var(--peach-d)}
@@ -584,4 +607,194 @@ body.metpaneel .world{aspect-ratio:4/3;max-height:44vh}
   .hot.hotwolk .zeg{max-width:216px;font-size:.74rem}
   .hot.hotkeuzes .lbl{font-size:.64rem}
   .kzk{padding:3px 7px}
+}
+
+/* =====================================================================
+   DE MOBIELE SCHIL (M1a) - echte telefoons, staand én liggend.
+   Dit blok staat achteraan omdat het de kleine-schermregels hierboven moet
+   kunnen overrulen. Drie afspraken:
+     1. tikdoelen zijn minstens 48 px (44 mag alleen onder de 360 px),
+     2. kindertekst is nooit kleiner dan 12 px,
+     3. in een laag kader gaat het cijferpad ONDER het kader staan, nooit
+        erin (daar botst het met de sommenkaart en met de deuren).
+===================================================================== */
+
+/* ---------- niets is per ongeluk te selecteren of lang in te drukken ----------
+   Een kind houdt een knop makkelijk een seconde vast. Zonder dit krijgt het
+   dan de blauwe selectie of het iOS-menu ("Kopiëren / Delen") in beeld. */
+.hot,.ghost,.kchip,.btn,.wtag,.padstrip .padk{
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+
+/* ---------- kindertekst: nooit onder 12 px ----------
+   Gemeten vóór M1a: het label onder een pictogram 8,8 px, het woord op een
+   kamerchip 10,9 px, een bolletje 11,2 px, de zin op een sommenkaart 11,2 px.
+   Op een telefoon in de hand is dat niet te lezen. clamp() legt de bodem op
+   12 px en laat de letters op een groot scherm meegroeien tot 14 px. */
+.hot .lbl,.hot.hotwens .lbl,.hot.hotkeuzes .lbl,
+.hot .bdg,.kb,.hot.hotbron .hand,
+.kchip .kn,.pcel .pn,.wtag,
+.hot.hotwolk .zeg,.hot.hotsom .somzin,.hot.hotsom .somhulp{
+  font-size:clamp(12px, .75rem, 14px);
+}
+/* het label mag breder worden nu de letters groter zijn */
+.hot .lbl,.hot.hotwens .lbl{max-width:124px}
+/* De zin boven de som breekt af naar een TWEEDE regel; hij wordt nooit meer
+   afgekapt met "...". HOTEL.md 9 houdt de zin op <= 8 woorden, dus twee korte
+   regels lezen goed - een halve zin niet. */
+.hot.hotsom .somzin{white-space:normal;overflow:visible;text-overflow:clip;
+  max-width:min(84vw,340px);overflow-wrap:break-word}
+/* Letters van 12 px maken het kaartje breder, en een breder kaartje ligt eerder
+   over de gast heen (w1: het dier onder zijn naamplaatje raakte van 0% naar 17%
+   bedekt). Op een telefoon halen we die millimeters terug uit de randen en de
+   kieren van het kaartje zelf, niet uit de lettergrootte. */
+@media (max-width:520px){
+  .hot.hotsom.metzin{padding:5px 7px 12px}
+  .hot.hotsom{gap:5px}
+  .hot.hotsom .somrij{gap:5px}
+  .hot.hotsom .somvak{min-width:36px}
+}
+/* onder 360 px blijft het kaartje op de 170 px van HOTEL.md 9 */
+@media (max-width:360px){
+  .hot.hotsom .somzin{max-width:150px}
+}
+
+/* ---------- de kamerbalk: alle negen chips zichtbaar ----------
+   Vóór M1a schoof de balk zijwaarts: op 390 px stonden Tuin, Zwembad,
+   Wasserij en Plattegrond buiten het scherm zonder dat je zag dat er nog
+   iets was (clientW 366, scrollW 694). Nu breekt de rij af naar twee regels:
+   geen onzichtbare schuifbeweging, en de plattegrond staat altijd in beeld. */
+/* De kier is 4 px, niet 6: met 6 px werd de eerste rij op een scherm van
+   360 px 332,2 px breed in een balk van 332 px, en dan viel Keuken naar een
+   derde rij. 4 px maakt van drie rijen weer twee. */
+.kamerbalk{flex-wrap:wrap;justify-content:center;overflow:visible;padding:4px 2px;gap:4px}
+@media (max-width:700px){
+  .kchip{min-height:48px;min-width:48px;padding:3px 5px;gap:0}
+  .kchip .ki{font-size:1.15rem}
+}
+/* onder 360 px mag een tikdoel 44 px zijn (HOTEL.md 9); anders past de rij niet.
+   Op 360 px zelf blijft alles 48: daar past het nog. */
+@media (max-width:359px){
+  .kchip{min-width:44px}
+}
+
+/* ---------- de voetregel is op een telefoon 44 px kamer ----------
+   Op een telefoon kost "Dierenhotel Kwispelsteeg - demo - rustig aan..."
+   twee regels plus zijn marge: 44 px die de kamer beter kan gebruiken. Op een
+   tablet of laptop blijft de regel staan. */
+@media (max-width:520px){
+  .foot{display:none}
+}
+
+/* ---------- op 360 px blijven de toetsen 48 px ----------
+   De regels hierboven voor <= 360 px maken het kaartje smal én de toetsen 44;
+   dat laatste is alleen nodig ONDER de 360 px. Een rij van zes toetsen van
+   48 px is 310 px breed en past in een kader van 336 px. */
+@media (min-width:360px) and (max-width:520px){
+  .padk{min-width:48px;min-height:48px;font-size:1.15rem}
+}
+
+/* ---------- het cijferpad als strook ONDER het kader ----------
+   ui.js zet het pad hier zodra het kader lager is dan 300 px (padPlek 'auto').
+   Eén rij van twaalf toetsen over de volle breedte: de toetsen blijven groot
+   en de kamer blijft helemaal vrij. */
+.padstrip{display:flex;flex-wrap:wrap;gap:4px;justify-content:center;align-items:center;
+  padding:4px;border-radius:18px;background:#FFFDF8;border:3px solid #fff;
+  box-shadow:0 4px 0 rgba(74,59,51,.16), 0 10px 22px rgba(74,59,51,.12)}
+.padstrip[hidden]{display:none!important}
+.padstrip .padrij{display:flex;gap:4px;flex-wrap:wrap;justify-content:center;width:100%}
+.padstrip .padk{flex:0 1 auto;min-width:48px;min-height:48px;
+  font-family:inherit;font-size:1.15rem;font-weight:700;color:var(--ink);
+  background:#fff;border:2px solid #C9D8E6;border-radius:12px;cursor:pointer;box-shadow:0 3px 0 #0001}
+.padstrip .padk:active{transform:translateY(2px);box-shadow:none}
+.padstrip .padk.ok{background:var(--mint);border-color:var(--mint-d)}
+.padstrip .padk.del{background:var(--pink);border-color:#F0BBB2}
+@media (max-width:359px){
+  .padstrip .padk{min-width:44px;min-height:44px}
+}
+
+/* ---------- een leeg rekenblad kost geen ruimte meer ----------
+   Zonder blad (bijna altijd) kostte de lege <main> nog wel de tussenruimte
+   van 12 px. Op een liggende telefoon is dat een derde van een toets. */
+body:not(.metpaneel) .scene{display:none}
+
+/* =====================================================================
+   LIGGENDE TELEFOON (hoogte <= 450 px): één balk boven, chips ernaast.
+   Vóór M1a nam de schil hier 256 van de 390 px: er bleef 134 px over, dus
+   viel world.js terug op zijn bodem van 200 px en ging de pagina schuiven
+   (scrollHeight 456 op een scherm van 390). Nu: kop en rondebalk samen in
+   één rij van 48 px, de voetregel weg, de kamerbalk als rail náást het
+   kader en het cijferpad als strook onder kader + rail.
+===================================================================== */
+@media (orientation:landscape) and (max-height:450px){
+  #app{padding:4px 8px}
+  .foot{display:none}
+  /* kop en rondebalk samen één rij; wordt het te smal, dan mag hij afbreken
+     naar twee rijen - liever dat dan knoppen kleiner dan 48 px */
+  .chroom{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:4px}
+  .topbar{flex:1 1 320px;margin:0;flex-wrap:nowrap;justify-content:flex-start;gap:6px}
+  .rondebalk{flex:0 1 auto;margin:0;justify-content:flex-end}
+  .logo{display:none}                      /* de titel is versiering, geen knop */
+  .badges{flex:1 1 auto;justify-content:flex-start}
+  .stagewrap{gap:4px}
+  /* kader en rail naast elkaar, de padstrook eronder over de volle breedte */
+  .stagecol{display:grid;gap:4px;
+    grid-template-columns:minmax(0,1fr) auto;
+    grid-template-areas:"wereld rail" "strook strook"}
+  .world{grid-area:wereld;max-height:none}
+  .padstrip{grid-area:strook}
+  /* Twee kolommen van 48 px: de rail is 98 px breed. Met drie kolommen mét
+     woorden was hij 231 px, en die 231 px gaan van de breedte van het kader af
+     (HOTEL.md 1 legt de kamer ín het kader): de kamer werd er zichtbaar
+     kleiner van en de sommenkaart dekte de gast helemaal af. Het woord blijft
+     staan - een pictogram zonder woord bestaat hier niet, en 🛏️ Kamer 1 en
+     🛏️ Kamer 2 hebben hetzelfde plaatje - maar het mag afbreken. */
+  .kamerbalk{grid-area:rail;display:grid;grid-template-columns:repeat(3,48px);
+    grid-auto-rows:min-content;gap:2px;align-content:start;justify-content:end;
+    padding:0;overflow:visible}
+  .kchip{min-height:48px;min-width:48px;width:48px;padding:1px 1px;gap:0;
+    line-height:1.02;overflow:hidden}
+  .kchip .ki{font-size:1rem}
+  .kchip .kn{white-space:normal;overflow-wrap:anywhere;word-break:break-word;
+    text-align:center;max-height:2.1em;overflow:hidden}
+  /* het bolletje met het aantal wachtende dieren past niet meer als 22 px op
+     een chip van 48 px zonder aan de buur te komen; kleiner mag, maar het
+     cijfer blijft 12 px (kindertekst) */
+  .kb{top:-4px;right:-4px;min-width:18px;height:18px;padding:0 2px;line-height:1}
+  /* De plattegrond moet in een blad van 92dvh passen (op 342 px hoog is dat
+     315 px, en de inhoud was 330 px). Kleinere cellen halen dat, en voor de
+     schermen waar het écht niet past (802x293 geeft een blad van 270 px)
+     plakt de knoppenrij onderaan het blad vast: "Sluiten" staat dan altijd in
+     beeld, hoe ver je ook geschoven hebt. */
+  .pcel{min-height:48px;padding:2px}
+  .pcel .pi{font-size:1.1rem}
+  .pgrid{gap:4px;margin:4px 0}
+  .sheet{padding:10px 12px}
+  .sheet h2{font-size:1.05rem;margin:0 0 2px}
+  .sheet .row.center{position:sticky;bottom:-10px;z-index:1;
+    background:var(--card);margin-top:6px;padding:6px 0 4px}
+}
+/* Onder 320 px schermhoogte is er echt geen ruimte meer: dan gaat de
+   uitlegregel van een blad eraf (de pictogrammen mét woord in het raster
+   zeggen het al) in plaats van een tikdoel kleiner dan 48 px te maken. */
+@media (orientation:landscape) and (max-height:320px){
+  .sheet .hint{display:none}
+}
+@supports (padding:max(0px)){
+  @media (orientation:landscape) and (max-height:450px){
+    #app{padding:max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+                max(4px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left))}
+  }
+}
+
+/* ---------- het toastje op een laag scherm ----------
+   Onderin zou het over de cijferstrook en over de kamerchips liggen. Op een
+   laag scherm hangt het dus bovenaan, net onder de balk, en het vangt nooit
+   een tik (pointer-events:none hierboven). */
+@media (max-height:450px){
+  .toast{bottom:auto;top:58px;font-size:.95rem;padding:8px 16px}
+}
+@supports (top:max(0px)){
+  @media (max-height:450px){
+    .toast{top:max(58px, calc(env(safe-area-inset-top) + 56px))}
+  }
 }

@@ -27,10 +27,13 @@ function hudKnoppen() {
       sb.textContent = Snd.dempt() ? '🔇' : '🔊';
     });
   }
-  /* elke knop krijgt een zacht tikje - via delegatie, zo hoeft geen knop apart */
+  /* elke knop krijgt een zacht tikje - via delegatie, zo hoeft geen knop apart.
+     .padstrip is het cijferpad als het onder het kader staat (laag kader op een
+     liggende telefoon): dat is geen .hot, maar het tikt natuurlijk wel. */
   document.addEventListener('click', function (e) {
     if (e.target.closest && (e.target.closest('.btn') || e.target.closest('.hot') ||
-                             e.target.closest('.kchip'))) Snd.tik();
+                             e.target.closest('.kchip') ||
+                             e.target.closest('.padstrip .padk'))) Snd.tik();
   });
 }
 

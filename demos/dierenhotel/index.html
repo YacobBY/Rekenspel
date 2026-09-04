@@ -10,6 +10,10 @@
 <body>
 <div id="app">
 
+  <!-- de schil bovenin. Op een liggende telefoon (hoogte <= 450 px) worden
+       deze twee balken door style.css samen ÉÉN rij van 48 px, zodat er
+       hoogte overblijft voor de kamer zelf. -->
+  <div class="chroom">
   <header class="topbar">
     <div class="logo">🛎️ Dierenhotel</div>
     <div class="badges">
@@ -26,6 +30,7 @@
     <button class="btn mini2" id="prikBtn" type="button">📋 Prikbord</button>
     <button class="btn mini2" id="avondBtn" type="button">🌙 Avond</button>
   </div>
+  </div>
 
   <div class="stagewrap">
     <div class="stagecol">
@@ -37,6 +42,10 @@
         <!-- de hotspot-laag: knoppen en sleep-doelen op de voorwerpen zelf -->
         <div class="hits" id="worldHits"></div>
       </div>
+      <!-- het cijferpad als strook ONDER het kader: ui.js zet hem hier zodra
+           het kader lager is dan 300 px (liggende telefoon), zodat het pad de
+           kamer niet afdekt. Staat hij leeg, dan is hij hidden. -->
+      <div class="padstrip" id="padstrip" role="group" aria-label="Cijfers" hidden></div>
       <nav class="kamerbalk" id="kamerbalk" aria-label="Naar een andere ruimte"></nav>
     </div>
     <main id="scene" class="scene"></main>

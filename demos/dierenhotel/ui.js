@@ -27,6 +27,10 @@ function openSheet(html) {
   $('#sheet').innerHTML = html;
   o.classList.remove('hidden');
   o.setAttribute('aria-hidden', 'false');
+  /* Zolang het blad open staat schuift de pagina eronder niet mee. Zonder dit
+     duwt een vinger op een telefoon het hele hotel weg achter het blad, en dan
+     staat de kamer scheef als het blad weer dichtgaat. */
+  document.documentElement.classList.add('sheet-open');
   return $('#sheet');
 }
 function closeSheet() {
@@ -34,6 +38,7 @@ function closeSheet() {
   o.classList.add('hidden');
   o.setAttribute('aria-hidden', 'true');
   $('#sheet').innerHTML = '';
+  document.documentElement.classList.remove('sheet-open');
 }
 document.addEventListener('click', function (e) {
   if (e.target && e.target.id === 'overlay') closeSheet();
@@ -50,7 +55,41 @@ function shake(node) {
    dragKit: werkt met muis, pen en vinger (pointer events).
    opts = { ghostHTML(), dropSel, canDrag(), onDrop(target), onTap() }
    Kleine beweging telt als tik -> ook bruikbaar zonder slepen.
+
+   Met een VINGER staat het sleepplaatje 40 px boven de vingertop en wordt het
+   doel daar gemeten, niet onder de vinger: anders hou je je eigen bakje af en
+   zie je niet waar het koekje heen gaat. Met de muis blijft alles zoals het was.
 ---------------------------------------------------------------- */
+/* hoeveel het sleepplaatje boven de vingertop hangt */
+var VINGER_LIFT = 40;
+/* de speling waarbinnen het nog een tik is (8 px, dus 64 = 8*8) */
+var TIK_SPELING = 64;
+
+/* Eén tik = één keer afleveren. Na een tik met de vinger stuurt de browser óók
+   nog een 'click' naar dezelfde knop, en die knop heeft via de hotspot-laag
+   zijn eigen klik-handler: zonder poortwachter legt één tik twee koekjes neer.
+   We vangen die ene click in de capture-fase van het venster (dus vóórdat de
+   knop zelf hem ziet) en laten hem vallen. Het oude vangnetje in de spellen
+   (__bronTik) mag blijven staan - we zetten het meteen terug op 0 zodat het
+   nooit een echte tik tegenhoudt. */
+function slikEenKlik(node) {
+  var t0 = null;
+  function weg() { window.removeEventListener('click', eet, true); clearTimeout(t0); }
+  function eet(ev) {
+    weg();
+    var d = ev.target;
+    if (d !== node && !(node.contains && node.contains(d))) return;
+    ev.stopImmediatePropagation();
+    ev.preventDefault();
+    node.__bronTik = 0;
+    /* het zachte tikje van game.js hangt aan de click; die valt nu weg, dus
+       geven we hem hier - een knop zonder tikje voelt kapot */
+    if (window.Snd && Snd.tik && node.closest && node.closest('.btn,.hot,.kchip')) Snd.tik();
+  }
+  t0 = setTimeout(weg, 400);
+  window.addEventListener('click', eet, true);
+}
+
 function makeDraggable(node, opts) {
 
   function targetAt(x, y) {
@@ -58,11 +97,16 @@ function makeDraggable(node, opts) {
     return e && e.closest ? e.closest(opts.dropSel) : null;
   }
 
+  /* een lange druk op een plaatje of een woord opent op de telefoon het menu
+     "Kopiëren / Delen"; hier sleep je, dus dat menu hoort er niet te zijn */
+  node.addEventListener('contextmenu', function (ev) { ev.preventDefault(); });
+
   node.addEventListener('pointerdown', function (ev) {
     if (opts.canDrag && !opts.canDrag()) return;
     if (ev.button !== undefined && ev.button !== 0) return;
 
     var sx = ev.clientX, sy = ev.clientY, pid = ev.pointerId;
+    var lift = ev.pointerType === 'touch' ? VINGER_LIFT : 0;
     var ghost = null, hot = null, dragging = false;
     ev.preventDefault();
     /* capture is fijn, maar we luisteren op window zodat het ook zonder werkt */
@@ -81,7 +125,7 @@ function makeDraggable(node, opts) {
     function move(e2) {
       if (e2.pointerId !== pid) return;
       var dx = e2.clientX - sx, dy = e2.clientY - sy;
-      if (!dragging && dx * dx + dy * dy < 64) return;
+      if (!dragging && dx * dx + dy * dy < TIK_SPELING) return;
       if (!dragging) {
         dragging = true;
         /* tijdens het slepen mogen geplaatste blokjes de vakjes eronder niet afschermen */
@@ -92,8 +136,8 @@ function makeDraggable(node, opts) {
         document.body.appendChild(ghost);
       }
       ghost.style.left = e2.clientX + 'px';
-      ghost.style.top = e2.clientY + 'px';
-      var t = targetAt(e2.clientX, e2.clientY);
+      ghost.style.top = (e2.clientY - lift) + 'px';
+      var t = targetAt(e2.clientX, e2.clientY - lift);
       if (t !== hot) {
         if (hot) hot.classList.remove('drop-hot');
         hot = t;
@@ -104,10 +148,10 @@ function makeDraggable(node, opts) {
     function up(e2) {
       if (e2.pointerId !== pid) return;
       var wasDrag = dragging;
-      var t = wasDrag ? targetAt(e2.clientX, e2.clientY) : null;
+      var t = wasDrag ? targetAt(e2.clientX, e2.clientY - lift) : null;
       stop();
-      if (wasDrag) { if (t && opts.onDrop) opts.onDrop(t); }
-      else if (opts.onTap) opts.onTap();
+      if (wasDrag) { if (t && opts.onDrop) { opts.onDrop(t); slikEenKlik(node); } }
+      else if (opts.onTap) { opts.onTap(); slikEenKlik(node); }
     }
 
     function cancel(e2) { if (e2.pointerId === pid) stop(); }
@@ -289,6 +333,47 @@ function wolk(obj, o) {
 }
 function wolkWeg(id) { Hits.weg(id); }
 
+/* ---------- het kader in de gaten houden ----------
+   Verandert de maat van het kader (kantelen, adresbalk die wegschuift, een
+   spel dat een rekenblad naast de wereld zet), dan moet alles wat in
+   SCHERMpixels is uitgemeten opnieuw gelegd worden.
+   world.js krijgt daar één nette bron voor: World.onKader(fn) - één ontdenderde
+   melding uit een ResizeObserver op #world, die een opzegger teruggeeft. Zolang
+   die er niet is doen we het zelf met resize + orientationchange, achter
+   precies dezelfde deur. Zo werkt de code vóór én na die samenvoeging. */
+function opKader(fn) {
+  if (window.World && typeof World.onKader === 'function') {
+    try {
+      var af = World.onKader(fn);
+      if (typeof af === 'function') return af;
+    } catch (e) { /* dan doen we het zelf */ }
+  }
+  var t = null;
+  function op() { clearTimeout(t); t = setTimeout(function () { t = null; fn(); }, 90); }
+  window.addEventListener('resize', op);
+  window.addEventListener('orientationchange', op);
+  return function () {
+    clearTimeout(t);
+    window.removeEventListener('resize', op);
+    window.removeEventListener('orientationchange', op);
+  };
+}
+
+/* ---------- de schil is van maat veranderd ----------
+   Zet de schil iets neer of weg dat hoogte kost (de cijferstrook), dan is er
+   plotseling meer of minder over voor het kader en moet world.js zijn kader
+   opnieuw OPMETEN - niet alleen opnieuw tekenen.
+   Sinds M1b is opmeten World.hermeet(); World.vuil() vraagt daar alleen nog een
+   nieuwe tekenbeurt. Vóór M1b deed vuil() beide, dus die is de terugval. */
+function schilVeranderd() {
+  if (window.World && typeof World.hermeet === 'function') {
+    try { World.hermeet(); return; } catch (e) { /* dan de terugval */ }
+  }
+  if (window.World && typeof World.vuil === 'function') {
+    try { World.vuil(); } catch (e) { /* geeft niet */ }
+  }
+}
+
 /* ---------- klein cijferpad, verankerd aan het voorwerp ----------
    Het enige 2D-ding dat mag (HOTEL.md 9): twee rijen van zes toetsen,
    elke toets minstens 48 px, en het staat vlak onder de sommenkaart. */
@@ -296,12 +381,67 @@ function wolkWeg(id) { Hits.weg(id); }
    toetsen op één rij, en dan is het pad half zo hoog en dekt het de vloer
    van de kamer niet af. */
 var PAD_KEYS = ['1', '2', '3', '4', '5', 'del', '6', '7', '8', '9', '0', 'ok'];
+function kaderEl() { return document.getElementById('world'); }
 function padBreed() {
-  var w = document.getElementById('world');
+  var w = kaderEl();
   return !!(w && w.clientWidth >= 660);
 }
-function padHtml() {
-  var perRij = padBreed() ? 12 : 6, h = '<div class="padrij">', i, k;
+/* Onder deze kaderhoogte past een pad niet meer ÍN het kader.
+   Gemeten op een liggende telefoon (844x390, vóór M1a): kader 820x200, pad
+   638x66 middenin het kader - dat lag over de sommenkaart, over de deurknop
+   en over het prikbord (4 botsingen). Bij zo'n laag kader hoort het pad als
+   strook ONDER het kader, over de volle breedte.
+
+   KADER_RUIM is de terugweg, en die ligt hoger: de cijferstrook staat ín de
+   pagina, dus zodra hij zichtbaar wordt krimpt het kader. Meet je dan opnieuw
+   met dezelfde grens, dan wil het pad weer naar binnen, krimpt het kader weer
+   niet meer, wil het weer naar buiten... (nagemeten met een ResizeObserver op
+   #world: 44 wissels in 5 seconden op 750x342). Vandaar drie sloten:
+     1. we meten de kaderhoogte ZONDER onze eigen strook (kaderHoogVrij),
+     2. een dode zone tussen 300 en 340 px,
+     3. onze eigen wissel maakt zelf een kadermelding: die negeren we even
+        (VERSTIL_MS), en per schermmaat wisselen we hooguit WISSEL_MAX keer.
+        Daarna blijft het staan waar het staat; "buiten" is altijd veilig,
+        want daar botst het pad met niets. */
+var KADER_KORT = 300, KADER_RUIM = 340, VERSTIL_MS = 400, WISSEL_MAX = 2;
+/* de hoogte die het kader zou hebben zonder onze cijferstrook: de strook staat
+   eronder in dezelfde kolom, dus zijn hoogte plus de kier van 4 px komt erbij */
+function kaderHoogVrij(strookPx) {
+  var w = kaderEl();
+  if (!w || !w.clientHeight) return 0;
+  return w.clientHeight + (strookPx || 0);
+}
+/* ... en ook niet als het kader te SMAL is voor één rij van zes toetsen.
+   Hoe breed die rij is staat in de opmaak en is opgemeten: onder 360 px zijn de
+   toetsen 44 px met 2 px kier (pad 286 px), op 360 px zelf 48 px met 2 px kier
+   (310 px) en daarboven 48 px met 4 px kier (326 px). Past die rij niet in het
+   kader, dan stak het pad zijwaarts uit (gemeten: kader 259 px binnenwerk, pad
+   286 px, 24 px eruit) - en dan hoort het als strook onder het kader. */
+function padMinBreed() {
+  var w = window.innerWidth;
+  if (w < 360) return 286;
+  if (w <= 360) return 310;
+  return 326;
+}
+function kaderSmal() {
+  var w = kaderEl();
+  return !!(w && w.clientWidth > 0 && w.clientWidth < padMinBreed());
+}
+/* padPlek: 'auto' (standaard) | 'binnen' | 'buiten'
+   nu = waar het pad NU staat ('buiten' of iets anders), strookPx = de hoogte
+   die onze eigen strook op dit moment inneemt (0 als hij er niet staat). */
+function padBuiten(plek, nu, strookPx) {
+  if (plek === 'binnen') return false;
+  if (plek === 'buiten') return true;
+  if (kaderSmal()) return true;               /* te smal: breedte hangt niet aan de strook */
+  var h = kaderHoogVrij(strookPx);
+  if (!h) return nu === 'buiten';
+  /* naar buiten onder 300 px, terug naar binnen pas boven 340 px */
+  return nu === 'buiten' ? h < KADER_RUIM : h < KADER_KORT;
+}
+function padHtml(perRij) {
+  var h = '<div class="padrij">', i, k;
+  perRij = perRij || 6;
   for (i = 0; i < PAD_KEYS.length; i++) {
     if (i && i % perRij === 0) h += '</div><div class="padrij">';
     k = PAD_KEYS[i];
@@ -363,6 +503,10 @@ function klaagZin(id, som, zin) {
                                       icoon:'🛏', open:true, onOk:fn })
    Keuzes in plaats van cijfers (dan geen antwoordvakje en geen pad):
    Ui.somkaart('bel', '4 × 2', { regel:[...], keuzes:[{id,icoon,tekst,kies}] })
+   padPlek:'auto'|'binnen'|'buiten' - waar het cijferpad hoort. 'auto' (de
+   standaard, dus geen enkel spel hoeft iets te veranderen) zet het pad ÍN het
+   kader, behalve als het kader lager is dan 300 px: dan komt het als strook
+   onder het kader te staan en blijft de kamer vrij.
    Geeft een handvat terug: .regel(zin) .som(tekst) .zet(tekst) .hulp(h)
                             .open() .klaar() .weg()                       */
 function somkaart(obj, som, o) {
@@ -375,6 +519,12 @@ function somkaart(obj, som, o) {
              zin: zinLijst(o.regel) };
   var hoogBasis = o.hoog === undefined ? 22 : o.hoog;
   var hoog = hoogBasis;        /* + lift zodra het pad de kaart zou afdekken */
+  /* Het merkteken van DEZE kaart. hotel.js maakt bij elke hertekening een
+     nieuwe somkaart onder dezelfde id (ci_som); de hotspot-laag geeft dan
+     hetzelfde DOM-knopje terug. Zonder merkteken bleven de luisteraars van de
+     oude kaart aan datzelfde knopje hangen en tekenden ze bij het kantelen een
+     kaartje terug dat al opgeruimd was. */
+  var mij = {};
 
   function zinHtml() {
     var h = '', i;
@@ -394,7 +544,7 @@ function somkaart(obj, som, o) {
   function kaart() {
     klaagZin(id, som, st.zin);
     var metzin = st.zin.length > 0;
-    Hits.maak({
+    var s = Hits.maak({
       id: id, door: o.door || 'som', kamer: p.kamer, x: p.x, z: p.z, y: hoog,
       klas: 'hotsom' + (metzin ? ' metzin' : '') + (st.klaar ? ' af' : '') +
             (o.klas ? ' ' + o.klas : ''),
@@ -405,8 +555,25 @@ function somkaart(obj, som, o) {
             (st.extra ? '<span class="somhulp">' + st.extra + '</span>' : ''),
       titel: (st.zin.length ? st.zin.join(' ') + ' ' : '') + String(som) +
              (keuzes ? '' : ' ' + (st.val || '?')),
-      aan: function () { if (!st.klaar && !keuzes && o.pad !== false) padAan(); }
+      aan: function () { if (!st.klaar && !keuzes && o.pad !== false) padAan(); },
+      /* Ruimt de hotspot-laag dit kaartje op (Hits.weg of Hits.wisEigenaar),
+         dan gaan onze luisteraars en de cijferstrook mee. hits.js roept dit
+         zelf aan zodra die kant er is; tot dan doet padOpnieuw hetzelfde werk
+         aan de hand van het merkteken hieronder. */
+      onWeg: function () { padUit(); }
     });
+    if (s && s.el) {
+      /* Neemt deze kaart het knopje over van een OUDERE somkaart met dezelfde
+         id (hotel.js maakt ci_som bij elke hertekening opnieuw)? Dan zegt die
+         oude zijn luisteraars nu meteen op, en niet pas bij het volgende
+         kantelen: gemeten hielden tien kaarten onder dezelfde id tien
+         kaderluisteraars vast. Zijn strook gaat mee, de nieuwe staat er nog
+         niet (kaart() loopt vóór padAan()). */
+      var oud = (s.el.__somEig && s.el.__somEig !== mij) ? s.el.__somAf : null;
+      s.el.__somEig = mij;
+      s.el.__somAf = padUit;
+      if (typeof oud === 'function') oud();
+    }
   }
   /* Het pad hoort ONDER de kamer te liggen, in de lucht onder de vloer: zo
      dekt het de kamer niet af. We rekenen de hoogte terug uit de onderrand
@@ -427,6 +594,7 @@ function somkaart(obj, som, o) {
     setTimeout(function () { kaartVrij(0); }, 90);
   }
   function kaartVrij(ronde) {
+    if (strookVanMij()) return;         /* pad staat buiten: niets af te dekken */
     var k = document.querySelector('[data-hot="' + id + '"]');
     var pd = document.querySelector('[data-hot="' + id + '_pad"]');
     if (!k || !pd) return;
@@ -441,52 +609,166 @@ function somkaart(obj, som, o) {
     if (World.vuil) World.vuil();
     if ((ronde || 0) < 1) setTimeout(function () { kaartVrij(1); }, 90);
   }
+
+  /* ---------- het pad als strook ONDER het kader ----------
+     Eén rij van twaalf toetsen over de volle breedte van het speelveld, in
+     #padstrip (buiten #world, dus buiten de hotspot-laag). Het draagt wél
+     data-hot="<id>_pad": voor een spel, een speeltest of een testsuite is het
+     hetzelfde pad, alleen op een andere plek. */
+  function strook() { return document.getElementById('padstrip'); }
+  function strookVanMij() {
+    var s = strook();
+    return (s && !s.hidden && s.__eig === mij) ? s : null;
+  }
+  /* De strook staat BUITEN de hotspot-laag, dus hij gaat niet mee als die laag
+     wordt leeggehaald. hotel.js begint elke hertekening met
+     Hits.wisEigenaar('checkin'): dan is het kaartje er ineens niet meer en zou
+     de cijferstrook alleen achterblijven (gemeten: vraag 2 van de check-in had
+     nog een pad). We kijken daarom mee met de hotspot-laag: verdwijnt ons
+     kaartje of neemt een andere kaart het over, dan ruimt de strook zich op.
+     (Levert hits.js later een onWeg-haak - ticket M1b - dan is dit het vangnet
+     ernaast, niet in plaats daarvan.) */
+  var strookWacht = null;
+  function strookLet() {
+    if (strookWacht || !window.MutationObserver) return;
+    var host = document.getElementById('worldHits');
+    if (!host) return;
+    strookWacht = new MutationObserver(function () {
+      var el = document.querySelector('[data-hot="' + id + '"]');
+      if (el && el.__somEig === mij) return;
+      padUit();
+    });
+    strookWacht.observe(host, { childList: true });
+  }
+  function strookLetUit() {
+    if (!strookWacht) return;
+    strookWacht.disconnect();
+    strookWacht = null;
+  }
+  function strookAan() {
+    var s = strook();
+    if (!s) return false;
+    var nieuw = !!s.hidden;             /* stond hij nog weg? dan verandert de schil */
+    s.innerHTML = padHtml(12);
+    s.setAttribute('data-hot', id + '_pad');
+    s.hidden = false;
+    s.__eig = mij;
+    strookLet();
+    s.__aan = padTik;                   /* wie er nu de baas over de strook is */
+    if (nieuw) schilVeranderd();        /* de strook kost hoogte: kader hermeten */
+    if (!s.__gehaakt) {
+      s.__gehaakt = 1;
+      s.addEventListener('click', function (ev) {
+        var b = ev.target && ev.target.closest ? ev.target.closest('[data-pk]') : null;
+        if (!b || !s.__aan) return;
+        s.__aan(b.getAttribute('data-pk'));
+      });
+    }
+    return true;
+  }
+  function strookUit() {
+    strookLetUit();
+    var s = strookVanMij();
+    if (!s) return;
+    s.hidden = true;
+    s.innerHTML = '';
+    s.removeAttribute('data-hot');
+    s.__eig = null;
+    s.__aan = null;
+    schilVeranderd();                   /* er is weer hoogte over: kader hermeten */
+  }
+  /* één toets, waar het pad ook staat */
+  function padTik(k) {
+    if (k === 'del') st.val = st.val.slice(0, -1);
+    else if (k === 'ok') { if (o.onOk) o.onOk(st.val === '' ? null : parseInt(st.val, 10), api); return; }
+    else if (st.val.length < (o.max || 2)) st.val += k;
+    kaart();
+  }
+
   /* Kantelt het scherm, dan verandert de vorm van het pad (twee rijen van zes
-     op een telefoon, één rij van twaalf op een breed scherm). De html van een
-     hotspot blijft anders staan zoals hij gemaakt is: een pad van twaalf
-     toetsen stak zo 273 px buiten een staand kader. Dus: bij een nieuwe
-     schermmaat het pad opnieuw tekenen en de kaart opnieuw vrij zetten. */
-  var padLuister = null, padWas = null;
+     op een telefoon, één rij van twaalf op een breed scherm, of een strook
+     onder een laag kader). De html van een hotspot blijft anders staan zoals
+     hij gemaakt is: een pad van twaalf toetsen stak zo 273 px buiten een staand
+     kader. Dus: bij een nieuwe kadermaat het pad opnieuw tekenen en de kaart
+     opnieuw vrij zetten. */
+  var padAf = null, padWas = null, padHerT = null;
+  /* wisselteller per schermmaat: een lus zit altijd op één schermmaat vast */
+  var padWissels = 0, padVpWas = '', padStilTot = 0;
   function padUit() {
-    if (!padLuister) return;
-    window.removeEventListener('resize', padLuister);
-    window.removeEventListener('orientationchange', padLuister);
-    padLuister = null;
+    clearTimeout(padHerT); padHerT = null;
+    if (padAf) { padAf(); padAf = null; }
+    strookUit();
+  }
+  /* hoeveel hoogte neemt ONZE strook nu in? (0 als hij er niet staat) */
+  function strookPx() {
+    var s = strookVanMij();
+    if (!s) return 0;
+    var h = s.offsetHeight;
+    return h ? h + 4 : 0;               /* + de kier van 4 px uit de opmaak */
+  }
+  function padVorm() {
+    var vp = window.innerWidth + 'x' + window.innerHeight;
+    if (vp !== padVpWas) { padVpWas = vp; padWissels = 0; }   /* nieuwe maat: opnieuw mogen kiezen */
+    var wil = padBuiten(o.padPlek, padWas, strookPx()) ? 'buiten'
+            : (padBreed() ? 'breed' : 'smal');
+    if (padWas === null || wil === padWas) return wil;
+    var vanBuiten = padWas === 'buiten', naarBuiten = wil === 'buiten';
+    /* Een sprong ÍN of ÚIT het kader mag hooguit WISSEL_MAX keer per
+       schermmaat. Daarna blijft het pad staan waar het staat; van vorm
+       veranderen (zes toetsen of twaalf) mag altijd, dat kost geen hoogte. */
+    if (vanBuiten !== naarBuiten) {
+      if (padWissels >= WISSEL_MAX)
+        return padWas === 'buiten' ? 'buiten' : (padBreed() ? 'breed' : 'smal');
+      padWissels++;
+    }
+    return wil;
   }
   function padOpnieuw() {
-    /* Is het kaartje inmiddels opgeruimd (Hits.wisEigenaar na een check-in of
-       een spel dat stopt)? Dan hoort deze luisteraar er ook niet meer te zijn:
-       anders tekent hij bij het kantelen een verdwenen kaartje terug. */
-    if (!document.querySelector('[data-hot="' + id + '"]')) { padUit(); return; }
-    if (!st.open || st.klaar || keuzes || o.pad === false) return;
-    var breed = padBreed();
+    var el = document.querySelector('[data-hot="' + id + '"]');
+    /* Is het kaartje opgeruimd (Hits.wisEigenaar na een check-in of een spel
+       dat stopt), of heeft een NIEUWE somkaart deze id overgenomen? Dan hoort
+       deze luisteraar er niet meer te zijn: anders tekent hij bij het kantelen
+       een verdwenen kaartje terug, of vecht hij met de nieuwe kaart. */
+    if (!el || el.__somEig !== mij) { padUit(); return; }
+    if (!st.open || st.klaar || keuzes || o.pad === false) { padUit(); return; }
+    /* Onze eigen wissel verandert het kader, en dat geeft weer een
+       kadermelding. Die melding is van onszelf: even niets doen, en daarna één
+       keer opnieuw kijken (zodat een echte draai binnen dat venster niet
+       verloren gaat). */
+    if (nuMs() < padStilTot) {
+      if (!padHerT) padHerT = setTimeout(function () { padHerT = null; padOpnieuw(); },
+                                         padStilTot - nuMs() + 20);
+      return;
+    }
+    var vorm = padVorm();
     hoog = hoogBasis;           /* de lift hoort bij het oude kader */
     kaart();
-    if (breed !== padWas) padAan();     /* andere vorm: pad opnieuw tekenen */
+    if (vorm !== padWas) padAan();      /* andere vorm: pad opnieuw tekenen */
+    else if (vorm === 'buiten') strookAan();
     else kaartVrijStraks();             /* zelfde vorm, ander kader: opnieuw meten */
   }
   function padAan() {
     if (st.klaar || o.pad === false) return;
     st.open = true;
-    padWas = padBreed();
-    if (!padLuister) {
-      padLuister = function () { setTimeout(padOpnieuw, 90); };
-      window.addEventListener('resize', padLuister);
-      window.addEventListener('orientationchange', padLuister);
+    var vorig = padWas;
+    padWas = padVorm();
+    if (padWas !== vorig) padStilTot = nuMs() + VERSTIL_MS;   /* eigen wissel: even stil */
+    if (!padAf) padAf = opKader(padOpnieuw);
+    if (padWas === 'buiten') {
+      Hits.weg(id + '_pad');            /* nooit binnen ÉN buiten */
+      if (strookAan()) return;
+      padWas = padBreed() ? 'breed' : 'smal';   /* geen strook in de opmaak: dan toch binnen */
     }
+    strookUit();
     Hits.maak({
       id: id + '_pad', door: o.door || 'som', kamer: p.kamer, x: p.x, z: p.z,
       y: padY(),
       tagnaam: 'div', klas: 'hotpad', vast: true, prio: 20,
-      html: padHtml(), titel: 'cijfers',
+      html: padHtml(padWas === 'breed' ? 12 : 6), titel: 'cijfers',
       aan: function (spot, ev) {
         var b = ev.target && ev.target.closest ? ev.target.closest('[data-pk]') : null;
         if (!b) return;
-        var k = b.getAttribute('data-pk');
-        if (k === 'del') st.val = st.val.slice(0, -1);
-        else if (k === 'ok') { if (o.onOk) o.onOk(st.val === '' ? null : parseInt(st.val, 10), api); return; }
-        else if (st.val.length < (o.max || 2)) st.val += k;
-        kaart();
+        padTik(b.getAttribute('data-pk'));
       }
     });
     kaartVrijStraks();
@@ -667,5 +949,8 @@ return { paneel: paneel, leegPaneel: leegPaneel, inPaneel: inPaneel,
          sheet: openSheet, sluit: closeSheet, nu: nuMs,
          /* rekenen ín de wereld (HOTEL.md 9) */
          wolk: wolk, wolkWeg: wolkWeg, somkaart: somkaart, spreek: spreek,
-         bron: bron };
+         bron: bron,
+         /* "het kader is van maat veranderd" - één melding, met opzegger.
+            Gebruikt World.onKader als die er is, anders resize/orientationchange. */
+         opKader: opKader };
 })();
