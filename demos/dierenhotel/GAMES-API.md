@@ -46,8 +46,9 @@ Games.register({
 ```
 
 Zet je bestand daarna in `index.html` in de rij `<script src="games/...">`
-(de vier plaatshouders `bedden.js`, `sleutels.js`, `tobbe.js` en `meubels.js`
-staan er al — vervang gewoon je eigen bestand).
+(`voerkar.js`, `bedden.js`, `sleutels.js`, `tobbe.js` en `meubels.js` zijn af en
+staan er al; `zwembad.js`, `wekker.js`, `hinkel.js`, `was.js` en `kraam.js` hangen
+er al leeg in — vul het bestand van jouw spel, dan hoeft `index.html` niet mee).
 
 ### Wat de stekkerdoos voor je doet
 * De **knop in de wereld** aanmaken op het voorwerp uit `hotspot.obj`, met de

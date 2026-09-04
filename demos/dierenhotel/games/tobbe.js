@@ -36,9 +36,9 @@
    * de motor kent geen waterstand in een tobbe (`setBak` bestaat alleen
      voor voerbakjes). Het niveau staat daarom als peilglaasje op de knop
      van de tobbe, plus het cijfer óp de tobbe met wereld.getalTag.
-   * er is geen ctx-functie om een behoefte af te vinken. Net als de
-     voerkar zetten we dat op het gast-object zelf: hotel.js leest voor de
-     wens 🛁 `g.blij` als "behoefte klaar".
+   * (vervallen) een behoefte afvinken kan wel via ctx: `wereld.behoefteKlaar`
+     (registry.js) zet `g.blij` en tekent het prikbord opnieuw. Dit spel
+     gebruikt die functie zelf, zodra een gast in de tobbe stapt.
    * `wereld.getalTag` heeft een vaste prio 4, dus bij meer dan 16 knoppen
      in een kamer verdwijnen juist de cijfers het eerst. Dit spel houdt zijn
      eigen knoppen daarom bewust krap (hooguit 14 in de tuin).

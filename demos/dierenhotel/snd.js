@@ -94,6 +94,16 @@ var Snd = (function () {
     /* een sterretje erbij */
     ster: function () { noot(784, 0, 0.09, 'triangle', 0.30); noot(988, 0, 0.09, 'triangle', 0.28, 0.07);
                         noot(1319, 0, 0.20, 'sine', 0.24, 0.14); },
+    /* een dier glijdt het zwembad in: een plons met wat spetters */
+    plons: function () { noot(560, 150, 0.14, 'sine', 0.40); papier(0.20, 1500, 0.28, 0.03);
+                         papier(0.13, 800, 0.16, 0.10); },
+    /* zachte bots tegen de wand: een klein "au", nooit een schrikgeluid.
+       Hier wordt niemand gestraft, dus blijft het laag, kort en rond. */
+    au: function () { noot(240, 180, 0.09, 'sine', 0.26); noot(430, 350, 0.16, 'sine', 0.20, 0.06); },
+    /* de halklok slaat een keer: een zachte gong die nog even naklinkt */
+    klok: function () { noot(659, 0, 0.55, 'sine', 0.36); noot(988, 0, 0.40, 'sine', 0.16, 0.02); },
+    /* hup, een sprongetje naar de volgende steen */
+    hup: function () { noot(430, 720, 0.08, 'sine', 0.30); },
     /* staat het geluid uit? */
     dempt: function () { return demp; },
     /* speakerknop: aan of uit, onthouden voor de volgende keer */
