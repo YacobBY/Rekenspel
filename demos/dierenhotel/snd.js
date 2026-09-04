@@ -7,11 +7,18 @@
 var Snd = (function () {
   var SLEUTEL = 'kws-geluid';
   var ctx = null, meester = null, demp = false;
+  /* Vóór de eerste aanraking bestaat er GEEN geluidsband.
+     Een browser mag een AudioContext niet laten spelen voordat het kind iets
+     heeft aangeraakt; maakte je hem toch al aan (het hotel opent met Snd.deur),
+     dan zette Chrome een waarschuwing in de console en stond de band daarna
+     "suspended" te wachten. Dus: tot de eerste tik doet Snd gewoon niets.
+     Dat scheelt ook batterij op een telefoon die alleen even kijkt. */
+  var los = false;
 
   try { demp = localStorage.getItem(SLEUTEL) === '0'; } catch (e) { demp = false; }
 
   function band() {
-    if (demp) return null;
+    if (demp || !los) return null;
     if (!ctx) {
       var A = window.AudioContext || window.webkitAudioContext;
       if (!A) return null;
@@ -22,13 +29,56 @@ var Snd = (function () {
         meester.connect(ctx.destination);
       } catch (e) { ctx = null; return null; }
     }
-    if (ctx.state === 'suspended' && ctx.resume) { try { ctx.resume(); } catch (e) {} }
     return ctx;
+  }
+
+  /* Doe iets MET de band, maar alleen als hij echt loopt. Staat hij stil
+     (net ontgrendeld, of net terug uit de achtergrond), dan wachten we tot
+     resume() klaar is en spelen we daarna - nooit in het niets. */
+  function metBand(fn) {
+    var c = band(); if (!c) return;
+    if (c.state === 'running') { fn(c); return; }
+    if (!c.resume) return;
+    try {
+      var p = c.resume();
+      if (p && p.then) p.then(function () { if (c.state === 'running') fn(c); }, function () {});
+      else if (c.state === 'running') fn(c);
+    } catch (e) { /* geeft niet: dan blijft het even stil */ }
+  }
+
+  /* De eerste echte aanraking maakt de band aan en wekt hem.
+     Het lege sample van één tel is het trucje van iOS: zonder dat blijft een
+     WebAudio-band daar soms stil tot de tweede tik. */
+  function ontgrendel() {
+    if (demp) return;
+    if (!los) {
+      los = true;
+      var c = band();
+      if (!c) return;
+      try {
+        var b = c.createBufferSource();
+        b.buffer = c.createBuffer(1, 1, c.sampleRate);
+        b.connect(c.destination);
+        b.start(0);
+      } catch (e) { /* geeft niet */ }
+    }
+    if (ctx && ctx.state !== 'running' && ctx.resume) { try { ctx.resume(); } catch (e) {} }
+  }
+  /* pointerdown dekt vinger, pen en muis; touchend is het net op oudere iOS.
+     De haak blijft staan: hij wekt de band ook weer als de telefoon terugkomt
+     uit de achtergrond. */
+  if (window.addEventListener) {
+    window.addEventListener('pointerdown', ontgrendel, true);
+    window.addEventListener('touchend', ontgrendel, true);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'hidden') return;
+      if (ctx && ctx.state === 'running' && ctx.suspend) { try { ctx.suspend(); } catch (e) {} }
+    });
   }
 
   /* één zachte toon, glijdt van f naar to (optioneel), met zachte start */
   function noot(f, to, duur, vorm, top, wacht) {
-    var c = band(); if (!c) return;
+    metBand(function (c) {
     var t = c.currentTime + (wacht || 0);
     var o = c.createOscillator(), g = c.createGain();
     o.type = vorm || 'sine';
@@ -39,11 +89,12 @@ var Snd = (function () {
     g.gain.exponentialRampToValueAtTime(0.0001, t + duur);
     o.connect(g); g.connect(meester);
     o.start(t); o.stop(t + duur + 0.03);
+    });
   }
 
   /* ritselend papier: korte ruis door een filter */
   function papier(duur, freq, top, wacht) {
-    var c = band(); if (!c) return;
+    metBand(function (c) {
     var t = c.currentTime + (wacht || 0);
     var n = Math.max(16, Math.floor(c.sampleRate * duur));
     var buf = c.createBuffer(1, n, c.sampleRate);
@@ -54,6 +105,7 @@ var Snd = (function () {
     var g = c.createGain(); g.gain.value = top;
     b.connect(f); f.connect(g); g.connect(meester);
     b.start(t);
+    });
   }
 
   var A = {
@@ -106,11 +158,14 @@ var Snd = (function () {
     hup: function () { noot(430, 720, 0.08, 'sine', 0.30); },
     /* staat het geluid uit? */
     dempt: function () { return demp; },
+    /* is de geluidsband al door een echte aanraking wakker gemaakt?
+       (voor de testsuites en voor een spel dat wil weten of het zin heeft) */
+    ontgrendeld: function () { return los; },
     /* speakerknop: aan of uit, onthouden voor de volgende keer */
     schakel: function () {
       demp = !demp;
       try { localStorage.setItem(SLEUTEL, demp ? '0' : '1'); } catch (e) {}
-      if (!demp) A.tik();
+      if (!demp) { ontgrendel(); A.tik(); }
       return demp;
     }
   };
