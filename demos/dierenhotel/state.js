@@ -20,7 +20,8 @@
 function mkGast(id, naam, kind, soort, scoops, act, mins) {
   return { id: id, naam: naam, name: naam, kind: kind, soort: soort, scoops: scoops,
            act: act, mins: mins, kamer: null, bed: null, waar: 'receptie',
-           nachten: 2, geslapen: 0, prijs: 1, behoefte: 'kamer', dagIn: 1 };
+           nachten: 2, geslapen: 0, prijs: 1, behoefte: 'kamer', dagIn: 1,
+           accessoires: [] };     /* souvenirs: 'hoedje' | 'sjaaltje' | 'bal' (art.js) */
 }
 
 var GASTEN_POOL = [
@@ -612,7 +613,9 @@ function vulAan(s) {
     if (g.geslapen === undefined) g.geslapen = 0;
     if (g.prijs === undefined) g.prijs = 1;
     if (!g.behoefte) g.behoefte = g.kamer ? 'eten' : 'kamer';
+    if (!g.accessoires) g.accessoires = [];   /* oudere opslag: nog geen souvenirs */
   });
+  s.wachtlijst.concat(s.nieuweGast || []).forEach(function (g) { if (!g.accessoires) g.accessoires = []; });
   return s;
 }
 
