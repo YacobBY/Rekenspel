@@ -1109,7 +1109,7 @@ function tekenDier(d, mengen) {
   var a = K.dierAnker;
   var ox = ((x - a[0]) - (z - a[1])) * S * g + d.zij * g;
   var oy = ((x - a[0]) + (z - a[1])) * (S / 2) * g + (d.bob + d.lift) * g;
-  var p = K.dier(d.kind, d.pose, g);
+  var p = K.dier(d.kind, d.pose, g, Art.accessoires ? Art.accessoires(d.id) : null);
   if (d.face < 0) putSpiegel(p, camX + ox, camY + oy, schermX(x, z) + d.zij * g);
   else put(p, camX + ox, camY + oy);
   if (d.inWater()) tekenWater(d, x, z, p, ox, oy);

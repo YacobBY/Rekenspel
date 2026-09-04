@@ -503,15 +503,265 @@ function liggen(v) {
   return v;
 }
 
-var poseCache = Object.create(null), komCache = [];
-function bouw(kind, pose) {
-  var p = POSE[pose] || POSE.rust;
-  var v = (SOORT[kind] || hond)(p);
-  return p.lig ? liggen(v) : p.zit ? zitten(v) : v;
+/* =====================================================================
+   ACCESSOIRES (P1e): hoedje, sjaaltje, bal
+   Gekocht bij de souvenirkraam (G5) en bewaard op de gast als
+   g.accessoires = ['hoedje' | 'sjaaltje' | 'bal', ...]. Drie kleine vormen
+   uit dezelfde blokjes, hetzelfde licht en hetzelfde palet als de dieren:
+     hoedje   - platte rand + bolle kroon boven op de kop, met een licht lintje
+     sjaaltje - een bijgeverfde band om hals en borst, een kraag erbij voor de
+                dikte, en een slip die over de borst naar de kijker toe hangt
+     bal      - bol tegen de borst/buik aan de kant van de kijker, met een
+                witte evenaar zoals een strandbal
+   Kop en hals zitten per dier ergens anders en bewegen mee met de houding
+   (hx/hy), dus elke soort geeft zijn ankerpunten door (ankers()). Hoedje en
+   sjaaltje gaan vóór liggen()/zitten() op het dier, zodat ze met de kop mee
+   omlaag zakken; de bal komt erna en wordt aan de HUID van het al
+   platgeduwde model vastgemaakt, zodat hij ook liggend een ronde bal tegen
+   de buik is. Alle drie horen bij de omtrek van het dier zelf: een bed of
+   een kast dat ná het dier getekend wordt kan er dus niet zomaar overheen
+   schuiven (P1e-F1).
+===================================================================== */
+var ACC_NAMEN = ['hoedje', 'sjaaltje', 'bal'];
+var HOED = BAND, HOED_LINT = WIT;            /* mint met een licht lintje */
+var SJAAL = PAL.gans.e, SJAAL_FR = WIT;      /* warm oranje met witte franje */
+var BAL = PAL.poes.e, BAL_BAND = WIT;        /* zacht roze met een witte band */
+
+/* de vaste volgorde maakt van een lijstje één sleutel: 'hoedje,bal';
+   onbekende namen vallen af, een lege lijst geeft '' */
+function accSleutel(lijst) {
+  if (!lijst || !lijst.length) return '';
+  if (typeof lijst === 'string') lijst = lijst.split(',');
+  var uit = [], i;
+  for (i = 0; i < ACC_NAMEN.length; i++) if (lijst.indexOf(ACC_NAMEN[i]) >= 0) uit.push(ACC_NAMEN[i]);
+  return uit.join(',');
 }
-function faces(kind, pose) {
-  var k = kind + '/' + pose;
-  return poseCache[k] || (poseCache[k] = bake(bouw(kind, pose)));
+
+/* waar zit de kop [midden-x, bovenkant-y, rx, rz] en de hals [x0, y0, x1,
+   y1, straal, diepte, plek op de halsas (0..1), extra dikte] van dit dier
+   in deze houding? Precies dezelfde getallen als in hond()/poes()/konijn()/
+   gans() hierboven, inclusief de gans-omrekening van hx/hy, dus de tooi
+   beweegt mee met happen, blij zijn en snuffelen. */
+function ankers(kind, p) {
+  var hx = p.hx, hy = p.hy, ky;
+  /* de poes krijgt haar hoedje een blokje verder naar de snuit: haar spitse
+     oortjes zitten achter op de kop en piepen er zo naast uit */
+  if (kind === 'poes')   return { kop: [22 + hx, 20.5 + hy, 3.8, 4.8], hals: [15, 12, 19 + hx, 15 + hy, 2.4, 3.0, 0.55, 1.0] };
+  if (kind === 'konijn') return { kop: [21 + hx, 21.4 + hy, 4.2, 5.2], hals: [15, 13, 19 + hx, 16 + hy, 2.6, 3.2, 0.55, 1.0] };
+  if (kind === 'gans') {
+    hx = Math.round(p.hx * 2.5); hy = p.hy < 0 ? Math.round(p.hy * 2.2) : p.hy; ky = 21 + hy;
+    return { kop: [19 + hx, ky + 5.8, 2.8, 3.0], hals: [14, 13, 19 + hx, ky + 1, 1.9, 2.2, 0.60, 0.9] };
+  }
+  /* de hond: korte, dikke hals, dus de sjaal zit iets lager dan het midden */
+  return { kop: [22 + hx, 22 + hy, 4.4, 5.6], hals: [16, 12, 20 + hx, 15 + hy, 2.8, 3.6, 0.45, 1.1] };
+}
+
+/* hoedje: een platte rand die één laag in de kop zakt, met daarop een
+   bolletje kroon (breed onderaan, afgerond bovenop) en een licht lintje
+   als eerste laag boven de rand. Drie lagen hoog: een petje, geen doos.
+   Konijnenoren zijn hoger dan de kroon en steken er dus bovenuit. */
+function hoedje(v, k) {
+  var cx = k[0], y = Math.floor(k[1]), rx = k[2], rz = k[3], n0, i;
+  ell(v, cx, y - 0.2, 7.5, rx + 0.7, 0.9, rz + 0.7, HOED, { e: 3.0 });
+  n0 = v.length;
+  /* de kroon is één laag lager en een tikje smaller dan de eerste versie:
+     hij nam bijna een kwart van de omtrek in en dekte de oortjes van de
+     poes af. Nu piepen die er weer bovenuit. */
+  ell(v, cx, y, 7.5, rx - 0.8, 3.2, rz - 0.8, HOED, { e: 3.0, ymin: y });
+  for (i = n0; i < v.length; i++) if (v[i][1] === y + 1) v[i][3] = HOED_LINT;
+}
+/* een band om de hals: hetzelfde recept als hals(), maar alleen een schijf
+   loodrecht op de halsas (geen ronde uiteinden), zodat het een ring blijft
+   en geen dikke nek wordt. De blokjes komen ná het dier in de lijst, dus
+   ze overschrijven bij het bakken wat er op die plek van de hals of de kin
+   zat: de sjaal ligt om de hals in plaats van erin.
+   `dak` = per x-kolom de hoogste y van het DIER: daarboven komt er niets
+   bij. Zonder dat dak steekt een dikke kraag bij de poes en het konijn als
+   een oranje stok boven de rug uit - staand valt dat weg achter de kop,
+   liggend niet. */
+function ring(v, x0, y0, x1, y1, cz, r, rz, c, tm, halfdik, dak) {
+  var dx = x1 - x0, dy = y1 - y0, L = Math.sqrt(dx * dx + dy * dy) || 1;
+  var ta = tm - halfdik / L, tb = tm + halfdik / L, x, y, z, t, qx, qy, d2, zr;
+  for (x = Math.floor(Math.min(x0, x1) - r); x <= Math.ceil(Math.max(x0, x1) + r); x++) {
+    if (dak && dak[x] === undefined) continue;
+    for (y = Math.floor(Math.min(y0, y1) - r); y <= Math.ceil(Math.max(y0, y1) + r); y++) {
+      if (dak && y > dak[x]) continue;
+      t = ((x - x0) * dx + (y - y0) * dy) / (L * L);
+      if (t < ta || t > tb) continue;
+      qx = x0 + dx * t; qy = y0 + dy * t;
+      d2 = (x - qx) * (x - qx) + (y - qy) * (y - qy);
+      if (d2 > r * r) continue;
+      zr = rz * (0.55 + 0.45 * Math.sqrt(1 - d2 / (r * r)));
+      for (z = Math.ceil(cz - zr); z <= Math.floor(cz + zr); z++) v.push([x, y, z, c]);
+    }
+  }
+}
+/* dezelfde schijf, maar dan alleen BESTAANDE blokjes bijverven (zoals de
+   halsband en de sokjes van de hond: art.js verft liever bij dan dat het
+   iets losses aanplakt). Met een iets ruimere straal loopt de sjaal zo
+   altijd over het buitenste vlak van kin, hals en borst - bij de hond zit
+   de kop namelijk zó dicht op het lijf dat een losse ring erachter
+   verdwijnt. `plafond` houdt de verf onder de halslijn: de poes en het
+   konijn leggen hun oren liggend langs de rug, en die liggen dan pal naast
+   de hals - zonder plafond wordt zo'n oor een oranje stok over de rug. */
+function ringVerf(v, x0, y0, x1, y1, cz, r, rz, c, tm, halfdik, plafond) {
+  var dx = x1 - x0, dy = y1 - y0, L = Math.sqrt(dx * dx + dy * dy) || 1;
+  var ta = tm - halfdik / L, tb = tm + halfdik / L, i, p, t, qx, qy, d2, zr;
+  for (i = 0; i < v.length; i++) {
+    p = v[i];
+    if (p[1] > plafond) continue;
+    t = ((p[0] - x0) * dx + (p[1] - y0) * dy) / (L * L);
+    if (t < ta || t > tb) continue;
+    qx = x0 + dx * t; qy = y0 + dy * t;
+    d2 = (p[0] - qx) * (p[0] - qx) + (p[1] - qy) * (p[1] - qy);
+    if (d2 > r * r) continue;
+    zr = rz * (0.55 + 0.45 * Math.sqrt(1 - d2 / (r * r)));
+    if (Math.abs(p[2] - cz) <= zr) p[3] = c;
+  }
+}
+/* Waar houdt het model in een kolom (x, y) op aan de kant van de kijker?
+   De kijker ziet de +x-, +y- en +z-vlakken, dus de hoogste z is de huid die
+   naar hem toe staat. Zo hangt een slipje of een bal ALTIJD tegen het
+   buitenste vlak, welke soort en welke houding het ook is - geen tabel met
+   vaste getallen die per dier weer net verkeerd staat. Terug: [z, laagste y,
+   hoogste y] van de kolommen x0..x1, of null als daar niets staat. */
+function huid(v, x0, x1, y0, y1) {
+  var i, p, z = -1e9, ya = 1e9, yb = -1e9;
+  for (i = 0; i < v.length; i++) {
+    p = v[i];
+    if (p[0] < x0 || p[0] > x1 || p[1] < y0 || p[1] > y1) continue;
+    if (p[2] > z) z = p[2];
+    if (p[1] < ya) ya = p[1];
+    if (p[1] > yb) yb = p[1];
+  }
+  return z < -1e8 ? null : [z, ya, yb];
+}
+/* dezelfde huid, maar in één rondje: per kolom 'x|y' de hoogste z. De slip
+   van het sjaaltje vraagt tientallen kolommen op; zo blijft het één keer
+   door de lijst in plaats van tientallen keren. */
+function huidKaart(v) {
+  var m = Object.create(null), i, p, k;
+  for (i = 0; i < v.length; i++) {
+    p = v[i];
+    k = p[0] + '|' + p[1];
+    if (m[k] === undefined || p[2] > m[k]) m[k] = p[2];
+  }
+  return m;
+}
+/* het laagste punt OP HET SCHERM van de blokjes v[van..tot): dezelfde formule
+   als bake() gebruikt. Zo is te zien of iets onder het dier uit hangt. */
+function pyMax(v, van, tot) {
+  var i, p, q, m = -1e9;
+  for (i = van; i < tot; i++) {
+    p = v[i];
+    q = (p[0] + p[2]) * (S / 2) - (p[1] + 1) * HG;
+    if (q > m) m = q;
+  }
+  return m;
+}
+/* per x-kolom de hoogste y van het model: het dak waar de kraag onder blijft */
+function dakVan(v) {
+  var m = Object.create(null), i, p;
+  for (i = 0; i < v.length; i++) {
+    p = v[i];
+    if (m[p[0]] === undefined || p[1] > m[p[0]]) m[p[0]] = p[1];
+  }
+  return m;
+}
+/* sjaaltje: een DIKKE kraag om de hals plus een slip die vanaf de halsaanzet
+   over de borst naar de kijker toe omlaag hangt, met een witte franje
+   onderaan. De eerste versie was alleen een dunne bijgeverfde schijf om de
+   hals; bij de hond zit de kop zó dicht op het lijf dat daar bijna niets van
+   te zien was (119-322 px van 23825 bij g=3). Nu:
+     1. een ruime bijverf-schijf om hals, kin en bovenkant borst - dat is de
+        kleur op het buitenste vlak, dus altijd te zien;
+     2. een kraag erbij voor de dikte, onder het dak van het dier zelf;
+     3. een slip die per laag de VOORSTE bestaande kolom volgt en één blokje
+        búiten de huid ligt, dus die hangt over de borst naar de kijker toe
+        en verdwijnt niet achter kop of schouder.
+   Alles blijft dwars op de hals en dus ónder de kin: het snuitje en de
+   oogjes worden nooit aangeraakt (de t-grens sluit kop en staart uit). */
+function sjaaltje(v, h) {
+  var tm = h[6], dik = h[7], r = h[4] + dik, rz = h[5] + dik;
+  var x0 = h[0], y0 = h[1], x1 = h[2], y1 = h[3], i, j, x, y, yy, xm, k, lagen = [];
+  var dak = dakVan(v), sy = Math.round(y0);
+  /* de halslijn: hoger dan de bovenkant van de hals hoort er geen sjaal te
+     komen (daar zitten oren en kop) */
+  var plafond = Math.round(Math.max(y0, y1));
+  for (x in dak) if (dak[x] > plafond) dak[x] = plafond;
+  ringVerf(v, x0, y0, x1, y1, 7.5, r + 1.8, rz + 1.8, SJAAL, tm, 1.8, plafond);
+  ring(v, x0, y0, x1, y1, 7.5, r + 1.2, rz + 1.2, SJAAL, tm, 2.2, dak);
+  /* Eerst alle plekken opmeten (anders meet laag 2 de slip van laag 1) en
+     daarna neerzetten. Per laag de voorste kolom zoeken die er echt is: bij
+     de hond houdt het lijf al bij x 17 op, bij de gans bij x 16. */
+  var kaart = huidKaart(v);
+  for (y = 0; y < 7; y++) {
+    yy = sy - y;
+    for (xm = Math.round(x0) + 2; xm > Math.round(x0) - 3; xm--)
+      if (kaart[xm + '|' + yy] !== undefined) break;
+    for (i = 0; i < 4; i++) {
+      k = kaart[(xm - i) + '|' + yy];
+      if (k !== undefined) lagen.push([xm - i, yy, k + 1, y === 6 ? SJAAL_FR : SJAAL]);
+    }
+  }
+  for (j = 0; j < lagen.length; j++)
+    bx(v, lagen[j][0], lagen[j][1], lagen[j][2], 1, 1, 2, lagen[j][3]);
+}
+/* bal: een bol met een witte evenaar, tegen de borst/buik aan de kant van de
+   kijker. De eerste versie legde hem met een vaste sprong (z 17.6) vóór de
+   pootjes op de grond; daar hoort hij niet bij de omtrek van het dier en
+   schoof een bed er zo overheen (17 px verschil in de wereld tegenover 1053
+   op de kale plaat). Nu wordt hij vastgemaakt aan de huid van het dier zelf,
+   op borsthoogte, dus hij is in ELKE houding - ook liggend in bed - net zo
+   goed te zien als het dier. */
+function bal(v, h) {
+  var sx = Math.round(h[0]), k = huid(v, sx - 2, sx, -1e9, 1e9);
+  if (!k) return;
+  var r = 2.7, cy = Math.round(k[1] + (k[2] - k[1]) * 0.45), n0 = v.length, i, zak;
+  var onder = pyMax(v, 0, n0);
+  ell(v, sx + 1.5, cy, k[0] + 1.4, r, r, r, BAL, { e: 2.2 });
+  /* de bal mag niet ONDER het dier uit zakken: liggend is het dier plat en
+     zou een ronde bal er anders onderuit steken, precies in de strook waar
+     een bed langs komt. Even optillen tot hij binnen de omtrek past. */
+  /* + 1 marge: het onderste blokje van het dier kan onzichtbaar zijn (dan
+     ligt de getekende onderrand hóger dan pyMax zegt) */
+  zak = Math.ceil((pyMax(v, n0, v.length) - onder + 1) / HG);
+  if (zak > 0) { for (i = n0; i < v.length; i++) v[i][1] += zak; cy += zak; }
+  for (i = n0; i < v.length; i++) if (v[i][1] === cy) v[i][3] = BAL_BAND;
+}
+
+var poseCache = Object.create(null), komCache = [];
+/* De kale modellen blijven in poseCache (4 soorten x 15 houdingen). De
+   aangeklede varianten komen in een eigen laatje MET een dak erop, want
+   4 soorten x 15 houdingen x 7 combinaties zou ongemerkt kunnen groeien.
+   Het hotel heeft vier bedden, dus er zijn er hoogstens vier tegelijk in
+   gebruik: 4 gasten x 15 houdingen = 60 past er ruim in. */
+var tooiCache = Object.create(null), tooiOrde = [], TOOI_MAX = 72;
+function bouw(kind, pose, key) {
+  var p = POSE[pose] || POSE.rust;
+  var v = (SOORT[kind] || hond)(p), acc = key ? key.split(',') : [], a;
+  if (!acc.length) return p.lig ? liggen(v) : p.zit ? zitten(v) : v;
+  a = ankers(kind, p);
+  if (acc.indexOf('sjaaltje') >= 0) sjaaltje(v, a.hals);
+  if (acc.indexOf('hoedje') >= 0) hoedje(v, a.kop);
+  /* hoedje en sjaaltje zitten op het dier en zakken dus mee met de houding;
+     de bal wordt ERNA tegen de borst gelegd, tegen de huid van het al
+     platgeduwde model, zodat hij ook liggend nog een ronde bal is */
+  v = p.lig ? liggen(v) : p.zit ? zitten(v) : v;
+  if (acc.indexOf('bal') >= 0) bal(v, a.hals);
+  return v;
+}
+function faces(kind, pose, key) {
+  var k = kind + '/' + pose, f;
+  if (!key) return poseCache[k] || (poseCache[k] = bake(bouw(kind, pose, '')));
+  k += '/' + key;
+  f = tooiCache[k];
+  if (!f) {
+    f = tooiCache[k] = bake(bouw(kind, pose, key));
+    tooiOrde.push(k);
+    while (tooiOrde.length > TOOI_MAX) delete tooiCache[tooiOrde.shift()];
+  }
+  return f;
 }
 function komFaces(n, groot) {
   var k = (groot ? 'g' : 'k') + n;
@@ -676,9 +926,9 @@ function haalPlaat(k, maak) {
   }
   return e;
 }
-function dierPlaat(kind, pose, g) {
-  return haalPlaat('d|' + kind + '|' + pose + '|' + g, function () {
-    return plaat(faces(kind, pose), g);
+function dierPlaat(kind, pose, g, key) {
+  return haalPlaat('d|' + kind + '|' + pose + '|' + g + (key ? '|' + key : ''), function () {
+    return plaat(faces(kind, pose, key), g);
   });
 }
 function komPlaat(n, g, voor, groot) {
@@ -961,6 +1211,61 @@ function poseer(id, naam, eten) {
   teken();
 }
 
+/* ---------- wie draagt wat: de gast in de wereld ----------
+   De accessoires staan op het gastrecord (state.js, g.accessoires) en gaan
+   daar mee in de opslag; hier wordt niets dubbel bewaard. world.js geeft ze
+   op de tekenregel mee aan de kist: K.dier(d.kind, d.pose, g,
+   Art.accessoires(d.id)). Dat is één regel in world.js en één id, dus er is
+   geen giswerk nodig over WELKE gast er getekend wordt. */
+function gastRecord(id) {
+  var St = window.State, st;
+  if (!St || !St.ruw || !(st = St.ruw())) return null;
+  if (st.nieuweGast && st.nieuweGast.id === id) return st.nieuweGast;
+  return St.gast ? St.gast(id) : null;
+}
+
+/* ---------- de kleine API (via ctx.wereld, zie registry.js) ---------- */
+/* Altijd een NIEUWE lijst met alleen bekende namen: een oude of met de hand
+   aangepaste save kan hier geen rommel in de tekenkant duwen, en de beller
+   kan er niet in prikken. */
+function accessoires(id) {
+  var g = gastRecord(id), l = g && g.accessoires;
+  if (!l || !l.length || typeof l.filter !== 'function') return [];
+  return l.filter(function (n) { return ACC_NAMEN.indexOf(n) >= 0; });
+}
+function naTooi() {
+  if (wereld && wereld.vuil) wereld.vuil();
+  if (window.State && State.bewaar) State.bewaar();
+}
+/* één erbij (idempotent); geeft de lijst terug, of null als de gast of de
+   naam niet bestaat */
+function accessoire(id, naam) {
+  var g = gastRecord(id);
+  if (!g || ACC_NAMEN.indexOf(naam) < 0) return null;
+  if ((g.accessoires || []).indexOf(naam) < 0) {
+    /* nooit ter plekke wijzigen: een verse gast deelt zijn lege lijstje met
+       de gastenpool (Object.assign kopieert alleen de verwijzing) */
+    g.accessoires = (g.accessoires || []).concat([naam]);
+    naTooi();
+  }
+  return accessoires(id);
+}
+function accessoireWeg(id, naam) {
+  var g = gastRecord(id);
+  if (!g) return null;
+  if (g.accessoires && g.accessoires.indexOf(naam) >= 0) {
+    g.accessoires = g.accessoires.filter(function (n) { return n !== naam; });
+    naTooi();
+  }
+  return accessoires(id);
+}
+(window.CTX_UITBREIDINGEN = window.CTX_UITBREIDINGEN || []).push(function (ctx) {
+  if (!ctx.wereld) return;
+  ctx.wereld.accessoire = accessoire;
+  ctx.wereld.accessoires = accessoires;
+  ctx.wereld.accessoireWeg = accessoireWeg;
+});
+
 /* ---------- gereedschapskist voor world.js ----------
    De wereld bouwt zijn eigen decor (boom, hok, hek, plukjes gras) met
    dezelfde blokjes, hetzelfde licht en dezelfde bak-cache als de dieren.
@@ -969,7 +1274,10 @@ var kit = {
   S: S, HG: HG, KOM: KOM,
   bx: bx, ell: ell, punt: punt, verf: verf, bake: bake,
   plaat: plaat, cache: haalPlaat, canvas: maakCanvas,
-  dier: function (kind, pose, g) { init(); return dierPlaat(kind, pose, g); },
+  /* acc = de accessoires van dit dier: een lijstje (['hoedje', 'bal']), een
+     string ('hoedje,bal'), of leeg/weggelaten voor het kale dier. world.js
+     geeft op zijn tekenregel Art.accessoires(d.id) mee. */
+  dier: function (kind, pose, g, acc) { init(); return dierPlaat(kind, pose, g, accSleutel(acc)); },
   kom: function (n, g, voor) { init(); return komPlaat(n, g, voor, 1); },
   komAnker: [KOM_CX, KOM_CZ],       /* midden van het voerbakje in voxels */
   dierAnker: [13, 7.5]              /* midden van de vier pootjes */
@@ -978,5 +1286,7 @@ var kit = {
 return { animal: animal, mount: koppel, setMood: setMood, setFood: setFood,
          feast: feast, debug: debug, pose: poseer, PAL: PAL, stats: stats,
          kit: kit, wereld: koppelWereld, niveau: niveau,
+         accessoire: accessoire, accessoires: accessoires, accessoireWeg: accessoireWeg,
+         ACCESSOIRES: ACC_NAMEN.slice(),
          size: function () { return [CW, CH]; } };
 })();
