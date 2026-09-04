@@ -21,7 +21,9 @@
      Rooms.plekken(kamerId)       - dwaalplekken voor de dieren
      Rooms.plek(kamerId, fx, fz)  - een plek als breuk van w en d
      Rooms.hoogte(kamerId, f)     - een hoogte (y) die met de kamer meeschaalt
-     Rooms.model(naam)            - voxels van een decorstuk
+     Rooms.model(naam, params?)   - voxels van een decorstuk
+     Rooms.registerModel(naam,fn) - eigen decorstuk aanmelden (minigames)
+     Rooms.heeftModel(naam)       - bestaat dit decorstuk?
      Rooms.vloerKleur(kamer,x,z)  - kleur van een vloervakje
 ---------------------------------------------------------------- */
 var Rooms = (function () {
@@ -293,15 +295,45 @@ var MODEL = {
   lampaan: pLampAan, plant: pPlant, prikbordz: draai(pPrikbord),
   sleutelbordz: draai(pSleutelbord)
 };
-function model(naam) {
-  return MODEL[naam] ? MODEL[naam]() : pPol(+String(naam).slice(3) || 0);
+/* Eigen decorstukken van minigames (klok, stapstenen, kratten, ...):
+   Rooms.registerModel('klok', function (params) { ... return voxels; }).
+   Een model-functie geeft dezelfde lijst terug als de vaste stukken hierboven:
+   [x, y, z, kleur, voor?] per voxel, midden op (0,0,0), y omhoog vanaf de
+   vloer. `params` is wat de aanroeper meegeeft ({} als er niets is), zodat
+   één naam meerdere gedaantes kan hebben (wijzers op 7 uur, een stapel van
+   n blokjes). De ingebouwde namen zijn beschermd: die worden nooit
+   overschreven. Opnieuw aanmelden van een eigen naam mag (laatste wint). */
+var EXTRA = Object.create(null);
+/* MODEL is een gewoon object, dus MODEL['toString'] geeft de erfenis van
+   Object.prototype terug: zonder deze wacht zou 'toString' (of 'valueOf',
+   'constructor', ...) een beschermd "ingebouwd" stuk lijken dat heeftModel
+   goedkeurt en waarop het bakken stukloopt. Alleen EIGEN sleutels tellen. */
+var eigenSleutel = Object.prototype.hasOwnProperty;
+function eigenModel(map, naam) {
+  return typeof naam === 'string' && eigenSleutel.call(map, naam);
+}
+function registerModel(naam, fn) {
+  if (typeof naam !== 'string' || !naam || typeof fn !== 'function') return false;
+  if (eigenModel(MODEL, naam)) return false;
+  EXTRA[naam] = fn;
+  return true;
+}
+/* ook 'pol0'..'polN': de grasplukjes van de tuin, die model() zonder tabel maakt */
+function heeftModel(naam) {
+  return eigenModel(MODEL, naam) || eigenModel(EXTRA, naam) || /^pol\d+$/.test(String(naam));
+}
+function model(naam, params) {
+  if (eigenModel(MODEL, naam)) return MODEL[naam](params);
+  if (eigenModel(EXTRA, naam)) return EXTRA[naam](params || {});
+  return pPol(+String(naam).slice(3) || 0);
 }
 
 /* =====================================================================
    DE RUIMTES
    w x d = vloer in voxels; de wanden staan op x = 0 en z = 0.
    deuren:  {naar, wand:'x'|'z', at, breed}  - at = begin van het gat
-   decor:   {n, x, z, y?, ver?}              - ver = altijd achteraan
+   decor:   {n, x, z, y?, ver?, params?}     - ver = altijd achteraan,
+                                               params -> Rooms.model(n, params)
    slots:   {id, soort:'bed'|'bak'|'vrij', x, z}
    loop:    de stapmaat van de dieren in deze ruimte (1 = de oude maat)
 
@@ -787,7 +819,8 @@ return {
   get: function (id) { return BY_ID[id] || null; },
   pad: pad, deur: deur, slots: slots, slot: slot,
   plekken: function (id) { return (BY_ID[id] || {}).plekkenLijst || [[0, 0]]; },
-  model: model, vloerKleur: vloerKleur, kader: kader,
+  model: model, registerModel: registerModel, heeftModel: heeftModel,
+  vloerKleur: vloerKleur, kader: kader,
   plek: plek, hoogte: hoogte,
   meubelZet: meubelZet, voegBed: voegBed, meubelWeg: meubelWeg,
   nrStand: nrStand, zetNr: zetNr, nrUitIds: nrUitIds,

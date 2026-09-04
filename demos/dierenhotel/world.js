@@ -36,6 +36,10 @@
      World.solo(id, act)         - vignet: dit dier gaat iets doen
      World.dingZet(sleutel, o)   - los voorwerp (bv. de voerkar) verzetten
      World.dingPlek(sleutel)     - waar staat dat voorwerp
+     World.decor(kamer, o, door) - los decor van een spel zetten/bijwerken
+     World.decorWeg(kamer,id,door)  ... en weer weghalen
+     World.decorLijst(kamer?)    - wat staat er los (kopieën)
+     World.decorWisEigenaar(door)- alles van één eigenaar weg
      World.debug()               - stand van zaken (voor de tests)
 ---------------------------------------------------------------- */
 var World = (function () {
@@ -712,9 +716,13 @@ function putSpiegel(p, sx, sy, mx) {
   ctx.drawImage(p.cv, Math.round(sx + p.dx - mx), Math.round(sy + p.dy));
   ctx.restore();
 }
-function decorPlaat(naam) {
-  return K.cache('h|' + naam + '|' + g, function () {
-    return K.plaat(K.bake(Rooms.model(naam)), g);
+/* it = het decor-item (optioneel): draagt het params, dan hoort die gedaante
+   bij een eigen plaatje in de cache (sleutel = naam | g | params) */
+function decorPlaat(naam, it) {
+  var k = 'h|' + naam + '|' + g;
+  if (it && it.params) k += '|' + paramSleutel(it);
+  return K.cache(k, function () {
+    return K.plaat(K.bake(Rooms.model(naam, it && it.params)), g);
   });
 }
 function grondschaduw(x, z, r) {
@@ -805,8 +813,14 @@ function teken(mengen) {
   lijst.length = 0;
   for (i = 0; i < r.decor.length; i++) {
     var it = r.decor[i];
-    lijst.push({ n: it.n, x: it.x, z: it.z, y: it.y || 0,
+    lijst.push({ n: it.n, x: it.x, z: it.z, y: it.y || 0, it: it,
                  d: it.x + it.z + (it.y ? 0.3 : 0) - (it.ver ? 1000 : 0) });
+  }
+  /* los decor van een spel: zelfde painter als de meubels (zie LOS DECOR) */
+  var los = losDecor[r.id];
+  if (los) for (i = 0; i < los.length; i++) {
+    var lo = los[i];
+    lijst.push({ los: lo, d: lo.x + lo.z + (lo.hoog ? 0.3 : 0) - (lo.ver ? 1000 : 0) });
   }
   for (i = 0; i < dingen.length; i++) {
     if (dingen[i].kamer !== r.id) continue;
@@ -835,7 +849,8 @@ function teken(mengen) {
 
   for (i = 0; i < lijst.length; i++) {
     var q = lijst[i];
-    if (q.n) put(decorPlaat(q.n), schermX(q.x, q.z), schermY(q.x, q.z) - (q.y || 0) * HG * g);
+    if (q.n) put(decorPlaat(q.n, q.it), schermX(q.x, q.z), schermY(q.x, q.z) - (q.y || 0) * HG * g);
+    else if (q.los) tekenLos(q.los);
     else if (q.bak) {
       if (q.eter) { tekenBak(q.bak, 0); tekenDier(q.eter, mengen); tekenBak(q.bak, 1); }
       else { tekenBak(q.bak, 0); tekenBak(q.bak, 1); }
@@ -846,6 +861,243 @@ function teken(mengen) {
   ctx.restore();
   naamplaatjes(mengen, r.id);
   Hits.plaats(r.id, projectie);
+}
+
+/* =====================================================================
+   LOS DECOR: voorwerpen die een minigame zelf neerzet en bijwerkt
+   (een klok waarvan de wijzers draaien, kratten die volstromen, stapstenen
+   met een cijfer, een vlag op L meter). Ze staan NIET in Rooms (dus niet in
+   de opslag) en NIET in de vloerplaat: elk stuk bakt zijn eigen plaatje en
+   doet per beeld gewoon mee in de painter (x + z) met de meubels en de
+   dieren. Wisselen de params, dan wordt alleen dát ene plaatje opnieuw
+   gebakken; de vloerplaat (4 slots) en de gedeelde plaatjes-cache van Art
+   blijven met rust. Per beeld kost een stuk één lijst.push - hetzelfde als
+   een meubel.
+
+   Eigenaar (door) = het spel dat het neerzette (via ctx.wereld.decor gaat
+   dat vanzelf). Stopt dat spel, of begint een ander spel, dan ruimt de
+   wereld het op: registry.js zet bij elke start/stop Hits.voorrang(spel |
+   null), en daar haken we op in (spelWissel). Eigenaars die geen aangemeld
+   spel zijn (het hotel zelf, een test) blijven staan tot decorWeg.
+   Zie .fanout/specs/api-p1b.md.
+===================================================================== */
+var losDecor = Object.create(null);     /* kamerId -> [stuk] */
+var LOS_MAX = 48;                        /* per kamer: 20 stenen + rand + vlag past ruim */
+
+function paramSleutel(it) {
+  if (!it.params) return '';
+  if (it._pk === undefined) {
+    try { it._pk = JSON.stringify(it.params); } catch (e) { it._pk = String(it.params); }
+  }
+  return it._pk;
+}
+/* kwartslagen om de y-as: rot 1 = [x, y, z] -> [z, y, -x]. Een klok die met
+   zijn wijzerplaat naar +z kijkt (aan de z-wand) kijkt na rot 1 naar +x (aan
+   de x-wand). Het is een echte draaiing, geen spiegeling: wijzers draaien
+   nog steeds met de klok mee. */
+function draaiVox(v, rot) {
+  var r = ((rot % 4) + 4) % 4, u = [], i, q;
+  if (!r) return v;
+  for (i = 0; i < v.length; i++) {
+    q = v[i];
+    if (r === 1) u.push([q[2], q[1], -q[0], q[3], q[4]]);
+    else if (r === 2) u.push([-q[0], q[1], -q[2], q[3], q[4]]);
+    else u.push([-q[2], q[1], q[0], q[3], q[4]]);
+  }
+  return u;
+}
+/* het lege plaatje (een doorzichtig velletje van een paar pixels): één keer
+   per voxelmaat maken en delen, voor een stapel van nul blokjes en voor een
+   stuk dat niet gebakken kan worden. Er wordt alleen uit gelezen (put), dus
+   delen is veilig. */
+var leegPlaat = null, leegPlaatG = 0;
+function leegStuk() {
+  if (!leegPlaat || leegPlaatG !== g) { leegPlaat = K.plaat(K.bake([]), g); leegPlaatG = g; }
+  return leegPlaat;
+}
+/* ALLES wat uit een modelfunctie komt hoort in DEZELFDE try: niet alleen de
+   functie kan gooien, ook K.bake / K.plaat doen dat op een lijst die geen
+   lijst is ('kapot') of op een voxel zonder kleur ([[0, 0, 0]]). Zou dat
+   buiten de try gebeuren, dan gaf één kapot stuk elk beeld een paginafout
+   en brak teken() halverwege af: de rest van de painter (meubels, dieren)
+   en Hits.plaats bleven dan liggen. Mislukt het: het lege plaatje komt op
+   het stuk te staan, dus één waarschuwing per stuk in plaats van één per
+   beeld; bij nieuwe params (decorZet zet _fout terug) wordt het opnieuw
+   geprobeerd. */
+function losPlaat(it) {
+  if (it.plaat && it.plaatG === g) return it.plaat;
+  var p = null;
+  try {
+    var v = Rooms.model(it.model, it.params);
+    if (!v || !v.length) v = null;
+    else {
+      if (it.rot) v = draaiVox(v, it.rot);
+      p = K.plaat(K.bake(v), g);
+    }
+  } catch (e) {
+    p = null;
+    if (!it._fout) { it._fout = true; console.warn('decor ' + it.id + ': model ' + it.model + ' faalt', e); }
+  }
+  it.plaat = p || leegStuk();
+  it.plaatG = g;
+  return it.plaat;
+}
+function tekenLos(it) {
+  put(losPlaat(it), schermX(it.x, it.z), schermY(it.x, it.z) - it.hoog * HG * g);
+}
+function losVind(lijst, id) {
+  for (var i = 0; i < lijst.length; i++) if (lijst[i].id === id) return i;
+  return -1;
+}
+/* opzoeken zonder ook maar iets te maken: een afgewezen decor() laat geen
+   lege lijst in losDecor achter en losZoek hoeft geen lijstje kamers te
+   bouwen (volg() draait per beeld, zie losMik). */
+function losIn(kamerId, id) {
+  var l = losDecor[kamerId];
+  if (!l) return null;
+  var j = losVind(l, id);
+  return j >= 0 ? l[j] : null;
+}
+function losZoek(id, kamerId) {
+  /* zonder kamer: eerst de kamer die nu in beeld is, dan de rest */
+  if (kamerId) return losIn(kamerId, id);
+  var it = losIn(kamerNu, id), k;
+  if (it) return it;
+  for (k in losDecor) { it = losIn(k, id); if (it) return it; }
+  return null;
+}
+/* params gaat als eigen laagje mee naar buiten: wie in de teruggave rommelt,
+   verandert niets aan het stuk (en dus ook niets aan de herbak-sleutel) */
+function losParams(p) {
+  var u, k;
+  if (!p || typeof p !== 'object') return p;
+  if (Object.prototype.toString.call(p) === '[object Array]') return p.slice();
+  u = {};
+  for (k in p) if (Object.prototype.hasOwnProperty.call(p, k)) u[k] = p[k];
+  return u;
+}
+function losKopie(it) {
+  return { id: it.id, model: it.model, kamer: it.kamer, x: it.x, z: it.z, hoog: it.hoog,
+           rot: it.rot, ver: it.ver, params: losParams(it.params), door: it.door };
+}
+/* zetten of bijwerken op id.
+     o = {id, model, x, z, params?, hoog?, rot?, ver?}  (bij bijwerken mag
+         alles behalve id weg blijven: wat ontbreekt blijft zoals het was)
+     eigen = de eigenaar (via ctx: het spel zelf; undefined = bevoorrecht)
+   Geeft een kopie van het stuk terug, of null: onbekende kamer, onbekend
+   model, stuk van een ander spel, of kamer vol (LOS_MAX). */
+function decorZet(kamerId, o, eigen) {
+  var r = Rooms.get(kamerId);
+  if (!r || !o || o.id === undefined || o.id === null || o.id === '') return null;
+  var id = String(o.id), lijst = losDecor[kamerId] || null, it = lijst ? losIn(kamerId, id) : null;
+  if (it && eigen !== undefined && it.door !== eigen) return null;      /* niet van jou */
+  var model = o.model !== undefined ? String(o.model) : (it ? it.model : null);
+  if (!model || !Rooms.heeftModel(model)) { console.warn('decor ' + id + ': onbekend model ' + model); return null; }
+  if (!it) {
+    if (lijst && lijst.length >= LOS_MAX) { console.warn('decor: kamer ' + kamerId + ' is vol (' + LOS_MAX + ')'); return null; }
+    it = { id: id, kamer: kamerId, model: model, x: 0, z: 0, hoog: 0, rot: 0, ver: false,
+           params: null, _pk: '', door: eigen === undefined ? null : eigen,
+           plaat: null, plaatG: 0, _fout: false };
+    /* pas hier de lijst maken: een afgewezen aanroep laat niets achter */
+    if (!lijst) lijst = losDecor[kamerId] = [];
+    lijst.push(it);
+  }
+  var params = o.params === undefined ? it.params : (o.params || null), pk = '';
+  if (params) { try { pk = JSON.stringify(params); } catch (e) { pk = String(params); } }
+  var rot = o.rot === undefined ? it.rot : ((Math.round(+o.rot || 0) % 4) + 4) % 4;
+  if (model !== it.model || rot !== it.rot || pk !== it._pk) { it.plaat = null; it._fout = false; }
+  it.model = model; it.rot = rot; it.params = params; it._pk = pk;
+  if (o.x !== undefined) it.x = +o.x || 0;
+  if (o.z !== undefined) it.z = +o.z || 0;
+  if (o.hoog !== undefined) it.hoog = +o.hoog || 0;
+  else if (o.y !== undefined) it.hoog = +o.y || 0;
+  if (o.ver !== undefined) it.ver = !!o.ver;
+  vuil = true;
+  return losKopie(it);
+}
+function decorWeg(kamerId, id, eigen) {
+  var lijst = losDecor[kamerId];
+  if (!lijst) return false;
+  var i = losVind(lijst, String(id));
+  if (i < 0 || (eigen !== undefined && lijst[i].door !== eigen)) return false;
+  lijst.splice(i, 1);
+  vuil = true;
+  return true;
+}
+function decorLijst(kamerId) {
+  var uit = [], k, i, l;
+  for (k in losDecor) {
+    if (kamerId && k !== kamerId) continue;
+    l = losDecor[k];
+    for (i = 0; i < l.length; i++) uit.push(losKopie(l[i]));
+  }
+  return uit;
+}
+function decorWisEigenaar(eigen) {
+  var k, l, i, n = 0;
+  for (k in losDecor) {
+    l = losDecor[k];
+    for (i = l.length - 1; i >= 0; i--) if (l[i].door === eigen) { l.splice(i, 1); n++; }
+  }
+  if (n) vuil = true;
+  return n;
+}
+/* het stopsignaal: alles van een AANGEMELD spel dat niet `wie` is gaat weg */
+function spelWissel(wie) {
+  if (!window.Games || typeof Games.get !== 'function') return;
+  var k, l, i, n = 0;
+  for (k in losDecor) {
+    l = losDecor[k];
+    for (i = l.length - 1; i >= 0; i--)
+      if (l[i].door && l[i].door !== wie && Games.get(l[i].door)) { l.splice(i, 1); n++; }
+  }
+  if (n) vuil = true;
+}
+if (window.Hits && typeof Hits.voorrang === 'function') {
+  if (!Hits.voorrang._losDecor) {
+    var hitsVoorrang = Hits.voorrang;
+    Hits.voorrang = function (wie) { hitsVoorrang(wie); spelWissel(wie || null); };
+    Hits.voorrang._losDecor = true;
+  }
+} else {
+  /* geen stopsignaal om op te haken (hits.js niet geladen of veranderd): dan
+     ruimt de wereld het decor van een spel NIET meer automatisch op. Eén
+     regel, meteen bij het laden, zodat dat opvalt. */
+  console.warn('los decor: Hits.voorrang ontbreekt - decor van een spel wordt niet ' +
+               'automatisch opgeruimd; roep ctx.wereld.decorWisAlles() in stop()');
+}
+/* De ctx van elk spel krijgt dezelfde vier functies, met het spel zelf als
+   eigenaar. registry.js roept dit één keer per spel aan bij het bouwen van
+   zijn ctx (zie de opmerking aan het eind van ctxVoor). Dit blok hoort hier,
+   bij het losse decor - andere modules hangen hun eigen uitbreiding op hun
+   eigen plek aan dezelfde lijst. De functies hieronder zijn declaraties, dus
+   het maakt niet uit dat `api` pas onderaan het bestand bestaat. */
+(window.CTX_UITBREIDINGEN = window.CTX_UITBREIDINGEN || []).push(function (c, eigen) {
+  if (!c || !c.wereld) return;
+  c.wereld.decor = function (kamerId, o) { return decorZet(kamerId, o, eigen); };
+  c.wereld.decorWeg = function (kamerId, id) { return decorWeg(kamerId, id, eigen); };
+  c.wereld.decorLijst = function (kamerId) { return decorLijst(kamerId); };
+  c.wereld.decorWisAlles = function () { return decorWisEigenaar(eigen); };
+});
+/* mikpunt op een los stuk (ui.wolk, ui.somkaart, getalTag aan een klok of
+   steen). mik() kijkt hier als laatste: dieren, losse dingen, slots en vast
+   decor gaan voor, dus kies ids die daar niet mee botsen (niet 'bed1', 'bak',
+   'tobbe', 'kar', ...). */
+/* volg() draait per beeld voor ELKE hotspot (Hits.plaats), dus daar mag niets
+   gemaakt worden: de kamer staat vast in de sluiting (geen lijstje kamers om
+   te zoeken) en het antwoord gaat in een eigen vast doosje per mikpunt. Hits
+   leest het meteen uit en houdt het niet vast. */
+function losMik(id, kamerId) {
+  var it = losZoek(id, kamerId);
+  if (!it) return null;
+  var kamer = it.kamer, uit = { x: it.x, z: it.z, kamer: kamer };
+  return { kamer: kamer, x: it.x, z: it.z, y: it.hoog || 0, los: id,
+           volg: function () {
+             var q = losIn(kamer, id);
+             if (!q) return null;
+             uit.x = q.x; uit.z = q.z;
+             return uit;
+           } };
 }
 
 /* De hotspot-laag rekent in css-pixels binnen het wereldkader.
@@ -1267,7 +1519,8 @@ function mik(obj, kamerId) {
       if (r.decor[j].n === obj || r.decor[j].meubel === obj)
         return { kamer: lijst[i], x: r.decor[j].x, z: r.decor[j].z, y: r.decor[j].y || 0, volg: null };
   }
-  return null;
+  /* als laatste: een los stuk van een spel (zie LOS DECOR) */
+  return losMik(obj, kamerId);
 }
 
 /* een cijfer ÓP een voorwerp (het aantal in een bakje, het bedrag op de
@@ -1346,6 +1599,10 @@ function debug() {
   }
   for (var k in bakken) o.bakken[k] = bakken[k].eten;
   for (i = 0; i < dingen.length; i++) o.dingen[dingen[i].sleutel] = { kamer: dingen[i].kamer, x: dingen[i].x, z: dingen[i].z };
+  /* de vloerplaat-cache en het losse decor (P1b) */
+  o.platen = plaatOrde.length;
+  o.losDecor = {};
+  for (k in losDecor) if (losDecor[k].length) o.losDecor[k] = losDecor[k].length;
   return o;
 }
 
@@ -1377,6 +1634,11 @@ var api = { sync: sync, setFood: setFood, setBak: setBak, bakStand: bakStand,
             mik: mik, getalTag: getalTag, vloer: vloerRect, schaal: schaal,
             heeft: heeft, toon: toon, debug: debug, dier: vind,
             klaar: function () { return aan; } };
+/* los decor van minigames (zie LOS DECOR); door = eigenaar, weglaten = bevoorrecht */
+api.decor = decorZet;
+api.decorWeg = decorWeg;
+api.decorLijst = decorLijst;
+api.decorWisEigenaar = decorWisEigenaar;
 
 begin();
 if (!aan) {
