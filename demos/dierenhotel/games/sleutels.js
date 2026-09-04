@@ -92,6 +92,34 @@ var ELS_PLEK = Rooms.plek('receptie', 0.25, 0.975, vox(0.075));
    rij uit elkaar (gemeten met sleutels/plek.js: één stap is ~2 px). */
 var KAART_HOOG = vox(0.775);                  /* sommenkaart boven het bord */
 var WOLK_HOOG = vox(0.4625), KEY_HOOG = vox(0.05);
+var GAST_SOM = GAST_PLEK.x + GAST_PLEK.z;     /* de diepte (x + z) van de gast */
+
+/* ---------- en waar past dat in DIT kader? (X1) ----------
+   De hoogtes hierboven zijn voxels: ze krimpen en groeien met de voxelmaat k
+   (HOTEL.md 1, per kamer). Een sommenkaart is dat niet: die is 92 css-px hoog
+   omdat er een zin op staat, op elk scherm. Daardoor klopt één vaste breuk
+   niet voor elk kader:
+     portret 420x900   kader 386x473, k = 0,78 - de kaart hangt 79 px boven de
+                       rij en dat is genoeg (11 px lucht): alles blijft staan
+                       zoals het stond.
+     liggend 1000x640  kader 966x378, k = 1,25 - de camera snijdt de kale wand
+                       af, de kaart wil 54 px BOVEN het kader hangen en de
+                       knoppenlaag klemt hem tegen de bovenrand (onderrand op
+                       94 px). De rij hing op haar gewone hoogte 38 px ín de
+                       kaart, en de laag schoof haakje 0 en 1 uit de rij.
+     liggende telefoon kader 826x190 (860x420) of 706x190 (740x360) - daar
+                       passen kaart (92) + rij (48) + wolkje (48) niet meer
+                       boven de kop van de gast.
+   Daarom meet opbouw() het kader op en kiest hij zijn opstelling: STAPEL
+   (kaart boven, rij eronder, wolkje onder de rij, precies zo veel lager als
+   nodig), NAAST (kaart uiterst links, rij rechts ernaast in de bovenste
+   strook) of, in een kader waarin ook dat niet past, KRAP (de rij gaat vóór,
+   het wolkje wijkt). Past alles al, dan blijft het GEWOON - portret verandert
+   dus niet. Zie .fanout/specs/api-x1.md. */
+var GAP = 4;              /* css-px lucht tussen de kaart en de rij */
+var GAP_WOLK = 6;         /* ... en tussen de rij en het wolkje */
+var KNOP = 48;            /* een tikdoel is minstens zo groot (style.css .hot) */
+var DIER_HOOG = 28;       /* de gasten zijn 23-28 voxels hoog (art.js): daarboven blijft het wolkje */
 
 var C = null;     /* de ctx */
 var P = null;     /* de opdracht - hij woont in C.data(), dus hij blijft bewaard */
@@ -277,7 +305,11 @@ function bordNu() {
 
 function start(ctx) {
   C = ctx;
-  U = { licht: null, buren: null, kaart: null, spook: false, tip: null };
+  U = { licht: null, buren: null, kaart: null, spook: false, tip: null,
+        /* voor de opbouw in het kader (X1): het anker van de kaart aan de
+           wand, de opstelling die het laatst gekozen is (debug.opbouw) en de
+           luisteraar die na het kantelen opnieuw opbouwt */
+        anker: null, opbouw: null, luister: null, wacht: 0 };
   var gasten = gastenMetBed();
   if (!gasten.length) {
     C.ui.wolk('sleutelbordz', { id: 'sl_leeg', door: 'sleutels', icoon: '🛏',
@@ -295,7 +327,18 @@ function start(ctx) {
   P = D.bord;
   if (!P.t0) P.t0 = C.ui.nu();
   C.wereld.naar('receptie');
+  U.anker = C.wereld.mik('sleutelbordz', 'receptie') || { x: 1, z: 84 };
   haalGast();
+  /* Kantelt het scherm, dan is het kader anders (van 386x473 naar 966x378) en
+     hoort de opstelling opnieuw gekozen te worden. Net als het cijferpad van
+     ui.js wachten we even tot de wereld haar nieuwe maat heeft genomen. */
+  U.luister = function () {
+    if (!U) return;
+    clearTimeout(U.wacht);
+    U.wacht = setTimeout(function () { if (C && P && U) teken(); }, 220);
+  };
+  window.addEventListener('resize', U.luister);
+  window.addEventListener('orientationchange', U.luister);
   teken();
 }
 
@@ -310,6 +353,11 @@ function gastenKloppen(p) {
 
 function stop() {
   if (!C) return;
+  if (U && U.luister) {
+    window.removeEventListener('resize', U.luister);
+    window.removeEventListener('orientationchange', U.luister);
+    clearTimeout(U.wacht);
+  }
   /* wie nog met zijn sleutellabel aan de balie staat, gaat weer naar zijn
      eigen kamer: het hotel blijft opgeruimd achter */
   if (P) P.sleutels.forEach(function (s) { if (!s.op) naarKamer(s.gast, false); });
@@ -349,9 +397,13 @@ function naarKamer(gastId, blij) {
    3. HET BORD IN DE WERELD
 ===================================================================== */
 function drieCijfers(b) { return b.van + (b.n - 1) * b.stap >= 100; }
-function haakPlek(i, n, dx) {
-  var x = Math.round(HAAK_MID + (dx || HAAK_DX) * (i - (n - 1) / 2));
-  return { x: x, z: HAAK_SOM - x, y: HAAK_Y, kamer: 'receptie' };
+/* y = de hoogte van de rij (gewoon HAAK_Y), schuif = hoeveel voxels de hele
+   rij langs de wand opschuift (naar rechts op het scherm). De diepte x + z
+   blijft HAAK_SOM, dus de rij houdt haar plek in de tekenvolgorde. */
+function haakPlek(i, n, dx, y, schuif) {
+  var x = Math.round(HAAK_MID + (schuif || 0) + (dx || HAAK_DX) * (i - (n - 1) / 2));
+  return { x: x, z: HAAK_SOM - x, y: y === undefined || y === null ? HAAK_Y : y,
+           kamer: 'receptie' };
 }
 
 function nrTekst(w) { return P.variant === 'kamers' ? 'kamer ' + w : 'nummer ' + w; }
@@ -370,46 +422,27 @@ function rijTekst(b) {
 function teken() {
   if (!C || !P) return;
   C.hotspots.wisAlles();
-  var b = bordNu(), s = sleutelNu(), i;
+  var b = bordNu(), s = sleutelNu();
 
-  /* 1. de nummerplaatjes aan de wand: sleep-doelen met hun getal erop */
-  for (i = 0; i < b.haken.length; i++) tekenHaak(b, i);
+  /* Eerst het bord op zijn gewone plek zetten en dan opmeten: een kaartje en
+     een plaatje hebben pas een echte maat als ze in de pagina staan. Kiest
+     opbouw() daardoor een andere opstelling (liggend), dan zetten we het bord
+     meteen goed. De knoppenlaag verplaatst de knoppen pas in de volgende
+     tekenbeurt (hits.plaats vanuit de tekenlus), dus dit tweede rondje is op
+     het scherm niet te zien. */
+  var lay = gewoon();
+  tekenBord(b, s, lay);
+  var lay2 = opbouw(b);
+  if (verschilt(lay2, lay)) { lay = lay2; tekenBord(b, s, lay); }
+  U.opbouw = lay;
   /* de plaatjes met het lampje boven de deuren in de gang horen bij de stand
      van het spel, dus tekenen we ze hier opnieuw: wisAlles() haalde ze net weg */
   deurPlaatjes();
 
-  /* 2. één sommenkaartje aan het sleutelbord: de rij + de sleutel in je hand */
-  /* de rij staat er nooit kaal (HOTEL.md 9): één gewone vraag erboven, met
-     het pictogram vooraan op dezelfde regel */
-  U.kaart = C.ui.somkaart('sleutelbordz', rijTekst(b), {
-    id: 'sl_kaart', door: 'sleutels', pad: false, hoog: KAART_HOOG,
-    klas: P.klaar ? 'af' : '', icoon: '🔑',
-    regel: s ? (P.variant === 'kamers' ? 'Welk kamernummer hoort in het gat?'
-                                       : 'Welk nummer hoort in het gat?')
-             : 'De rij is nu af'
-  });
-  if (U.kaart) {
-    if (s) U.kaart.zet('🔑' + s.nummer); else U.kaart.klaar();
-    if (U.buren) U.kaart.hulp(burenTekst());
-    else if (U.tip) U.kaart.hulp(U.tip);
-  }
-
-  /* 3. de gast met zijn sleutel: wolkje boven zijn kop, sleutel bij zijn poot.
-        Ze hangen aan de PLEK bij de balie waar de gast naartoe loopt, niet aan
-        het dier zelf: een wolkje dat aan een dier hangt houdt de kamer waarin
-        het dier stond toen het wolkje werd gemaakt (ui.wolk/volg geven geen
-        nieuwe kamer door), en dan staat het in de verkeerde ruimte. */
+  /* 3b. de sleutel bij zijn poot: de sleepbron. Hij hangt aan de PLEK bij de
+         balie waar de gast naartoe loopt, niet aan het dier zelf (zie
+         tekenBord), en hij schuift met geen enkele opstelling mee. */
   if (s) {
-    C.ui.wolk({ x: GAST_PLEK.x, z: GAST_PLEK.z, kamer: 'receptie' }, {
-      /* pictogram, nummer EN woorden in hetzelfde wolkje (HOTEL.md 9). Het
-         blijft kort: in portret is de receptie ~386 px breed en duwt een
-         breder wolkje de bel van het hotel in de rij haakjes (192 px past
-         nog, 204 px niet - sleutels/plek.js). De hele opdracht staat als zin
-         op de sommenkaart. */
-      id: 'sl_tag', door: 'sleutels', icoon: '🔑', getal: s.nummer,
-      tekst: U.buren ? 'kijk bij de buren' : 'hang mij op',
-      klas: U.buren ? 'hulp' : '', hoog: WOLK_HOOG, prio: 10
-    });
     C.hotspots.bron({ x: KEY_PLEK.x, z: KEY_PLEK.z, kamer: 'receptie' }, {
       id: 'sl_key', icoon: '🔑', aantal: s.nummer, hoog: KEY_HOOG, prio: 12,
       titel: 'de sleutel van ' + s.naam + ': ' + nrTekst(s.nummer),
@@ -437,9 +470,216 @@ function teken() {
   C.wereld.vuil();
 }
 
-function tekenHaak(b, i) {
+/* de rij, de sommenkaart en het wolkje van de gast, op de plekken uit lay
+   (zie opbouw). Alle drie horen bij elkaar: ze staan onder elkaar. */
+function tekenBord(b, s, lay) {
+  var i;
+  /* 1. de nummerplaatjes aan de wand: sleep-doelen met hun getal erop */
+  for (i = 0; i < b.haken.length; i++) tekenHaak(b, i, lay);
+
+  /* 2. één sommenkaartje aan het sleutelbord: de rij + de sleutel in je hand */
+  /* de rij staat er nooit kaal (HOTEL.md 9): één gewone vraag erboven, met
+     het pictogram vooraan op dezelfde regel. Gewoon hangt de kaart aan het
+     sleutelbord; in een laag kader (opstelling 'naast') uiterst links. */
+  var anker = lay.kaartX === null ? 'sleutelbordz'
+            : { x: lay.kaartX, z: lay.kaartZ, kamer: 'receptie' };
+  U.kaart = C.ui.somkaart(anker, rijTekst(b), {
+    id: 'sl_kaart', door: 'sleutels', pad: false, hoog: KAART_HOOG,
+    klas: P.klaar ? 'af' : '', icoon: '🔑',
+    regel: s ? (P.variant === 'kamers' ? 'Welk kamernummer hoort in het gat?'
+                                       : 'Welk nummer hoort in het gat?')
+             : 'De rij is nu af'
+  });
+  if (U.kaart) {
+    if (s) U.kaart.zet('🔑' + s.nummer); else U.kaart.klaar();
+    if (U.buren) U.kaart.hulp(burenTekst());
+    else if (U.tip) U.kaart.hulp(U.tip);
+  }
+
+  /* 3. de gast met zijn sleutel: wolkje boven zijn kop.
+        Het hangt aan de PLEK bij de balie waar de gast naartoe loopt, niet aan
+        het dier zelf: een wolkje dat aan een dier hangt houdt de kamer waarin
+        het dier stond toen het wolkje werd gemaakt (ui.wolk/volg geven geen
+        nieuwe kamer door), en dan staat het in de verkeerde ruimte. */
+  if (s) {
+    /* langs de wand meeschuiven houdt de diepte (x + z) gelijk: het wolkje
+       blijft dus vóór de balie staan en achter niets verdwijnen */
+    var wx = GAST_PLEK.x + (lay.wolkX || 0);
+    C.ui.wolk({ x: wx, z: GAST_SOM - wx, kamer: 'receptie' }, {
+      /* pictogram, nummer EN woorden in hetzelfde wolkje (HOTEL.md 9). Het
+         blijft kort: in portret is de receptie ~386 px breed en duwt een
+         breder wolkje de bel van het hotel in de rij haakjes (192 px past
+         nog, 204 px niet - sleutels/plek.js). De hele opdracht staat als zin
+         op de sommenkaart. */
+      id: 'sl_tag', door: 'sleutels', icoon: '🔑', getal: s.nummer,
+      tekst: U.buren ? 'kijk bij de buren' : 'hang mij op',
+      klas: U.buren ? 'hulp' : '', hoog: lay.wolkY, prio: 10
+    });
+  }
+}
+
+/* =====================================================================
+   3b. DE OPSTELLING IN HET KADER (X1)
+   Alles in css-px binnen het kader, precies zoals de knoppenlaag rekent:
+     scherm-x = px0 + (x - z) * 2k        scherm-y = py0 + (x + z - 2y) * k
+   met k uit ctx.wereld.schaal() en (px0, py0) de achterhoek van de vloer uit
+   World.vloer() - net zoals voerkar.js zijn bakjes in de keuken uitzet. De
+   laag klemt daarna nog elke knop binnen het kader (2 px rand) en schuift wat
+   elkaar afdekt uit elkaar; dat blijft het vangnet, maar met een opstelling
+   die past hoeft ze niets meer te verschuiven - en juist dat verschuiven
+   haalde de rij haakjes uit de rij.
+===================================================================== */
+function gewoon() {
+  return { modus: 'gewoon', haakY: HAAK_Y, haakX: 0, haakDx: 0, wolkY: WOLK_HOOG,
+           wolkX: 0, kaartX: null, kaartZ: null };
+}
+function verschilt(a, q) {
+  return !!a && (a.haakY !== q.haakY || a.haakX !== q.haakX || a.haakDx !== q.haakDx ||
+                 a.wolkY !== q.wolkY || a.wolkX !== q.wolkX || a.kaartX !== q.kaartX);
+}
+function kaderMaat() {
+  var host = document.getElementById('worldHits');
+  var s = C.wereld.schaal ? C.wereld.schaal() : null;
+  var vl = (window.World && World.vloer) ? World.vloer() : null;
+  var r = C.wereld.kamer('receptie');
+  if (!host || !host.clientWidth || !host.clientHeight) return null;
+  if (!s || !s.k || !vl || !r) return null;
+  return { k: s.k, px0: vl.x + r.d * 2 * s.k, py0: vl.y,
+           breed: host.clientWidth, hoog: host.clientHeight };
+}
+function schermX(m, x, z) { return m.px0 + (x - z) * 2 * m.k; }
+function schermY(m, som, y) { return m.py0 + (som - 2 * y) * m.k; }
+/* de hoogte y die een punt met diepte som op scherm-y py zet. laag = naar
+   beneden afgerond (het komt hooguit één stapje LAGER dan gevraagd, en dat is
+   de veilige kant als het onder iets anders moet blijven). */
+function hoogteVoor(m, som, py, laag) {
+  var y = (som - (py - m.py0) / m.k) / 2;
+  return laag ? Math.floor(y + 1e-6) : Math.ceil(y - 1e-6);
+}
+/* hoeveel voxels langs de wand is dit een verschuiving op het scherm?
+   (x + 1, z - 1) schuift een knop 4k px naar rechts. Naar boven afgerond. */
+function schuifVoor(m, px) { return Math.ceil(px / (4 * m.k) - 1e-6); }
+function maatVan(id) {
+  var e = document.querySelector('#worldHits [data-hot="' + id + '"]');
+  return { w: e ? e.offsetWidth || 0 : 0, h: e ? e.offsetHeight || 0 : 0 };
+}
+/* zo klemt de knoppenlaag een knop binnen het kader (hits.js, plaats) */
+function klemY(m, py, h) {
+  if (m.breed <= 78 || m.hoog <= 78) return py;
+  return Math.max(h / 2 + 2, Math.min(m.hoog - h / 2 - 2, py));
+}
+
+/* Waar hangen de rij en het wolkje in DIT kader? Aangeroepen NA een tekenbeurt
+   op de gewone plekken, zodat de echte maten bekend zijn: de kaart (met of
+   zonder hulpregel: 92 of ~107 px), de plaatjes (een oplichtend getal maakt er
+   53 px van) en het wolkje. Geeft de gewone opstelling terug als alles al past
+   (portret) of als er (nog) niets te meten valt. */
+function opbouw(b) {
+  var uit = gewoon();
+  var m = kaderMaat();
+  if (!m || !U || C.wereld.actief() !== 'receptie') return uit;
+  var kaart = maatVan('sl_kaart'), wolk = maatVan('sl_tag'), sleutel = maatVan('sl_key');
+  if (!kaart.h) return uit;
+  var n = b.haken.length, knopH = KNOP, knopW = KNOP, i, q;
+  for (i = 0; i < n; i++) {
+    q = maatVan('sl_h' + i);
+    knopH = Math.max(knopH, q.h); knopW = Math.max(knopW, q.w);
+  }
+  if (!sleutel.h) sleutel = { w: 0, h: KNOP };
+  var anker = U.anker || { x: 1, z: 84 }, ankerSom = anker.x + anker.z;
+  /* de kaart: op haar gewone hoogte, of door de laag tegen de rand geklemd */
+  var kaartMid = klemY(m, schermY(m, ankerSom, KAART_HOOG), kaart.h);
+  var kaartOnder = kaartMid + kaart.h / 2;
+  /* De rij: n plaatjes, en twee buren schelen 2dx in (x - z), dus staan ze
+     4dx*k px van elkaar. Op de kleinste maat (kader 286 px breed, k = 0,58)
+     is 4 x 20 x k maar 47 px en dat is minder dan een plaatje breed: dan
+     vindt de laag dat de plaatjes elkaar afdekken en schuift ze de rij zelf
+     uit elkaar. Daarom houdt de stap altijd 53 px aan - zo breed als een
+     oplichtend plaatje met drie cijfers. */
+  var dx = Math.max(drieCijfers(b) ? HAAK_DX3 : HAAK_DX,
+                    Math.ceil((KNOP + 5) / (4 * m.k)));
+  var rijW = (n - 1) * 4 * dx * m.k + knopW;
+  if (dx !== (drieCijfers(b) ? HAAK_DX3 : HAAK_DX)) uit.haakDx = dx;
+  var rijNat = schermY(m, HAAK_SOM, HAAK_Y);
+  var rijMax = m.hoog - knopH / 2 - 2;          /* lager klemt de laag hem terug */
+  var wolkNat = schermY(m, GAST_SOM, WOLK_HOOG);
+  var keyMid = schermY(m, KEY_PLEK.x + KEY_PLEK.z, KEY_HOOG);
+  var kopY = schermY(m, GAST_SOM, DIER_HOOG);   /* de bovenkant van de gast */
+  /* Zo ver moet het wolkje van de rij en van de sleutel af blijven; anders
+     vindt de laag dat ze elkaar afdekken (hits.js: |dy| < (h1 + h2) / 2 - 1)
+     en schuift ze het wolkje weg - en daarna de rij, want die kiest later. De
+     sleutel ligt bij zijn poot en verschuift nooit: hij kiest als eerste. */
+  var vanRij = (wolk.h + knopH) / 2, vanKey = (wolk.h + sleutel.h) / 2;
+
+  /* Waar hangt het wolkje bij een rij op hoogte rijMid? Onder de rij, boven de
+     sleutel, in beeld, en zo hoog (dus zo dicht bij zijn kop) als dat kan.
+     bovenKop = het wolkje moet de gast heel laten. null = past niet. */
+  function wolkPlek(rijMid, bovenKop, lucht) {
+    if (!wolk.h) return WOLK_HOOG;
+    var laagst = Math.min(keyMid - vanKey - lucht, m.hoog - wolk.h / 2 - 2);
+    if (bovenKop) laagst = Math.min(laagst, kopY - wolk.h / 2);
+    var hi = hoogteVoor(m, GAST_SOM, rijMid + vanRij + lucht, true);   /* onder de rij */
+    var lo = hoogteVoor(m, GAST_SOM, laagst, false);                   /* boven de sleutel */
+    if (lo > hi) return null;
+    return Math.min(hi, Math.max(lo, WOLK_HOOG));
+  }
+
+  /* A. DE STAPEL (portret, en liggend op een tablet): de kaart boven, de rij
+        eronder - precies zo veel lager als de kaart nodig heeft - en het
+        wolkje onder de rij, maar altijd boven de kop van de gast. */
+  var wens = Math.max(rijNat, kaartOnder + GAP + knopH / 2);
+  var haakY = wens > rijNat + 0.5 ? hoogteVoor(m, HAAK_SOM, wens, true) : HAAK_Y;
+  var rijMid = schermY(m, HAAK_SOM, haakY);
+  var wolkY = rijMid <= rijMax ? wolkPlek(rijMid, true, GAP_WOLK) : null;
+  if (wolkY !== null) {
+    uit.haakY = haakY; uit.wolkY = wolkY;
+    if (haakY !== HAAK_Y || wolkY !== WOLK_HOOG || uit.haakDx) uit.modus = 'stapel';
+    return uit;
+  }
+
+  /* B. NAAST (liggende telefoon: kader ~190 px hoog): de kaart uiterst links
+        tegen de rand, de rij rechts ernaast op haar gewone hoogte aan de wand.
+        Het wolkje blijft bij de gast en zakt onder de rij; komt het dan nog
+        tegen de kaart aan, dan schuift het langs de wand naar rechts tot het
+        naast de kaart staat. */
+  var kaartRechts = kaart.w + 2;                /* de kaart begint op 2 px */
+  var rijNatX = schermX(m, HAAK_MID, HAAK_MID);
+  var rijMidX = Math.max(rijNatX, kaartRechts + GAP + rijW / 2);
+  wolkY = wolkPlek(rijNat, false, GAP_WOLK);
+  if (rijMidX + rijW / 2 + 2 <= m.breed && wolkY !== null) {
+    uit.modus = 'naast';
+    uit.kaartX = Math.round((ankerSom + (kaart.w / 2 + 2 - m.px0) / (2 * m.k)) / 2);
+    uit.kaartZ = ankerSom - uit.kaartX;
+    uit.haakX = schuifVoor(m, rijMidX - rijNatX);
+    uit.wolkY = wolkY;
+    if (wolk.h) {
+      var wolkMid = schermY(m, GAST_SOM, wolkY);
+      var wolkX = schermX(m, GAST_PLEK.x, GAST_PLEK.z);
+      if (wolkMid - wolk.h / 2 < kaartOnder + GAP && wolkX - wolk.w / 2 < kaartRechts + GAP)
+        uit.wolkX = schuifVoor(m, kaartRechts + GAP + wolk.w / 2 - wolkX);
+    }
+    return uit;
+  }
+
+  /* C. past die ook niet (een smal én laag kader: een telefoon van 320 px
+        staand, 568 px liggend), dan de stapel zo laag als het kader toelaat.
+        De rij gaat dan vóór: daar sleep je de sleutel naartoe, dus die blijft
+        heel en de kaart blijft erboven. Het wolkje mag over de kop van de gast
+        hangen, en past het ook daar niet tussen de rij en de sleutel, dan gaat
+        het onder de sleutel staan - lelijker, maar alles blijft te tikken. */
+  uit.modus = 'krap';
+  uit.haakY = hoogteVoor(m, HAAK_SOM, Math.min(wens, rijMax), true);
+  wolkY = wolkPlek(schermY(m, HAAK_SOM, uit.haakY), false, 0);
+  if (wolkY === null)
+    wolkY = hoogteVoor(m, GAST_SOM, Math.min(keyMid + vanKey, m.hoog - wolk.h / 2 - 2), false);
+  uit.wolkY = wolkY;
+  return uit;
+}
+
+function tekenHaak(b, i, lay) {
   var breed = drieCijfers(b);
-  var h = b.haken[i], p = haakPlek(i, b.haken.length, breed ? HAAK_DX3 : HAAK_DX);
+  var dx = Math.max(lay.haakDx || 0, breed ? HAAK_DX3 : HAAK_DX);
+  var h = b.haken[i], p = haakPlek(i, b.haken.length, dx, lay.haakY, lay.haakX);
   var leeg = h.blanco && h.sleutel === null;
   /* na de hulp van Els staat het goede getal als spookcijfer op het haakje */
   var spook = leeg && U.spook;
@@ -633,7 +873,9 @@ Games.register({
     bord: function () { return P; },
     plek: haakPlek,
     haken: aantalHaken,
-    sleutels: aantalSleutels
+    sleutels: aantalSleutels,
+    /* de opstelling die het laatst gekozen is (X1): gewoon, stapel, naast of krap */
+    opbouw: function () { return U ? U.opbouw : null; }
   }
 });
 })();
