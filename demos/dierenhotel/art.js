@@ -1097,15 +1097,32 @@ function meet(sp) {
   return true;
 }
 
-var vorige = 0, STAP = 1000 / 12;
+/* ---------- de 12-fps lus: ALLEEN als er dieren op het scherm staan ----------
+   Vroeger draaide deze lus altijd, ook als er nul sprites waren, en deed hij
+   12x per seconde een querySelectorAll over het hele document. In het
+   dierenhotel staat er meestal geen enkele losse `.animal` (de dieren zitten
+   in het wereldcanvas), dus dat was 12 zoekopdrachten per seconde voor
+   niets. Nu start koppel() de lus zodra de eerste sprite er is en stopt hij
+   zichzelf zodra de laatste weg is; nieuwe sprites komen binnen via de
+   waarnemer op #sheet / #scene of via Art.mount(root).
+   En hij loopt niet door terwijl het tabblad weg is. */
+var vorige = 0, STAP = 1000 / 12, lusHaak = 0;
+function lusAan() {
+  if (lusHaak || !sprites.length || document.hidden) return;
+  lusHaak = requestAnimationFrame(lus);
+}
 function lus(nu) {
-  requestAnimationFrame(lus);
+  lusHaak = 0;
+  if (document.hidden) return;                 /* visibilitychange start ons weer */
+  var i;
+  for (i = sprites.length - 1; i >= 0; i--) if (!sprites[i].el.isConnected) {
+    if (sprites[i].el.__vox === sprites[i]) sprites[i].el.__vox = null;
+    sprites.splice(i, 1);
+  }
+  if (!sprites.length) return;                 /* de laatste is weg: lus uit */
+  lusAan();
   if (nu - vorige < STAP) return;
   vorige = nu;
-  koppel();
-  var i;
-  for (i = sprites.length - 1; i >= 0; i--) if (!sprites[i].el.isConnected) sprites.splice(i, 1);
-  if (!sprites.length) return;
   if (!rustig) {
     var gedaan = Object.create(null);
     for (i = 0; i < sprites.length; i++) {
@@ -1146,6 +1163,7 @@ function koppel(root) {
     setMood(id, el.getAttribute('data-mood'));
     tekenSprite(sp);
   }
+  lusAan();          /* er staat er nu minstens één: de lus mag lopen */
 }
 
 /* bij draaien / zoomen kan de apparaat-resolutie veranderen */
@@ -1186,18 +1204,35 @@ function stats() {
   return o;
 }
 
-/* ---------- start ---------- */
+/* ---------- start ----------
+   De waarnemer kijkt naar de twee plekken waar een spel html neerzet: het
+   paneel (#scene) en het scherm-in-het-scherm (#sheet). Vroeger keek hij
+   naar de hele body en dus ook naar elke tag, elke toast en elke hotspot
+   die de wereld 30x per seconde verzet - een muizenval die de hele dag
+   afging. Zet je ergens ANDERS dieren neer, roep dan Art.mount(root).
+   Opmeten (bij draaien of zoomen) gaat via de opmaat-bus van de wereld
+   (World.onKader, M1b); is die er niet, dan aan het venster zoals vroeger. */
 function begin() {
   try { rustig = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
   catch (e) { rustig = false; }
   init();
   koppel();
   if (window.MutationObserver) {
-    new MutationObserver(function () { koppel(); }).observe(document.body, { childList: true, subtree: true });
+    var mo = new MutationObserver(function () { koppel(); });
+    var plekken = ['sheet', 'scene'].map(function (id) { return document.getElementById(id); })
+                                    .filter(function (el) { return !!el; });
+    if (!plekken.length && document.body) plekken = [document.body];
+    plekken.forEach(function (el) { mo.observe(el, { childList: true, subtree: true }); });
   }
-  window.addEventListener('resize', hermeet);
-  window.addEventListener('orientationchange', hermeet);
-  requestAnimationFrame(lus);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) lusAan(); });
+  /* world.js meldt zich pas ná ons aan (het staat later in index.html), dus
+     we haken één tel later aan zijn bus */
+  setTimeout(function () {
+    if (window.World && typeof World.onKader === 'function') { World.onKader(hermeet); return; }
+    window.addEventListener('resize', hermeet);
+    window.addEventListener('orientationchange', hermeet);
+  }, 0);
+  lusAan();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', begin);
 else begin();
@@ -1233,7 +1268,13 @@ function accessoires(id) {
   if (!l || !l.length || typeof l.filter !== 'function') return [];
   return l.filter(function (n) { return ACC_NAMEN.indexOf(n) >= 0; });
 }
+/* Een teller die bij élke wijziging van de tooi opschuift. world.js hangt
+   de tooi in zijn vingerafdruk (beeldStand) en wil daarvoor niet 60x per
+   seconde de opslag langs; met deze teller rekent hij de sleutel per dier
+   alleen opnieuw als er echt iets veranderd is (M1b). */
+var tooiV = 0;
 function naTooi() {
+  tooiV++;
   if (wereld && wereld.vuil) wereld.vuil();
   if (window.State && State.bewaar) State.bewaar();
 }
@@ -1288,5 +1329,7 @@ return { animal: animal, mount: koppel, setMood: setMood, setFood: setFood,
          kit: kit, wereld: koppelWereld, niveau: niveau,
          accessoire: accessoire, accessoires: accessoires, accessoireWeg: accessoireWeg,
          ACCESSOIRES: ACC_NAMEN.slice(),
+         /* M1b: schuift op bij elke wijziging van de tooi (zie naTooi) */
+         tooiVersie: function () { return tooiV; },
          size: function () { return [CW, CH]; } };
 })();

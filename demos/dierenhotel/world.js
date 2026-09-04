@@ -751,6 +751,31 @@ var KADER_RAND = 4;             /* css-px lucht links en rechts van de doos */
    zoals de camera dat altijd deed. Het prikbord is 23 voxels hoog (46
    voxel-px), het sleutelbord 19, dus met 56 blijven ze heel. */
 var WAND_ZICHT = 56;
+/* ---------- HET DICHTHEIDSPLAFOND (M1b) ----------
+   `d` is de ondergrens van de tekendichtheid: zoveel canvas-px per css-px
+   levert het scherm zelf. Op een kleine telefoon met een 3x-scherm liep de
+   uitkomst daardoor op tot dicht = 3,9: het wereldcanvas werd 1444 x 1392
+   (7,7 MB) en de vloerplaat 1432 x 1102 (6,3 MB), en dat hele canvas werd
+   ~31x per seconde met één drawImage van die plaat overgetekend. Op zo'n
+   scherm is 2 als ondergrens genoeg - de css schaalt het canvas terug en op
+   3x zie je dat niet - en daarmee valt g op 2 in plaats van 3: het canvas
+   werd 963 x 928 (3,4 MB) en de plaat 956 x 736 (2,8 MB), met precies
+   dezelfde q: de kamer staat even groot op het scherm. Bredere schermen en
+   dpr <= 2 houden hun dpr-dichtheid.
+   Let op: dit is een plafond op de ONDERGRENS, niet op `dicht` zelf. `dicht`
+   blijft max(d, g / q), en een kamer die breder is dan het scherm duwt die
+   nog steeds omhoog - anders past de kamer niet meer in het kader en zou de
+   voxelmaat g geen heel getal meer kunnen zijn (HOTEL.md 1). */
+var DICHT_MAX_KLEIN = 2, KLEIN_SCHERM = 500;
+function schermDicht() {
+  var dp = window.devicePixelRatio || 1;
+  /* "Kleine telefoon" is een eigenschap van het APPARAAT, niet van hoe je hem
+     vasthoudt: liggend is innerWidth 740-851 px en dan viel het plafond weg,
+     precies waar het canvas het breedst en dus het duurst is (liggend op een
+     iPhone 13 was de wasserij 3213 x 784 = 9,6 MB). Daarom de KORTE zijde. */
+  if (dp > 2 && Math.min(window.innerWidth, window.innerHeight) < KLEIN_SCHERM) return DICHT_MAX_KLEIN;
+  return Math.min(3, dp);
+}
 function doosVan(r) { return r.box || Rooms.kader(r); }
 function doosBreed(r) { var b = doosVan(r); return b[1] - b[0]; }
 function doosHoog(r) { var b = doosVan(r); return b[3] - b[2]; }
@@ -759,25 +784,83 @@ function nodigHoog(r) {
   var b = doosVan(r), lucht = Math.max(0, -b[2] - WAND_ZICHT);
   return (b[3] - b[2]) - lucht;
 }
-/* hoeveel hoogte gaat er op aan balken boven en onder het kader? */
+/* Hoeveel hoogte gaat er op aan balken boven en onder het kader? Gewoon
+   opmeten: alles van #app dat niet het kader zelf is. Hier stond
+   `Math.max(110, ...)`, en dat was in werkelijkheid een PLAFOND op het kader:
+   maakt de schil zijn balken smaller (M1a meet er liggend 64), dan bleef er
+   toch 110 van af, en dus bleef het kader liggend 274 px in plaats van 320.
+   Het kader mag nemen wat er past (ruimteHoogte houdt zelf nog 6 px marge en
+   KADER_MIN = 200 als ONDERgrens). Verzetten we het kader, dan krimpt #app
+   evenveel mee, dus deze maat slingert niet. */
 function chroomHoogte() {
   var app = document.getElementById('app');
   if (!app || !host) return 200;
-  return Math.max(110, app.offsetHeight - host.offsetHeight);
+  var appH = app.offsetHeight;
+  if (appH < 40) return 200;                  /* nog niet opgemaakt: veilig hoog */
+  return Math.max(0, appH - host.offsetHeight);
+}
+
+/* ---------- DE STABIELE SCHERMHOOGTE (M1b) ----------
+   window.innerHeight is op een telefoon geen rustige maat: zodra de url-balk
+   in- of uitschuift springt hij 60-90 px op en neer, ook middenin een
+   sleepbeweging van een kind. Rekenden we het kader daaruit, dan verschoof
+   de hele wereld onder de vingertjes weg.
+   Daarom meten we de KLEINE viewport-hoogte (css `100svh`): die staat vast,
+   of de url-balk nu in beeld is of niet. Kan de browser dat niet, dan
+   visualViewport.height, en als laatste innerHeight.
+   En we LATCHEN hem: een nieuwe hoogte nemen we alleen over als de breedte
+   veranderde (draaien, een rekenblad ernaast), de oriëntatie omsloeg, of de
+   hoogte meer dan HOOGTE_RUIS px verschoof. Kleinere hoogtesprongen zijn
+   url-balk-ruis en laten het kader met rust. */
+var HOOGTE_RUIS = 120;               /* css-px: hieronder is een hoogtesprong ruis */
+var KADER_MIN = 200;                 /* css-px: hier gaat het kader nooit onder */
+var vast = { h: 0, w: 0, staand: null };
+var svhBalk = null, svhKan = null;
+
+/* het meetlatje voor 100svh: één onzichtbaar strookje, één keer gemaakt */
+function svhMeter() {
+  if (svhKan === null) {
+    try { svhKan = !!(window.CSS && CSS.supports && CSS.supports('height', '100svh')); }
+    catch (e) { svhKan = false; }
+  }
+  if (!svhKan || !document.body) return null;
+  if (svhBalk && svhBalk.isConnected) return svhBalk;
+  svhBalk = document.createElement('div');
+  svhBalk.id = 'worldSvh';
+  svhBalk.setAttribute('aria-hidden', 'true');
+  svhBalk.style.cssText = 'position:fixed;top:0;left:0;width:0;height:100svh;' +
+    'pointer-events:none;visibility:hidden;z-index:-1';
+  document.body.appendChild(svhBalk);
+  return svhBalk;
+}
+/* de rauwe schermhoogte: zo stabiel als de browser hem kan geven */
+function schermHoogte() {
+  var m = svhMeter();
+  if (m) { var h = m.offsetHeight || m.getBoundingClientRect().height; if (h > 80) return Math.round(h); }
+  if (window.visualViewport && window.visualViewport.height > 80) return Math.round(window.visualViewport.height);
+  return window.innerHeight;
+}
+/* ... en de gelatchte versie, die url-balk-ruis negeert */
+function vasteHoogte() {
+  var h = schermHoogte(), w = window.innerWidth, staand = h >= w;
+  if (!vast.h || w !== vast.w || staand !== vast.staand || Math.abs(h - vast.h) >= HOOGTE_RUIS) {
+    vast.h = h; vast.w = w; vast.staand = staand;
+  }
+  return vast.h;
 }
 /* hoeveel hoogte is er over voor het kader zelf? */
 function ruimteHoogte() {
-  return Math.max(200, window.innerHeight - chroomHoogte() - 6);
+  return Math.max(KADER_MIN, vasteHoogte() - chroomHoogte() - 6);
 }
 /* ... en hoeveel daarvan mag het kader echt gebruiken (de balken van het
    hotel moeten er ook nog bij: staand 78%, liggend 90% van het scherm) */
 function ruimVoorKader() {
-  var staand = window.innerHeight >= window.innerWidth;
-  return Math.min(ruimteHoogte(), Math.round(window.innerHeight * (staand ? 0.78 : 0.90)));
+  var h = vasteHoogte(), staand = h >= window.innerWidth;
+  return Math.min(ruimteHoogte(), Math.round(h * (staand ? 0.78 : 0.90)));
 }
 /* de maat van ÉÉN ruimte in een kader van cssW breed en hoogPx hoog */
 function maatVan(r, cssW, hoogPx) {
-  var d = Math.min(3, window.devicePixelRatio || 1);
+  var d = schermDicht();
   /* Deze doos past: in de breedte helemaal, in de hoogte tot op de kale wand.
      KADER_RAND is het strookje lucht dat we vrijhouden - onderaan houdt de
      camera diezelfde 4 px ook echt vrij (camDoel) als hij wand afsnijdt. */
@@ -798,12 +881,23 @@ function maatVan(r, cssW, hoogPx) {
    kleinst uitvallende doos minder dan 60% vult (dan kijk je in een zee van
    lucht) - en de hoogste doos mag er alleen kale wand bij inschieten. */
 function kaderHoogte(cssW, ruim) {
-  var laagste = 0;
+  var laagste = 0, nodig = 0;
   Rooms.lijst().forEach(function (r) {
-    var h = doosHoog(r) * maatVan(r, cssW, ruim).q;
+    var m = maatVan(r, cssW, ruim), h = doosHoog(r) * m.q;
     if (!laagste || h < laagste) laagste = h;
+    var n = nodigHoog(r) * m.q;
+    if (n > nodig) nodig = n;
   });
-  return Math.max(200, Math.min(ruim, Math.round(laagste / 0.60)));
+  /* De 60%-regel is een PLAFOND tegen een zee van lucht, geen reden om een
+     kamer af te snijden: past de hele nodige hoogte (vloer + WAND_ZICHT) van
+     de zwaarste doos er ook nog in, dan houdt het kader daar niet onder.
+     `nodig` is per constructie hooguit `ruim - KADER_RAND` (maatVan begrenst
+     q juist op die hoogte), dus dit kan het kader nooit boven de beschikbare
+     ruimte tillen. Nu doet deze regel niets (nodig ligt overal ruim onder
+     laagste / 0,60); hij gaat pas tellen als M1a de liggende balken smaller
+     maakt en er hoogte vrijkomt. */
+  var wil = Math.max(Math.round(laagste / 0.60), Math.round(nodig));
+  return Math.max(KADER_MIN, Math.min(ruim, wil));
 }
 /* geeft true als de hoogte van het kader veranderd is */
 function pasKader(cssW) {
@@ -820,17 +914,170 @@ function pasKader(cssW) {
   return true;
 }
 
+/* =====================================================================
+   DE OPMAAT-BUS (M1b): één waarnemer, één wachttijd, één signaal
+
+   Vroeger deed de tekenlus elk beeldje `host.getBoundingClientRect()` (60x
+   per seconde een layout-leesbeurt) en riep elk ander bestand zijn eigen
+   window-resize af. Nu is er één pad:
+
+     ResizeObserver  ->  wachtje van KADER_WACHT ms  ->  meet()  ->  onKader
+
+   Eén waarnemer kijkt naar drie dozen: het wereldkader zelf (een rekenblad
+   ernaast maakt het smaller zonder dat het venster verandert), het
+   svh-meetlatje (de kleine viewport-hoogte; die verspringt NIET als de
+   url-balk in- of uitschuift, maar wel bij draaien) en #app (worden de
+   balken hoger, dan is er minder over). Verandert de BREEDTE van het kader,
+   dan meten we meteen - een kamer die 120 ms in de verkeerde maat staat zie
+   je. Verandert alleen de hoogte, dan wachten we het rijtje meldingen af.
+   Kan de browser geen ResizeObserver, dan hangen we hetzelfde pad aan
+   window resize + orientationchange.
+
+     World.onKader(fn) -> functie die weer afmeldt
+     fn({ x, y, w, h }, { g, dpr, k, pxPerVoxelX, pxPerVoxelY, pxPerHoogte,
+                          kamer })
+
+   Alle maten in css-px binnen de pagina; `schaal` is precies wat
+   World.schaal() geeft, plus de ruimte waar hij bij hoort. Meld je altijd
+   af als je weggaat - de bus houdt de functie anders vast.
+===================================================================== */
+var KADER_WACHT = 120;               /* ms: één wachtje voor een rij meldingen */
+var luisteraars = [], kaderTimer = 0, kaderRO = null, roBreed = -1;
+var kaderRect = null;                /* de laatst gemeten kaderrechthoek (css-px) */
+var kaderSlagen = 0;                 /* hoe vaak de bus geslagen heeft (tests) */
+
+/* De kaderrechthoek. Alleen hier staat een layout-leesbeurt, en hij komt
+   alleen uit de bus - nooit meer uit de tekenlus. */
+function kaderMaat(vers) {
+  if (!host) return null;
+  if (vers || !kaderRect) {
+    var r = host.getBoundingClientRect();
+    kaderRect = { x: r.left, y: r.top, w: r.width, h: r.height };
+  }
+  return kaderRect;
+}
+function onKader(fn) {
+  if (typeof fn !== 'function') return function () {};
+  luisteraars.push(fn);
+  return function () {
+    var i = luisteraars.indexOf(fn);
+    if (i >= 0) luisteraars.splice(i, 1);
+  };
+}
+function kaderRoep() {
+  kaderSlagen++;
+  if (!luisteraars.length) return;
+  var k = kaderMaat() || { x: 0, y: 0, w: 0, h: 0 }, s = schaal();
+  s.kamer = kamerNu;
+  var l = luisteraars.slice(), i;
+  for (i = 0; i < l.length; i++) {
+    /* één stukke luisteraar mag de rest niet meeslepen */
+    try { l[i]({ x: k.x, y: k.y, w: k.w, h: k.h }, s); }
+    catch (e) { console.warn('World.onKader: een luisteraar deed het niet', e); }
+  }
+}
+/* het svh-meetlatje onder de waarnemer schuiven (en er later nog eens naar
+   kijken: bij een heel vroege start bestaat document.body nog niet) */
+var roMeter = null;
+function meterWaak() {
+  if (!kaderRO) return;
+  var m = svhMeter();
+  if (m && m !== roMeter) { kaderRO.observe(m); roMeter = m; }
+}
+/* nu meten, en als er iets veranderde: de bus slaan */
+function kaderNu() {
+  if (kaderTimer) { clearTimeout(kaderTimer); kaderTimer = 0; }
+  if (!host) return;
+  meterWaak();
+  var oud = kaderRect ? kaderRect.w + 'x' + kaderRect.h : '';
+  kaderMaat(true);
+  var anders = meet();
+  if (anders || (kaderRect.w + 'x' + kaderRect.h) !== oud) kaderRoep();
+}
+/* ... en straks meten: een rij meldingen (draaien, een url-balk) wordt zo
+   één keer verwerkt in plaats van tien keer */
+function kaderStraks() {
+  if (kaderTimer) clearTimeout(kaderTimer);
+  kaderTimer = setTimeout(function () { kaderTimer = 0; kaderNu(); }, KADER_WACHT);
+}
+function kaderBus() {
+  if (!host) return;
+  if (window.ResizeObserver) {
+    kaderRO = new ResizeObserver(function (lijst) {
+      var i, e, b, w = roBreed;
+      for (i = 0; i < lijst.length; i++) {
+        e = lijst[i];
+        if (e.target !== host) continue;             /* het meetlatje is 0 breed */
+        b = e.borderBoxSize && e.borderBoxSize[0];
+        w = b ? b.inlineSize : e.contentRect.width;
+      }
+      var breedAnders = roBreed < 0 || Math.abs(w - roBreed) >= 1;
+      roBreed = w;
+      if (!W || breedAnders) kaderNu();
+      else kaderStraks();
+    });
+    kaderRO.observe(host);
+    meterWaak();
+    /* #app erbij: worden de balken boven of onder het kader hoger (een badge,
+       een kamerchip erbij), dan is er minder ruimte over. Dat verandert de
+       doos van het kader zelf niet, dus zonder deze waarneming zou niemand
+       het merken. chroomHoogte = app - host, dus het kader zelf verzetten
+       verandert die maat niet: geen slingerbeweging. */
+    var app = document.getElementById('app');
+    if (app) kaderRO.observe(app);
+  } else {
+    /* geen ResizeObserver: hetzelfde pad, aan het venster */
+    window.addEventListener('resize', kaderStraks);
+    window.addEventListener('orientationchange', kaderNu);
+  }
+}
+
+/* Een rekenblad ernaast (body.metpaneel) laat de OPMAAK de hoogte van het
+   kader bepalen; pasKader haalt zijn eigen hoogte er dan af. Maar zolang die
+   hoogte er nog op staat, verandert de doos van het kader niet en zwijgt de
+   waarnemer - staand staat het blad namelijk ónder de wereld, dus ook de
+   breedte blijft gelijk. Daarom kijken we apart naar die ene klasse. */
+var paneelWas = null;
+function paneelWacht() {
+  if (!window.MutationObserver || !document.body) return;
+  paneelWas = document.body.classList.contains('metpaneel');
+  new MutationObserver(function () {
+    var nu = document.body.classList.contains('metpaneel');
+    if (nu === paneelWas) return;              /* 'sleept' en zo gaan ons niet aan */
+    paneelWas = nu;
+    kaderNu();
+  }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+}
+
+/* De hotspot-laag wordt aan het eind van elke tekenbeurt op zijn plek gezet
+   (Hits.plaats in teken). Nu de wereld alleen nog tekent als er iets
+   veranderd is, moet een NIEUWE of weggehaalde hotspot dat zelf zeggen -
+   anders staat een knop die een spel net neerzette pas bij de volgende
+   tekenbeurt goed. We haken daarom om Hits heen (hits.js zelf blijft
+   ongemoeid, dat is ticket H1). */
+function hitsHaken() {
+  if (!window.Hits) return;
+  ['maak', 'weg', 'wisEigenaar', 'pak', 'laat', 'voorrang'].forEach(function (naam) {
+    var oud = Hits[naam];
+    if (typeof oud !== 'function' || oud._vuil) return;
+    var nieuw = function () { var u = oud.apply(Hits, arguments); vuil = true; return u; };
+    nieuw._vuil = true;
+    Hits[naam] = nieuw;
+  });
+}
+
 function meet() {
   if (!host) return false;
-  var r = host.getBoundingClientRect();
-  if (r.width < 8 || r.height < 8) return false;
-  if (pasKader(r.width)) r = host.getBoundingClientRect();
-  var m = maatVan(kamer(), r.width, r.height);
-  var nw = Math.max(240, Math.round(r.width * m.dicht)), nh = Math.max(180, Math.round(r.height * m.dicht));
+  var r = kaderMaat();
+  if (!r || r.w < 8 || r.h < 8) return false;
+  /* pasKader zet de hoogte van het kader zelf: dan is onze maat verouderd */
+  if (pasKader(r.w)) r = kaderMaat(true);
+  var m = maatVan(kamer(), r.w, r.h);
+  var nw = Math.max(240, Math.round(r.w * m.dicht)), nh = Math.max(180, Math.round(r.h * m.dicht));
   if (nw === W && nh === H && m.g === g && m.dicht === dpr) return false;
   W = nw; H = nh; g = m.g; dpr = m.dicht;
   cv.width = W; cv.height = H;
-  cv.style.width = r.width + 'px'; cv.style.height = r.height + 'px';
+  cv.style.width = r.w + 'px'; cv.style.height = r.h + 'px';
   ctx.imageSmoothingEnabled = false;
   camZet();
   if (window.Hits) Hits.hermeet();
@@ -1503,11 +1750,127 @@ function reisStap(nu) {
   if (t >= 1) { reis = null; camZet(); }
 }
 
+/* ---------- WANNEER IS ER IETS VERANDERD? (M1b) ----------
+   Vroeger zette elke hartslag `vuil` op waar, en niets zette hem ooit weer
+   uit: de wereld tekende dus 31x per seconde opnieuw, ook als er een uur
+   lang niets bewoog. Elk beeldje kostte één drawImage van de hele
+   vloerplaat over het hele canvas.
+   Nu kijken we per beeldje of de INVOER van teken() nog dezelfde is: de
+   camera, de reis, de maat, de dieren met hun houdingen en pluisjes, de
+   bakjes, het decor van de kamer, het losse decor van een spel en het
+   badwater. Verandert daar iets - door wie of wat dan ook - dan tekenen we
+   opnieuw. De losse `vuil = true` op alle plekken waar iets verandert blijft
+   staan: die is sneller (meteen dit beeldje, niet pas bij de volgende
+   vergelijking) en gratis. Zo hoeft niemand erop te vertrouwen dat een ander
+   bestand netjes `World.vuil()` roept.
+   Tussen twee hartslagen glijdt een lopend dier van px,pz naar x,z: zolang
+   dat glijden bezig is verandert het beeld elk beeldje, dus dan is de wereld
+   ook elk beeldje vuil (iemandGlijdt). Staat alles stil, dan tekenen we
+   hooguit nog eens per 400 ms - genoeg om de hotspot-laag en de
+   naamkaartjes vers te houden. */
+var vorigeStand = '';
+/* De tooi van een dier (P1e) gaat mee in het plaatje dat tekenDier bakt
+   (K.dier(..., Art.accessoires(d.id))), dus hij hoort ook in de
+   vingerafdruk. art.js roept bij elke wijziging zelf World.vuil() (naTooi),
+   maar de vingerafdruk mag daar niet van afhangen.
+   Art.accessoires() loopt langs de opslag en maakt elke keer een nieuw
+   lijstje; dit pad loopt 60x per seconde, dus we onthouden de sleutel per
+   dier en rekenen hem alleen opnieuw als het lijstje in de opslag een ÁNDER
+   lijstje is geworden. De setters van art.js vervangen dat lijstje altijd
+   (nooit ter plekke wijzigen - zie de opmerking bij accessoire()), dus die
+   vergelijking op identiteit is genoeg. */
+function tooiSleutel(d) {
+  var A = window.Art;
+  if (!A || typeof A.accessoires !== 'function') return '';
+  /* geen teller (een oudere art.js): dan elke keer verse rekenen - liever
+     traag dan een oud plaatje */
+  if (typeof A.tooiVersie !== 'function') return A.accessoires(d.id).join('+');
+  var v = A.tooiVersie();
+  if (v !== d._tooiV) { d._tooiV = v; d._tooi = A.accessoires(d.id).join('+'); }
+  return d._tooi || '';
+}
+function beeldStand() {
+  var r = kamer(), uit, i, j, d, q, s, b, lo, it;
+  uit = kamerNu + '@' + camX + ',' + camY + '|' + g + ',' + dpr + ',' + W + ',' + H +
+        '|' + (reis ? Math.round(reis.alfa * 1000) : '') +
+        /* het badwater: tekenWater/inWater lezen de rechthoek uit rooms.js */
+        '|' + (r && r.bad ? r.bad.x0 + ',' + r.bad.x1 + ',' + r.bad.z0 + ',' + r.bad.z1 : '') + '#';
+  for (i = 0; i < dieren.length; i++) {
+    d = dieren[i];
+    if (d.kamer !== kamerNu) continue;
+    uit += d.id + '|' + d.kind + '|' + d.staat + '|' + d.pose + '|' + d.face + '|' +
+           d.x + '|' + d.z + '|' + d.px + '|' + d.pz + '|' +
+           d.zij + '|' + d.bob + '|' + d.lift + '|' + d.hoogte + '|' + d.pluis.length +
+           /* inWater() kijkt ook naar de houding van een lopende opdracht */
+           '|' + (d.opdracht ? d.opdracht.pose : '') +
+           /* de tooi zit in het plaatje dat tekenDier bakt (P1e) */
+           '|' + tooiSleutel(d);
+    for (j = 0; j < d.pluis.length; j++) {
+      q = d.pluis[j];
+      uit += '/' + q.x + ',' + q.z + ',' + q.y + ',' + q.t + ',' + q.s + ',' + q.c;
+    }
+    uit += ';';
+  }
+  if (!r) return uit;
+  uit += '#';
+  for (i = 0; i < r.decor.length; i++) {
+    it = r.decor[i];
+    uit += it.n + ',' + it.x + ',' + it.z + ',' + (it.y || 0) + ',' + (it.ver ? 1 : 0) +
+           ',' + paramSleutel(it) + ';';
+  }
+  uit += '#';
+  for (i = 0; i < r.slots.length; i++) {
+    s = r.slots[i];
+    if (s.soort === 'bed') uit += (s.model || (s.draai ? 'bedz' : 'bed')) + ',' + s.x + ',' + s.z + ';';
+    else if (s.soort === 'bak') {
+      b = bakken[r.id + '|' + s.id];
+      if (b) uit += 'bak' + s.id + ',' + b.x + ',' + b.z + ',' + b.eten + ';';
+    }
+  }
+  uit += '#';
+  for (i = 0; i < dingen.length; i++) {
+    if (dingen[i].kamer !== r.id) continue;
+    uit += dingen[i].n + ',' + dingen[i].x + ',' + dingen[i].z + ',' + (dingen[i].y || 0) + ';';
+  }
+  uit += '#';
+  lo = losDecor[r.id];
+  if (lo) for (i = 0; i < lo.length; i++) {
+    it = lo[i];
+    uit += it.model + ',' + it.x + ',' + it.z + ',' + it.hoog + ',' + it.rot +
+           ',' + (it.ver ? 1 : 0) + ',' + it._pk + ';';
+  }
+  return uit;
+}
+/* geeft true als de invoer van teken() sinds de vorige keer veranderd is */
+function standAnders() {
+  var s = beeldStand();
+  if (s === vorigeStand) return false;
+  vorigeStand = s;
+  return true;
+}
+/* glijdt er iemand tussen twee hartslagen? dan verandert het beeld per beeldje */
+function iemandGlijdt() {
+  for (var i = 0; i < dieren.length; i++) {
+    var d = dieren[i];
+    if (d.kamer === kamerNu && (d.px !== d.x || d.pz !== d.z)) return true;
+  }
+  return false;
+}
+
+/* De lus loopt niet door terwijl het tabblad weg is: geen tikken, geen
+   tekenbeurten, geen batterij. Bij terugkomst beginnen we de klok opnieuw
+   (anders haalt hij in één keer drie hartslagen in) en tekenen we één keer. */
+var lusHaak = 0;
+function lusAan() {
+  if (lusHaak || document.hidden) return;
+  lusHaak = requestAnimationFrame(lus);
+}
 function lus(nu) {
-  requestAnimationFrame(lus);
+  lusHaak = 0;
+  if (document.hidden) return;                  /* visibilitychange start ons weer */
+  lusAan();
   if (!host || !host.isConnected) return;
-  if (meet()) vuil = true;
-  if (!W) return;
+  if (!W) return;                               /* de opmaat-bus meet, niet de lus */
   if (!tonen) return;
 
   if (!rustModus) {
@@ -1519,18 +1882,22 @@ function lus(nu) {
         if (dieren[i].kamer === kamerNu) dieren[i].tik();
         else dieren[i].grofTik();
       }
-      vuil = true; n++;
+      n++;
     }
     if (nu - vorigeTik > STAP * 6) vorigeTik = nu;
     restTijd = Math.max(0, Math.min(1, (nu - vorigeTik) / STAP));
+    if (iemandGlijdt()) vuil = true;
   } else restTijd = 1;
 
   if (reis) reisStap(nu);
+  /* is de invoer van teken() veranderd - door een hartslag, een spel of het
+     hotel? Dit staat NA reisStap, zodat de camera van dit beeldje meetelt. */
+  if (standAnders()) vuil = true;
   if (!vuil && nu - vorigeTeken < 400) return;
   if (nu - vorigeTeken < TEKEN) return;
   vorigeTeken = nu;
   teken(rustModus ? 1 : restTijd);
-  if (rustModus) vuil = false;
+  vuil = false;
 }
 
 /* =====================================================================
@@ -1633,6 +2000,9 @@ function sync(lijstGasten) {
     else {
       d.naam = a.name || a.naam || d.naam;
       if (d.tag) d.tag.textContent = d.naam;
+      /* De opslag kan buitenom veranderd zijn (een spel geladen): de
+         onthouden tooi-sleutel van dit dier één keer weggooien. */
+      d._tooiV = null;
     }
     d.nr = i;
     d.blijStijl = stijlVan(i);
@@ -1912,9 +2282,12 @@ function naar(kamerId, meteen) {
 }
 
 function toon(ja) {
+  var was = tonen;
   tonen = !!ja;
   if (host) host.classList.toggle('uit', !tonen);
-  if (tonen) { vuil = true; vorigeTik = 0; }
+  /* het kader was net nog display:none en dus 0 bij 0: meteen opmeten, niet
+     wachten tot de waarnemer erover begint (de tekenlus meet niet meer) */
+  if (tonen) { vuil = true; vorigeTik = 0; if (!was || !W) kaderNu(); lusAan(); }
 }
 function vuilMaken() { vuil = true; }
 
@@ -2021,7 +2394,11 @@ function debug() {
             dpr: dpr, q: g / (dpr || 1), canvas: [W, H],
             cam: [camX, camY], reis: !!reis, dieren: {}, bakken: {}, dingen: {},
             kader: host ? [Math.round(host.clientWidth), Math.round(host.clientHeight)] : null,
-            box: (kamer() || {}).box || null, vloer: vloerRect() };
+            box: (kamer() || {}).box || null, vloer: vloerRect(),
+            /* de opmaat-bus (M1b): hoeveel keer heeft hij geslagen, hoeveel
+               luisteraars hangen eraan, en welke schermhoogte houden we vast */
+            kaderSlagen: kaderSlagen, kaderLuisteraars: luisteraars.length,
+            vasteHoogte: vast.h, vuil: vuil, waakt: !!kaderRO };
   for (var i = 0; i < dieren.length; i++) {
     var d = dieren[i];
     o.dieren[d.id] = { staat: d.staat, pose: d.pose, naam: d.naam, kamer: d.kamer,
@@ -2054,9 +2431,18 @@ function begin() {
   host.classList.toggle('uit', !tonen);
   meet();
   Art.wereld(api);
-  window.addEventListener('resize', function () { vuil = true; });
-  window.addEventListener('orientationchange', function () { vuil = true; });
-  requestAnimationFrame(lus);
+  /* de opmaat-bus vervangt de twee window-luisteraars die hier stonden: één
+     waarnemer, één wachtje, één signaal (zie DE OPMAAT-BUS) */
+  kaderBus();
+  paneelWacht();
+  hitsHaken();
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) return;
+    vorigeTik = 0;                 /* niet drie hartslagen inhalen na een pauze */
+    vuil = true;
+    lusAan();
+  });
+  lusAan();
 }
 
 var api = { sync: sync, setFood: setFood, setBak: setBak, bakStand: bakStand,
@@ -2074,6 +2460,15 @@ api.decorWisEigenaar = decorWisEigenaar;
 
 /* P1c: bewegen met een belofte, ook rechtstreeks via World (zie stappen) */
 api.loopNaar = loopNaar; api.stappen = stappen; api.pose = poseZet;
+
+/* M1b: de opmaat-bus. Eén ResizeObserver, één wachtje van 120 ms, één
+   signaal voor iedereen die zijn eigen laag op het kader wil leggen.
+   Zie .fanout/specs/api-m1b.md en DE OPMAAT-BUS hierboven. */
+api.onKader = onKader;
+api.kader = function () { var k = kaderMaat(); return k ? { x: k.x, y: k.y, w: k.w, h: k.h } : null; };
+/* handmatig opmeten (een spel dat zelf de opmaak omgooit); normaal doet de
+   waarnemer dit vanzelf */
+api.hermeet = kaderNu;
 
 begin();
 if (!aan) {
