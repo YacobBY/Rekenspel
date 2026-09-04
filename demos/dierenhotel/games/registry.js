@@ -189,7 +189,7 @@ function ctxVoor(def) {
       },
 
       /* ---------- inrichten: bedden en meubels bijplaatsen ----------
-         Dit loopt via rooms.js, wordt bewaard in de opslag (v6) en staat
+         Dit loopt via rooms.js, wordt bewaard in de opslag (v7) en staat
          er na "Verder spelen" weer. Zo hoeft een spel nooit in een
          gedeeld bestand te schrijven. */
       voegBed: function (kamerId, plek) { return zetMeubel(kamerId, 'bed', plek); },
@@ -226,7 +226,7 @@ function ctxVoor(def) {
 
     /* ---------- de stand van het hotel ---------- */
     state: State,
-    /* je eigen laatje in de opslag (wordt bewaard in kws-hotel-v6) */
+    /* je eigen laatje in de opslag (wordt bewaard in kws-hotel-v7) */
     data: function () { return State.spelData(def.id); },
 
     /* ---------- het scherm ----------
