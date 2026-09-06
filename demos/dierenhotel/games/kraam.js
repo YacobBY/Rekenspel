@@ -343,6 +343,9 @@ var O = null;              /* de opzet van deze beurt (prijzen, aankoop) */
 var kaart = null;          /* de sommenkaart */
 var kaartLift = 0;         /* hoogtecorrectie van de kaart (kaartPast) */
 var kaartRonde = 0, kaartT = null;
+var kaartPad = '';         /* de padPlek waarmee de kaart nu getekend is */
+var kaderAf = null;        /* opzegger van ctx.ui.opKader (api-m1a.md 2) */
+var kaderT = null;         /* wachtje na een kadermelding (opKaderMaat) */
 var terugNr = 0;           /* teken van de munt die aan het terugschuiven is */
 /* De munt die geweigerd wordt ligt ALLEEN op het beeld, nooit in de opslag:
    S.gelegd houdt altijd een geldige stand (<= doel). Anders bleef een
@@ -428,8 +431,19 @@ function start(ctx) {
   terugMunt = 0;
   herstelBank();                    /* nooit met een te volle toonbank starten */
   if (O.munten.indexOf(S.hand) < 0) S.hand = O.munten[0];
-  kaartLift = 0; kaartRonde = 0; kaartT = null; terugNr = 0;
+  kaartLift = 0; kaartRonde = 0; kaartT = null; kaartPad = ''; kaderT = null; terugNr = 0;
   gastGestuurd = 0; gastGelopen = 0; gastKeer = 0;
+  /* Het kader kan van maat veranderen: draaien, maar ook onze eigen
+     cijferstrook (die staat ín de pagina onder het kader, dus het kader
+     krimpt zodra hij verschijnt - api-m1a.md 1). Dan klopt de hoogte van de
+     kaart niet meer, en dat mag niet blijven staan: de kaart mag nooit over
+     de gast liggen (HOTEL.md 9).
+     VÓÓR de eerste teken(): de strook vraagt zelf meteen een hermeting aan
+     (ui.js schilVeranderd -> World.hermeet), en die slaat de opmaat-bus nog
+     tijdens diezelfde teken(). Gemeten op 860 x 420: de bus sloeg 7 ms na
+     Games.start, dus een luisteraar die pas ná teken() wordt aangemeld hoort
+     precies de melding niet waar het om gaat. */
+  if (!kaderAf && C.ui.opKader) kaderAf = C.ui.opKader(opKaderMaat);
   C.wereld.naar('tuin');
   zetDecor();
   haalGast();
@@ -439,9 +453,35 @@ function start(ctx) {
   straks(1500, function () { if (C && S) { kaartRonde = 0; kaartNakijken(); } });
   straks(3200, function () { if (C && S) { kaartRonde = 0; kaartNakijken(); } });
 }
+/* Eén kadermelding: opnieuw nameten, en dat TWEE keer.
+   Meteen, want de kamer staat in een nieuwe maat. En nog een keer voorbij de
+   400 ms die de mobiele schil zichzelf gunt (VERSTIL_MS, api-m1a.md 1): bij
+   een kadermelding zet de schil de kaart namelijk zelf terug op de hoogte
+   waarmee hij gemaakt is (ui.js padOpnieuw: "hoog = hoogBasis"), en daar ging
+   onze correctie onderdoor. Gemeten op 860 x 420: kaart om 251 ms netjes op
+   84..192, om 495 ms door de schil terug op 128..236 met de gast op 229..312
+   - 7 px eroverheen, tot de losse lus van 1500 ms hem alsnog optilde.
+   Hier NIET opnieuw teken(): een hertekening haalt de oude kaart weg
+   (hotspots.wisAlles -> onWeg -> de strook gaat even uit) en zet daarna een
+   nieuwe neer (de strook weer aan). Dat zijn twee kaderveranderingen, dus
+   twee meldingen, dus een lus - nagemeten: 86 busslagen in 2,6 s. Nameten
+   verandert alleen de hoogte van één hotspot en meldt dus niets terug. */
+function opKaderMaat() {
+  if (!C || !S || !O) return;
+  kaartRonde = 0;
+  kaartNakijken();
+  if (kaderT) return;
+  kaderT = straks(560, function () {
+    kaderT = null;
+    if (!C || !S || !O) return;
+    kaartRonde = 0;
+    kaartNakijken();
+  });
+}
 
 function stop() {
   stopKlok();
+  if (kaderAf) { try { kaderAf(); } catch (e) { } kaderAf = null; }
   if (C) {
     C.hotspots.wisAlles();
     C.hotspots.laat();
@@ -451,7 +491,7 @@ function stop() {
     C.wereld.decorWisAlles();
   }
   C = null; S = null; P = null; O = null; kaart = null;
-  kaartLift = 0; kaartRonde = 0; kaartT = null; terugNr = 0; terugMunt = 0;
+  kaartLift = 0; kaartRonde = 0; kaartT = null; kaartPad = ''; kaderT = null; terugNr = 0; terugMunt = 0;
   gastGestuurd = 0; gastGelopen = 0; gastKeer = 0;
 }
 
@@ -563,6 +603,42 @@ function kaartIco() {
   return '🎁';
 }
 
+/* ---------- waar hoort het cijferpad? (G5-F2) ----------
+   Het pad van groep 4 en 5 hangt onderaan de sommenkaart en is in een breed
+   kader één rij van twaalf toetsen over bijna de hele kaderbreedte. Sinds
+   M1b is het liggende kader ~310-340 px hoog, en dan valt die rij precies
+   over de kraam: gemeten op 860 x 420 (kader 682 x 340) lag het pad op
+   55..693 x 333..399, over de prijskaartjes kr_p0 en kr_p2 (320..344) en
+   over de gast (269..367). Staand op 320 x 640 (kader 304 px) lag het pad
+   op 349..451 en de gast op 285..357: 8 px eroverheen. Dat mag geen van
+   beide (HOTEL.md 9).
+   Boven de 360 px kaderhoogte is er wél ruimte onder de kraam - gemeten
+   360 x 740 (kader 395): pad 399..509, gast tot 383; 420 x 860 (kader 468):
+   pad 447..565, gast tot 429. Daarom: is het kader lager dan 360 px, dan
+   vragen we het pad als STROOK onder het kader (api-m1a.md 1,
+   padPlek 'buiten'). Daar botst het met niets, het houdt zijn toetsen van
+   48 px en het draagt daar dezelfde data-hot="kr_som_pad". Is het kader
+   hoger, dan laten we 'auto' staan: dan beslist de mobiele schil zelf (die
+   kijkt ook naar een té smal kader).
+   STROOKVRIJ meten, net als ui.js kaderHoogVrij: onze eigen strook staat ín
+   de pagina onder het kader, dus zodra hij er is krimpt het kader. Meten we
+   dat rauw, dan hangt de meting van onze eigen keuze af; met de hoogte van
+   de strook erbij is de uitkomst dezelfde vóór en ná de wissel en kan het
+   pad dus niet heen en weer springen. */
+var KADER_PADRUIM = 360;
+function kaderHoogVrij() {
+  var w = document.getElementById('world');
+  if (!w || !w.clientHeight) return 0;
+  var h = w.clientHeight, s = document.getElementById('padstrip');
+  if (s && !s.hidden && s.getAttribute('data-hot') === 'kr_som_pad' && s.offsetHeight)
+    h += s.offsetHeight + 4;                  /* + de kier tussen kader en strook */
+  return h;
+}
+function padPlek() {
+  var h = kaderHoogVrij();
+  return (h && h < KADER_PADRUIM) ? 'buiten' : 'auto';
+}
+
 /* De kaart hangt hoog boven de toonbank: hij mag nooit over de gast
    heen liggen (HOTEL.md 9) en ook niet over de spullen waar het kind op
    moet tikken. Eerst een schatting in schermpixels, daarna meten we het
@@ -572,9 +648,10 @@ function kaartHoog() {
 }
 function tekenKaart() {
   var open = S.stap === 'som';
+  kaartPad = padPlek();
   kaart = C.ui.somkaart({ x: P.bank.x, z: P.bank.z, kamer: 'tuin' }, somLijn(), {
     id: 'kr_som', kamer: 'tuin', hoog: kaartHoog(), icoon: kaartIco(),
-    regel: zin(), open: open, max: 2, pad: open,
+    regel: zin(), open: open, max: 2, pad: open, padPlek: kaartPad,
     klas: S.stap === 'af' ? 'af' : '',
     onOk: function (n, k) { antwoordSom(n, k); }
   });
@@ -981,6 +1058,8 @@ Games.register({
     uit.opBank = opBank();            /* wat er op het beeld ligt */
     uit.terugMunt = terugMunt;
     uit.kaartLift = kaartLift;
+    uit.padPlek = kaartPad;           /* waar het cijferpad nu hoort (G5-F2) */
+    uit.kaderHoogVrij = kaderHoogVrij();
     uit.gastVak = gastVak();
     uit.kaartVak = vak('[data-hot="kr_som"]');
     return uit;
