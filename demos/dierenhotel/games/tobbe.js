@@ -390,12 +390,18 @@ function peil(n, mors) {
   }
   /* het aantal ook ÍN het glaasje: zo is de knop nooit een leeg chipje, en
      tijdens de hulp van Els (dan liggen er spookcijfers op de tobbe in plaats
-     van het echte cijfer) blijft de inhoud te zien */
-  s += '<span style="position:absolute;left:0;right:0;top:8px;text-align:center;' +
-    'font-size:.72rem;font-weight:700;color:#3F4F57;text-shadow:0 1px 0 #FFFFFFAA">' +
+     van het echte cijfer) blijft de inhoud te zien.
+     TEKSTBODEM (M1c): dit cijfer stond op .72rem = 11,52 px en het druppeltje
+     ernaast op .7rem = 11,2 px. De schil zet sinds M1a een bodem van 12 px op
+     elk kindergetal en elk kinderwoord (style.css, clamp), maar een eigen
+     style="font-size:..." in de html van een spel gaat daar bovenuit - dus
+     staat de bodem hier ook. Het glaasje is 30 px breed; een vet getal van
+     twee cijfers op 12 px is ~15 px, dus dat past nog ruim. */
+  s += '<span style="position:absolute;left:0;right:0;top:7px;text-align:center;' +
+    'font-size:12px;line-height:1;font-weight:700;color:#3F4F57;text-shadow:0 1px 0 #FFFFFFAA">' +
     n + '</span>';
   s += '</span>';
-  if (n > 0) s += '<span style="font-size:.7rem;line-height:1">' + (mors ? '💦' : '🫧') + '</span>';
+  if (n > 0) s += '<span style="font-size:12px;line-height:1">' + (mors ? '💦' : '🫧') + '</span>';
   return s;
 }
 
@@ -859,6 +865,10 @@ function tekenBaden() {
         var q = C.wereld.dier(g.id);
         return q ? { x: q.x, z: q.z, y: 34 } : null;
       },
+      /* ÉÉN tik-afhandelaar: die van de hotspot-laag. dierSleep() hangt er
+         alleen het SLEPEN aan, geen onTap (M1c item 4) - met twee
+         afhandelaars aan dezelfde tik hing het van de klik-slikker van ui.js
+         (slikEenKlik, M1a) af of er één of twee dieren in bad gingen. */
       aan: function () { volgendeInBad(-1); }
     });
     dierSleep(g.id);
@@ -912,8 +922,8 @@ function dierSleep(id) {
       var g = C.state.gast(id);
       return '<div style="font-size:30px">' + (g ? ico(g) : '🐾') + '</div>';
     },
-    onDrop: function (t) { inBad(id, doelVan(t)); },
-    onTap: function () { volgendeInBad(-1); }
+    onDrop: function (t) { inBad(id, doelVan(t)); }
+    /* geen onTap: een tik komt via `aan` van de hotspot binnen (M1c item 4) */
   });
 }
 

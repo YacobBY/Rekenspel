@@ -67,6 +67,21 @@ var GOLF = 260;             /* ms tussen twee bedden van de deken-golf */
 var STAP_PX = 50;           /* van rij naar rij, omlaag (een knop is 48 hoog) */
 var BOVEN_PX = 80;          /* de sommenkaart boven de bovenste rij */
 var ONDER_PX = 66;          /* de dekenkist onder de onderste rij */
+var KNOP_PX = 48;           /* een tikdoel (style.css .hot) */
+/* Een sommenkaart MET zin is ~92 px hoog, niet 46 (HOTEL.md 9: elke kaart
+   draagt één gewone zin, en die breekt op een telefoon af naar twee regels).
+   maxStroken() rekende met 46 en reserveerde dus 46 px te weinig; op een
+   liggende telefoon (kader 320 px) koos hij daardoor VIER strookjes, en dan
+   klemt de knoppenlaag de kaart bovenop de bovenste rij. Gemeten op
+   844 x 390: bd_som over bd_rij0 heen, 123 x 26 px, en een sleep van de
+   dekenkist naar het HART van rij 0 kwam niet aan (het hart lag onder de
+   kaart, dus elementFromPoint gaf de kaart). Met de echte hoogte erin komt
+   dat kader op drie strookjes en is de rij weer een heel sleepdoel. */
+var KAART_PX = 92;
+/* hart-op-hart afstand die de kaart en de kist minimaal nodig hebben om de
+   buitenste rij niet te raken (halve kaart + halve knop + 4 px lucht) */
+var MIN_BOVEN = (KAART_PX + KNOP_PX) / 2 + 4;   /* 74 */
+var MIN_ONDER = KNOP_PX + 4;                    /* 52 */
 var goot = 132;             /* naar de zijkant, langs de rijen heen; wordt
                                na het tekenen bijgesteld op de echte breedte
                                van een strookje (die hangt van de tafel af) */
@@ -77,7 +92,7 @@ var T = [];                 /* eigen tijdertjes (alleen animatie) */
 var t0 = 0;
 var bezig = false;          /* tijdens de golf even geen tikken */
 var kaart = null;           /* de sommenkaart */
-var bewaarT = null, maatT = null, opMaat = null;
+var bewaarT = null, maatT = null, opMaat = null, maatAf = null;
 
 function tik(fn, ms) { T.push(setTimeout(fn, ms)); }
 function stopTikken() { T.forEach(clearTimeout); T = []; }
@@ -118,20 +133,104 @@ function frameHoogte() {
   return (e && e.clientHeight) || 480;
 }
 /* Hoeveel stroken passen er in dit kader? Een strook is STAP_PX hoog en de
-   sommenkaart (46 px) en de dekenkist (40 px) moeten er in hun kleinste maat
-   bij. Sinds K1 is het kader wat lager (de kamers werden breder, dus vullen
-   ze het kader eerder in de breedte - world.js pasKader), dus rekenen we het
-   uit in plaats van een vaste grens van 430 px te gebruiken. Uitkomst per
-   kader: 200 px -> 3, 282 -> 3, 321 -> 4, 379 -> 4, 715 -> 4. */
+   sommenkaart en de dekenkist moeten er in hun kleinste maat bij. Sinds K1 is
+   het kader wat lager (de kamers werden breder, dus vullen ze het kader eerder
+   in de breedte - world.js pasKader), dus rekenen we het uit in plaats van een
+   vaste grens van 430 px te gebruiken. M1c heeft de reservering voor de kaart
+   op haar echte hoogte gezet (zie KAART_PX); de uitkomst per kader staat
+   hieronder in de functie. */
 function maxStroken() {
-  var over = frameHoogte() - 48 - 46 - 40;
+  /* wat er BUITEN de rijen nog moet: de kaart boven de bovenste rij
+     (MIN_BOVEN hart-op-hart, dus MIN_BOVEN + halve kaart - halve knop boven
+     haar bovenrand), de kist onder de onderste rij, de 48 px van de rij zelf
+     en 4 px lucht. Met de echte kaarthoogte is dat 200 px:
+       kader 200 -> 3 (de ondergrens), 228 -> 3, 282 -> 3, 320 -> 3,
+             379 -> 4, 405 -> 4, 478 -> 4, 715 -> 4. */
+  var vast = (MIN_BOVEN + KAART_PX / 2 - KNOP_PX / 2) + MIN_ONDER + KNOP_PX + 4;
+  var over = frameHoogte() - vast;
   return Math.max(3, Math.min(MAX_RIJEN + 1, Math.floor(over / STAP_PX) + 1));
 }
 function marges() {
   var h = frameHoogte(), n = aantalStroken();
-  var ruim = Math.max(0, (h - ((n - 1) * STAP_PX + 48)) / 2);
-  return { boven: Math.max(46, Math.min(BOVEN_PX, ruim - 30)),
-           onder: Math.max(40, Math.min(ONDER_PX, ruim - 24)) };
+  var rij = (n - 1) * STAP_PX + KNOP_PX;             /* wat de rijen innemen */
+  var over = Math.max(0, h - rij - 4);
+  var nodig = (MIN_BOVEN + KAART_PX / 2 - KNOP_PX / 2) + MIN_ONDER;
+  var extra = Math.max(0, over - nodig);
+  /* Is er meer ruimte dan nodig, dan mag het ruimer - tot BOVEN_PX/ONDER_PX,
+     precies de maten van vóór M1c. Op een staand kader (478 px, vier
+     strookjes) komt daar 80 / 66 uit: exact hetzelfde als eerst. */
+  return { boven: Math.min(BOVEN_PX, MIN_BOVEN + extra * 0.6),
+           onder: Math.min(ONDER_PX, MIN_ONDER + extra * 0.4) };
+}
+
+/* ---------- de sommenkaart écht vrij zetten (M1c) ----------
+   marges() rekent met KAART_PX, maar de kaart is niet altijd 92 px hoog: op
+   een smal kader krimpt hij naar 170 px breed en breekt de zin naar drie
+   regels (gemeten 129 px op 320 x 640 en op 360 x 740). Daarom meten we na
+   het tekenen na of hij de bovenste rij raakt - net zoals ui.js dat met het
+   cijferpad doet (kaartVrij) - en tillen hem dan precies genoeg op. Lukt dat
+   niet, omdat er boven de rij simpelweg geen kader meer is (802 x 293: kader
+   223 px, kaart 109 + rijen 98 + kist 48 = 255 px nodig), dan gaat de kaart
+   ERNAAST staan: links van de bovenste rij, op dezelfde hoogte. Dat is
+   dezelfde uitweg die games/sleutels.js in X1 kreeg.
+   ZOWEL de rij als de kaart zijn `vast` hotspots, dus de knoppenlaag schuift
+   ze niet voor elkaar weg; alleen wíj kunnen dit oplossen. */
+var somLift = 0, somNaast = false, somT = null, somRonde = 0, somOverBoven = 0;
+function somOpnieuw() {
+  somLift = 0; somNaast = false; somRonde = 0; somOverBoven = 0;
+  clearTimeout(somT); somT = null;
+}
+function somPlekNaast() {
+  var el = document.querySelector('[data-hot="bd_rij0"]');
+  var k = document.querySelector('[data-hot="bd_som"]');
+  var rw = (el && el.offsetWidth) || 123;
+  var kw = (k && k.offsetWidth) || 187;
+  return plekPx(0, -(rw / 2 + 8 + kw / 2), 0);
+}
+/* Hooguit drie meetrondes per kadermaat, en de teller staat BUITEN teken():
+   teken() vraagt na elke hertekening om een meting, dus zonder teller zou
+   ronde 0 zichzelf blijven herhalen.
+     ronde 0  raakt de kaart de rij? -> precies genoeg optillen
+     ronde 1  nog steeds? -> dan is er boven de rij geen kader meer: ERNAAST
+     ronde 2  is ernaast SLECHTER (een smal kader klemt de kaart terug tegen
+              de linkerrand)? -> dan toch weer erboven, met de lift
+   Daarna staat het; somOpnieuw() zet de teller op nul bij een nieuw kader,
+   een nieuwe opdracht of een nieuwe start. */
+function somVrijStraks() {
+  clearTimeout(somT);
+  if (somRonde > 2) return;
+  if (C && C.wereld.vuil) C.wereld.vuil();
+  somT = setTimeout(function () { somT = null; somVrij(somRonde++); }, 90);
+}
+function somOverlap() {
+  var k = document.querySelector('[data-hot="bd_som"]');
+  var r0 = document.querySelector('[data-hot="bd_rij0"]');
+  if (!k || !r0) return null;
+  var a = k.getBoundingClientRect(), c = r0.getBoundingClientRect();
+  if (!a.height || !c.height) return null;
+  var dx = Math.min(a.right, c.right) - Math.max(a.left, c.left);
+  if (dx <= 1) return 0;                       /* naast elkaar: niets erover */
+  return Math.max(0, a.bottom - c.top + 4);
+}
+function somVrij(ronde) {
+  if (!C || !D || D.klaar) return;
+  var over = somOverlap();
+  if (over === null) return;
+  if (ronde === 0) {
+    if (over <= 0) { somRonde = 9; return; }   /* de rij is een heel sleepdoel */
+    somLift += Math.ceil(over);
+    teken();
+    return;
+  }
+  if (ronde === 1) {
+    if (over <= 0) { somRonde = 9; return; }
+    somOverBoven = over;                       /* dit haalden we mét de lift */
+    somNaast = true;
+    teken();
+    return;
+  }
+  /* ronde 2: ernaast gemeten. Was het slechter, dan gaan we terug. */
+  if (over > 0 && over >= somOverBoven) { somNaast = false; teken(); }
 }
 
 /* De diagonale stap tussen twee rijen, in voxels. NIET afronden op hele
@@ -234,6 +333,7 @@ function signatuur(o) {
   return [o.band, C.state.dag(), C.state.N(), K, o.cap, o.rijen, o.perRij].join('|');
 }
 function nieuweOpdracht(o, sig) {
+  somOpnieuw();               /* andere opdracht = andere rijen = opnieuw meten */
   D.sig = sig;
   D.kamer = K;
   D.cap = o.cap;
@@ -411,7 +511,7 @@ function teken() {
 
   /* de som schrijft zichzelf: zoveel volle rijen x zoveel per rij */
   if (!D.klaar) {
-    var sp = plekPx(0, 0, marges().boven);
+    var sp = somNaast ? somPlekNaast() : plekPx(0, 0, marges().boven + somLift);
     kaart = C.ui.somkaart(sp, (vol || '?') + ' × ' + D.perRij + ' =',
       { id: 'bd_som', door: 'bedden', pad: false, hoog: sp.y, kamer: K,
         /* één gewone zin boven de som, met het pictogram vooraan op
@@ -425,6 +525,8 @@ function teken() {
         regel: ['Leg ' + mv(D.rijen, 'rij', 'rijen') + ' van ' +
                 mv(D.perRij, 'bed', 'bedden'), 'Zo veel bedden staan er nu'] });
     if (kaart) kaart.zet(vol ? vol * D.perRij : '');
+    /* nameten: raakt de kaart de bovenste rij? (zie somVrij hierboven) */
+    somVrijStraks();
   }
 
   /* de opdracht hangt boven de gast die op een bed wacht: het pictogram staat
@@ -714,6 +816,7 @@ function vol() {
 }
 function start(ctx) {
   C = ctx;
+  somOpnieuw();
   D = C.data();
   bezig = false;
   t0 = C.ui.nu();
@@ -732,14 +835,18 @@ function start(ctx) {
       C.hotspots.pak('deur_' + K + '_' + d.naar, check);
     });
   }
-  /* draait het scherm, dan verandert de voxelmaat: opnieuw uitleggen */
+  /* Draait het scherm, dan verandert de voxelmaat: opnieuw uitleggen. Sinds
+     M1c via de opmaat-bus (Ui.opKader -> World.onKader): één melding per
+     echte kaderverandering in plaats van resize ÉN orientationchange, en ook
+     als alleen het kader krimpt (de cijferstrook eronder). */
   opMaat = function () {
     _sch = null;
+    somOpnieuw();                 /* de gemeten lift hoort bij het OUDE kader */
     clearTimeout(maatT);
     maatT = setTimeout(function () { if (C) teken(); }, 260);
   };
-  window.addEventListener('resize', opMaat);
-  window.addEventListener('orientationchange', opMaat);
+  if (maatAf) { maatAf(); maatAf = null; }
+  maatAf = C.ui.opKader(opMaat);
   teken();
 }
 
@@ -747,12 +854,10 @@ function stop() {
   stopTikken();
   clearTimeout(bewaarT);
   clearTimeout(maatT);
+  somOpnieuw();
   bewaarT = maatT = null;
-  if (opMaat) {
-    window.removeEventListener('resize', opMaat);
-    window.removeEventListener('orientationchange', opMaat);
-    opMaat = null;
-  }
+  if (maatAf) { maatAf(); maatAf = null; }
+  opMaat = null;
   if (C) {
     if (kaart) kaart.weg();
     ['bd_wolk', 'bd_fout', 'bd_goed', 'bd_op', 'bd_wolkje', 'bd_vol'].forEach(function (id) {

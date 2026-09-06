@@ -465,8 +465,34 @@ function ciHoog() {
 /* En daarom wacht de gast links vóór de balie in plaats van midden ervoor:
    met het kaartje rechts achterin en het dier links vooraan zijn ze in elk
    beeld los van elkaar te zien (gemeten met het breedste naamplaatje: 0%
-   van het plaatje én 0% van het dier bedekt, staand en liggend). */
-var WACHTPLEK = Rooms.plek('receptie', 0.25, 0.925);
+   van het plaatje én 0% van het dier bedekt, staand en liggend).
+
+   M1c: 0,25 x 0,925 was op één telefoonmaat te weinig. De sommenkaart is
+   258 px breed (op een scherm van 360 px of smaller krimpt hij naar 170) en de
+   hotspot-laag klemt hem tegen de RECHTERrand van het kader; hij staat dus op
+   elke staande maat even ver naar rechts als hij kan. Gemeten in het kader
+   (binnenwerk, na M1a+M1b), met het doosje van 56 px waarin het dier onder
+   zijn naamplaatje zit:
+
+     kader      kaart          linkerrand kaart   dier       vrij
+     386x468    258 px         126 px             43..99     27 px
+     356x431    258 px          96 px             38..94      2 px
+     341x387    258 px          81 px             35..91    -10 px  (375x667!)
+     326x395    170 px         154 px             32..88     66 px
+     286x304    170 px         114 px             25..81     33 px
+
+   Op 375 x 667 (dpr 2) paste het dus net niet: 18% van het dier en 15% van het
+   naamplaatje gingen schuil achter de kaart, waar w1.js hooguit 10% toestaat.
+   Optillen helpt daar niet - de kaart zou 86 px hoger moeten en dan valt hij
+   uit het kader - en naar rechts kán de kaart niet meer. Daarom staat de gast
+   nu 6 voxels verder van de balie en 3 voxels verder naar voren: in
+   schermtermen 9 stappen van (x - z), dat is 12-14 px naar links op deze
+   maten. Nagemeten: 0% en 0% op 320x640, 360x740, 375x667, 390x844, 420x860,
+   667x375, 740x360, 750x342, 844x390 en 860x420, staand én liggend, ook na
+   het kantelen en met een tweede gast erbij.
+   Verder naar links kan niet: de z-vleugel van de balie staat op x 11..19
+   (decor `baliez`), dus dan zou de gast ín de balie staan. */
+var WACHTPLEK = Rooms.plek('receptie', 0.2, 0.95);
 
 /* De drie keuzes bij vraag 2. LET OP de koppeling met het bevroren
    vergelijk(): dat vergelijkt dagen × per dag MET de voorraad.
@@ -482,6 +508,14 @@ var CI_KEUZE = [
 ];
 
 function paintCheckin() {
+  /* Eerst de OUDE kaart netjes afsluiten, dan de laag legen. Elke hertekening
+     maakt een nieuwe somkaart onder dezelfde id (ci_som); zijn weg() zegt de
+     kaderluisteraar op, laat de cijferstrook los en haalt kaart + pad + keuzes
+     weg. Zonder dat hangt het aan de opruimhaak van de hotspot-laag (H1
+     onWeg) of aan het merkteken van ui.js (M1a) - allebei vangnetten, geen
+     opdracht. Met weg() erbij is de volgorde ook onder een oudere hits.js
+     goed. */
+  if (ciKaart && ciKaart.weg) { try { ciKaart.weg(); } catch (e) { /* laat staan */ } }
   Hits.wisEigenaar('checkin');
   ciKaart = null;
   var v = state.checkin;
@@ -1165,29 +1199,68 @@ function render() {
    (world.js maatVan) - en daarmee alles wat in SCHERMpixels is uitgemeten,
    zoals de keuzestrook onder een sommenkaart (ui.js keuzeY, in hoogtestappen
    van 2k px). We leggen de hotspots dan opnieuw neer, net zoals
-   games/bedden.js dat voor zijn rijen doet. */
+   games/bedden.js dat voor zijn rijen doet.
+
+   Sinds M1c hangt dat aan de OPMAAT-BUS (Ui.opKader -> World.onKader, M1b) in
+   plaats van aan een eigen window-luisteraar. Winst: één ontdenderde melding
+   per echte kaderverandering in plaats van twee (resize + orientationchange
+   komen bij het kantelen beide langs), en de bus slaat ook als alleen het
+   KADER verandert - een rekenblad ernaast, de cijferstrook eronder - zonder
+   dat het venster van maat verandert. Het eigen wachtje van 180 ms blijft:
+   world.js heeft na een melding nog een tekenbeurt nodig voordat de
+   hotspot-plekken kloppen. */
+/* WAAROM ER EEN SLOT OP ZIT. Een hertekening van de check-in ruimt de
+   sommenkaart op en maakt hem opnieuw. Staat het cijferpad als STROOK onder
+   het kader (M1a, een liggende telefoon), dan gaat die strook daarbij even uit
+   en meteen weer aan - en elke keer vraagt ui.js world.js om te hermeten. Dat
+   is een echte kaderverandering (572 x 228 -> 572 x 290 -> 572 x 228), dus de
+   bus slaat, dus opMaat gaat af, dus de check-in wordt hertekend: een lus.
+   Gemeten op 740 x 360 zonder slot: 61 kadermeldingen en 61 World.hermeet()
+   in 5 seconden (basismeting met de oude window-luisteraars: 1), en een tik op
+   het cijferpad kwam niet meer aan omdat het kaartje 5x per seconde werd
+   vervangen ("vakje leeg" in mobiel.js).
+   Het slot: we onthouden voor WELK kader we de knoppen hebben neergelegd en
+   doen niets als dat kader er nog precies zo bij staat. De vergelijking gebeurt
+   op het moment dat het wachtje afgaat (niet bij de melding), dus de twee
+   tussenmeldingen van onze eigen strook vallen samen in één wachtje en dat
+   wachtje ziet het kader terug op zijn oude maat. Een echte draai heeft een
+   andere maat en komt dus gewoon door. */
 var maatT = null;
+function maatNu() {
+  var k = (window.World && World.kader) ? World.kader() : null;
+  var s = (window.World && World.schaal) ? World.schaal() : null;
+  if (!k) return '';
+  return Math.round(k.w) + 'x' + Math.round(k.h) +
+         '|' + (s ? s.g + ':' + s.dicht + ':' + (s.kamer || '') : '') +
+         '|' + World.actief();
+}
+var maatWas = '';
 function opMaat() {
   clearTimeout(maatT);
   maatT = setTimeout(function () {
     maatT = null;
     if (!state) return;
+    var sig = maatNu();
+    if (sig && sig === maatWas) return;      /* dit kader ligt er al zo */
+    maatWas = sig;
     render();
     if (state.checkin) paintCheckin();
   }, 180);
 }
+/* de opzegger van de bus: start() mag twee keer langskomen (nieuw spel na
+   herladen) en dan hoort er niet een tweede luisteraar bij te komen */
+var maatAf = null;
 
 function start() {
   herstelWereld();
   bouwTaken(true);
   render();
-  window.addEventListener('resize', opMaat);
-  window.addEventListener('orientationchange', opMaat);
+  if (maatAf) { maatAf(); maatAf = null; }
+  maatAf = Ui.opKader(opMaat);
   /* een halve check-in gaat vóór: die maak je eerst af */
   if (state.checkin) paintCheckin();
   else if (state.ronde === 'ochtend') prikbord();
 }
-
 return { start: start, render: render, naarKamer: naarKamer, bel: bel,
          prikbord: prikbord, avondronde: avondronde, morgen: morgen,
          brievenMuur: brievenMuur, plattegrond: plattegrond, badMogelijk: badMogelijk,

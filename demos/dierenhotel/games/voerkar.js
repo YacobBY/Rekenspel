@@ -91,9 +91,14 @@ var CHIP = 'hotbron hotwolk';
 /* Op een klein scherm (een telefoon van 360 px: het kader is dan maar
    326 x 312 css-px) en in een laag kader (liggend: 826 x 190) worden
    pictogram, woord en getal een maatje kleiner: anders passen zes bakjes met
-   een naam én een correctie erop er niet meer bij. Het woord blijft boven de
-   11 px, dus leesbaar. `mini` is alleen het echt kleine scherm: daar past de
-   keuzestrook met drie knoppen niet en wordt het één knop die doorschakelt. */
+   een naam én een correctie erop er niet meer bij. `mini` is alleen het echt
+   kleine scherm: daar past de keuzestrook met drie knoppen niet en wordt het
+   één knop die doorschakelt.
+   TEKSTBODEM (M1c): het woord stond hier op .72rem = 11,52 px. De schil zet
+   sinds M1a een bodem van 12 px op elk kinderwoord (style.css, clamp), maar
+   een eigen style="font-size:..." in de html van een spel gaat daar bovenuit -
+   dus staat de bodem hier ook. 12 px, niet minder; de tekst zelf verandert
+   niet. */
 var krap = false, mini = false, kort = 0;
 /* de naam op het kaartje; op een heel klein kader met veel bakjes ingekort */
 function naamKort(n) {
@@ -105,7 +110,7 @@ function naamKort(n) {
    geen knop bij (hooguit 16 per kamer) en valt er nooit een wolkje weg. */
 function chip(ico, woord, getal, erbij, doel) {
   var i = krap ? ' style="font-size:1.15rem"' : '';
-  var w = krap ? ' style="font-size:.72rem"' : '';
+  var w = krap ? ' style="font-size:12px"' : '';    /* tekstbodem, zie boven */
   var g = krap ? ' style="font-size:1rem"' : '';
   /* Krap (of Els kijkt mee)? Dan zet de correctie zich ONDER de naam in
      plaats van erachter. Het kaartje wordt daar ruim 50 px smaller van en
@@ -768,6 +773,11 @@ function karHotspot(nogOpen) {
       var q = C.wereld.ding('kar');
       return q ? { x: q.x, z: q.z, y: 16 } : null;
     },
+    /* ÉÉN tik-afhandelaar voor deze knop: die van de hotspot-laag. De sleep
+       hieronder heeft daarom géén onTap (M1c item 4) - anders hangen er twee
+       aan dezelfde tik en hing het van de klik-slikker van ui.js
+       (slikEenKlik, M1a) af of hoeDan() één of twee keer afging. Zelfde
+       afspraak als de buidel in econ.js. */
     aan: function () { hoeDan(); }
   });
   var el = document.querySelector('[data-hot="karhot"]');
@@ -779,8 +789,8 @@ function karHotspot(nogOpen) {
       onDrop: function (t) {
         if (t.getAttribute('data-drop') === 'deur') duwNaar(t.getAttribute('data-h-naar'));
         else lever(t.getAttribute('data-h-kamer'), t.getAttribute('data-h-slot'));
-      },
-      onTap: function () { hoeDan(); }
+      }
+      /* geen onTap: een tik komt via `aan` binnen, precies één keer */
     });
   }
 }
