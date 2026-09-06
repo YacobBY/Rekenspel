@@ -124,6 +124,10 @@ var DIER_HOOG = 28;       /* de gasten zijn 23-28 voxels hoog (art.js): daarbove
 var C = null;     /* de ctx */
 var P = null;     /* de opdracht - hij woont in C.data(), dus hij blijft bewaard */
 var U = null;     /* wat alleen op het scherm leeft: licht, buren, spook, tip */
+/* de opzegger van de opmaat-bus (M1c). Hij staat BUITEN U, want U wordt bij
+   elke start() opnieuw gemaakt en dan zou een oude aanmelding blijven hangen
+   als er geen stop() tussen zat. */
+var maatAf = null;
 
 /* =====================================================================
    1. DE GETALLEN
@@ -337,8 +341,11 @@ function start(ctx) {
     clearTimeout(U.wacht);
     U.wacht = setTimeout(function () { if (C && P && U) teken(); }, 220);
   };
-  window.addEventListener('resize', U.luister);
-  window.addEventListener('orientationchange', U.luister);
+  /* Sinds M1c hangt dat aan de opmaat-bus (Ui.opKader -> World.onKader, M1b)
+     in plaats van aan window resize + orientationchange: één melding per echte
+     kaderverandering, en ook als alleen het kader krimpt. */
+  if (maatAf) { maatAf(); maatAf = null; }
+  maatAf = C.ui.opKader(U.luister);
   teken();
 }
 
@@ -353,11 +360,8 @@ function gastenKloppen(p) {
 
 function stop() {
   if (!C) return;
-  if (U && U.luister) {
-    window.removeEventListener('resize', U.luister);
-    window.removeEventListener('orientationchange', U.luister);
-    clearTimeout(U.wacht);
-  }
+  if (maatAf) { maatAf(); maatAf = null; }
+  if (U) { U.luister = null; clearTimeout(U.wacht); }
   /* wie nog met zijn sleutellabel aan de balie staat, gaat weer naar zijn
      eigen kamer: het hotel blijft opgeruimd achter */
   if (P) P.sleutels.forEach(function (s) { if (!s.op) naarKamer(s.gast, false); });
