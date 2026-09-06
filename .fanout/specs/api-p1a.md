@@ -55,7 +55,20 @@ Vrije wand voor de kratten van G4: de achterwand rechts van de kast (x 44..60 en
 | `zones.hinkel` | `{ x0: 24, x1: 100, z0: 34, z1: 50 }` — 76 × 16 | G3: strook langs de achterrand, vlak vóór het hok; 11+ stapstenen langs x (steek ≈ 7), de trap bij x1 |
 | `zones.kraam` | `{ x0: 104, x1: 126, z0: 36, z1: 68 }` — 22 × 32 | G5: langs de rechterzijrand; kraam met de lange kant langs z (≈ 10 × 30) en een gast ervoor (x ≈ 108) |
 
-Beide zones liggen binnen het hek, in het vaste tuinkader (`x - z` in −85..95 en `x + z` ≤ 220), los van elkaar (4 voxels tussen hinkel.x1 en kraam.x0) en vrij van de voetafdruk van hok (x 55..79, z 8..31), kist (90..100, 18..28), boom (1..30, 55..80), bal (116..124, 72..80), tobbe (32, 94), het poortje (10, 40) en beide doorgangen (marge 8). `bouwTuin` zet er geen grasplukjes in (marge 4). De p1a-suite toetst dit uit de voxels van de modellen zelf, dus een verschoven decorstuk valt meteen op.
+Beide zones liggen binnen het hek, in het vaste tuinkader (`x - z` in −85..95 en `x + z` ≤ 220), los van elkaar (4 voxels tussen hinkel.x1 en kraam.x0) en vrij van de voetafdruk van het tuindecor en van beide doorgangen (marge 8). `bouwTuin` zet er geen grasplukjes in (marge 4). De p1a-suite toetst dit uit de voxels van de modellen zelf, dus een verschoven decorstuk valt meteen op.
+
+De voetafdrukken hieronder komen uit de voxels van `Rooms.model(n)` zelf (nagemeten voor S3; de eerdere regel was er bij hok, boom en bal één tot twee voxels naast):
+
+| stuk | anker | voetafdruk in kamervoxels |
+|---|---|---|
+| `hok` | (67, 19) | x 55..78, z 8..29 |
+| `kist` | (95, 23) | x 90..100, z 18..28 |
+| `boom` | (16, 68) | x 1..29, z 56..80 |
+| `bal` | (120, 76) | x 117..123, z 73..79 |
+| `tobbe` | (32, 94) | x 27..37, z 89..99 |
+| `poort` | (10, 40) | x 9..11, z 31..49 |
+
+De opmerking in `rooms.js` bij `zones` noemt afgeronde rechthoeken (kist `89..101 / 17..29`, hok `56..78 / 9..31`). Die zijn bedoeld als "hier moet je vandaan blijven" en wijken een voxel of twee af van de meting; ze zijn geen tweede bron. Wie precies wil weten wat een stuk beslaat, neemt de tabel hierboven of meet opnieuw met `Rooms.model(n)`.
 
 ## 4. Kaart en rustplekken
 

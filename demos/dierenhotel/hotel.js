@@ -1261,7 +1261,7 @@ function start() {
   if (state.checkin) paintCheckin();
   else if (state.ronde === 'ochtend') prikbord();
 }
-return { start: start, render: render, naarKamer: naarKamer, bel: bel,
+return { start: start, render: render, hud: hud, naarKamer: naarKamer, bel: bel,
          prikbord: prikbord, avondronde: avondronde, morgen: morgen,
          brievenMuur: brievenMuur, plattegrond: plattegrond, badMogelijk: badMogelijk,
          wensMogelijk: wensMogelijk, nieuweWensen: nieuweWensen,

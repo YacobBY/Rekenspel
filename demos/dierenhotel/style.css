@@ -798,3 +798,54 @@ body:not(.metpaneel) .scene{display:none}
     .toast{top:max(58px, calc(env(safe-area-inset-top) + 56px))}
   }
 }
+
+/* ---------- de sommenkaart in het KLEINSTE kader (S3) ----------
+   Op een telefoon van 320 x 640 is het wereldkader 296 x 304 css-px. De kaart
+   van "Bedden op rij" was daar 170 x 129 px: twee zinnen die allebei over twee
+   regels afbraken (58 px), een antwoordvakje van 46 px, 17 px vulling, 2 px
+   kier en 6 px rand. games/bedden.js rekent met een kaart van 92 px
+   (KAART_PX) om te beslissen hoeveel rijen er passen en hoe hoog de kaart
+   boven de bovenste rij hangt; met 129 px klopte die begroting niet en lag de
+   kaart 75 x 48 px ÓVER bd_rij0 - precies over het hart van de rij, dus een
+   sleep van de dekenkist naar die rij kwam bij de kaart uit in plaats van bij
+   de rij (elementFromPoint gaf .somvak).
+
+   Op één regel heeft zo'n zin 215-225 px nodig; dat past niet in een kader van
+   296 px zonder de gast eronder af te dekken. De zin mag dus afbreken (één
+   keer, dat is de regel uit M1a), en we halen de millimeters uit alles
+   eromheen: de vulling, de kier, de regelafstand en het antwoordvakje. De
+   letters blijven 12 px (kindertekst) en de cijfertoetsen blijven 44 px - dit
+   raakt geen enkel tikdoel, want het antwoordvakje is een leesvakje: je typt
+   op het cijferpad eronder. */
+@media (max-width:360px){
+  .hot.hotsom.metzin{padding:3px 6px 4px;gap:0}
+  .hot.hotsom{gap:4px;border-width:2px}
+  .hot.hotsom .somzin{line-height:1.05}
+  .hot.hotsom .somrij{gap:4px}
+  /* .somvak staat op width/height:46px (de vaste maat van het rekenblad);
+     min-width/min-height overschrijven dat niet, dus hier de maat zelf */
+  .hot.hotsom .somvak{width:auto;height:auto;min-width:32px;min-height:32px;
+    font-size:1rem;border-width:2px;padding:0 3px}
+  .hot.hotsom .somlijn{font-size:.95rem}
+  .hot.hotsom .somhulp{line-height:1.05}
+}
+/* ... en die 93 px is nog steeds te veel voor "Bedden op rij" op 320 x 640.
+   Daar liggen de rijen op vaste kamervoxels, en boven de bovenste rij zit maar
+   61 px kader (gemeten: kader y 149..453, bd_rij0 op y 216). Zelfs twee zinnen
+   van één regel plus het antwoordvakje halen dat niet, dus BOVEN de rij kan
+   deze kaart daar niet staan - hoe klein we hem ook maken.
+   games/bedden.js heeft daar zelf een uitweg voor (somVrij ronde 1: de kaart
+   gaat ERNAAST staan, links van de rij op dezelfde hoogte), maar die uitweg
+   werkte niet: links van bd_rij0 is 111 px vrij (kader vanaf x 17, de rij
+   begint op x 128) en de kaart was 166 px breed, dus ook ernaast lag hij er
+   nog overheen en koos ronde 2 weer voor "erboven".
+   Deze kaart is de enige die naast zijn doel moet kunnen staan, dus staat hij
+   hier op zijn id en niet op .hotsom in het algemeen: elke andere kaart houdt
+   op dezelfde telefoon zijn gewone breedte. De zin breekt af (nooit afgekapt,
+   overflow-wrap staat aan), de letters blijven 12 px en er zit geen tikdoel
+   in deze kaart - typen doe je op het cijferpad. */
+@media (max-width:360px){
+  .hot.hotsom[data-hot="bd_som"]{max-width:104px}
+  .hot.hotsom[data-hot="bd_som"] .somzin{max-width:88px}
+  .hot.hotsom[data-hot="bd_som"] .somrij{flex-wrap:wrap}
+}

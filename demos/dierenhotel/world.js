@@ -39,6 +39,7 @@
      World.decor(kamer, o, door) - los decor van een spel zetten/bijwerken
      World.decorWeg(kamer,id,door)  ... en weer weghalen
      World.decorLijst(kamer?)    - wat staat er los (kopieën)
+     World.decorPlek(id, kamer?) - waar staat één los stuk (of null)
      World.decorWisEigenaar(door)- alles van één eigenaar weg
      World.debug()               - stand van zaken (voor de tests)
 ---------------------------------------------------------------- */
@@ -1613,6 +1614,16 @@ function decorWeg(kamerId, id, eigen) {
   vuil = true;
   return true;
 }
+/* Waar staat één los stuk? Hetzelfde antwoord als een regel uit decorLijst,
+   maar zonder de kopieerslag: registry.plek() vraagt dit per beeld voor elke
+   spelknop (via volg()), en decorLijst zou daar per beeld een lijst met
+   kopieën van álle stukken in de kamer voor maken. Geeft null als het stuk er
+   niet (meer) is - decor van een spel bestaat alleen zolang dat spel draait. */
+function decorPlek(id, kamerId) {
+  if (id === undefined || id === null) return null;
+  var it = losZoek(String(id), kamerId);
+  return it ? { kamer: it.kamer, x: it.x, z: it.z, y: it.hoog || 0 } : null;
+}
 function decorLijst(kamerId) {
   var uit = [], k, i, l;
   for (k in losDecor) {
@@ -2456,6 +2467,7 @@ var api = { sync: sync, setFood: setFood, setBak: setBak, bakStand: bakStand,
 api.decor = decorZet;
 api.decorWeg = decorWeg;
 api.decorLijst = decorLijst;
+api.decorPlek = decorPlek;
 api.decorWisEigenaar = decorWisEigenaar;
 
 /* P1c: bewegen met een belofte, ook rechtstreeks via World (zie stappen) */

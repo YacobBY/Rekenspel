@@ -43,7 +43,15 @@ function ontgrendeld(def) {
   try { return !!def.unlock(N, band); } catch (e) { return true; }
 }
 
-/* waar staat het voorwerp waar dit spel aan hangt? */
+/* waar staat het voorwerp waar dit spel aan hangt?
+   Zoekorde: losse dingen (de voerkar), slots (bed1, bak, tobbe), vast decor
+   uit rooms.js, en als LAATSTE het losse decor van een spel zelf (P1b, zie
+   GAMES-API.md "Eigen decor in de wereld"). Die laatste stap is nieuw en
+   additief: alles wat vroeger gevonden werd, wordt nog steeds op precies
+   dezelfde manier gevonden. Een spel dat een eigen klok, kraam of stapsteen
+   neerzet hoeft zijn knop dus niet meer aan een vreemd vast stuk te hangen
+   met dx/dz erbij. Let op: dat decor bestaat alleen zolang het spel draait -
+   staat het er niet, dan geeft dit null en haalt hersteek() de knop weg. */
 function plek(kamerId, obj) {
   var d = World.dingPlek(obj);
   if (d) return { kamer: d.kamer, x: d.x, z: d.z, y: d.y || 0 };
@@ -55,6 +63,9 @@ function plek(kamerId, obj) {
       if (r.decor[i].n === obj || r.decor[i].sleutel === obj)
         return { kamer: kamerId, x: r.decor[i].x, z: r.decor[i].z, y: r.decor[i].y || 0 };
   }
+  /* World.decorPlek geeft één klein antwoord (geen kopie van de hele lijst):
+     dit loopt per beeld voor elke spelknop mee via volg(). */
+  if (typeof World.decorPlek === 'function') return World.decorPlek(obj, kamerId);
   return null;
 }
 

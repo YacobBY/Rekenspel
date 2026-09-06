@@ -605,6 +605,16 @@ function teken() {
      letters - dan blijven de opdrachtkaart en de correcties leesbaar, wat
      belangrijker is dan de hele naam. */
   if (g.length >= 5) krap = true;
+  /* Zes gasten = zeven kaartjes (zes bakjes + de pot) plus de zak, Els en de
+     twee knoppen: elf dingen. In een staand kader van 386 x 468 px laat de
+     opdrachtkaart met zijn keuzestrook vijf rijen van 52 px over, en daar
+     passen er hooguit tien naast elkaar - het elfde (de pot, die als laatste
+     wordt neergezet) belandde dan noodgedwongen 33 px over de zak heen
+     (voerkar/spel.js "staand 6g hulp"). Eén rij van 50 px in plaats van 52
+     levert precies één rij extra en dus twee plekken erbij, met nog altijd
+     2 px lucht tussen twee kaartjes van 48 px. Dezelfde maat die een klein
+     kader al gebruikt (kader(): mini -> 50). */
+  if (g.length >= 6) RIJ = 50;
   kort = F.mini && g.length >= 4 ? 4 : 0;
   LAY = { F: F, P: pakker(F) };
   g.forEach(function (a) { gm[a.id] = a; });

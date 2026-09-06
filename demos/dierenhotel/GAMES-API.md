@@ -361,6 +361,21 @@ verandert. Per beeld kost een stuk één `drawImage` — precies zoveel als een
 meubel — en het blijft buiten de gedeelde plaatjes-cache, dus het duwt de
 vloerplaat er niet uit. Stukken in andere kamers worden overgeslagen.
 
+**Je `hotspot.obj` mag een decor-id zijn.** `Games.register({hotspot:{obj:…}})`
+zoekt in deze volgorde: losse dingen → slots → vast decor uit `rooms.js` → jouw
+losse decor (`World.decorPlek`, dezelfde ids als `decorLijst(kamer)`). Je
+hoeft je knop dus niet meer aan een vreemd vast stuk te hangen met `dx`/`dz`
+erbij. **Maar:** jouw decor bestaat alleen zolang jouw spel draait, en de
+instapknop staat er juist als het spel **niet** draait — dan vindt de zoektocht
+niets en haalt `hersteek()` de knop weg. Hang de instapknop daarom aan een
+vast stuk en gebruik het decor-id alleen voor knoppen die je zélf in `start()`
+maakt (of zet `hotspot.blijf: true` erbij):
+
+```js
+hotspot: { obj: 'kist', dx: KX - 95, dz: KZ - 23, icoon: '⏰' },   /* instap: vast stuk, staat er altijd */
+ctx.hotspots.maak({ id: 'wk_klok', kamer: 'gang', x: KX, z: KZ, y: 34, … });  /* tijdens het spel: bij de klok zelf */
+```
+
 **Twee dingen om op te letten.** `World.mik(id)` vindt een decorstuk **als
 laatste** (dieren, losse dingen, slots en vast decor gaan voor), dus kies ids
 die daar niet mee botsen: niet `bed1`, `bak`, `tobbe`, `kar`. En dieren lopen
@@ -792,7 +807,10 @@ Games.register({
 });
 ```
 Zeg je niets, dan gebruikt het hotel een standaard uit `SPEL_TAAK` in
-`hotel.js` (voor de vier bestaande spellen staat die er al). `ctx.taakKlaar()`
+`hotel.js`. Die tabel komt uit golf 1–2 en heeft een regel voor vijf spellen
+(`voerkar`, `tobbe`, `bedden`, `sleutels`, `meubels`); de spellen van golf 3
+(zwembad, wekker, hinkel, was, kraam) staan er niet in en zeggen hun taakje dus
+zelf met `taak`. `ctx.taakKlaar()`
 zet het vinkje: dat werkt op de naam die je meegeeft **en** op de id van je
 spel, dus `ctx.taakKlaar('bad')` en `ctx.taakKlaar()` vinken allebei het
 juiste kaartje af. Een afgevinkt kaartje blijft de rest van de dag met een

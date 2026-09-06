@@ -349,6 +349,14 @@ function gelukt(wissel) {
 function sterren(n, waarvoor) {
   if (window.geefSter) geefSter(n || 1, waarvoor);
   if (window.Snd) Snd.ster();
+  /* De teller in de balk (#sterNum) hoort METEEN bij te staan. Vroeger werd
+     hij alleen bijgewerkt in Hotel.render(), en die loopt pas als het spel
+     sluit: een kind dat drie beurten achter elkaar speelde zag zijn sterren
+     pas ná het spel verschijnen. Hotel.hud() is precies dat balkje (vijf
+     tekstjes, geen taken en geen knoppenlaag), dus dit kost niets - anders
+     dan Hotel.render(), dat de taken herbouwt en alle hotspots opnieuw legt.
+     De bewaking op `state`: econ.js kan geladen zijn vóór er een spel is. */
+  if (state && window.Hotel && Hotel.hud) Hotel.hud();
   return state ? state.sterren : 0;
 }
 
