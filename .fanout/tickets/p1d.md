@@ -1,0 +1,22 @@
+TICKET P1d — Two new guest wishes (🏊 zwemmen, 🎁 souvenir) handed out only when a game can fulfil them.
+
+TASK
+Guests in demos/dierenhotel show wishes (🍪 eten, 🛏 bed, 🛁 bad, 🧶 spelen) and walk to the place themselves. Add 🏊 `zwemmen` and 🎁 `souvenir` for the upcoming zwembad and souvenirkraam games (spec: /home/pc/Documents/xnw/rkn/.fanout/specs/dierenhotel-golf3-games.md, G1 and G5), and make wish hand-out registry-driven so a wish only appears when a registered game declares it fulfils that wish.
+
+EXPECTED OUTCOME
+1. state.js BEHOEFTE (~50-55 at 25a4b52): entries for zwemmen (🏊) and souvenir (🎁) in the same shape as the existing ones. Nothing else in state.js changes; the frozen math (koekjesSom, vergelijk, planOplossingen, sommen.*) stays byte-identical — prove with `git diff -U0` of state.js showing only the BEHOEFTE hunk.
+2. hotel.js: WENSWOORD (~29) gets "🏊 zwemmen" and "🎁 souvenir"; plekVanBehoefte (~67-83) sends zwemmen to the zwembad start edge — use `Rooms.get('zwembad')` and its `bad` rectangle `{x0,x1,z0,z1}` if present (another ticket adds that room concurrently; code defensively: if the room is missing fall back to the tuin), standing on the deck just before x0; souvenir goes to `Rooms.get('tuin').zones.kraam` centre-front if present, else a tuin spot; behoefteKlaar (~98-102) handles both; morgen() (~951-952) only hands out a wish type when `Games` has a registered game that declares it. Implement the check in hotel.js without editing games/registry.js: find how hotel.js already iterates registered games for task chips (~665, spelTaken) and reuse that; a game declares `wens: 'zwemmen'` (string or array) in its Games.register definition. Generalise the existing badMogelijk (~628-631, hardcoded Games.get('tobbe')) into `wensMogelijk(type)` that treats the existing types as before (bad → tobbe) and the new ones by declaration. Distribution: existing behaviour for the four old wishes unchanged; a new wish goes to at most one guest per day while N ≤ 4 and at most two when N > 4.
+3. Everything a game needs to complete the wish must already exist (Hotel.wensAf / ctx.wereld.behoefteKlaar) — verify and document the exact call in .fanout/specs/api-p1d.md, together with the `wens` declaration and the fallback places.
+4. Suite .fanout/scratch/dierenhotel/p1d.js (port + land, ≥25 assertions): with no game declaring zwemmen, ten simulated mornings hand out no 🏊/🎁; after registering a dummy game `{id:'proefzwem', naam:'x', kamer:'tuin', wens:'zwemmen', start(){}, stop(){}}` (register from the test page context) 🏊 appears within a few mornings, the pill text is "🏊 zwemmen", the guest walks to the fallback/tuin place, behoefteKlaar marks it done; same for souvenir; old wishes' frequencies unchanged (compare hand-out counts over 30 mornings with and without the dummy, tolerance); no console errors; screenshot p1d-wens-zwemmen.png. Existing suites smoke, loop (port+land), w1 (port+land), hotspots, regels stay green against your worktree (override hard-coded main-tree URLs locally; do not change their defaults).
+
+CONTEXT
+Repo /home/pc/Documents/xnw/rkn; isolated git worktree branched from main at af8ab32. Vanilla JS, offline, no build. Playwright at /home/pc/work/ergomouse/node_modules/playwright; harness patterns in .fanout/scratch/dierenhotel/ (w1.js, loop.js, tobbe/spel.js). .fanout/scratch is gitignored: write your suite in your worktree's copy and copy it plus screenshots to /home/pc/Documents/xnw/rkn/.fanout/scratch/dierenhotel/ at the end. Do not edit GAMES-API.md. Hard rules: HOTEL.md §9 (pictogram always in the same bubble as its word). No new dependencies; no blanket pkill; you do not spawn agents; do not commit. Parallel tickets in their own worktrees edit hotel.js KAART (one line), state.js guest schema (accessories), rooms.js, world.js, art.js: keep your hunks to the wish regions and BEHOEFTE so merges stay clean.
+
+MUST NOT
+Edit registry.js, rooms.js, world.js, art.js, any game, ui.js, econ.js, or any state.js line outside BEHOEFTE.
+
+WRITE SET
+demos/dierenhotel/state.js (BEHOEFTE only), demos/dierenhotel/hotel.js (wish regions: WENSWOORD, plekVanBehoefte, behoefteKlaar, morgen, badMogelijk→wensMogelijk), .fanout/specs/api-p1d.md, scratch suite + screenshot.
+
+OUTPUT FORMAT
+First line DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED; then ≤25 lines: file:line hunks, the `wens` declaration contract and completion call, suite numbers, frozen-math proof, worktree path/branch, concerns.
