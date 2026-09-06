@@ -811,6 +811,30 @@ function spelTaken() {
   return uit;
 }
 
+/* ---- de gewone klusjes van de spellen krijgen om de beurt een plek -------
+   Er zijn meer spellen dan de drie plekken op het prikbord. Een paar klusjes
+   mogen ALTIJD (het hinkelpad zodra er een gast in bed ligt, de was altijd),
+   en die vochten om dezelfde laatste plek: wie het laagste getal had stond er
+   elke dag, de ander nooit. Daarom tellen alle GEWONE klusjes (voorrang LAAG
+   of hoger getal, dus géén wens van een dier) op het bord even zwaar, en
+   schuiven ze per dag één plaats door: dag 1 begint bij de eerste, dag 2 bij
+   de tweede, enzovoort. Zo komt elk spel aan de beurt.
+   Wensen van dieren (voorrang 0 t/m 4, bijvoorbeeld 🛁 bad, 🏊 zwemles,
+   🎁 souvenir, ⏰ wekker) houden hun eigen voorrang en hun eigen volgorde,
+   en het bord blijft bij hoogstens drie kaartjes. */
+var LAAG = 5;
+function laagTaak(q) { return !!q.spel && (q.prio || 0) >= LAAG; }
+function bordPrio(q) { var p = q.prio || 0; return p >= LAAG ? LAAG : p; }
+function roteerSpel(sp) {
+  var laag = sp.filter(laagTaak), n = laag.length;
+  if (n < 2) return sp;
+  var dag = state && state.dag ? state.dag : 1;
+  var start = ((dag - 1) % n + n) % n;
+  var rij = laag.slice(start).concat(laag.slice(0, start));
+  var k = 0;
+  return sp.map(function (q) { return laagTaak(q) ? rij[k++] : q; });
+}
+
 /* Een vingerafdruk van alles waar een taakje van afhangt. Verandert die,
    dan wordt het prikbord opnieuw opgemaakt - ook midden op dag 1. */
 function taakSignatuur() {
@@ -862,7 +886,7 @@ function bouwTaken(forceer) {
   /* wensen van de dieren eerst (prio 0), dan de spellen op hun eigen
      voorrang; de volgorde binnen dezelfde voorrang blijft zoals hij is */
   t.forEach(function (q) { if (q.prio === undefined) q.prio = 0; });
-  var alles = t.concat(spelTaken());
+  var alles = t.concat(roteerSpel(spelTaken()));
   /* Wat je net hebt afgevinkt blijft de rest van de dag met een vinkje
      staan, ook als het niet meer "nodig" is - anders verdwijnt je succesje
      meteen van het bord. Morgen begint het bord weer leeg. */
@@ -877,7 +901,9 @@ function bouwTaken(forceer) {
     af[q.id] = 1;
     alles.push(q);
   });
-  alles.sort(function (a, b) { return (a.prio || 0) - (b.prio || 0); });
+  /* de gewone klusjes tellen even zwaar (bordPrio); hun onderlinge volgorde is
+     de beurtvolgorde van roteerSpel, en die blijft staan omdat sort stabiel is */
+  alles.sort(function (a, b) { return bordPrio(a) - bordPrio(b); });
   state.taken = alles.slice(0, 3).map(function (q) { q.klaar = !!af[q.id]; return q; });
   return state.taken;
 }
