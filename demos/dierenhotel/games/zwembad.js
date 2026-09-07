@@ -276,8 +276,19 @@ function kaderInfo() {
   var r = kamer();
   if (!el || !s || !vl || !r || !el.clientWidth || !el.clientHeight) return null;
   return { w: el.clientWidth, h: el.clientHeight, k: s.k || 1,
-           fx: vl.x, fy: vl.y, d: r.d || 88 };
+           fx: vl.x, fy: vl.y, d: r.d || 88, el: el };
 }
+/* Lucht rond de kaart, in css-px.
+     MARGE  de lucht die de kaart houdt van alles wat vrij moet blijven: de
+            zwemmer met zijn naamplaatje, en het cijfer op de vlag. Acht px,
+            zodat er ná het afronden van de hotspot-laag (die op een tiende
+            px neerzet) nog minstens zes px lucht zichtbaar overblijft.
+     RAND   dezelfde lucht naar de kaderrand. Op py 2 zat de kaart met zijn
+            neus tegen de rand, en dan is één px afrondingsverschil al het
+            verschil tussen "binnen" en "half eraf".
+     KRAP   de harde kaderrand: hier mag niets meer voorbij.
+     EPS    speling tegen het rekenen met kommagetallen. */
+var MARGE = 8, RAND = 6, KRAP = 2, EPS = 0.01;
 function csX(F, x, z) { return F.fx + (2 * (x - z) + 2 * F.d) * F.k; }
 function csY(F, x, z, y) { return F.fy + ((x + z) - 2 * (y || 0)) * F.k; }
 /* kaderpixels terug naar voxels, op een gekozen diepte (diep = x + z) */
@@ -292,22 +303,79 @@ function elMaat(id, bw, bh) {
   if (!e || !e.offsetHeight) return { w: bw, h: bh, er: false };
   return { w: e.offsetWidth || bw, h: e.offsetHeight || bh, er: true };
 }
-/* het vak dat vrij moet blijven: het dier waar de kaart bij hoort */
+/* het vak van een element (een naamplaatje, een cijfer) in kaderpixels */
+function elVak(F, el) {
+  if (!el || !F.el || !el.getBoundingClientRect) return null;
+  if (el.style && el.style.display === 'none') return null;
+  var r = el.getBoundingClientRect();
+  if (!r.width || !r.height) return null;
+  var q = F.el.getBoundingClientRect();
+  return { top: r.top - q.top, bot: r.bottom - q.top,
+           x0: r.left - q.left, x1: r.right - q.left };
+}
+/* het vak dat vrij moet blijven: het dier waar de kaart bij hoort.
+
+   Let op de LIFT: world.js tekent een zwemmer niet op zijn vloervak maar
+   ZWEM_DIEP * HG voxels lager (in een liggend kader ~16 css-px), en hij deint
+   daar ook nog in op en neer (bob). Die verschuiving zit niet in de
+   vloerprojectie csY(). Rekenden we hem niet mee, dan lag de onderrand van de
+   kaart precies op de buik van de zwemmer (G1-F2: een strook van 44 x 1 px).
+   Het naamplaatje meten we echt op: dat hangt bóven het dier en is breder. */
 function vrijVak(F) {
   var d = C && S ? C.wereld.dier(S.gast) : null, b = bad();
   /* onderweg naar het bad (nog in een andere kamer)? reken dan met de plek
      waar hij straks staat: de instapkant van de baan */
   if (d && d.kamer !== 'zwembad') d = null;
   var x = d ? d.x : b.x0, z = d ? d.z : baanZ();
+  var lift = d ? (d.lift || 0) : 0, bob = d ? (d.bob || 0) : 0;
+  var zakOnder = (lift + Math.max(0, bob)) * F.k;   /* zover zakt hij OMLAAG */
+  var zakBoven = (lift + Math.min(0, bob)) * F.k;   /* zover wipt hij OMHOOG */
   var voet = csY(F, x, z, 0), mid = csX(F, x, z);
   var hg = 36 * 2 * F.k, br = 30 * F.k + 10;   /* een gast is ~34 voxels hoog */
-  return { top: voet - hg, bot: voet + 6, x0: mid - br, x1: mid + br };
+  var v = { top: voet - hg + zakBoven, bot: voet + zakOnder,
+            x0: mid - br, x1: mid + br };
+  var t = d ? elVak(F, d.tag) : null;
+  if (t) {
+    if (t.top < v.top) v.top = t.top;
+    if (t.bot > v.bot) v.bot = t.bot;
+    if (t.x0 < v.x0) v.x0 = t.x0;
+    if (t.x1 > v.x1) v.x1 = t.x1;
+  }
+  return v;
+}
+/* het cijfer op de vlag ("19 m") mag de kaart net zo goed niet raken */
+function vlagVak(F) {
+  var e = (typeof document !== 'undefined') &&
+          document.querySelector('[data-hot="getal_zb_vlagtag"]');
+  return e ? elVak(F, e) : null;
+}
+/* hoeveel lucht houdt vak a van vak b? negatief = ze dekken elkaar af */
+function lucht(a, b) {
+  if (!b) return 1e9;
+  return Math.max(Math.max(b.x0 - a.x1, a.x0 - b.x1),
+                  Math.max(b.top - a.bot, a.top - b.bot));
+}
+/* Een VERSE knop staat één tekenbeurt lang nog zonder transform: hits.js zet
+   de plek pas in de volgende beurt (ui.js zegt het net zo). Zo lang staat een
+   nieuwe kaart linksboven in het kader - gemeten: de eindkaart op py 0 in een
+   kader van 386x468, terwijl het anker py 356 zei. Daarom schrijven we het
+   gemeten mikpunt hier meteen zelf op de knop, in precies de vorm die hits.js
+   gebruikt (het middelpunt, met translate(-50%,-50%) ervoor). Alleen als de
+   laag er nog niets op gezet heeft: daarna is de laag de baas. */
+function mikNu(id, mx, my) {
+  var e = (typeof document !== 'undefined') &&
+          document.querySelector('[data-hot="' + id + '"]');
+  if (!e || !e.style || e.style.transform) return false;
+  e.style.transform = 'translate(-50%,-50%) translate(' +
+                      mx.toFixed(1) + 'px,' + my.toFixed(1) + 'px)';
+  return true;
 }
 /* Een knop alleen verzetten als hij écht ergens anders hoort. Zonder deze rem
    verschuift de kaart bij elke nameting een haarbreedte, en een tik die net
    op dat moment landt valt dan naast de knop. */
 var plekNu = Object.create(null);
-function zetPlek(id, v) {
+function zetPlek(id, v, mx, my) {
+  if (mx !== undefined) mikNu(id, mx, my);
   var was = plekNu[id];
   if (was && Math.abs(was.x - v.x) < 0.02 && Math.abs(was.z - v.z) < 0.02 &&
       Math.abs(was.y - v.y) < 0.02) return false;
@@ -325,21 +393,50 @@ function kaartLeg() {
   var K = elMaat(KAART_ID, 200, 78), R = elMaat(KAART_ID + '_keuzes', 230, 62);
   var gat = 5, nodig = K.h + (R.er ? gat + R.h : 0);
   var halfW = Math.max(K.w, R.er ? R.w : 0) / 2 + 2;
-  var v = vrijVak(F), kant, X, Yt;
+  var v = vrijVak(F), vl = vlagVak(F), kant, X, Yt;
   var midX = klem(F.w / 2, halfW, Math.max(halfW, F.w - halfW));
-  /* eronder: zo LAAG als het kader toelaat - staand houdt world.js daar een
-     strook vrij (KADER_ONDER), dus dan ligt de kaart onder de kamer en niet
-     over het bad */
-  if (v.bot + 6 + nodig <= F.h - 2) { kant = 'onder'; X = midX; Yt = Math.max(v.bot + 6, F.h - 2 - nodig); }
-  else if (v.top - 6 - nodig >= 2) { kant = 'boven'; X = midX; Yt = 2; }
-  else if (v.x0 - 6 >= 2 * halfW) { kant = 'links'; X = v.x0 - 6 - halfW; Yt = klem((F.h - nodig) / 2, 2, Math.max(2, F.h - nodig - 2)); }
-  else if (F.w - v.x1 - 6 >= 2 * halfW) { kant = 'rechts'; X = v.x1 + 6 + halfW; Yt = klem((F.h - nodig) / 2, 2, Math.max(2, F.h - nodig - 2)); }
-  else { kant = 'krap'; X = midX; Yt = Math.max(2, F.h - nodig - 2); }
+  var laag = Math.max(RAND, F.h - RAND - nodig);
+  var midY = klem((F.h - nodig) / 2, RAND, Math.max(RAND, F.h - nodig - RAND));
+  /* Vier plekken rond het vrije vak, in volgorde van voorkeur:
+       onder  - zo LAAG als het kader toelaat; staand houdt world.js daar een
+                strook vrij (KADER_ONDER), dus dan ligt de kaart onder de
+                kamer en niet over het bad
+       boven  - tegen de bovenrand, met RAND lucht
+       links / rechts - ernaast, midden in de hoogte
+     Elke plek moet binnen het kader vallen én MARGE px lucht houden van de
+     zwemmer en van het cijfer op de vlag; de eerste die past wint. */
+  var wil = [
+    { kant: 'onder',  X: midX, Yt: Math.max(v.bot + MARGE, laag) },
+    { kant: 'boven',  X: midX, Yt: RAND },
+    { kant: 'links',  X: v.x0 - MARGE - halfW, Yt: midY },
+    { kant: 'rechts', X: v.x1 + MARGE + halfW, Yt: midY }
+  ];
+  var i, p, vak, ruim, best = null;
+  for (i = 0; i < wil.length; i++) {
+    p = wil[i];
+    vak = { x0: p.X - halfW, x1: p.X + halfW, top: p.Yt, bot: p.Yt + nodig };
+    if (vak.x0 < KRAP - EPS || vak.x1 > F.w - KRAP + EPS) continue;
+    if (vak.top < KRAP - EPS || vak.bot > F.h - KRAP + EPS) continue;
+    ruim = Math.min(lucht(vak, v), lucht(vak, vl));
+    if (ruim >= MARGE - EPS) { kant = p.kant; X = p.X; Yt = p.Yt; break; }
+    if (!best || ruim > best.ruim) best = { kant: p.kant, X: p.X, Yt: p.Yt, ruim: ruim };
+  }
+  /* niets past helemaal: neem de plek met de meeste lucht die nog binnen het
+     kader valt, en anders zo laag als het kader toelaat */
+  if (kant === undefined) {
+    kant = 'krap';
+    X = best ? best.X : midX;
+    Yt = best ? best.Yt : Math.max(KRAP, F.h - KRAP - nodig);
+  }
   var diep = 300;                              /* de kaart staat vooraan */
-  zetPlek(KAART_ID, voxVan(F, X, Yt + K.h / 2, diep));
-  if (R.er) zetPlek(KAART_ID + '_keuzes', voxVan(F, X, Yt + K.h + gat + R.h / 2, diep));
+  var mY = Yt + K.h / 2, sY = Yt + K.h + gat + R.h / 2;
+  zetPlek(KAART_ID, voxVan(F, X, mY, diep), X, mY);
+  if (R.er) zetPlek(KAART_ID + '_keuzes', voxVan(F, X, sY, diep), X, sY);
+  vak = { x0: X - halfW, x1: X + halfW, top: Yt, bot: Yt + nodig };
   anker = { kant: kant, X: heel(X), Y: heel(Yt), nodig: heel(nodig),
-            kaartH: K.h, strookH: R.er ? R.h : 0, vrij: v, kader: [F.w, F.h] };
+            kaartH: K.h, strookH: R.er ? R.h : 0, vrij: v, vlag: vl,
+            lucht: heel(Math.min(lucht(vak, v), lucht(vak, vl))),
+            kader: [F.w, F.h] };
   return anker;
 }
 /* Na een kamerwissel of een herlaad zakt het kader nog: de kamerbalk breekt
