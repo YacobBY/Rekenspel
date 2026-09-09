@@ -1,0 +1,54 @@
+; Dierenhotel Kwispelsteeg — Godot 4.7 port.
+; Hand-written; see .fanout/specs/godot/architecture.md §7 for every key.
+
+config_version=5
+
+[application]
+
+config/name="Dierenhotel"
+config/description="Dierenhotel Kwispelsteeg — rekenen ín de wereld."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+config/icon="res://icon.svg"
+boot_splash/bg_color=Color(1, 0.968627, 0.925490, 1)
+boot_splash/show_image=false
+
+[autoload]
+
+Art="*res://autoload/art.gd"
+Rooms="*res://autoload/rooms.gd"
+Hits="*res://autoload/hits.gd"
+World="*res://autoload/world.gd"
+Snd="*res://autoload/snd.gd"
+Ui="*res://autoload/ui.gd"
+State="*res://autoload/state.gd"
+Econ="*res://autoload/econ.gd"
+Games="*res://autoload/games.gd"
+Hotel="*res://autoload/hotel.gd"
+
+[display]
+
+window/size/viewport_width=1024
+window/size/viewport_height=768
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=6
+window/energy_saving/keep_screen_on=false
+
+[gui]
+
+theme/default_font_multichannel_signed_distance_field=true
+timers/tooltip_delay_sec=1.5
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+pointing/android/enable_long_press_as_right_click=false
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/canvas_textures/default_texture_filter=1
+environment/defaults/default_clear_color=Color(1, 0.968627, 0.925490, 1)
+anti_aliasing/quality/msaa_2d=0

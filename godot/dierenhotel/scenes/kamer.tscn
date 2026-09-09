@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/kamer.gd" id="1_kamer"]
+[ext_resource type="Script" path="res://scenes/vloer.gd" id="2_vloer"]
+
+[node name="Kamer" type="Node2D"]
+script = ExtResource("1_kamer")
+
+[node name="Vloer" type="Node2D" parent="."]
+script = ExtResource("2_vloer")
+
+[node name="Ver" type="Node2D" parent="."]
+
+[node name="Objecten" type="Node2D" parent="."]
+y_sort_enabled = true
+
+[node name="Voor" type="Node2D" parent="."]
