@@ -1,7 +1,21 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scenes/main.gd" id="1_main"]
 [ext_resource type="PackedScene" path="res://scenes/kamer.tscn" id="2_kamer"]
+[ext_resource type="Script" path="res://ui/hud.gd" id="3_hud"]
+[ext_resource type="Script" path="res://ui/kamerbalk.gd" id="4_balk"]
+
+[sub_resource type="StyleBoxFlat" id="SB_kader"]
+bg_color = Color(0.937255, 0.874509, 0.788235, 1)
+border_width_left = 5
+border_width_top = 5
+border_width_right = 5
+border_width_bottom = 5
+border_color = Color(1, 0.992157, 0.972549, 1)
+corner_radius_top_left = 26
+corner_radius_top_right = 26
+corner_radius_bottom_right = 26
+corner_radius_bottom_left = 26
 
 [node name="Main" type="Node"]
 script = ExtResource("1_main")
@@ -19,7 +33,7 @@ render_target_update_mode = 4
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
-color = Color(1, 0.968627, 0.92549, 1)
+color = Color(1, 0.956863, 0.909804, 1)
 
 [node name="Scherm" type="MarginContainer" parent="."]
 anchor_right = 1.0
@@ -33,55 +47,71 @@ theme_override_constants/margin_bottom = 10
 layout_mode = 2
 theme_override_constants/separation = 4
 
-[node name="Chroom" type="HBoxContainer" parent="Scherm/Kolom"]
+[node name="Chroom" type="HFlowContainer" parent="Scherm/Kolom"]
 layout_mode = 2
-theme_override_constants/separation = 8
+script = ExtResource("3_hud")
 
-[node name="Logo" type="Label" parent="Scherm/Kolom/Chroom"]
+[node name="Middenrij" type="HBoxContainer" parent="Scherm/Kolom"]
 layout_mode = 2
-text = "Dierenhotel"
+size_flags_vertical = 3
+theme_override_constants/separation = 4
 
-[node name="Dag" type="Label" parent="Scherm/Kolom/Chroom"]
+[node name="Kaderdoos" type="PanelContainer" parent="Scherm/Kolom/Middenrij"]
 layout_mode = 2
-text = "Dag 1"
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("SB_kader")
 
-[node name="Speel" type="Button" parent="Scherm/Kolom/Chroom"]
-custom_minimum_size = Vector2(48, 48)
-layout_mode = 2
-text = "Speel"
-
-[node name="Kader" type="Control" parent="Scherm/Kolom"]
+[node name="Kader" type="Control" parent="Scherm/Kolom/Middenrij/Kaderdoos"]
 clip_contents = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="Beeld" type="TextureRect" parent="Scherm/Kolom/Kader"]
+[node name="Beeld" type="TextureRect" parent="Scherm/Kolom/Middenrij/Kaderdoos/Kader"]
 texture_filter = 2
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 expand_mode = 1
 
-[node name="Knoplaag" type="Control" parent="Scherm/Kolom/Kader"]
+[node name="Vanglaag" type="Control" parent="Scherm/Kolom/Middenrij/Kaderdoos/Kader"]
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="Naamlaag" type="Control" parent="Scherm/Kolom/Kader"]
+[node name="Knoplaag" type="Control" parent="Scherm/Kolom/Middenrij/Kaderdoos/Kader"]
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
 
-[node name="Kamerbalk" type="HBoxContainer" parent="Scherm/Kolom"]
+[node name="Naamlaag" type="Control" parent="Scherm/Kolom/Middenrij/Kaderdoos/Kader"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Rail" type="VBoxContainer" parent="Scherm/Kolom/Middenrij"]
+visible = false
 layout_mode = 2
 
-[node name="Proefkamer" type="Button" parent="Scherm/Kolom/Kamerbalk"]
-custom_minimum_size = Vector2(48, 48)
+[node name="Kamerbalk" type="GridContainer" parent="Scherm/Kolom"]
 layout_mode = 2
-text = "Proefkamer"
+columns = 1
+script = ExtResource("4_balk")
+
+[node name="Voet" type="Label" parent="Scherm/Kolom"]
+layout_mode = 2
+theme_type_variation = &"Voet"
+text = "Dierenhotel Kwispelsteeg · demo · rustig aan, je mag alles zo vaak proberen als je wil"
+horizontal_alignment = 1
+autowrap_mode = 3
 
 [node name="Toastlaag" type="Control" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Bladlaag" type="Control" parent="."]
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2

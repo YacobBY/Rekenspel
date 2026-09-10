@@ -20,12 +20,18 @@ extends SceneTree
 ## are caught with an `OS.add_logger()` hook; warnings (`push_warning`, the `# Wn`
 ## stubs) are deliberately NOT failures.  `tools/test.sh` greps stderr for the
 ## same thing, so a failure survives even if a future engine drops the hook.
+##
+## A test that walks an error path ON PURPOSE says so with `Proef.verwacht_fout()`.
+## The runner then demands EXACTLY that many engine errors during that test, and
+## reports the total on the last line (`verwachte motorfouten: n`) so that the
+## shell gate in `tools/test.sh` can allow the same number and no more.
 
 const MAP := "res://tests"
 const SPELLEN := "res://games"
 
 var _goed := 0
 var _fout := 0
+var _verwacht_totaal := 0
 var _regels: Array[String] = []
 var _teller: FoutTeller = null
 
@@ -74,33 +80,62 @@ func _initialize() -> void:
 		print(r)
 	print("----")
 	print("%d goed, %d fout, %d ms" % [_goed, _fout, ms])
+	# tools/test.sh reads this line: it allows exactly this many ERROR lines
+	print("verwachte motorfouten: %d" % _verwacht_totaal)
 	quit(1 if _fout > 0 else 0)
 
 func _draai_bestand(pad: String) -> void:
+	# A file that does not compile is a FAILURE, never a skip.  `load()` on a
+	# script with a parse error hands back a GDScript that is not null but has an
+	# empty method list, so the loop below would simply not run and the file would
+	# vanish from the suite without a line — the bare `--script` command would
+	# print "n goed, 0 fout" while a test file was broken (W5-F1).
 	var scr: GDScript = load(pad)
-	if scr == null:
-		_mis(pad, "kan niet laden", [])
+	if scr == null or not scr.can_instantiate():
+		_mis(pad.get_file(), "kan niet laden — parseerfout?", [])
 		return
+	var namen: Array[String] = []
 	for m in scr.get_script_method_list():
 		var naam: String = m["name"]
-		if not naam.begins_with("test_"):
-			continue
+		if naam.begins_with("test_"):
+			namen.append(naam)
+	if namen.is_empty():
+		_mis(pad.get_file(), "geen enkele test_-methode — parseerfout?", [])
+		return
+	for naam in namen:
 		var proef = scr.new()
+		if proef == null:
+			_mis("%s.%s" % [pad.get_file(), naam], "kan geen exemplaar maken", [])
+			continue
 		proef.set("_runner", self)
 		var voor := _teller.aantal
 		_teller.neem()
-		var uit = proef.call(naam)
-		if typeof(uit) == TYPE_OBJECT and uit != null and uit.has_signal("completed"):
-			await uit.completed
+		# `await` is mandatory here, also for a test without one.  A test method
+		# that awaits is a coroutine; a plain `proef.call(naam)` on one logs
+		# `SCRIPT ERROR: Trying to call an async function without "await"` AND
+		# abandons the rest of that file — the test and everything after it in it
+		# silently disappear from the suite (measured: 14 tests in test_ui.gd, 13
+		# lines of output).  Awaiting a value that is not a coroutine simply
+		# returns it, so this one word covers both kinds.
+		await proef.call(naam)
 		var motor := _teller.aantal - voor
+		var verwacht := 0
+		if proef.get("_verwacht") != null:
+			verwacht = int(proef.get("_verwacht"))
+		_verwacht_totaal += verwacht
 		var meldingen: Array = []
 		if proef.get("_meldingen") != null:
 			meldingen = proef.get("_meldingen")
-		if motor > 0:
+		if motor != verwacht:
 			meldingen = meldingen.duplicate()
-			meldingen.append("%d motorfout(en) tijdens de test:" % motor)
+			if verwacht == 0:
+				meldingen.append("%d motorfout(en) tijdens de test:" % motor)
+			else:
+				meldingen.append("verwachtte %d motorfout(en), kreeg er %d:" % [verwacht, motor])
 			meldingen.append_array(_teller.neem())
-		if (proef.get("_fouten") != null and int(proef.get("_fouten")) > 0) or motor > 0:
+		else:
+			_teller.neem()
+		if (proef.get("_fouten") != null and int(proef.get("_fouten")) > 0) or motor != verwacht:
 			_mis("%s.%s" % [pad.get_file(), naam], "", meldingen)
 		else:
 			_goed += 1

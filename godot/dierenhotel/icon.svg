@@ -1,9 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <rect width="128" height="128" rx="26" fill="#FFF7EC"/>
-  <rect x="10" y="10" width="108" height="108" rx="20" fill="#F5B0C2"/>
-  <path d="M64 34c-16 0-29 13-29 29v11H93V63c0-16-13-29-29-29z" fill="#FFFDF6"/>
-  <rect x="28" y="74" width="72" height="9" rx="4.5" fill="#FFFDF6"/>
-  <circle cx="64" cy="28" r="6" fill="#6BC5A4"/>
-  <circle cx="52" cy="58" r="5" fill="#5B4840"/>
-  <circle cx="76" cy="58" r="5" fill="#5B4840"/>
+  <!-- Dierenhotel Kwispelsteeg — the reception bell and one paw print.
+       Flat, warm and legible down to 32 px; palette from art-sound-rules.md §2.4. -->
+  <rect width="128" height="128" rx="28" fill="#FFF4E8"/>
+  <rect x="8" y="8" width="112" height="112" rx="24" fill="#FFB88C"/>
+  <rect x="8" y="76" width="112" height="44" fill="#F2915B"/>
+  <path d="M8 76h112v20a24 24 0 0 1-24 24H32a24 24 0 0 1-24-24z" fill="#F2915B"/>
+  <!-- the bell -->
+  <path d="M64 34c-19 0-34 15-34 34v10h68V68c0-19-15-34-34-34z" fill="#FFFDF8"/>
+  <rect x="22" y="78" width="84" height="12" rx="6" fill="#FFFDF8"/>
+  <rect x="22" y="86" width="84" height="5" rx="2.5" fill="#EAE0C8"/>
+  <circle cx="64" cy="27" r="8" fill="#F2C14E"/>
+  <!-- one paw print on the dome: the hotel is for animals -->
+  <ellipse cx="64" cy="64" rx="10" ry="8.5" fill="#8A7566"/>
+  <circle cx="52" cy="52" r="4.2" fill="#8A7566"/>
+  <circle cx="63" cy="47" r="4.2" fill="#8A7566"/>
+  <circle cx="74" cy="52" r="4.2" fill="#8A7566"/>
 </svg>

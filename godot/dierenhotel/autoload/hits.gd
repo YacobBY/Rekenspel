@@ -28,6 +28,7 @@ var _spots: Dictionary = {}        ## id -> Spot
 var _volgorde: Array[String] = []  ## insertion order
 var _voorrang: String = ""         ## the game that picks its places first
 var _bezet: Dictionary = {}        ## "rij|kol" -> true, rebuilt every placement
+var _geplaatst: Array[Rect2] = []  ## the rectangles already handed out this pass
 var _vakken: Array[Rect2] = []     ## object boxes in view; a button avoids all of them
 var _laatste: Dictionary = {}      ## id -> {rect, vlak, dekking, op, laag, prio, krap}
 
@@ -37,7 +38,11 @@ class Spot extends RefCounted:
 	var x: float
 	var z: float
 	var y: float
-	var vlak: Rect2 = Rect2()      ## the object's own screen rect, if known
+	var vlak: Rect2 = Rect2()      ## the object's own screen rect, if the caller knows it
+	var vlak_nu: Rect2 = Rect2()   ## and the one this pass really used
+	var obj: String = ""           ## the object it hangs on, when it has a name
+	var _voorwerp: Dictionary = {} ## the thing that was found for it, cached
+	var _voorwerp_sleutel := ""
 	var maat: Vector2 = Vector2.ZERO   ## explicit minimum size (0 = ask the Control)
 	var kleef_aan: String = ""     ## glue my top edge under the rect of this id
 	var kind: String = "btn"       ## btn | drop | tag
@@ -51,6 +56,12 @@ class Spot extends RefCounted:
 	var aan: Callable              ## tap handler
 	var on_weg: Callable
 	var knoop: Control
+	var vangvlak: UiVangvlak = null   ## union of button and object, for a drop
+	var drop: String = ""             ## the name a dragged item must carry
+	var data: Dictionary = {}
+	var val: Callable                 ## the game's drop handler
+	var geleend_door: String = ""     ## a game borrowed this hotel button
+	var eigen_aan: Callable           ## and this is what it did before
 	var laag := Laag.HOTEL
 	var zichtbaar := true
 
@@ -81,15 +92,29 @@ func maak(o: Dictionary) -> String:
 	s.aan = o.get("aan", Callable())
 	s.on_weg = o.get("on_weg", Callable())
 	s.vlak = o.get("vlak", Rect2())
+	s.obj = o.get("obj", "")
 	s.maat = o.get("maat", Vector2.ZERO)
 	s.kleef_aan = o.get("kleef_aan", "")
+	s.drop = o.get("drop", "")
+	s.data = o.get("data", {})
+	s.val = o.get("val", Callable())
 	s.knoop = Ui.maak_knop(s.kind, o)
-	if s.knoop is BaseButton and s.aan.is_valid():
-		(s.knoop as BaseButton).pressed.connect(func():
+	# Always connected, also when the hotspot has no handler yet: that is what
+	# lets a game BORROW one of the hotel's buttons (`ctx.hotspots.pak`).
+	if s.knoop is BaseButton:
+		(s.knoop as BaseButton).pressed.connect(func() -> void:
 			Snd.tik()
 			hotspot_getikt.emit(s.id)
-			s.aan.call(s))
+			if s.aan.is_valid():
+				Ui.roep(s.aan, [s]))
 	Ui.knoplaag.add_child(s.knoop)
+	if s.drop != "" and Ui.vanglaag != null:
+		s.vangvlak = UiVangvlak.new()
+		s.vangvlak.name = "V" + id
+		s.vangvlak.drop = s.drop
+		s.vangvlak.data = s.data
+		s.vangvlak.val = s.val
+		Ui.vanglaag.add_child(s.vangvlak)
 	_spots[id] = s
 	_volgorde.append(id)
 	return id
@@ -102,15 +127,40 @@ func weg(id: String) -> void:
 		s.on_weg.call(s)
 	if is_instance_valid(s.knoop):
 		s.knoop.queue_free()
+	if s.vangvlak != null and is_instance_valid(s.vangvlak):
+		s.vangvlak.queue_free()
 	_spots.erase(id)
 	_volgorde.erase(id)
 	_laatste.erase(id)
 
 func wis_eigenaar(door: String) -> void:
+	geef_terug(door)
 	for id in _volgorde.duplicate():
 		var s: Spot = _spots[id]
 		if s.door == door:
 			weg(id)
+
+# --------------------------------------------------------------- lenen
+
+## `ctx.hotspots.pak(id, fn)` — a game borrows one of the hotel's own buttons
+## while it runs (world.md §5.3).  The button keeps its place and its picture;
+## only what it does changes, and `Games.stop()` gives it back.
+func leen(id: String, door: String, fn: Callable) -> bool:
+	var s: Spot = _spots.get(id)
+	if s == null or s.geleend_door != "":
+		return false
+	s.geleend_door = door
+	s.eigen_aan = s.aan
+	s.aan = fn
+	return true
+
+func geef_terug(door: String) -> void:
+	for id in _volgorde:
+		var s: Spot = _spots[id]
+		if s.geleend_door == door:
+			s.aan = s.eigen_aan
+			s.eigen_aan = Callable()
+			s.geleend_door = ""
 
 func wis_alles() -> void:
 	for id in _volgorde.duplicate():
@@ -146,10 +196,17 @@ func plaats() -> void:
 	if kader.size.x <= 0.0:
 		return
 	_bezet.clear()
+	_geplaatst.clear()
 	_vakken.clear()
 	var lijstje: Array[Spot] = []
-	for id in _volgorde:
+	for id in _volgorde.duplicate():
 		var s: Spot = _spots[id]
+		# A Control can be freed from under a hotspot when the whole shell goes
+		# (a scene change, a test tearing down its viewport).  Drop the spot
+		# instead of writing to a freed object one frame later.
+		if not is_instance_valid(s.knoop):
+			weg(id)
+			continue
 		if s.volg.is_valid():
 			var v: Dictionary = s.volg.call()
 			if not v.is_empty():
@@ -160,6 +217,10 @@ func plaats() -> void:
 				s.vlak = v.get("vlak", s.vlak)
 		s.laag = _laag_van(s)
 		s.zichtbaar = s.kamer == World.kamer_nu()
+		s.vlak_nu = _vlak_van(s)
+		# While a game has priority the wish bubbles step aside (world.md §5.2).
+		if s.laag == Laag.WENS and _voorrang != "":
+			s.zichtbaar = false
 		if s.zichtbaar:
 			lijstje.append(s)
 	# cull: at most 16 per room, lowest layer and priority go first
@@ -178,14 +239,16 @@ func plaats() -> void:
 			lijstje[i].zichtbaar = false
 	# every object still in view is a box that a button must stay off
 	for s in lijstje:
-		if s.zichtbaar and s.vlak.size.x > 0.0 and s.vlak.size.y > 0.0:
-			_vakken.append(s.vlak)
+		if s.zichtbaar and s.vlak_nu.size.x > 0.0 and s.vlak_nu.size.y > 0.0:
+			_vakken.append(s.vlak_nu)
 	# place front-most first inside each layer
 	var rijen := maxi(1, int((kader.size.y - 2 * RAND) / RIJ))
 	var kolommen := maxi(1, int((kader.size.x - 2 * RAND) / KOL))
 	for s in lijstje:
 		if not s.zichtbaar:
 			s.knoop.visible = false
+			if s.vangvlak != null and is_instance_valid(s.vangvlak):
+				s.vangvlak.visible = false
 			_laatste.erase(s.id)
 			continue
 		s.knoop.visible = true
@@ -198,9 +261,85 @@ func plaats() -> void:
 		s.knoop.position = rect.position
 		_laatste[s.id] = {
 			"id": s.id, "op": uit["op"], "laag": s.laag, "prio": s.prio,
-			"rect": rect, "vlak": s.vlak, "krap": uit["krap"],
-			"dekking": _dekking(rect, s.vlak),
+			"rect": rect, "vlak": s.vlak_nu, "krap": uit["krap"],
+			"dekking": _dekking(rect, s.vlak_nu),
 		}
+		_zet_vangvlak(s, rect)
+
+## The catch area is the union of the button and its object, so dragging onto
+## the object itself works (world.md §5.4 step 8).  Nothing for a game to do:
+## it only declares `drop`.
+func _zet_vangvlak(s: Spot, rect: Rect2) -> void:
+	if s.vangvlak == null or not is_instance_valid(s.vangvlak):
+		return
+	var vang := rect
+	if s.vlak_nu.size.x > 0.0 and s.vlak_nu.size.y > 0.0:
+		vang = rect.merge(s.vlak_nu)
+	s.vangvlak.position = vang.position
+	s.vangvlak.size = vang.size
+	s.vangvlak.visible = s.zichtbaar
+
+## How near an object has to stand to count as "the object this hotspot hangs on".
+const VLAK_NABIJ := 2.0
+
+## The screen rectangle a hotspot has to stay off.
+##
+## A caller may hand it in (`vlak`), name the object (`obj`), or hand in neither
+## — and the hotel's own buttons hand in neither: they know where the bowl IS,
+## not how big it draws.  In that case the object is looked up by position in
+## the room (loose things, a game's loose decor, slots, fixed decor) and its
+## baked plate gives the exact rectangle, so `Hits.dekking()` measures something
+## real for every button and not only for the ones that were kind enough to say.
+##
+## The lookup is cached per room + decor version; the rectangle itself is
+## recomputed every pass, because the camera moves.
+func _vlak_van(s: Spot) -> Rect2:
+	if s.vlak.size.x > 0.0 and s.vlak.size.y > 0.0:
+		return s.vlak
+	if not s.zichtbaar:
+		return Rect2()
+	var sleutel := "%s|%d" % [s.kamer, World.decor_versie()]
+	if s._voorwerp_sleutel != sleutel:
+		s._voorwerp_sleutel = sleutel
+		s._voorwerp = _zoek_voorwerp(s)
+	if s._voorwerp.is_empty():
+		return Rect2()
+	var stuk := s._voorwerp
+	return World.vlak_van(str(stuk.get("model", stuk.get("n", ""))),
+		float(stuk.get("x", 0.0)), float(stuk.get("z", 0.0)),
+		float(stuk.get("hoog", stuk.get("y", 0.0))), stuk.get("params", {}))
+
+## The thing a hotspot stands on: by name when it has one, otherwise the nearest
+## thing in the room within VLAK_NABIJ voxels of its aim point.
+func _zoek_voorwerp(s: Spot) -> Dictionary:
+	if s.obj != "":
+		var op_naam := World.mik(s.obj, s.kamer)
+		if _bruikbaar(op_naam):
+			return op_naam
+	var kandidaten: Array = []
+	kandidaten.append_array(World.dingen(s.kamer))
+	kandidaten.append_array(World.decor_lijst(s.kamer))
+	var r := Rooms.get_kamer(s.kamer)
+	if r != null:
+		kandidaten.append_array(r.slots.values())
+		kandidaten.append_array(r.decor)
+	var beste: Dictionary = {}
+	var dichtst := VLAK_NABIJ
+	for stuk in kandidaten:
+		if not _bruikbaar(stuk):
+			continue
+		var d := absf(float(stuk.get("x", 0.0)) - s.x) + absf(float(stuk.get("z", 0.0)) - s.z)
+		if d <= dichtst:
+			dichtst = d
+			beste = stuk
+	return beste
+
+func _bruikbaar(stuk: Variant) -> bool:
+	if typeof(stuk) != TYPE_DICTIONARY:
+		return false
+	var d: Dictionary = stuk
+	var naam := str(d.get("model", d.get("n", "")))
+	return not naam.is_empty() and Art.heeft_model(naam)
 
 ## A tap target is at least 48 x 48; a number tag keeps its natural size.
 func _maat_van(s: Spot) -> Vector2:
@@ -215,7 +354,7 @@ func _maat_van(s: Spot) -> Vector2:
 	return maat
 
 func _laag_van(s: Spot) -> int:
-	if s.vast or s.kind == "tag":
+	if s.vast or s.kind == "tag" or s.kind == "pad":
 		return Laag.VAST
 	if _voorrang != "" and s.door == _voorrang:
 		return Laag.SPEL
@@ -227,6 +366,8 @@ func _diepte(s: Spot) -> float:
 	return s.d if not is_nan(s.d) else s.x + s.z
 
 func _op_van(s: Spot) -> String:
+	if s.op == "voet" or s.kind == "pad":
+		return "voet"
 	if s.kleef_aan != "":
 		return "kleef"
 	if s.op != "auto":
@@ -254,24 +395,36 @@ func _op_van(s: Spot) -> String:
 ## and the tests fail — it is a diagnosis, not a silent overlap.
 func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, kolommen: int) -> Dictionary:
 	var op := _op_van(s)
-	var vlak := s.vlak
+	var vlak := s.vlak_nu
 	var top := vlak.position.y if vlak.size.y > 0.0 else mik.y - s.y * World.px_per_hoogte()
 	var voet := vlak.end.y if vlak.size.y > 0.0 else mik.y
-	if op == "midden":
-		var r := _klem(Rect2(mik - maat * 0.5, maat), kader)
+	if op == "voet":
+		# The keypad band: docked to the bottom of the world frame, inside the
+		# KADER_ONDER strip the camera already keeps free (architecture.md §4.4).
+		# It is placed FIRST inside its layer, so a card that would land on it
+		# lifts itself instead of the pad moving under the room.
+		var r := _klem(Rect2(Vector2(kader.size.x * 0.5 - maat.x * 0.5,
+			kader.size.y - RAND - maat.y), maat), kader)
 		_reserveer(r, kader)
 		return {"rect": r, "op": op, "krap": false}
+	if op == "midden":
+		return _plaats_midden(mik, maat, kader, s.vlak_nu)
 	if s.kleef_aan != "":
 		var aan: Dictionary = _laatste.get(s.kleef_aan, {})
 		if not aan.is_empty():
 			var kr: Rect2 = aan["rect"]
 			var mx := kr.position.x + kr.size.x * 0.5 - maat.x * 0.5
 			var r := _klem(Rect2(Vector2(mx, kr.end.y + KLEEF), maat), kader)
-			if r.intersects(kr):        # no room under it: glue it above instead
-				r = _klem(Rect2(Vector2(mx, kr.position.y - KLEEF - maat.y), maat), kader)
+			if _botst(r):
+				# no room under it: glue it above instead
+				var boven_r := _klem(Rect2(Vector2(mx, kr.position.y - KLEEF - maat.y), maat), kader)
+				if not _botst(boven_r):
+					r = boven_r
+			var krap := _botst(r)
 			_reserveer(r, kader)
-			return {"rect": r, "op": "kleef", "krap": r.intersects(kr)}
-		op = "midden"
+			return {"rect": r, "op": "kleef", "krap": krap}
+		# the thing it glues onto is not on screen: fall back to the aim point
+		return _plaats_midden(mik, maat, kader, s.vlak_nu)
 	if op == "rand":
 		var y := top - maat.y + minf(maat.y, vlak.size.y * TAG_IN)
 		var r := _klem(Rect2(Vector2(mik.x - maat.x * 0.5, y), maat), kader)
@@ -301,6 +454,71 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 	var laatste := _klem(Rect2(mik - maat * 0.5, maat), kader)
 	_reserveer(laatste, kader)
 	return {"rect": laatste, "op": op, "krap": true}
+
+## On the aim point, clamped into the frame, lifted clear of anything already
+## placed and of its own object.
+func _plaats_midden(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2) -> Dictionary:
+	var r := _wijk_omhoog(_klem(Rect2(mik - maat * 0.5, maat), kader), kader, eigen)
+	var krap := _botst(r)
+	_reserveer(r, kader)
+	return {"rect": r, "op": "midden", "krap": krap}
+
+## A fixed card lifts itself off whatever is already on screen (its own keypad,
+## in practice), in whole bands, upwards first and then downwards.  The test is
+## a real rectangle overlap, not a shared grid cell: the choice strip is glued
+## 5 units under its card ON PURPOSE and must not be pushed away for it.
+func _wijk_omhoog(r: Rect2, kader: Rect2, eigen := Rect2()) -> Rect2:
+	if not _bezet_voor(r, eigen):
+		return r
+	for stap in range(1, maxi(2, int(kader.size.y / RIJ)) + 1):
+		var op_r := Rect2(Vector2(r.position.x, r.position.y - stap * RIJ), r.size)
+		if op_r.position.y >= KRAP and not _bezet_voor(op_r, eigen):
+			return op_r
+		var neer := Rect2(Vector2(r.position.x, r.position.y + stap * RIJ), r.size)
+		if neer.end.y <= kader.size.y - KRAP and not _bezet_voor(neer, eigen):
+			return neer
+	# Nowhere free: keep the aim point, but never at the cost of the invariant
+	# that two placed elements do not overlap — that one is checked separately
+	# and reported as `krap`.
+	for stap in range(1, maxi(2, int(kader.size.y / RIJ)) + 1):
+		var op_r := Rect2(Vector2(r.position.x, r.position.y - stap * RIJ), r.size)
+		if op_r.position.y >= KRAP and not _botst(op_r):
+			return op_r
+		var neer := Rect2(Vector2(r.position.x, r.position.y + stap * RIJ), r.size)
+		if neer.end.y <= kader.size.y - KRAP and not _botst(neer):
+			return neer
+	return r
+
+## A fixed card may stand over the world, but never over the object it belongs
+## to: the sum hangs ABOVE the bowl, the guest stays whole (HOTEL.md §9).
+func _bezet_voor(r: Rect2, eigen: Rect2) -> bool:
+	if _botst(r):
+		return true
+	if eigen.size.x <= 0.0 or eigen.size.y <= 0.0:
+		return false
+	var snij := r.intersection(eigen)
+	return snij.size.x > 0.001 and snij.size.y > 0.001
+
+## Does this rectangle touch anything already handed out in this pass?
+func _botst(r: Rect2) -> bool:
+	for g in _geplaatst:
+		var snij := r.intersection(g)
+		if snij.size.x > 0.001 and snij.size.y > 0.001:
+			return true
+	return false
+
+func _cellen_van(r: Rect2, kader: Rect2) -> Array[String]:
+	var rijen := maxi(1, int((kader.size.y - 2 * RAND) / RIJ))
+	var kolommen := maxi(1, int((kader.size.x - 2 * RAND) / KOL))
+	var k0 := int(floor((r.position.x - RAND) / KOL))
+	var k1 := int(floor((r.end.x - 0.001 - RAND) / KOL))
+	var r0 := int(floor((r.position.y - RAND) / RIJ))
+	var r1 := int(floor((r.end.y - 0.001 - RAND) / RIJ))
+	var uit: Array[String] = []
+	for rr in range(maxi(0, r0), mini(rijen - 1, r1) + 1):
+		for kk in range(maxi(0, k0), mini(kolommen - 1, k1) + 1):
+			uit.append("%d|%d" % [rr, kk])
+	return uit
 
 ## What the anchor became, for Hits.debug() — `boven` may silently become `onder`.
 func _werd(op: String, rij: int, top: float, maat: Vector2) -> String:
@@ -380,15 +598,9 @@ func _vak_kosten(r: Rect2) -> float:
 ## A placed rectangle blocks every cell it touches — cards and clamped
 ## placements included.  That is the invariant the review found missing.
 func _reserveer(r: Rect2, kader: Rect2) -> void:
-	var rijen := maxi(1, int((kader.size.y - 2 * RAND) / RIJ))
-	var kolommen := maxi(1, int((kader.size.x - 2 * RAND) / KOL))
-	var k0 := int(floor((r.position.x - RAND) / KOL))
-	var k1 := int(floor((r.end.x - 0.001 - RAND) / KOL))
-	var r0 := int(floor((r.position.y - RAND) / RIJ))
-	var r1 := int(floor((r.end.y - 0.001 - RAND) / RIJ))
-	for rr in range(maxi(0, r0), mini(rijen - 1, r1) + 1):
-		for kk in range(maxi(0, k0), mini(kolommen - 1, k1) + 1):
-			_bezet["%d|%d" % [rr, kk]] = true
+	_geplaatst.append(r)
+	for cel in _cellen_van(r, kader):
+		_bezet[cel] = true
 
 ## The rectangle of one cell block.  Inside the frame by construction.
 func _cel(rij: int, kol: int, maat: Vector2) -> Rect2:

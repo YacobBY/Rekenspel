@@ -1,0 +1,123 @@
+# Dierenhotel Kwispelsteeg — import, tests and web export on every push and PR.
+#
+# The three steps are the three commands of architecture.md §7.3, run through the
+# same tools/ scripts a developer uses, so a red run here is reproducible with one
+# local command. Each script gates on `^(USER )?(SCRIPT )?ERROR:` in the engine
+# output (architecture.md §2.4: a runtime error inside a test may never be a pass).
+#
+# The Godot binary and a stripped-down set of export templates are cached; on a
+# cache miss they are downloaded from the release page and checked against the
+# SHA-512 sums of the release SHA512-SUMS.txt (toolchain.md §1), pinned here so a
+# rewritten sums file cannot slip a different binary past the check. Everything
+# is sudo-free, exactly as on the machine the toolchain spec was written on.
+name: test
+
+on:
+  push:
+  pull_request:
+  # pages.yml calls this workflow first, so main is never published red.
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GODOT_VERSION: 4.7.2-stable
+      GODOT_TEMPLATE_DIR: 4.7.2.stable
+      # sha512sum of the two release assets (toolchain.md §1)
+      GODOT_ZIP_SHA512: 9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65
+      GODOT_TPZ_SHA512: ca4d71c4d7b81dfc15d1a98baa07534aa95b03fdda78a0075b06672e1648d2e5f40980c9adc28d23e1b92e732ee7bf3461997aa804af74ec2fcd7a93ccb84079
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the Godot binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/opt/godot
+          key: godot-bin-${{ env.GODOT_VERSION }}
+
+      - name: Cache the web export templates
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates
+          # the key names the strip: only web_nothreads_* survives (toolchain.md G6)
+          key: godot-tpl-web-${{ env.GODOT_VERSION }}
+
+      - name: Install Godot
+        run: |
+          set -euo pipefail
+          bin=~/.local/opt/godot/Godot_v${GODOT_VERSION}_linux.x86_64
+          if [ ! -x "$bin" ]; then
+            mkdir -p ~/.local/opt/godot
+            cd "$RUNNER_TEMP"
+            base="https://github.com/godotengine/godot/releases/download/$GODOT_VERSION"
+            curl -sSL --retry 3 -O "$base/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+            echo "$GODOT_ZIP_SHA512  Godot_v${GODOT_VERSION}_linux.x86_64.zip" | sha512sum -c -
+            unzip -o -q "Godot_v${GODOT_VERSION}_linux.x86_64.zip" -d ~/.local/opt/godot/
+            chmod +x "$bin"
+          fi
+          mkdir -p ~/.local/bin
+          ln -sfn "$bin" ~/.local/bin/godot
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          # where tools/import.sh and tools/export.sh drop their logs; the runner
+          # context is not available in a job-level env block, so it is set here
+          echo "DH_LOG_DIR=$RUNNER_TEMP/dierenhotel-log" >> "$GITHUB_ENV"
+
+      - name: Install the web export templates
+        run: |
+          set -euo pipefail
+          d=~/.local/share/godot/export_templates/$GODOT_TEMPLATE_DIR
+          if [ ! -f "$d/web_nothreads_release.zip" ]; then
+            cd "$RUNNER_TEMP"
+            base="https://github.com/godotengine/godot/releases/download/$GODOT_VERSION"
+            curl -sSL --retry 3 -O "$base/Godot_v${GODOT_VERSION}_export_templates.tpz"
+            echo "$GODOT_TPZ_SHA512  Godot_v${GODOT_VERSION}_export_templates.tpz" | sha512sum -c -
+            rm -rf "$RUNNER_TEMP/tpl"
+            unzip -q "Godot_v${GODOT_VERSION}_export_templates.tpz" -d "$RUNNER_TEMP/tpl"
+            rm -rf "$d"
+            mkdir -p "$(dirname "$d")"
+            mv "$RUNNER_TEMP/tpl/templates" "$d"
+            # the full set is 2.0 GiB; the Web preset only needs the nothreads
+            # variant (toolchain.md G6, verified: a stripped set exports byte-identically)
+            find "$d" -type f ! -name 'web_nothreads_*' ! -name 'version.txt' -delete
+            rm -rf "$RUNNER_TEMP/tpl" "$RUNNER_TEMP/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          fi
+          ls -l "$d"
+
+      - name: Versions
+        run: godot --headless --version
+
+      - name: Import
+        run: tools/import.sh
+
+      - name: Tests
+        run: tools/test.sh
+
+      - name: Export web
+        run: tools/export.sh
+
+      - name: Upload the web build
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-${{ github.sha }}
+          path: godot/dierenhotel/build/web
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ github.sha }}
+          path: ${{ env.DH_LOG_DIR }}
+          if-no-files-found: ignore
+          retention-days: 7

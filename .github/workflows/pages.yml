@@ -1,0 +1,138 @@
+# Dierenhotel Kwispelsteeg — web export to GitHub Pages, from main.
+#
+# ONE-TIME REPOSITORY SETTING, by hand, by the owner:
+#   Settings ▸ Pages ▸ Build and deployment ▸ Source = "GitHub Actions".
+# Without it this workflow builds fine and the deploy step fails with
+# "Get Pages site failed"; nothing else has to be configured. (`gh auth login`
+# has never been run on the development machine, toolchain.md §1, so the setting
+# cannot be flipped from here.)
+#
+# Pages serves the build from a plain static host: no COOP/COEP headers, which is
+# possible because the Web preset has variant/thread_support=false
+# (architecture.md §7.2). .wasm is served gzipped by Pages itself. Every path in
+# Godot's shell, its PWA manifest and its service worker is relative, so a project
+# page under https://<user>.github.io/<repo>/ works without a base-path rewrite.
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. Queued runs collapse to the newest, but a deployment
+# that is already running is never cancelled: a half-finished Pages upload is
+# worse than a slightly stale site.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # The whole test workflow — import, suite, export — runs first; a red suite
+  # can then never reach the deployment (R-W3W6 finding 3).
+  test:
+    uses: ./.github/workflows/test.yml
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GODOT_VERSION: 4.7.2-stable
+      GODOT_TEMPLATE_DIR: 4.7.2.stable
+      # sha512sum of the two release assets (toolchain.md §1)
+      GODOT_ZIP_SHA512: 9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65
+      GODOT_TPZ_SHA512: ca4d71c4d7b81dfc15d1a98baa07534aa95b03fdda78a0075b06672e1648d2e5f40980c9adc28d23e1b92e732ee7bf3461997aa804af74ec2fcd7a93ccb84079
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the Godot binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/opt/godot
+          key: godot-bin-${{ env.GODOT_VERSION }}
+
+      - name: Cache the web export templates
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/godot/export_templates
+          # the key names the strip: only web_nothreads_* survives (toolchain.md G6)
+          key: godot-tpl-web-${{ env.GODOT_VERSION }}
+
+      - name: Install Godot
+        run: |
+          set -euo pipefail
+          bin=~/.local/opt/godot/Godot_v${GODOT_VERSION}_linux.x86_64
+          if [ ! -x "$bin" ]; then
+            mkdir -p ~/.local/opt/godot
+            cd "$RUNNER_TEMP"
+            base="https://github.com/godotengine/godot/releases/download/$GODOT_VERSION"
+            curl -sSL --retry 3 -O "$base/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+            echo "$GODOT_ZIP_SHA512  Godot_v${GODOT_VERSION}_linux.x86_64.zip" | sha512sum -c -
+            unzip -o -q "Godot_v${GODOT_VERSION}_linux.x86_64.zip" -d ~/.local/opt/godot/
+            chmod +x "$bin"
+          fi
+          mkdir -p ~/.local/bin
+          ln -sfn "$bin" ~/.local/bin/godot
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          # where tools/import.sh and tools/export.sh drop their logs; the runner
+          # context is not available in a job-level env block, so it is set here
+          echo "DH_LOG_DIR=$RUNNER_TEMP/dierenhotel-log" >> "$GITHUB_ENV"
+
+      - name: Install the web export templates
+        run: |
+          set -euo pipefail
+          d=~/.local/share/godot/export_templates/$GODOT_TEMPLATE_DIR
+          if [ ! -f "$d/web_nothreads_release.zip" ]; then
+            cd "$RUNNER_TEMP"
+            base="https://github.com/godotengine/godot/releases/download/$GODOT_VERSION"
+            curl -sSL --retry 3 -O "$base/Godot_v${GODOT_VERSION}_export_templates.tpz"
+            echo "$GODOT_TPZ_SHA512  Godot_v${GODOT_VERSION}_export_templates.tpz" | sha512sum -c -
+            rm -rf "$RUNNER_TEMP/tpl"
+            unzip -q "Godot_v${GODOT_VERSION}_export_templates.tpz" -d "$RUNNER_TEMP/tpl"
+            rm -rf "$d"
+            mkdir -p "$(dirname "$d")"
+            mv "$RUNNER_TEMP/tpl/templates" "$d"
+            # the full set is 2.0 GiB; the Web preset only needs the nothreads
+            # variant (toolchain.md G6, verified: a stripped set exports byte-identically)
+            find "$d" -type f ! -name 'web_nothreads_*' ! -name 'version.txt' -delete
+            rm -rf "$RUNNER_TEMP/tpl" "$RUNNER_TEMP/Godot_v${GODOT_VERSION}_export_templates.tpz"
+          fi
+          ls -l "$d"
+
+      - name: Import
+        run: tools/import.sh
+
+      - name: Export web
+        run: tools/export.sh
+
+      - name: Licences beside index.html
+        run: |
+          set -euo pipefail
+          # tools/export.sh copies fonts/OFL-*.txt next to index.html; the site
+          # must never ship the fonts without them (R-W3W6 finding 4).
+          n=$(find godot/dierenhotel/build/web -maxdepth 1 -name 'OFL-*.txt' | wc -l)
+          echo "$n OFL licence file(s) in the build"
+          test "$n" -ge 1
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: godot/dierenhotel/build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

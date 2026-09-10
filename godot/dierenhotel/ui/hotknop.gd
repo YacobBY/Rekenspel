@@ -1,0 +1,53 @@
+class_name UiHotKnop
+extends Button
+## A hotspot button: pictogram, word, and optionally a waiting badge.
+##
+## Never a lone pictogram (HOTEL.md §9), never under 48 × 48 units (44 only
+## below a 360 unit frame, world.md §6.5), and its label never below 12 px —
+## the floor lives here, not in a stylesheet a game could escape.
+
+var badge_label: Label = null
+var _icoon := ""
+var _label := ""
+
+func bouw(o: Dictionary, mt: Dictionary, tap: int) -> void:
+	theme_type_variation = "Hotknop"
+	_icoon = str(o.get("icoon", ""))
+	_label = str(o.get("label", ""))
+	text = ("%s %s" % [_icoon, _label]).strip_edges()
+	tooltip_text = str(o.get("titel", _label))
+	custom_minimum_size = Vector2(tap, tap)
+	clip_text = false
+	add_theme_font_size_override("font_size", mt["klein"])
+	focus_mode = Control.FOCUS_ALL
+	zet_badge(o.get("badge", null))
+
+## `badge` is the waiting-guest counter; `null` or 0 hides it.
+func zet_badge(n: Variant) -> void:
+	var tekst := "" if n == null else str(n)
+	if tekst == "0":
+		tekst = ""
+	if tekst.is_empty():
+		if badge_label != null:
+			badge_label.visible = false
+		return
+	if badge_label == null:
+		badge_label = Label.new()
+		badge_label.name = "Badge"
+		badge_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		badge_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		badge_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		badge_label.add_theme_font_size_override("font_size", UiThema.VLOER)
+		badge_label.add_theme_color_override("font_color", UiThema.INKT)
+		badge_label.add_theme_stylebox_override("normal",
+			UiThema.vulling(UiThema.vlak(UiThema.ZON, 999, 2, UiThema.WIT), 4, 0))
+		badge_label.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		badge_label.position = Vector2(-6, -6)
+		add_child(badge_label)
+	badge_label.text = tekst
+	badge_label.visible = true
+
+func zet_label(icoon: String, label: String) -> void:
+	_icoon = icoon
+	_label = label
+	text = ("%s %s" % [icoon, label]).strip_edges()

@@ -42,6 +42,12 @@ static func to_uint32(x: float) -> int:
 		n = (-n) & 0xFFFFFFFF
 	return n & 0xFFFFFFFF
 
+## `x | 0` where x is a float64 that may exceed 2^53 (ToInt32 in the spec).
+## Same bits as `to_uint32`, read as a signed 32-bit number.
+static func to_int32(x: float) -> int:
+	var u := to_uint32(x)
+	return u - U32 if u >= 2147483648 else u
+
 ## `Math.round(x)` — halves toward +infinity.
 static func rond(x: float) -> int:
 	return int(floorf(x + 0.5))

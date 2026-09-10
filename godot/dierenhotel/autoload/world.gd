@@ -8,10 +8,15 @@ extends Node
 ## down smoothly.  `schaal()` is the only source of scale numbers a game may
 ## read; never the device pixel ratio.
 ##
-## W1 fills in: the eight rooms in view, guests, idle wandering, sleeping,
-## bowls, the door graph walk (`reis`), the camera slide of world.md §1.9 and
-## the redraw-on-change fingerprint.  The skeleton implements the scale/camera
-## maths, the projection and a single walking animal.
+## The think tick runs at 15 Hz and is completely independent of the draw rate.
+## Between two ticks the room scene glides the animals (`glij()`), so movement
+## is smooth without the world thinking any faster.  Animals in rooms you
+## cannot see run a coarse tick: they keep their route, but get no poses, no
+## particles and no drawing (world.md §2.9).
+##
+## Determinism (architecture.md §13, Q-X1-1): an animal's idle behaviour is
+## seeded from its id and the day, not from the clock, so the same day gives the
+## same wandering — reproducible bugs and testable idle rules.
 
 signal kader_veranderd(rect: Rect2, schaal: Dictionary)
 signal kamer_veranderd(kamer: String)
@@ -23,34 +28,98 @@ const KADER_ONDER := 132    ## css-px reserved under the room (keypad band)
 const WAND_ZICHT := 56      ## voxel-px of wall that must stay visible
 const KADER_MIN := 200
 const DICHT_KLEIN := 900    ## short side under this -> density lower bound 2
+const REIS_S := 0.300       ## camera slide between two rooms
+const REIS_ZIJ := 0.40      ## it starts 40 % of the frame width sideways
+const REIS_ALFA := 0.35     ## ... and at this alpha
+
+const MATRAS := 7           ## the top of a mattress, in voxels
+const ZWEM_DIEP := ArtEffect.ZWEM_DIEP   ## a swimmer sinks this many voxels
+const SPRING_TIKKEN := 6    ## ticks in the air per jump, at tempo 1
+const SQUASH := 3           ## ticks flat on the stone after landing
+const SPRING_HOOG := {"hond": 5.0, "poes": 6.0, "konijn": 7.0, "gans": 4.0}
+const GANG_K := 16.0        ## gait phase per voxel; world.md does not pin it
+const DRIJF_PLONS := 30     ## a floating swimmer splashes every 30th tick
 
 var _kamer_nu: String = ""
 var _kader := Rect2()
 var _schaal := {"g": 3, "dicht": 2.0, "k": 1.5, "q": 1.5,
 		"pxPerVoxelX": 3.0, "pxPerVoxelY": 1.5, "pxPerHoogte": 3.0, "kamer": ""}
-var _cam := Vector2.ZERO           ## camera origin in canvas px
+var _cam := Vector2.ZERO           ## camera origin in canvas px, while sliding
+var _cam_doel := Vector2.ZERO      ## where it is going — hotspots already use this
+var _reis := 1.0                   ## 0..1 of the slide; 1 = standing still
+var _reis_zij := 0.0
 var _viewport: SubViewport = null
 var _kamerscene: Node2D = null
 var _dieren: Dictionary = {}       ## id -> Dier
+var _volgorde: Array[String] = []  ## insertion order, for the wander places
+var _bakken: Dictionary = {}       ## "kamer|slot" -> 0..4
+var _deeltjes: Array = []          ## particles, in voxel-px around the room origin
 var _tijd := 0.0
 var _tikken := 0
 var _vuil := true
+var _stil_tijd := 0.0
+var _pauze := false
+var _zaad_dag := 1
+var _js_zicht = null
+var _rnd := RandomNumberGenerator.new()   ## particles only; seeded per day
 
+## One animal.  `hoogte` is voxels up (+ jump, − swim); `lift` is the same value
+## as a downward pixel offset, which is what the HTML calls it.
 class Dier extends RefCounted:
 	var id: String
+	var naam: String
+	var kind := "hond"
 	var kamer: String
 	var x: float
 	var z: float
+	var px: float                  ## the position at the previous tick (gliding)
+	var pz: float
 	var face := 1
 	var pose := "rust"
 	var staat := "stil"
 	var bob := 0.0
-	var lift := 0.0
+	var zij := 0.0
 	var hoogte := 0.0
-	var model := "proef_dier"
+	var lift := 0.0
+	var acc: Array = []
+	var voer := 0                  ## the level its card bowl shows (setFood)
+	var model := ""
 	var params: Dictionary = {}
-	var _punten: Array = []
-	var _opdracht: Object = null   ## Opdracht, resolved true/false
+	var nr := 0                    ## check-in order, seeds the start place
+	## per-animal constants, from its own seeded generator (world.md §2.4)
+	var fase := 0.0
+	var tempo := 1.0
+	var staart_snel := 0.2
+	var rustig := 1.0
+	var wandel_kans := 0.45
+	var blij_stijl := "draai"
+	var vmax := 1.3
+	var stap_lengte := 0.46
+	var bob_hoog := 2.1
+	## running state
+	var v := 0.0
+	var gang := 0.0
+	var tikken := 0                ## ticks left in this state
+	var na := ""
+	var punten: Array = []         ## points still to walk, in this room
+	var route: Array = []          ## rooms still to travel through
+	var route_doel := Vector2.INF
+	var route_na := ""
+	var slaap_doel := ""
+	var slaap_kamer := ""
+	var beweeg_pose := ""          ## "" | "zwem" | "spring"
+	var beweeg_tempo := 1.0
+	var per_stap: Callable
+	var eind_pose := ""
+	var stap_nr := 0
+	var spring_t := 0
+	var spring_van := Vector2.ZERO
+	var spring_naar := Vector2.ZERO
+	var rnd: Sommen.Prng
+	var opdracht: Object = null    ## Opdracht, resolved true/false
+
+	func plek() -> Vector2:
+		return Vector2(x, z)
 
 ## The awaitable movement order.  `await World.stappen(...)` gives a bool:
 ## true = the last point was reached, false = another order took over.
@@ -69,16 +138,59 @@ func registreer_viewport(vp: SubViewport, scene: Node2D) -> void:
 	_viewport = vp
 	_kamerscene = scene
 
+func _ready() -> void:
+	_kamer_nu = "receptie" if Rooms.bestaat("receptie") else ""
+	_bouw_dingen()
+	_luister_naar_tabblad()
+
+## Hidden tab: the think tick stops completely and the clock restarts on
+## return — it never catches up three heartbeats (world.md §6.6).
+func _luister_naar_tabblad() -> void:
+	if not OS.has_feature("web"):
+		return
+	_js_zicht = JavaScriptBridge.create_callback(_op_zichtbaarheid)
+	var doc = JavaScriptBridge.get_interface("document")
+	if doc != null:
+		doc.addEventListener("visibilitychange", _js_zicht)
+
+func _op_zichtbaarheid(_args: Array) -> void:
+	var verborgen = JavaScriptBridge.eval("document.hidden", true)
+	pauzeer(bool(verborgen))
+
+func _notification(wat: int) -> void:
+	if wat == NOTIFICATION_APPLICATION_PAUSED:
+		pauzeer(true)
+	elif wat == NOTIFICATION_APPLICATION_RESUMED:
+		pauzeer(false)
+
+func pauzeer(aan: bool) -> void:
+	if _pauze == aan:
+		return
+	_pauze = aan
+	_tijd = 0.0
+	if not aan:
+		_vuil = true
+
+func gepauzeerd() -> bool:
+	return _pauze
+
 func _process(delta: float) -> void:
-	_tijd += delta
-	var tikken := 0
-	while _tijd >= TIK and tikken < MAX_INHAAL:
-		_tijd -= TIK
-		tikken += 1
-		_tikken += 1
-		_tik()
-	if _tijd > TIK * 6.0:
-		_tijd = 0.0
+	if not _pauze:
+		_tijd += delta
+		var tikken := 0
+		while _tijd >= TIK and tikken < MAX_INHAAL:
+			_tijd -= TIK
+			tikken += 1
+			_tik()
+		if _tijd > TIK * 6.0:
+			_tijd = 0.0
+		_reis_stap(delta)
+		if _glijdt():
+			_vuil = true          # somebody is between two ticks: every frame counts
+		_stil_tijd += delta
+		if _stil_tijd >= 0.4:     # nothing moved: one lazy redraw, as in the HTML
+			_stil_tijd = 0.0
+			_vuil = true
 	if _vuil and _kamerscene != null:
 		_kamerscene.queue_redraw()
 		_vuil = false
@@ -87,6 +199,23 @@ func _process(delta: float) -> void:
 
 func vuil() -> void:
 	_vuil = true
+	_stil_tijd = 0.0
+
+## How far the world is between two think ticks, 0..1 — the room scene glides
+## the animals over that fraction so 15 Hz thinking draws smoothly.
+func glij() -> float:
+	return 0.0 if rust() else clampf(_tijd / TIK, 0.0, 1.0)
+
+func _glijdt() -> bool:
+	for d in _dieren.values():
+		if d.kamer == _kamer_nu and (not is_equal_approx(d.px, d.x) or not is_equal_approx(d.pz, d.z)):
+			return true
+	return false
+
+## Reduced motion (architecture.md §5.1): nothing moves, the camera jumps,
+## there are no particles and a walk resolves in the same frame.
+func rust() -> bool:
+	return Ui.rust_modus()
 
 # ------------------------------------------------------------ kader en maat
 
@@ -103,7 +232,9 @@ func meet(rect: Rect2) -> void:
 			maxi(1, JsGetal.rond(rect.size.y * _schaal["dicht"])))
 		if _viewport.size != canvas:
 			_viewport.size = canvas
-	_cam = cam_doel(Rooms.get_kamer(_kamer_nu))
+	_cam_doel = cam_doel(Rooms.get_kamer(_kamer_nu))
+	if _reis >= 1.0:
+		_cam = _cam_doel
 	_vuil = true
 	if oud != _kader:
 		kader_veranderd.emit(_kader, _schaal)
@@ -140,7 +271,7 @@ func _bereken_schaal() -> void:
 	if r != null:
 		var box := Rooms.kader(r)
 		box_w = float(box[1] - box[0])
-		nodig_h = float(box[3] - box[2]) - maxf(0.0, float(-box[2] - WAND_ZICHT))
+		nodig_h = nodig_hoog(r)
 	var q := minf((maxf(240.0, _kader.size.x) - 4.0) / box_w,
 			maxf(120.0, _kader.size.y - 4.0) / nodig_h)
 	q = maxf(q, 0.01)
@@ -152,6 +283,12 @@ func _bereken_schaal() -> void:
 	_schaal = {"g": ng, "dicht": dicht, "k": k, "q": k,
 			"pxPerVoxelX": 2.0 * k, "pxPerVoxelY": k, "pxPerHoogte": 2.0 * k,
 			"kamer": _kamer_nu}
+
+## The floor plus a 56 voxel-px strip of wall must always fit; bare wall above
+## that may be cut off.  The floor never may be.
+func nodig_hoog(r: Rooms.Kamer) -> float:
+	var box := Rooms.kader(r)
+	return float(box[3] - box[2]) - maxf(0.0, float(-box[2] - WAND_ZICHT))
 
 ## world.md §1.9 `camDoel()` — the floor stays whole; bare wall is cut at the top.
 func cam_doel(r: Rooms.Kamer) -> Vector2:
@@ -171,51 +308,127 @@ func cam_doel(r: Rooms.Kamer) -> Vector2:
 func cam() -> Vector2:
 	return _cam
 
+## 0.35 -> 1 while the camera slides, so the room fades in with its own move.
+func reis_alfa() -> float:
+	return 1.0 if _reis >= 1.0 else REIS_ALFA + (1.0 - REIS_ALFA) * _ease(_reis)
+
+func _ease(t: float) -> float:
+	return 2.0 * t * t if t < 0.5 else 1.0 - pow(-2.0 * t + 2.0, 2.0) / 2.0
+
+func _reis_stap(delta: float) -> void:
+	if _reis >= 1.0:
+		return
+	_reis = minf(1.0, _reis + delta / REIS_S)
+	_cam = _cam_doel + Vector2(_reis_zij * (1.0 - _ease(_reis)), 0.0)
+	_vuil = true
+
 # ------------------------------------------------------------- projectie
 
-## Canvas px inside the world SubViewport (world.md §0).
+## Canvas px inside the world SubViewport (world.md §0), with the camera where
+## it is RIGHT NOW — this is what the drawing uses.
 func scherm(x: float, z: float, y: float = 0.0) -> Vector2:
 	var g: float = float(_schaal["g"])
 	return Vector2(
 		_cam.x + (x - z) * Art.S * g,
 		_cam.y + (x + z) * (Art.S / 2.0) * g - y * Art.HG * g)
 
-## The same point in frame units (css px) — what a hotspot or card uses.
+## The same point with the camera where it is GOING.  During the 300 ms slide
+## the hotspots already sit at their destination, so a tap halfway through
+## lands on the right object (world.md §1.9).
+func scherm_doel(x: float, z: float, y: float = 0.0) -> Vector2:
+	var g: float = float(_schaal["g"])
+	return Vector2(
+		_cam_doel.x + (x - z) * Art.S * g,
+		_cam_doel.y + (x + z) * (Art.S / 2.0) * g - y * Art.HG * g)
+
+## The point in frame units (css px) — what a hotspot or a card uses.
 func mik_punt(x: float, z: float, y: float = 0.0) -> Vector2:
-	return scherm(x, z, y) / _schaal["dicht"]
+	return scherm_doel(x, z, y) / _schaal["dicht"]
+
+## `World.mik(obj)` — the aim point of a decor piece, a slot or a raw point.
+func mik(obj: Variant, kamer_id: String = "") -> Dictionary:
+	if obj is Dictionary:
+		return obj
+	if obj is String:
+		var k: String = kamer_id if kamer_id != "" else _kamer_nu
+		var los := decor_plek(obj, k)
+		if not los.is_empty():
+			return los
+		var r := Rooms.get_kamer(k)
+		if r != null:
+			if r.slots.has(obj):
+				return r.slots[obj]
+			for stuk in r.decor:
+				if stuk["n"] == obj:
+					return stuk
+	return {}
 
 ## The screen rectangle a model occupies, in frame units.  Hotspots need it to
 ## guarantee 0 % coverage; it comes straight from the baked plate.
-func vlak_van(model: String, x: float, z: float, y: float, params: Dictionary = {}) -> Rect2:
+func vlak_van(model: String, x: float, z: float, y: float, params: Dictionary = {},
+		anker := Vector2.ZERO) -> Rect2:
 	var p := Art.plaat(model, _schaal["g"], params)
 	if p == null:
 		return Rect2()
+	var g: float = float(_schaal["g"])
 	var dicht: float = _schaal["dicht"]
-	var mid := scherm(x, z, y)
-	return Rect2(Vector2(mid.x + p.dx, mid.y + p.dy) / dicht, Vector2(p.w, p.h) / dicht)
+	var mid := scherm_doel(x, z, y)
+	var ank := Vector2(
+		(anker.x - anker.y) * Art.S * g,
+		(anker.x + anker.y) * (Art.S / 2.0) * g)
+	return Rect2((mid + Vector2(p.dx, p.dy) - ank) / dicht, Vector2(p.w, p.h) / dicht)
+
+## The rectangle of one guest, from its own plate — used by the hotspot layer.
+func vlak_van_dier(id: String) -> Rect2:
+	var d: Dier = _dieren.get(id)
+	if d == null:
+		return Rect2()
+	return vlak_van(d.model, d.x, d.z, d.hoogte, d.params, Art.DIER_ANKER)
+
+## Where the name plate of a guest hangs, in frame units (world.md §2.10).
+func naam_punt(id: String) -> Vector2:
+	var d: Dier = _dieren.get(id)
+	if d == null:
+		return Vector2.ZERO
+	var g: float = float(_schaal["g"])
+	var p := scherm_doel(d.x, d.z, 0.0)
+	p.y += (-(30.0 * Art.HG + 8.0) + d.bob + d.lift) * g
+	return p / _schaal["dicht"]
 
 # ------------------------------------------------------------------ kamers
 
 func kamer_nu() -> String:
 	return _kamer_nu
 
+## world.md §1.9 — re-measure first (the new room may have another `g`), then
+## slide the camera in from the side while the frame fades in.
 func naar(kamer_id: String) -> void:
 	if not Rooms.bestaat(kamer_id) or kamer_id == _kamer_nu:
 		return
+	var oud := _kamer_nu
 	_kamer_nu = kamer_id
 	_bereken_schaal()
 	hermeet()
+	_cam_doel = cam_doel(Rooms.get_kamer(kamer_id))
+	var lijst := Rooms.lijst()
+	var later := lijst.find(kamer_id) > lijst.find(oud)
+	if rust() or _kader.size.x < 1.0 or _viewport == null:
+		_reis = 1.0
+		_cam = _cam_doel
+	else:
+		_reis = 0.0
+		_reis_zij = (REIS_ZIJ if later else -REIS_ZIJ) * float(_viewport.size.x)
+		_cam = _cam_doel + Vector2(_reis_zij, 0.0)
+	_vuil = true
 	kamer_veranderd.emit(kamer_id)
-	# W1: the 300 ms ease-in-out camera slide of world.md §1.9.
 
-# ------------------------------------------------------------------ dieren
+func reist() -> bool:
+	return _reis < 1.0
 
 # ------------------------------------------------------------- los decor
 ##
 ## `World.decor(kamer, o)` — a game's own loose decor (world.md §1.7).  Not
 ## saved; owned by the game that placed it; wiped when another game starts.
-## Implemented here because the vertical slice and every wave-2 game need it;
-## W1 adds `rot`, the depth bias for `hoog`, and the `ver` layer.
 
 const LOS_MAX := 48                ## pieces of loose decor per room
 
@@ -248,7 +461,7 @@ func decor(kamer_id: String, o: Dictionary) -> Dictionary:
 	}
 	kamer[id] = stuk
 	_decor_versie += 1
-	_vuil = true
+	vuil()
 	return stuk.duplicate(true)
 
 func decor_weg(kamer_id: String, id: String) -> bool:
@@ -256,7 +469,7 @@ func decor_weg(kamer_id: String, id: String) -> bool:
 		return false
 	_decor[kamer_id].erase(id)
 	_decor_versie += 1
-	_vuil = true
+	vuil()
 	return true
 
 func decor_lijst(kamer_id: String = "") -> Array:
@@ -268,7 +481,7 @@ func decor_lijst(kamer_id: String = "") -> Array:
 			uit.append(stuk.duplicate(true))
 	return uit
 
-## Where a piece stands, for a hotspot that hangs on it (`World.mik`).
+## Where a piece stands, for a hotspot that hangs on it.
 func decor_plek(id: String, kamer_id: String = "") -> Dictionary:
 	for k in _decor.keys():
 		if kamer_id != "" and k != kamer_id:
@@ -283,37 +496,269 @@ func decor_wis_eigenaar(door: String) -> void:
 			if _decor[k][id]["door"] == door:
 				_decor[k].erase(id)
 	_decor_versie += 1
-	_vuil = true
+	vuil()
 
 ## Bumped on every change; the room scene rebuilds its nodes when it moves.
 func decor_versie() -> int:
 	return _decor_versie
 
+# -------------------------------------------------------------- de dingen
+##
+## Two pieces of decor are movable "dingen" (world.md §1.3): the desk lamp and
+## the food trolley.  They are lifted out of the room's decor list at boot, so
+## a game can push them around without touching the room itself.
+
+var _dingen: Dictionary = {}       ## id -> {id, model, kamer, x, z, hoog}
+
+func _bouw_dingen() -> void:
+	_dingen.clear()
+	for kid in Rooms.lijst():
+		var r := Rooms.get_kamer(kid)
+		for i in range(r.decor.size() - 1, -1, -1):
+			var stuk: Dictionary = r.decor[i]
+			var sleutel: String = stuk.get("sleutel", "")
+			if sleutel.is_empty() and stuk["n"] != "kar":
+				continue
+			var id := sleutel if sleutel != "" else "kar"
+			_dingen[id] = {"id": id, "model": stuk["n"], "kamer": kid,
+				"x": float(stuk["x"]), "z": float(stuk["z"]),
+				"hoog": float(stuk.get("y", 0.0))}
+			r.decor.remove_at(i)
+		Rooms.bouw_af(r)
+
+func ding(id: String) -> Dictionary:
+	return _dingen.get(id, {}).duplicate()
+
+func dingen(kamer_id: String = "") -> Array:
+	var uit: Array = []
+	for id in _dingen:
+		if kamer_id == "" or _dingen[id]["kamer"] == kamer_id:
+			uit.append(_dingen[id].duplicate())
+	return uit
+
+## Move a thing, change its model (`lamp` -> `lampaan`), or both.
+func zet_ding(id: String, o: Dictionary) -> Dictionary:
+	if not _dingen.has(id):
+		return {}
+	var stuk: Dictionary = _dingen[id]
+	for sleutel in ["kamer", "x", "z", "hoog", "model"]:
+		if o.has(sleutel):
+			stuk[sleutel] = o[sleutel]
+	vuil()
+	return stuk.duplicate()
+
+# ------------------------------------------------------------------ platen
+
+const DRAAI_MAX := 24              ## rotated plates kept beside the Art cache
+
+var _draai_cache: Dictionary = {}
+var _draai_orde: Array[String] = []
+
+## The plate of a model, with the quarter turns of `rot` applied.  `rot == 0`
+## is the plain `Art.plaat()` and its LRU; a rotated piece is baked from the
+## same voxel list through `Art.bak()` and kept in a small cache of its own, so
+## the model registry does not need a rotation parameter (world.md §1.7).
+func plaat(model: String, g: int, params: Dictionary = {}, rot: int = 0):
+	if posmod(rot, 4) == 0:
+		return Art.plaat(model, g, params)
+	var sleutel := "%s|%d|%s|%d" % [model, g, JSON.stringify(params), posmod(rot, 4)]
+	if _draai_cache.has(sleutel):
+		_draai_orde.erase(sleutel)
+		_draai_orde.append(sleutel)
+		return _draai_cache[sleutel]
+	var voxels := Art.model(model, params)
+	if voxels.is_empty():
+		return null
+	var p = Art.bak(_roteer(voxels, rot), g)
+	if p == null:
+		return null
+	_draai_cache[sleutel] = p
+	_draai_orde.append(sleutel)
+	while _draai_orde.size() > DRAAI_MAX:
+		_draai_cache.erase(_draai_orde.pop_front())
+	return p
+
+## `rot` quarter turns about y — a real rotation, not a mirror (world.md §1.7):
+##   rot 1: [x, y, z] -> [z, y, -x]
+func _roteer(voxels: Array, rot: int) -> Array:
+	var uit: Array = voxels
+	for _ronde in posmod(rot, 4):
+		var stap: Array = []
+		for stuk in uit:
+			var kopie: Dictionary = stuk.duplicate()
+			kopie["x"] = stuk["z"]
+			kopie["z"] = -int(stuk["x"])
+			stap.append(kopie)
+		uit = stap
+	return uit
+
+# ------------------------------------------------------------------ bakken
+
+## `World.setBak(kamer, slot, 0..4)` — how full a feeding bowl is (world.md §2.8).
+func zet_bak(kamer_id: String, slot: String, niveau: int) -> int:
+	var n := clampi(niveau, 0, 4)
+	_bakken["%s|%s" % [kamer_id, slot]] = n
+	vuil()
+	return n
+
+func bak_stand(kamer_id: String, slot: String) -> int:
+	return _bakken.get("%s|%s" % [kamer_id, slot], 0)
+
+## `Art.niveau(aantal, per)` — how many scoops map to which of the four levels.
+func voer_niveau(aantal: int, per: int) -> int:
+	return Art.niveau(aantal, per)
+
 # ------------------------------------------------------------------ dieren
 
-func zet(id: String, kamer: String, x: float, z: float) -> Dier:
+## Which model draws a guest of this species.  W4 may register the real models
+## under the same names; if it only registers a bare `hond`, that is used.
+func gast_model(kind: String) -> String:
+	if Art.heeft_model("gast_" + kind):
+		return "gast_" + kind
+	if Art.heeft_model(kind):
+		return kind
+	return "gast_hond"
+
+## Teleport.  Clears the route, the bed target and the lift; state `stil` for
+## 12 ticks.  Without x/z it uses wander place `[(nr*3 + 1) % n]`.
+func zet(id: String, kamer: String, x: float = NAN, z: float = NAN,
+		o: Dictionary = {}) -> Dier:
 	var d: Dier = _dieren.get(id)
 	if d == null:
 		d = Dier.new()
 		d.id = id
+		d.nr = _volgorde.size()
 		_dieren[id] = d
+		_volgorde.append(id)
 	_breek(d, false)
-	d.kamer = kamer
+	d.naam = o.get("naam", d.naam if d.naam != "" else id)
+	d.kind = o.get("kind", d.kind)
+	if o.has("acc"):
+		d.acc = o["acc"]
+	if o.has("nr"):
+		d.nr = int(o["nr"])
+	_zaai(d)
+	if Rooms.bestaat(kamer):
+		d.kamer = kamer
+	if is_nan(x) or is_nan(z):
+		var r := Rooms.get_kamer(d.kamer)
+		if r != null and not r.plekken.is_empty():
+			var p: Array = r.plekken[(d.nr * 3 + 1) % r.plekken.size()]
+			x = p[0]
+			z = p[1]
+		else:
+			x = 0.0
+			z = 0.0
 	d.x = x
 	d.z = z
+	d.px = x
+	d.pz = z
+	d.route = []
+	d.punten = []
+	d.slaap_doel = ""
+	d.slaap_kamer = ""
+	d.hoogte = 0.0
+	d.lift = 0.0
+	d.v = 0.0
 	d.staat = "stil"
-	_vuil = true
+	d.tikken = 12
+	d.pose = "rust"
+	_model_bij(d)
+	vuil()
 	return d
+
+## The animal's own generator: same day, same guest, same wandering
+## (architecture.md §13, Q-X1-1).  Never `Date.now()`.
+func _zaai(d: Dier) -> void:
+	var zaad := JsGetal.u32(Sommen.hash_tekst(d.id) ^ JsGetal.u32(_zaad_dag * 2654435761))
+	d.rnd = Sommen.Prng.new(zaad)
+	var r := d.rnd
+	d.fase = r.volgende() * 6.283
+	d.tempo = 0.78 + r.volgende() * 0.5
+	d.staart_snel = 0.16 + r.volgende() * 0.2
+	d.rustig = 0.6 + r.volgende() * 0.9
+	d.wandel_kans = 0.34 + r.volgende() * 0.22
+	d.blij_stijl = ["draai", "hup", "wiebel"][(d.nr + int(_zaad_dag)) % 3]
+	var basis := 1.5 if d.kind == "konijn" else (1.0 if d.kind == "gans" else 1.3)
+	d.vmax = basis * d.tempo
+	d.stap_lengte = 0.26 if d.kind == "konijn" else (0.60 if d.kind == "gans" else 0.46)
+	d.bob_hoog = 5.0 if d.kind == "konijn" else (1.4 if d.kind == "gans" else 2.1)
+
+## The day seeds every animal; call it from `Hotel.morgen()`.
+func zet_dag(dag: int) -> void:
+	_zaad_dag = maxi(1, dag)
+	_rnd.seed = JsGetal.u32(dag * 2654435761)
+	for d in _dieren.values():
+		_zaai(d)
+
+func _model_bij(d: Dier) -> void:
+	d.model = gast_model(d.kind)
+	d.params = {"pose": d.pose, "acc": ArtGasten.acc_sleutel(d.acc)}
 
 func dier(id: String) -> Dier:
 	return _dieren.get(id)
 
 func dieren(kamer: String = "") -> Array:
 	var uit: Array = []
-	for d in _dieren.values():
+	for id in _volgorde:
+		var d: Dier = _dieren[id]
 		if kamer == "" or d.kamer == kamer:
 			uit.append(d)
 	return uit
+
+func weg(id: String) -> void:
+	var d: Dier = _dieren.get(id)
+	if d == null:
+		return
+	_breek(d, false)
+	_dieren.erase(id)
+	_volgorde.erase(id)
+	vuil()
+
+## Bring the world in line with the save: every guest in its own room, sleepers
+## in their bed.  `Hotel.start()` calls this after the furniture is restored.
+func sync(gasten: Array) -> void:
+	var gezien := {}
+	for g in gasten:
+		var id: String = g.get("id", "")
+		if id.is_empty():
+			continue
+		gezien[id] = true
+		var kamer: String = g.get("waar", g.get("kamer", "receptie"))
+		if not Rooms.bestaat(kamer):
+			kamer = "receptie"
+		var d: Dier = _dieren.get(id)
+		if d == null:
+			d = zet(id, kamer, NAN, NAN, {"naam": g.get("naam", id),
+				"kind": g.get("kind", "hond"), "acc": g.get("accessoires", [])})
+		else:
+			d.naam = g.get("naam", d.naam)
+			d.kind = g.get("kind", d.kind)
+			d.acc = g.get("accessoires", d.acc)
+			_model_bij(d)
+	for id in _volgorde.duplicate():
+		if not gezien.has(id):
+			weg(id)
+	vuil()
+
+## An accessory change is idempotent and always REPLACES the list.
+func accessoire(id: String, naam: String, aan: bool = true) -> Array:
+	var d: Dier = _dieren.get(id)
+	if d == null:
+		return []
+	var uit: Array = []
+	for a in ArtGasten.ACC_NAMEN:
+		var heeft: bool = d.acc.has(a)
+		if a == naam:
+			heeft = aan
+		if heeft:
+			uit.append(a)
+	d.acc = uit
+	_model_bij(d)
+	vuil()
+	return uit.duplicate()
+
+# -------------------------------------------------------- bewegen (world.md §2.5)
 
 ## `World.loopNaar(id, x, z, o)` — awaitable.  See `stappen`.
 func loop_naar(id: String, x: float, z: float, o: Dictionary = {}) -> bool:
@@ -323,94 +768,838 @@ func loop_naar(id: String, x: float, z: float, o: Dictionary = {}) -> bool:
 ## room.  Returns true when the last point was reached, false as soon as another
 ## order takes the animal over.  Never throws, never rejects.
 ##
-## A game MUST re-check `actief` after every await (architecture.md §5.4).
+##   o = {pose: "" | "zwem" | "spring", tempo: 1.0, per_stap: Callable, na: ""}
+##
+## Walking and swimming glide through the points and brake only for the last
+## one; jumping deliberately does not glide.  A game MUST re-check `actief`
+## after every await (architecture.md §6.2).
 func stappen(id: String, punten: Array, o: Dictionary = {}) -> bool:
 	var d: Dier = _dieren.get(id)
 	if d == null:
 		return false
-	if punten.is_empty():
+	var lijst := _punten_van(punten)
+	if lijst.is_empty():
 		return true
 	_breek(d, false)
+	d.beweeg_pose = o.get("pose", "")
+	d.beweeg_tempo = maxf(0.05, float(o.get("tempo", 1.0)))
+	d.per_stap = o.get("per_stap", o.get("perStap", Callable()))
+	d.eind_pose = o.get("na", "wacht")
+	if rust():
+		for i in lijst.size():
+			if d.per_stap.is_valid():
+				d.per_stap.call(i, lijst[i])
+		_zet_plek(d, lijst[lijst.size() - 1])
+		d.punten = []
+		_eind_staat(d)
+		vuil()
+		return true
 	var op := Opdracht.new()
-	d._opdracht = op
-	d._punten = punten.duplicate()
-	d.staat = "loop"
-	d.pose = o.get("pose", "loopA")
-	_vuil = true
-	var gehaald: bool = await op.af
-	return gehaald
+	d.opdracht = op
+	d.punten = lijst
+	d.stap_nr = 0
+	d.staat = "spring" if d.beweeg_pose == "spring" else \
+		("zwem" if d.beweeg_pose == "zwem" else "loop")
+	d.na = d.eind_pose
+	d.v = maxf(d.v, 0.14 * d.vmax)
+	if d.staat == "spring":
+		_spring_start(d)
+	vuil()
+	return await op.af
 
-## ---- the rest of the movement API (world.md §2.5) -------------------------
-## Signatures are final (architecture.md §6.4); the bodies are W1's.
+## Only finite points count; `{x, z}`, `[x, z]` and `Vector2` are all accepted.
+func _punten_van(punten: Array) -> Array:
+	var uit: Array = []
+	for p in punten:
+		var v := Vector2.INF
+		if p is Vector2:
+			v = p
+		elif p is Dictionary and p.has("x") and p.has("z"):
+			v = Vector2(p["x"], p["z"])
+		elif p is Array and p.size() >= 2:
+			v = Vector2(p[0], p[1])
+		if is_finite(v.x) and is_finite(v.y):
+			uit.append(v)
+	return uit
 
-## Walk inside the current room, then take state `na`.
-func ga(_id: String, _x: float, _z: float, _na: String = "") -> bool:
-	push_warning("World.ga: W1")            # W1
-	return false
-
-## Walk through the doors to another room.  Returns the path it will take.
-func reis(_id: String, _kamer: String, _o: Dictionary = {}) -> Array:
-	push_warning("World.reis: W1")          # W1
-	return []
-
-## Go to bed: walk to the bed's standing place, then lie down on the mattress.
-func slaap(_id: String, _kamer: String, _slot: String) -> bool:
-	push_warning("World.slaap: W1")         # W1
-	return false
-
-## Walk to the eating place and eat.
-func feed(_ids: Array) -> void:
-	push_warning("World.feed: W1")          # W1
-
-## Walk to a free place and be happy there.
-func solo(_id: String, _act: String = "") -> bool:
-	push_warning("World.solo: W1")          # W1
-	return false
-
-## 'sad' | 'happy' | 'idle' — sulk at the sulking place, bounce, or resume.
-func mood(_id: String, _stemming: String) -> bool:
-	push_warning("World.mood: W1")          # W1
-	return false
-
-## One pose for `duur` ticks (15 ticks = 1 s).  Minimal: sets the pose; W1 adds
-## the duration, the return to the previous state and the reduced-motion path.
-func pose(id: String, naam: String, _duur: int = 0) -> bool:
+## Walk inside the current room, then take state `na`.  Not awaitable.
+func ga(id: String, x: float, z: float, na: String = "") -> bool:
 	var d: Dier = _dieren.get(id)
 	if d == null:
 		return false
-	d.pose = naam                            # W1: duur, terugval, rustmodus
-	_vuil = true
+	_breek(d, false)
+	d.beweeg_pose = ""
+	d.beweeg_tempo = 1.0
+	d.per_stap = Callable()
+	d.eind_pose = na
+	d.na = na
+	if rust():
+		_zet_plek(d, Vector2(x, z))
+		_eind_staat(d)
+		vuil()
+		return true
+	d.punten = [Vector2(x, z)]
+	d.staat = "loop"
+	vuil()
+	return true
+
+## Walk THROUGH the doors to another room.  Returns the path it will take.
+## No path (same room, unknown room) is not an order at all: a swimmer or a
+## running command is left alone.
+func reis(id: String, kamer: String, o: Dictionary = {}) -> Array:
+	var d: Dier = _dieren.get(id)
+	if d == null or not Rooms.bestaat(kamer):
+		return []
+	var route := Rooms.pad(d.kamer, kamer)
+	if route.size() < 2:
+		return []
+	_breek(d, false)
+	d.route = route.slice(1)
+	d.route_na = o.get("na", "")
+	d.route_doel = Vector2.INF
+	if o.has("x") and o.has("z"):
+		d.route_doel = Vector2(o["x"], o["z"])
+	d.beweeg_pose = ""
+	d.beweeg_tempo = 1.0
+	d.per_stap = Callable()
+	if rust():
+		while not d.route.is_empty():
+			_stap_door_deur(d)
+		_klaar_met_route(d)
+		vuil()
+		return route
+	_volgende_deur(d)
+	vuil()
+	return route
+
+## Go to bed (world.md §2.7).  Already in that room — or reduced motion — and
+## the animal lies down straight away.
+func slaap(id: String, kamer: String, slot: String) -> bool:
+	var d: Dier = _dieren.get(id)
+	var r := Rooms.get_kamer(kamer)
+	if d == null or r == null or not r.slots.has(slot):
+		return false
+	var bed: Dictionary = r.slots[slot]
+	if d.kamer == kamer or rust():
+		_breek(d, false)
+		d.slaap_doel = slot
+		d.slaap_kamer = kamer
+		d.kamer = kamer
+		_in_bed(d)
+		vuil()
+		return true
+	# the walk first, THEN the bed target: `reis`/`ga` supersede the running
+	# order, and superseding is exactly what clears a bed target
+	if d.kamer != kamer:
+		reis(d.id, kamer, {"x": bed["sx"], "z": bed["sz"], "na": "wacht"})
+	else:
+		ga(d.id, bed["sx"], bed["sz"], "wacht")
+	d.slaap_doel = slot
+	d.slaap_kamer = kamer
+	return true
+
+## Lie on the mattress: the bed's own point, `hoogte = MATRAS`, pose `lig`, and
+## `face = −1` for a rotated bed — mirroring is exactly a quarter turn here.
+func _in_bed(d: Dier) -> void:
+	var r := Rooms.get_kamer(d.slaap_kamer)
+	if r == null or not r.slots.has(d.slaap_doel):
+		return
+	var bed: Dictionary = r.slots[d.slaap_doel]
+	d.kamer = d.slaap_kamer
+	_zet_plek(d, Vector2(bed["x"], bed["z"]))
+	d.hoogte = MATRAS
+	d.lift = -MATRAS * Art.HG
+	d.face = -1 if (bed.get("draai", false) or bed.get("model", "") == "bedz") else 1
+	d.staat = "slaap"
+	d.pose = "lig"
+	d.punten = []
+	d.route = []
+	d.v = 0.0
+	_model_bij(d)
+
+## Is this guest asleep in a bed?  The 💤 hang on this.
+func slaapt(id: String) -> bool:
+	var d: Dier = _dieren.get(id)
+	return d != null and d.staat == "slaap"
+
+## Walk to the eating place and eat (world.md §2.8).
+func feed(ids: Array) -> void:
+	var i := 0
+	for id in ids:
+		var d: Dier = _dieren.get(id)
+		if d == null:
+			continue
+		var r := Rooms.get_kamer(d.kamer)
+		var bak := _bak_van(r)
+		if bak.is_empty():
+			i += 1
+			continue
+		var zij := 7.0 if i % 2 == 0 else -7.0
+		ga(id, bak["x"] - 13.0, bak["z"] + zij, "eet")
+		i += 1
+
+func _bak_van(r: Rooms.Kamer) -> Dictionary:
+	if r == null:
+		return {}
+	for sid in r.slots:
+		if r.slots[sid]["soort"] == "bak":
+			var kopie: Dictionary = r.slots[sid].duplicate()
+			kopie["slot"] = sid
+			return kopie
+	return {}
+
+## Eat where you stand — the trolley delivers, nobody has to walk (games-a §7).
+func feest(ids: Array) -> void:
+	for id in ids:
+		var d: Dier = _dieren.get(id)
+		if d == null:
+			continue
+		_breek(d, false)
+		d.staat = "eet"
+		d.tikken = 0
+		d.punten = []
+	vuil()
+
+## Walk to a free place and be happy there.
+func solo(id: String, _act: String = "") -> bool:
+	var d: Dier = _dieren.get(id)
+	if d == null:
+		return false
+	var p := _vrije_plek(d)
+	return ga(id, p.x, p.y, "blij")
+
+## 'sad' | 'happy' | 'idle' — sulk at the sulking place, bounce, or resume.
+func mood(id: String, stemming: String) -> bool:
+	var d: Dier = _dieren.get(id)
+	if d == null:
+		return false
+	match stemming:
+		"sad", "droopy":
+			var r := Rooms.get_kamer(d.kamer)
+			var bak := _bak_van(r)
+			if bak.is_empty():
+				_breek(d, false)
+				d.staat = "sip"
+				d.pose = "sip"
+				d.tikken = 60
+				vuil()
+				return true
+			return ga(id, bak["x"] - 5.0, bak["z"] + 13.0, "sip")
+		"happy", "bouncy", "blij":
+			_breek(d, false)
+			d.staat = "blij"
+			d.tikken = 46 + int(d.rnd.volgende() * 34.0)
+			d.wandel_kans = minf(0.62, d.wandel_kans + 0.06)
+			vuil()
+			return true
+		_:
+			_breek(d, false)
+			d.staat = "stil"
+			d.tikken = 12
+			d.pose = "rust"
+			vuil()
+			return true
+
+## One pose for `duur` ticks (15 ticks = 1 s), then back to idle.
+func pose(id: String, naam: String, duur: int = 0) -> bool:
+	var d: Dier = _dieren.get(id)
+	if d == null:
+		return false
+	_breek(d, false)
+	d.punten = []
+	d.staat = "pose"
+	d.pose = naam
+	d.tikken = maxi(1, duur)
+	d.v = 0.0
+	_model_bij(d)
+	vuil()
 	return true
 
 ## Any new order supersedes the running one (world.md §2.5).
 func _breek(d: Dier, gehaald: bool) -> void:
-	if d._opdracht != null:
-		var op: Opdracht = d._opdracht
-		d._opdracht = null
-		d._punten = []
+	if d.opdracht != null:
+		var op: Opdracht = d.opdracht
+		d.opdracht = null
 		op.rond(gehaald)
+	d.punten = []
+	d.per_stap = Callable()
+	if d.staat == "slaap":
+		# out of bed: the next order is never "lie down again", and the bed
+		# target must go with it or he would climb back in on arrival
+		d.hoogte = 0.0
+		d.lift = 0.0
+	d.slaap_doel = ""
+	d.slaap_kamer = ""
+
+func _zet_plek(d: Dier, p: Vector2) -> void:
+	d.x = p.x
+	d.z = p.y
+	d.px = p.x
+	d.pz = p.y
+
+# --------------------------------------------------- de wereld-API van §5.3
+##
+## `ctx.wereld` IS this autoload (architecture.md §6.3), so every name world.md
+## §5.3 promises a minigame has to answer here.  The ones below are thin
+## passthroughs to `Rooms`, which is where that data lives; a game never has to
+## know that there are two autoloads.
+
+## `kamers()` — the room ids in bar order.
+func kamers() -> Array[String]:
+	return Rooms.lijst()
+
+## `kamer(id)` — one room, or null.
+func kamer(id: String) -> Rooms.Kamer:
+	return Rooms.get_kamer(id)
+
+## `pad(a, b)` — the door path, start room included.
+func pad(van: String, naar: String) -> Array[String]:
+	return Rooms.pad(van, naar)
+
+## `slots(kamer, soort)` — every slot of a room (empty room = all of them).
+func slots(kamer_id: String = "", soort: String = "") -> Array:
+	return Rooms.slots(kamer_id, soort)
+
+## `slot(kamer, slotId)` — one slot, or {}.
+func slot(kamer_id: String, slot_id: String) -> Dictionary:
+	return Rooms.slot(kamer_id, slot_id)
+
+## `actief()` — the room in view.
+func actief() -> String:
+	return _kamer_nu
+
+## `verwijderMeubel(id)` — take a bought piece away again.
+func verwijder_meubel(id: String) -> bool:
+	return Rooms.meubel_weg(id)
+
+## `kamerMeubels(kamer?)` — the bought pieces, as save records.
+func kamer_meubels(kamer_id: String = "") -> Array:
+	return Rooms.meubels(kamer_id)
+
+## `meubeltypen()` — the six types a child can buy, with their soort and model.
+func meubeltypen() -> Dictionary:
+	return Rooms.MEUBEL.duplicate(true)
+
+## `setFood(id, aantal, per)` — how full THIS guest's bowl looks on its card;
+## `Art.niveau` maps the scoops onto the four levels (art-sound-rules.md §7).
+func set_food(id: String, aantal: int, per: int) -> int:
+	var d: Dier = _dieren.get(id)
+	var niv := Art.niveau(aantal, per)
+	if d != null:
+		d.voer = niv
+		vuil()
+	return niv
+
+## `setBak(kamer, slot, 0..4)` and `setMood(id, stemming)` under the spelling
+## world.md §5.3 uses; `zet_bak` and `mood` are the same calls.
+func set_bak(kamer_id: String, slot_id: String, niveau: int) -> int:
+	return zet_bak(kamer_id, slot_id, niveau)
+
+func set_mood(id: String, stemming: String) -> bool:
+	return mood(id, stemming)
+
+## `dingZet(sleutel, o)` — the spelling of §5.3 for `zet_ding`.
+func ding_zet(sleutel: String, o: Dictionary) -> Dictionary:
+	return zet_ding(sleutel, o)
+
+## `decorWisAlles()` — every loose piece of every game, gone.
+func decor_wis_alles() -> void:
+	_decor.clear()
+	_decor_versie += 1
+	vuil()
+
+## `accessoires(id)` — what this guest is wearing, in the fixed order.
+func accessoires(id: String) -> Array:
+	var d: Dier = _dieren.get(id)
+	return [] if d == null else d.acc.duplicate()
+
+## `accessoireWeg(id, naam)` — take one off.
+func accessoire_weg(id: String, naam: String) -> Array:
+	return accessoire(id, naam, false)
+
+# ------------------------------------------------------- doorgeefluik hotel
+
+## `ctx.wereld.behoefteKlaar(gastId, welke)` — the hotel resolves the wish.
+func behoefte_klaar(gast_id: String, welke: String) -> bool:
+	return Hotel.wens_af(gast_id, welke)
+
+## `wereld.voegBed(kamer, {x, z})` — a bed added is a guest added (HOTEL.md §2).
+func voeg_bed(kamer_id: String, o: Dictionary = {}) -> Dictionary:
+	return Rooms.meubel_zet(kamer_id, "bed", o.get("x", NAN), o.get("z", NAN),
+		int(o.get("rot", 0)))
+
+## `wereld.plaatsMeubel(kamer, type, x, z, rot)`.
+func plaats_meubel(kamer_id: String, type: String, x: float = NAN, z: float = NAN,
+		rot: int = 0) -> Dictionary:
+	return Rooms.meubel_zet(kamer_id, type, x, z, rot)
+
+## `wereld.getalTag(obj, n, o)` — a bare number ON an object.
+func getal_tag(obj: Variant, n: Variant, o: Dictionary = {}) -> String:
+	return Ui.getal_tag(obj, n, o)
+
+func vloer() -> String:
+	var r := Rooms.get_kamer(_kamer_nu)
+	return "" if r == null else r.vloer
+
+# ------------------------------------------------------------------- de tik
+
+func tikken() -> int:
+	return _tikken
+
+func deeltjes() -> Array:
+	return _deeltjes
 
 func _tik() -> void:
-	for d in _dieren.values():
-		if d._punten.is_empty():
-			continue
-		var doel: Vector2 = d._punten[0]
+	# the tick counter belongs to the tick, not to the frame clock: a test
+	# drives `_tik()` by hand and every phase must move with it
+	_tikken += 1
+	for id in _volgorde:
+		var d: Dier = _dieren[id]
+		d.px = d.x
+		d.pz = d.z
+		if d.kamer != _kamer_nu:
+			_grof_tik(d)
+		else:
+			_fijn_tik(d)
+	_deeltjes_tik()
+
+## world.md §2.9 — off screen: keep the route, one step per tick, straight to
+## the target.  No poses, no particles, no drawing.
+func _grof_tik(d: Dier) -> void:
+	if d.staat == "eet":
+		# world.md §2.9: off screen the bowl is emptied at once, not chewed
+		var bak := _bak_van(Rooms.get_kamer(d.kamer))
+		if not bak.is_empty():
+			zet_bak(d.kamer, bak["slot"], 0)
+		d.staat = "blij"
+		d.tikken = 30
+	if d.punten.is_empty():
+		if not d.route.is_empty():
+			_stap_door_deur(d)
+			if d.route.is_empty():
+				_klaar_met_route(d)
+		return
+	var r := Rooms.get_kamer(d.kamer)
+	var stap := d.vmax * (1.0 if r == null else r.loop)
+	var doel: Vector2 = d.punten[0]
+	var weg := doel - Vector2(d.x, d.z)
+	if weg.length() <= stap:
+		d.x = doel.x
+		d.z = doel.y
+		d.punten.pop_front()
+		if d.punten.is_empty():
+			_aangekomen(d)
+	else:
+		var stapv := weg.normalized() * stap
+		d.x += stapv.x
+		d.z += stapv.y
+
+func _fijn_tik(d: Dier) -> void:
+	match d.staat:
+		"loop":
+			_rijd(d)
+		"zwem":
+			if d.punten.is_empty():
+				_drijf(d)
+			else:
+				_rijd(d)
+		"spring":
+			_spring(d)
+		"slaap":
+			d.bob = sin(_tikken * 0.045) * 0.6
+			d.pose = "lig"
+		"eet":
+			_eet(d)
+		"blij":
+			_blij(d)
+		"sip":
+			d.pose = "zitsip" if d.tikken % 40 < 20 else "sip"
+			d.bob = 0.0
+			_aftellen(d)
+		"zit":
+			d.pose = "zit"
+			_aftellen(d)
+		"kijk":
+			d.pose = "kijk"
+			_aftellen(d)
+		"snuif":
+			d.pose = "snuif"
+			_aftellen(d)
+		"pose":
+			_aftellen(d)
+		_:
+			_ademen(d)
+			_aftellen(d)
+	_model_bij(d)
+	vuil()
+
+func _aftellen(d: Dier) -> void:
+	d.tikken -= 1
+	if d.tikken <= 0:
+		_kies(d)
+
+## `stil`/`wacht` just breathe, with a random blink.
+func _ademen(d: Dier) -> void:
+	d.bob = sin(_tikken * 0.085 + d.fase) * 0.8 - 0.4
+	d.zij = 0.0
+	if d.pose != "tril" and d.pose != "kijk":
+		d.pose = "rust"
+	if d.rnd.volgende() < 0.035:
+		d.pose = "tril" if d.rnd.volgende() < 0.5 else "kijk"
+		d.tikken = maxi(d.tikken, 1 + int(d.rnd.volgende() * 4.0))
+
+## `blij` — 46..79 ticks in one of three styles, with two sparkles now and then.
+func _blij(d: Dier) -> void:
+	d.pose = "blijA" if (_tikken / 5) % 2 == 0 else "blijB"
+	match d.blij_stijl:
+		"draai":
+			if _tikken % 3 == 0:
+				d.face = -d.face
+		"hup":
+			d.bob = -7.5 * absf(sin(_tikken * 0.32))
+		_:
+			d.zij = sin(_tikken * 0.4) * 2.6
+	if not rust() and _tikken % (9 + d.nr * 2) == 0:
+		_pluis(d, ArtEffect.STER_N, ArtEffect.STER_KL[_tikken % 2], true)
+	_aftellen(d)
+
+## `eet` — a 5-tick chew that empties the bowl, then a happy bout.
+func _eet(d: Dier) -> void:
+	d.pose = "hap2" if (_tikken % 5) < 2 else "hap1"
+	d.bob = 0.0
+	if _tikken % 5 == 0:
 		var r := Rooms.get_kamer(d.kamer)
-		var loop := 1.0 if r == null else r.loop
-		var stap := 1.3 * loop   # voxels per tick; W1: the real accel/brake model
-		var naar_doel := Vector2(doel.x - d.x, doel.y - d.z)
-		if naar_doel.length() <= stap:
+		var bak := _bak_van(r)
+		if bak.is_empty():
+			d.staat = "blij"
+			d.tikken = 50 + int(d.rnd.volgende() * 36.0)
+			return
+		var stand := bak_stand(d.kamer, bak["slot"])
+		if stand <= 0:
+			d.staat = "blij"
+			d.tikken = 50 + int(d.rnd.volgende() * 36.0)
+			return
+		zet_bak(d.kamer, bak["slot"], stand - 1)
+		if not rust():
+			_pluis(d, ArtEffect.KRUIMEL_N, ArtEffect.KRUIMEL_KL, false)
+
+## Floating: he stays in the water, sways, paddles slowly and drops one splash
+## every 30th tick (world.md §2.5).  He does NOT arrive again every tick — that
+## would re-arm the order and reset the state forever.
+func _drijf(d: Dier) -> void:
+	d.hoogte = -ZWEM_DIEP
+	d.lift = ZWEM_DIEP * Art.HG
+	d.zij = sin(_tikken * 0.42 + d.fase) * 0.9
+	d.bob = 0.0
+	d.pose = "loopA" if (_tikken / 8) % 2 == 0 else "loopB"
+	if not rust() and _tikken % DRIJF_PLONS == 0:
+		_pluis(d, 1, ArtEffect.PLONS_KL[_tikken % 3], true)
+
+## world.md §2.4 — accelerate, brake for the LAST point only, glide through the
+## rest.  43 points along the pool cost the same time as one straight line.
+func _rijd(d: Dier) -> void:
+	if d.punten.is_empty():
+		_aangekomen(d)
+		return
+	var r := Rooms.get_kamer(d.kamer)
+	var loop := 1.0 if r == null else r.loop
+	var vmax := d.vmax * loop * d.beweeg_tempo
+	var acc := vmax / 5.5 * d.beweeg_tempo
+	var rem := d.v * d.v / (2.0 * acc) + d.vmax * 0.4 / d.beweeg_tempo
+	var rest := _rest_afstand(d)
+	if rest <= rem:
+		d.v -= acc
+	else:
+		d.v += acc
+	d.v = clampf(d.v, 0.14 * vmax, vmax)
+	var budget := d.v
+	while budget > 0.0 and not d.punten.is_empty():
+		var doel: Vector2 = d.punten[0]
+		var weg := doel - Vector2(d.x, d.z)
+		var af := weg.length()
+		if af <= budget or af < 0.0001:
 			d.x = doel.x
 			d.z = doel.y
-			d._punten.pop_front()
-			if d._punten.is_empty():
-				d.staat = "stil"
-				d.pose = "rust"
-				_breek(d, true)
+			budget -= af
+			d.punten.pop_front()
+			if d.per_stap.is_valid():
+				d.per_stap.call(d.stap_nr, doel)
+			d.stap_nr += 1
+			d.gang += af / (d.stap_lengte * GANG_K)
+			if d.punten.is_empty():
+				_aangekomen(d)
+				return
 		else:
-			var stapv := naar_doel.normalized() * stap
+			var stapv := weg / af * budget
 			d.x += stapv.x
 			d.z += stapv.y
 			d.face = 1 if (stapv.x - stapv.y) >= 0.0 else -1
-			d.pose = "loopA" if (_tikken / 4) % 2 == 0 else "loopB"
-		_vuil = true
+			d.gang += budget / (d.stap_lengte * GANG_K)
+			budget = 0.0
+	_loop_beeld(d)
+
+func _rest_afstand(d: Dier) -> float:
+	var som := 0.0
+	var vorig := Vector2(d.x, d.z)
+	for p in d.punten:
+		som += vorig.distance_to(p)
+		vorig = p
+	return som
+
+func _loop_beeld(d: Dier) -> void:
+	if d.staat == "zwem":
+		d.pose = "loopA" if int(d.gang * 2.0) % 2 == 0 else "loopB"
+		d.hoogte = -ZWEM_DIEP
+		d.lift = ZWEM_DIEP * Art.HG
+		d.zij = sin(_tikken * 0.42 + d.fase) * 0.9
+		d.bob = 0.0
+		if not rust() and _tikken % 5 == 0:
+			_pluis(d, 1, ArtEffect.PLONS_KL[_tikken % 3], true)
+		return
+	d.pose = "loopA" if int(d.gang) % 2 == 0 else "loopB"
+	d.hoogte = 0.0                  # whoever walks, walks on the floor
+	d.lift = 0.0
+	d.bob = -absf(sin(d.gang * PI)) * d.bob_hoog
+	d.zij = sin(d.gang * PI) * 1.6 if d.kind == "gans" else 0.0
+
+## Jumping deliberately does not glide: it stops and squashes on every stone.
+func _spring_start(d: Dier) -> void:
+	d.spring_van = Vector2(d.x, d.z)
+	d.spring_naar = d.punten[0]
+	d.spring_t = 0
+
+func _spring(d: Dier) -> void:
+	if d.punten.is_empty():
+		_aangekomen(d)
+		return
+	var lucht := maxi(2, JsGetal.rond(float(SPRING_TIKKEN) / d.beweeg_tempo))
+	d.spring_t += 1
+	if d.spring_t <= lucht:
+		var f := float(d.spring_t) / float(lucht)
+		var plek := d.spring_van.lerp(d.spring_naar, f)
+		d.x = plek.x
+		d.z = plek.y
+		var top: float = SPRING_HOOG.get(d.kind, 5.0)
+		d.hoogte = top * 4.0 * f * (1.0 - f)
+		d.lift = -d.hoogte * Art.HG
+		d.pose = "loopA" if f < 0.25 else ("blijA" if f < 0.75 else "loopB")
+		var weg := d.spring_naar - d.spring_van
+		d.face = 1 if (weg.x - weg.y) >= 0.0 else -1
+		return
+	if d.spring_t <= lucht + SQUASH:
+		d.hoogte = 0.0
+		d.lift = 0.0
+		d.pose = "zit"
+		return
+	d.x = d.spring_naar.x
+	d.z = d.spring_naar.y
+	d.punten.pop_front()
+	if d.per_stap.is_valid():
+		d.per_stap.call(d.stap_nr, d.spring_naar)
+	d.stap_nr += 1
+	if d.punten.is_empty():
+		_aangekomen(d)
+		return
+	_spring_start(d)
+
+## Arrived at the last point of this leg.
+func _aangekomen(d: Dier) -> void:
+	d.v = 0.0
+	d.hoogte = 0.0 if d.beweeg_pose != "zwem" else -ZWEM_DIEP
+	d.lift = -d.hoogte * Art.HG
+	if not d.route.is_empty():
+		_stap_door_deur(d)
+		if d.route.is_empty():
+			_klaar_met_route(d)
+		return
+	if d.opdracht != null:
+		var op: Opdracht = d.opdracht
+		d.opdracht = null
+		_eind_staat(d)
+		op.rond(true)
+		return
+	if d.slaap_doel != "" and d.kamer == d.slaap_kamer:
+		_in_bed(d)
+		return
+	_eind_staat(d)
+
+## `na` on arrival (world.md §2.5): a known state, or `stil` for a while.
+func _eind_staat(d: Dier) -> void:
+	var na := d.na if d.na != "" else d.eind_pose
+	d.na = ""
+	match na:
+		"eet":
+			d.staat = "eet"
+			d.tikken = 0
+		"sip":
+			d.staat = "sip"
+			d.pose = "sip"
+			d.tikken = 90
+		"wacht":
+			d.staat = "wacht"
+			d.pose = "rust"
+			d.tikken = 240
+		"snuif":
+			d.staat = "snuif"
+			d.pose = "snuif"
+			d.tikken = 24
+		"blij":
+			d.staat = "blij"
+			d.tikken = 46 + int(d.rnd.volgende() * 34.0)
+		"slaap":
+			if d.slaap_doel != "":
+				_in_bed(d)
+			else:
+				d.staat = "stil"
+				d.tikken = 30
+		"zwem":
+			d.staat = "zwem"
+			d.hoogte = -ZWEM_DIEP
+			d.lift = ZWEM_DIEP * Art.HG
+			d.tikken = 600
+		"deur":
+			d.staat = "stil"
+			d.pose = "rust"
+			d.tikken = 20
+		_:
+			d.staat = "stil"
+			d.pose = "rust"
+			d.tikken = JsGetal.rond((10.0 + d.rnd.volgende() * 40.0) * d.rustig)
+
+# ------------------------------------------------------------------- reizen
+
+## Walk to the door of the next room on the route.
+func _volgende_deur(d: Dier) -> void:
+	if d.route.is_empty():
+		return
+	var naar: String = d.route[0]
+	var dp := Rooms.deur(d.kamer, naar)
+	if dp.is_empty():
+		d.route = []
+		_klaar_met_route(d)
+		return
+	d.punten = [Vector2(dp["ix"], dp["iz"])]
+	d.staat = "loop"
+	d.na = "deur"
+
+## Step through the door: the animal appears just inside the next room.
+func _stap_door_deur(d: Dier) -> void:
+	if d.route.is_empty():
+		return
+	var vorige := d.kamer
+	var naar: String = d.route.pop_front()
+	d.kamer = naar
+	var terug := Rooms.deur(naar, vorige)
+	if not terug.is_empty():
+		_zet_plek(d, Vector2(terug["ix"], terug["iz"]))
+	if not d.route.is_empty():
+		_volgende_deur(d)
+
+## The route is walked: go to the point that was asked for, or stop here.
+func _klaar_met_route(d: Dier) -> void:
+	if d.slaap_doel != "" and d.kamer == d.slaap_kamer and is_inf(d.route_doel.x):
+		_in_bed(d)
+		return
+	if is_finite(d.route_doel.x):
+		# the last leg inside the target room; NOT through `ga()`, because that
+		# would supersede the order that started this journey
+		var doel := d.route_doel
+		d.route_doel = Vector2.INF
+		d.punten = [doel]
+		d.staat = "loop"
+		d.na = d.route_na
+		d.v = maxf(d.v, 0.14 * d.vmax)
+		return
+	d.na = d.route_na
+	_eind_staat(d)
+
+# ------------------------------------------------------------------- idle
+
+## world.md §2.6 — when a `stil`/`zit`/`kijk`/`snuif` state runs out.
+func _kies(d: Dier) -> void:
+	if not d.route.is_empty():
+		_volgende_deur(d)
+		return
+	if d.staat == "slaap" or d.staat == "zwem":
+		d.tikken = 120
+		return
+	var w := d.wandel_kans
+	var rol := d.rnd.volgende()
+	if rol < w or rol < w + 0.17:
+		var p := _vrije_plek(d)
+		d.punten = [p]
+		d.staat = "loop"
+		d.na = "" if rol < w else "snuif"
+		d.v = maxf(d.v, 0.14 * d.vmax)
+		return
+	if rol < w + 0.32:
+		d.staat = "zit"
+		d.pose = "zit"
+		d.tikken = 24 + int(d.rnd.volgende() * 50.0)
+		return
+	if rol < w + 0.44:
+		d.staat = "kijk"
+		d.pose = "kijk"
+		d.tikken = 6 + int(d.rnd.volgende() * 12.0)
+		return
+	d.staat = "stil"
+	d.pose = "rust"
+	d.tikken = JsGetal.rond((12.0 + d.rnd.volgende() * 46.0) * d.rustig)
+
+## A free wander place: not on top of another animal's target, not right under
+## the animal's own nose, and the farthest one of the candidates it looked at.
+func _vrije_plek(d: Dier) -> Vector2:
+	var r := Rooms.get_kamer(d.kamer)
+	if r == null or r.plekken.is_empty():
+		return Vector2(d.x, d.z)
+	var n: int = r.plekken.size()
+	var start := int(d.rnd.volgende() * n)
+	var beste := Vector2(r.plekken[start][0], r.plekken[start][1])
+	var beste_af := -1.0
+	for i in n:
+		var p: Array = r.plekken[(start + i) % n]
+		var kand := Vector2(p[0], p[1])
+		var bezet := false
+		for ander in _dieren.values():
+			if ander == d or ander.kamer != d.kamer:
+				continue
+			var doel: Vector2 = ander.punten[ander.punten.size() - 1] if not ander.punten.is_empty() \
+				else Vector2(ander.x, ander.z)
+			if _iso_afstand(kand, doel) < 66.0:
+				bezet = true
+				break
+		if bezet:
+			continue
+		var eigen := _iso_afstand(kand, Vector2(d.x, d.z))
+		if eigen < 40.0:
+			continue
+		if eigen > beste_af:
+			beste_af = eigen
+			beste = kand
+		if d.rnd.volgende() < 0.45:
+			break
+	return beste
+
+## Distance as it looks on screen, in voxel-px — the isometry squashes z.
+func _iso_afstand(a: Vector2, b: Vector2) -> float:
+	var dx := ((a.x - a.y) - (b.x - b.y)) * Art.S
+	var dy := ((a.x + a.y) - (b.x + b.y)) * (Art.S / 2.0)
+	return sqrt(dx * dx + dy * dy)
+
+# --------------------------------------------------------------- deeltjes
+
+## Particles are `ArtEffect`'s (art-sound-rules.md §11.2): it owns the count,
+## the spawn jitter, the gravity, the life and the colours, and it steps them.
+## The world only says where and adds the room the particle belongs to, in
+## voxel-px around the room origin so a scale change moves it along.
+func _pluis(d: Dier, n: int, kl: Color, omhoog: bool) -> void:
+	if rust():
+		return
+	var basis := Vector2((d.x - d.z) * Art.S, (d.x + d.z) * (Art.S / 2.0))
+	basis.y -= 14.0 if omhoog else 4.0
+	for q in ArtEffect.pluis(n, basis.x, basis.y, kl, omhoog, _rnd):
+		q["kamer"] = d.kamer
+		_deeltjes.append(q)
+
+func _deeltjes_tik() -> void:
+	ArtEffect.pluis_stap(_deeltjes)

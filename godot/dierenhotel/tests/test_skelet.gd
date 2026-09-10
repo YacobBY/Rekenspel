@@ -1,7 +1,13 @@
 extends Proef
 ## The skeleton's own contracts: the autoloads exist, the baker bakes, the
-## registry finds a game without any shared file, the save round-trips and a
-## button above an object covers 0 % of it.
+## registry finds a game without any shared file, the save round-trips and the
+## band follows the guest count.
+##
+## The placeholder room `proefkamer` and the placeholder models `proef_dier` /
+## `proef_blok` are gone (W1): the world now ships the eight real rooms and the
+## baker the real models, so the two assertions that named them bake a cube of
+## their own instead — the plate geometry of art-sound-rules.md §1.5 is what
+## they were really about.
 
 func test_autoloads_bestaan() -> void:
 	var boom := Engine.get_main_loop() as SceneTree
@@ -9,23 +15,29 @@ func test_autoloads_bestaan() -> void:
 		waar(boom.root.get_node_or_null(NodePath(naam)) != null, "autoload " + naam)
 
 func test_baker_maakt_een_plaat() -> void:
-	var boom := Engine.get_main_loop() as SceneTree
-	var art = boom.root.get_node_or_null(NodePath("Art"))
-	if art == null:
-		fout("Art ontbreekt")
-		return
-	var p = art.plaat("proef_blok", 4, {"n": 4})
+	# a 4x4x4 cube of its own, so the plate geometry is asserted on a shape
+	# whose box is known by hand instead of on a model somebody may re-draw
+	if not Art.heeft_model("proef_kubus"):
+		Art.registreer_wereldmodel("proef_kubus", func(params: Dictionary) -> Array:
+			var n: int = params.get("n", 4)
+			var v: Array = []
+			for x in n:
+				for y in n:
+					for z in n:
+						v.append({"x": x, "y": y, "z": z, "k": Color("#D0A87A")})
+			return v)
+	var p = Art.plaat("proef_kubus", 4, {"n": 4})
 	waar(p != null, "plaat bestaat")
 	if p == null:
 		return
-	# 4x4x4 voxels: box is 16 voxel-px wide (4 x 4) and 4+2*4+... tall.
+	# 4x4x4 voxels: the box is (4 + 4) * S = 16 voxel-px wide, + 2 px padding
 	gelijk(p.w, (4 + 4) * 2 * 4 + 4, "plaatbreedte bij g=4")
 	waar(p.h > 0, "plaathoogte")
 	waar(p.tex.get_image().get_used_rect().size.x > 0, "er staat iets op")
 	# a second call must hit the cache, not bake again
-	var voor: int = art.gebakken()
-	art.plaat("proef_blok", 4, {"n": 4})
-	gelijk(art.gebakken(), voor, "tweede aanroep komt uit de cache")
+	var voor: int = Art.gebakken()
+	Art.plaat("proef_kubus", 4, {"n": 4})
+	gelijk(Art.gebakken(), voor, "tweede aanroep komt uit de cache")
 
 func test_registry_vindt_voorbeeld() -> void:
 	var boom := Engine.get_main_loop() as SceneTree
@@ -36,7 +48,7 @@ func test_registry_vindt_voorbeeld() -> void:
 	waar(games.lijst().has("_voorbeeld"), "map-scan vindt _voorbeeld")
 	var def: Dictionary = games.definitie("_voorbeeld")
 	gelijk(def.get("naam", ""), "Voorbeeld", "definitie().naam")
-	gelijk(def.get("kamer", ""), "proefkamer", "definitie().kamer")
+	waar(def.has("kamer"), "definitie() noemt een kamer")
 
 func test_opslag_rondrit() -> void:
 	var boom := Engine.get_main_loop() as SceneTree

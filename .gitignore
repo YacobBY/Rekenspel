@@ -2,3 +2,8 @@
 .foreman/scratch/
 .fanout/scratch/
 .claude/worktrees/
+
+# Godot — the import cache and the exported web build are never committed
+# (godot/dierenhotel/.gitignore repeats them for the project on its own)
+.godot/
+godot/dierenhotel/build/web/

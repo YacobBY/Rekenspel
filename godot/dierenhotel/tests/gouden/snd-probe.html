@@ -1,0 +1,16 @@
+<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8"><title>snd</title></head><body>
+<script>
+/* Vervang de geluidsband door een OFFLINE band: dezelfde WebAudio-knopen,
+   maar het resultaat komt als sample-buffer terug in plaats van uit de
+   luidspreker. snd.js zelf blijft ongewijzigd. */
+window.__SR = 48000; window.__DUUR = 1.5;
+window.__offline = null;
+window.AudioContext = function () {
+  var c = new OfflineAudioContext(1, Math.round(window.__SR * window.__DUUR), window.__SR);
+  try { Object.defineProperty(c, 'state', { get: function () { return 'running'; } }); } catch (e) {}
+  window.__offline = c;
+  return c;
+};
+</script>
+<script src="file:///home/pc/Documents/xnw/rkn/demos/dierenhotel/snd.js"></script>
+</body></html>

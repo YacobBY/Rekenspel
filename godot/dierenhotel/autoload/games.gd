@@ -22,8 +22,19 @@ var _actief := ""
 var _actieve_kamer := ""
 var _knoop: Node = null         ## the running game's node
 
+const EIGENAAR := "registry"
+
 func _ready() -> void:
 	scan()
+	# Deferred: `Hotel` is autoload #10 and does not exist yet while #9 boots.
+	_verbind.call_deferred()
+
+## The entry buttons are re-stuck after every render, exactly as `hersteek()`
+## does in the HTML: the hotel decides what is on screen, the registry only
+## hangs its own icons on the objects that are there.
+func _verbind() -> void:
+	Hotel.bord_veranderd.connect(hersteek)
+	World.kamer_veranderd.connect(func(_k: String) -> void: hersteek())
 
 ## Discover every game.  Safe to call again.
 func scan() -> void:
@@ -80,7 +91,10 @@ func ontgrendeld(id: String) -> bool:
 ## world.md §5.2.  Starting another game supersedes the running one completely:
 ## there is no pause.
 func start(id: String) -> bool:
-	if not _defs.has(id):
+	if not _defs.has(id) or not _scenes.has(id):
+		# world.md §5.2 step 7: a game that cannot be built never leaves the
+		# child staring at a dead button.
+		Ui.toast(UiTekst.SPEL_MIS, "kind")
 		return false
 	if _actief != "":
 		stop()
@@ -97,12 +111,24 @@ func start(id: String) -> bool:
 	if World.kamer_nu() != _actieve_kamer:
 		World.naar(_actieve_kamer)
 	_knoop = _scenes[id].instantiate()
+	if _knoop == null:
+		_actief = ""
+		_actieve_kamer = ""
+		Hits.voorrang("")
+		Ui.toast(UiTekst.SPEL_MIS, "kind")
+		return false
 	add_child(_knoop)
 	var ctx := _maak_ctx(id, def)
 	if _knoop.has_method("_spel_start"):
 		_knoop._spel_start(ctx)
 	elif _knoop.has_method("start"):
 		_knoop.start(ctx)
+	# The game may have moved the camera itself; the hotel must know which room
+	# is really in view (world.md §5.2 step 8).
+	if World.kamer_nu() != _actieve_kamer:
+		_actieve_kamer = World.kamer_nu()
+		Hotel.render()
+	hersteek()
 	spel_gestart.emit(id)
 	return true
 
@@ -119,13 +145,71 @@ func stop() -> void:
 			_knoop.stop()
 		_knoop.queue_free()
 	_knoop = null
-	Hits.wis_eigenaar(id)
+	Hits.wis_eigenaar(id)          # returns every borrowed button as well
 	World.decor_wis_eigenaar(id)
 	Hits.voorrang("")
 	Hotel.render()
+	hersteek()
 	spel_gestopt.emit(id)
 
 func _maak_ctx(id: String, def: Dictionary) -> SpelCtx:
 	if not _ctx.has(id):
 		_ctx[id] = SpelCtx.new(id, def)
 	return _ctx[id]
+
+# ------------------------------------------------------------- de ingangen
+
+## `hersteek()` — the entry icon of every playable game, hung on ITS OWN object
+## (world.md §5.1).  Owner `registry`, class `hotgame`, prio 7, and it follows
+## its object every frame, so it walks with a trolley that is being pushed.
+##
+## The icon disappears while its own game runs (unless `hotspot.blijf`), when
+## `unlock` says no, and when the object is not in this room — which is exactly
+## why an entry button must hang on a FIXED object, never on a game's own loose
+## decor.
+func hersteek() -> void:
+	if Ui.knoplaag == null:
+		return                     # headless, or before the shell registered
+	var nu := World.kamer_nu()
+	for sleutel in _defs.keys():
+		var id := str(sleutel)
+		var def: Dictionary = _defs[id]
+		var knop_id := "spel_" + id
+		var hs: Dictionary = def.get("hotspot", {})
+		if hs.is_empty() or str(def.get("kamer", "")) != nu \
+				or not ontgrendeld(id) \
+				or (_actief == id and not bool(hs.get("blijf", false))):
+			Hits.weg(knop_id)
+			continue
+		var plek := _plek_van(nu, str(hs.get("obj", "")))
+		if plek.is_empty():
+			Hits.weg(knop_id)
+			continue
+		var x: float = float(plek.get("x", 0.0)) + float(hs.get("dx", 0))
+		var z: float = float(plek.get("z", 0.0)) + float(hs.get("dz", 0))
+		var y: float = float(hs.get("hoog", 12))
+		var volg := func() -> Dictionary:
+			var p := _plek_van(World.kamer_nu(), str(hs.get("obj", "")))
+			if p.is_empty():
+				return {}
+			return {"x": float(p.get("x", 0.0)) + float(hs.get("dx", 0)),
+				"z": float(p.get("z", 0.0)) + float(hs.get("dz", 0)),
+				"y": y, "kamer": World.kamer_nu()}
+		Hits.maak({
+			"id": knop_id, "door": EIGENAAR, "kamer": nu, "x": x, "z": z, "y": y,
+			"icoon": str(hs.get("icoon", "")), "label": str(hs.get("label", def.get("naam", id))),
+			"titel": str(def.get("naam", id)), "prio": 7,
+			"klas": "hotgame aan" if _actief == id else "hotgame",
+			"volg": volg, "aan": func(_s) -> void: start(id),
+		})
+
+## The object an entry button hangs on: a loose thing first (the trolley, the
+## desk lamp), then whatever `World.mik` finds (slots, fixed decor, the running
+## game's own loose decor).
+func _plek_van(kamer_id: String, obj: String) -> Dictionary:
+	if obj.is_empty():
+		return {}
+	var ding := World.ding(obj)
+	if not ding.is_empty() and str(ding.get("kamer", kamer_id)) == kamer_id:
+		return ding
+	return World.mik(obj, kamer_id)

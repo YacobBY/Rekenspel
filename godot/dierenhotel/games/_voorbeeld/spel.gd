@@ -18,8 +18,8 @@ var _kaart = null
 func definitie() -> Dictionary:
 	return {
 		"naam": "Voorbeeld",
-		"kamer": "proefkamer",
-		"hotspot": {"obj": "proef_blok", "icoon": "", "label": "Voorbeeld", "hoog": 14},
+		"kamer": "gang",
+		"hotspot": {"obj": "kist", "icoon": "", "label": "Voorbeeld", "hoog": 14},
 		"unlock": func(n: int, _band: int) -> bool: return n >= 0,
 		"taak": {"id": "voorbeeld", "icoon": "", "tekst": "Doe het voorbeeld", "prio": 5},
 	}

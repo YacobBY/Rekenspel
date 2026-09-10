@@ -2,74 +2,198 @@ extends Node2D
 ## The room in view, inside the world SubViewport.
 ##
 ## Layers, in drawing order (world.md §0 painter's algorithm):
-##   Vloer      one baked plate: floor tiles + both back walls   (W1/W4)
-##   Ver        wall decor, always behind everything             (`ver: 1`)
+##   Vloer      one mesh: floor tiles in 4x4 blocks + both back walls
+##   Ver        wall decor (`ver: 1`) — never sorted, always behind
 ##   Objecten   y_sort_enabled -> depth = x + z, for free
-##   Voor       overlays: the water band over a swimmer, particles
+##   Voor       overlays: the 💤 over a sleeper, particles
 ##
-## W1 replaces the placeholder floor below with the baked plate of world.md
-## §1.4 and fills Objecten from Rooms + World.
+## Every thing in `Objecten` is a `WereldObject` standing on its own floor
+## point, so Godot's y-sorting IS the painter's algorithm and nothing has to be
+## sorted by hand.  The depth tweaks of world.md §0 are a bias on that node:
+## +0.3 for decor with a height, +0.5 for a sleeping animal, +0.2 for a loose
+## "ding", and the back half of a feeding bowl sits far enough back that the
+## guest eating from it is drawn in between.
 
-const VOORBEELD_GAST := "gast1"
+const Proefwereld := preload("res://wereld/proefwereld.gd")
+const KOM_ACHTER := -16.0      ## depth bias: the bowl's back half
+const KOM_VOOR := 0.2
 
 @onready var vloer: Node2D = $Vloer
+@onready var ver: Node2D = $Ver
 @onready var objecten: Node2D = $Objecten
+@onready var voor: Node2D = $Voor
 
-var _gast: WereldObject = null
+var _kamer := ""
+var _los_versie := -1
+var _meubel_versie := 0
 var _decor: Array[WereldObject] = []
 var _los: Dictionary = {}          ## id -> WereldObject, a game's loose decor
-var _los_versie := -1
+var _dieren: Dictionary = {}       ## gast id -> Dierbeeld
+var _dingen: Dictionary = {}       ## ding id -> WereldObject
+var _proefwereld = null            ## only with --demo / ?demo=1
 
 func _ready() -> void:
 	World.registreer_viewport(get_parent() as SubViewport, self)
 	World.kader_veranderd.connect(_op_kader)
+	World.kamer_veranderd.connect(_op_kamer)
 	World.getekend.connect(_ververs)
+	Rooms.kamers_veranderd.connect(_op_meubels)
+	bouw(World.kamer_nu())
+	if Proefwereld.aan():
+		_proef()
 
+## The vertical slice of §14.4, only with `?demo=1` / `--demo` (see the file).
+func _proef() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_proefwereld = Proefwereld.new()
+	_proefwereld.start()
+
+func _op_kamer(kamer_id: String) -> void:
+	bouw(kamer_id)
+
+func _op_meubels() -> void:
+	_meubel_versie += 1
+	if vloer != null and vloer.has_method("herbouw"):
+		vloer.herbouw()
+	bouw(_kamer)
+
+## (Re)build the room.  An unknown id keeps the room that is in view — the
+## world decides which room that is, never the caller.
 func bouw(kamer_id: String) -> void:
-	for k in objecten.get_children():
-		k.queue_free()
-	_decor.clear()
-	_gast = null
+	if not Rooms.bestaat(kamer_id):
+		kamer_id = World.kamer_nu()
 	var r := Rooms.get_kamer(kamer_id)
 	if r == null:
 		return
+	_kamer = kamer_id
+	for laag in [objecten, ver]:
+		for k in laag.get_children():
+			laag.remove_child(k)
+			k.queue_free()
+	_decor.clear()
+	_los.clear()
+	_dieren.clear()
+	if Ui.naamlaag != null:
+		Ui.naamplaten_leeg()      # plates of guests in another room are hidden
+	_dingen.clear()
+	_los_versie = -1
 	for stuk in r.decor:
-		var o := WereldObject.new()
-		var s := Sprite2D.new()
-		s.name = "Beeld"
-		s.centered = false
-		s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		o.add_child(s)
-		objecten.add_child(o)
-		o.zet_model(stuk["n"], stuk.get("params", {}))
-		o.plaats(stuk["x"], stuk["z"], stuk.get("y", 0))
+		var o := WereldObject.maak(String(stuk["n"]))
+		var hoog: float = float(stuk.get("y", 0.0))
+		if stuk.get("ver", false):
+			ver.add_child(o)
+		else:
+			o.diepte_bias = 0.3 if hoog > 0.0 else 0.0
+			objecten.add_child(o)
+		o.zet_model(stuk["n"], stuk.get("params", {}), Vector2.ZERO, int(stuk.get("rot", 0)))
+		o.plaats(stuk["x"], stuk["z"], hoog)
 		_decor.append(o)
-	var d := World.dier(VOORBEELD_GAST)
-	if d != null:
-		var g := WereldObject.new()
-		var gs := Sprite2D.new()
-		gs.name = "Beeld"
-		gs.centered = false
-		gs.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		g.add_child(gs)
-		objecten.add_child(g)
-		g.zet_model(d.model, d.params, Vector2(8, 5))
-		g.plaats(d.x, d.z, 0.0)
-		_gast = g
+	for sid in r.slots:
+		_bouw_slot(r, sid)
+	_ververs_dingen()
+	_ververs_dieren()
+	_ververs_los()
+	if vloer != null and vloer.has_method("herbouw"):
+		vloer.herbouw()
 	queue_redraw()
 
-func gast_vlak() -> Rect2:
-	return Rect2() if _gast == null else _gast.vlak()
+## A bed is one object; a bowl is two, so a guest can sit IN it while eating.
+##
+## The KIND decides, not the model name: a bought `bakje` has no model of its
+## own (world.md §1.8) and must still draw a bowl, exactly as world.js keys it
+## on `soort`.
+func _bouw_slot(r: Rooms.Kamer, sid: String) -> void:
+	var slot: Dictionary = r.slots[sid]
+	var model: String = slot.get("model", "")
+	if slot["soort"] == "bak":
+		var kamer_id := r.id
+		for deel in [false, true]:
+			var o := WereldObject.maak("%s_%s" % [sid, "voor" if deel else "achter"])
+			# The bowl is two plates: the front wall is drawn AFTER the guest, so
+			# he sits IN the bowl while he eats (art-sound-rules.md §7).
+			o.diepte_bias = KOM_VOOR if deel else KOM_ACHTER
+			objecten.add_child(o)
+			o.zet_bron(func() -> String:
+					return "kom|%d|%d" % [World.bak_stand(kamer_id, sid), 1 if deel else 0],
+				func(g: int): return Art.kom(World.bak_stand(kamer_id, sid), g, deel),
+				Art.KOM_ANKER)
+			o.plaats(slot["x"], slot["z"], 0.0)
+			_decor.append(o)
+		return
+	if model.is_empty() or not Art.heeft_model(model):
+		return
+	var b := WereldObject.maak(sid)
+	objecten.add_child(b)
+	b.zet_model(model, {})
+	b.plaats(slot["x"], slot["z"], 0.0)
+	_decor.append(b)
+
+func gast_vlak(id: String = "") -> Rect2:
+	if id != "" and _dieren.has(id):
+		return _dieren[id].vlak()
+	for d in _dieren.values():
+		return d.vlak()
+	return Rect2()
+
+func dier_beeld(id: String) -> Node2D:
+	return _dieren.get(id)
 
 func _op_kader(_rect: Rect2, _schaal: Dictionary) -> void:
 	for o in _decor:
 		o.ververs()
-	if _gast != null:
-		_gast.ververs()
+	for o in _los.values():
+		o.ververs()
+	for o in _dingen.values():
+		o.ververs()
+	if vloer != null and vloer.has_method("herbouw"):
+		vloer.herbouw()
 	queue_redraw()
 
-## Loose decor of the running game (World.decor) becomes nodes like anything
-## else; the version counter is the redraw-on-change rule for them.
+## One guest, one node.  Guests in other rooms have no node at all — that is
+## the off-screen rule of world.md §2.9 on the drawing side.  The name plate
+## hangs over the world in `Ui`, which owns the widget; the world owns the
+## point it hangs on (world.md §2.10).
+func _ververs_dieren() -> void:
+	var gezien := {}
+	for d in World.dieren(_kamer):
+		gezien[d.id] = true
+		var beeld: Dierbeeld = _dieren.get(d.id)
+		if beeld == null:
+			beeld = Dierbeeld.maak_dier(d.id)
+			objecten.add_child(beeld)
+			_dieren[d.id] = beeld
+		beeld.volg()
+		if Ui.naamlaag != null and d.naam != "":
+			Ui.naamplaat(d.id, d.naam, World.naam_punt(d.id))
+	for id in _dieren.keys():
+		if not gezien.has(id):
+			_dieren[id].queue_free()
+			_dieren.erase(id)
+			if Ui.naamlaag != null:
+				Ui.naamplaat_weg(id)
+
+## The two movable things (the desk lamp, the food trolley) — world.md §1.3.
+func _ververs_dingen() -> void:
+	var gezien := {}
+	for stuk in World.dingen(_kamer):
+		var id: String = stuk["id"]
+		gezien[id] = true
+		var o: WereldObject = _dingen.get(id)
+		if o == null:
+			o = WereldObject.maak("ding_" + id)
+			o.diepte_bias = 0.2
+			objecten.add_child(o)
+			_dingen[id] = o
+		o.zet_model(stuk["model"], {})
+		o.plaats(stuk["x"], stuk["z"], stuk["hoog"])
+	for id in _dingen.keys():
+		if not gezien.has(id):
+			_dingen[id].queue_free()
+			_dingen.erase(id)
+
+## Loose decor of the running game (World.decor); the version counter is the
+## redraw-on-change rule for them.
 func _ververs_los() -> void:
 	if World.decor_versie() == _los_versie:
 		for o in _los.values():
@@ -77,21 +201,19 @@ func _ververs_los() -> void:
 		return
 	_los_versie = World.decor_versie()
 	var gezien := {}
-	for stuk in World.decor_lijst(World.kamer_nu()):
+	for stuk in World.decor_lijst(_kamer):
 		var id: String = stuk["id"]
 		gezien[id] = true
 		var o: WereldObject = _los.get(id)
 		if o == null:
-			o = WereldObject.new()
-			var s := Sprite2D.new()
-			s.name = "Beeld"
-			s.centered = false
-			s.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			o.add_child(s)
-			objecten.add_child(o)
+			o = WereldObject.maak("los_" + id)
+			if stuk["ver"]:
+				ver.add_child(o)
+			else:
+				objecten.add_child(o)
 			_los[id] = o
-		o.zet_model(stuk["model"], stuk["params"])
 		o.diepte_bias = 0.3 if stuk["hoog"] > 0.0 else 0.0
+		o.zet_model(stuk["model"], stuk["params"], Vector2.ZERO, int(stuk["rot"]))
 		o.plaats(stuk["x"], stuk["z"], stuk["hoog"])
 	for id in _los.keys():
 		if not gezien.has(id):
@@ -99,14 +221,24 @@ func _ververs_los() -> void:
 			_los.erase(id)
 
 func _ververs() -> void:
-	var d := World.dier(VOORBEELD_GAST)
-	if _gast != null and d != null:
-		_gast.face = d.face
-		_gast.plaats(d.x, d.z, d.hoogte)
+	if _kamer != World.kamer_nu():
+		bouw(World.kamer_nu())
+		return
+	var sch := World.schaal()
+	modulate.a = World.reis_alfa()
+	if vloer != null:
+		# the mesh is in voxel-px, so the camera is the node's own transform and
+		# panning costs nothing; only the vignette, which is screen-anchored,
+		# has to be re-emitted when the camera moves
+		vloer.position = World.cam()
+		vloer.scale = Vector2(sch["g"], sch["g"])
+		vloer.queue_redraw()
+	_ververs_dieren()
+	_ververs_dingen()
+	_ververs_los()
 	for o in _decor:
 		o.ververs()
-	_ververs_los()
-	vloer.queue_redraw()
+	voor.queue_redraw()
 
 func _draw() -> void:
 	pass

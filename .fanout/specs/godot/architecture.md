@@ -134,10 +134,29 @@ difference binding. `state.js:380-386` and `games/sleutels.js:139-142` settled i
   under test in the skeleton: `DagRnd`, `Zaadje`, `Prng` (mulberry32, for the garden
   tufts and the animals), `hash2`, `hash_tekst`, `band_van_n`, `koekjes_som`,
   `vergelijk`, `deel`, `tafel`, `geld`, `klok`, `buidel`, `splits`.
-  **W5 adds:** the planbord solver (`plan_fouten`, `plan_oplossingen`, `maak_plan`,
-  `planbord`, the four fixed appointments) and any generator a wave-2 game needs that
-  games-b.md marks as frozen (`zwembad.keuze_getallen`, `was.recept`, …). W5 owns this
-  file; a game may not copy a generator into its own directory.
+  **W5 added:** the planbord solver (`plan_fouten`, `plan_oplossingen`, `maak_plan`,
+  `planbord`, `CELLEN`, `VASTE_AFSPRAKEN`), the 31-bit LCG `Sommen.Lcg31` that
+  `zwembad`/`rooms` use, and one inner class per wave-2 game carrying that game's own
+  frozen generators. W5 owns this file; a game may not copy a generator into its own
+  directory, it calls:
+
+  | call | spec |
+  |---|---|
+  | `Sommen.Zwembad.baan / juist_van / keuze_getallen / slag` | games-b §1.3–§1.5 |
+  | `Sommen.Wekker.doel_tijd / afstand / duur_keuzes / duur_vraag / beurt / tijd_woord / uur_ico / u12 / in_min / van_min / klok5` | games-b §2.3–§2.4 |
+  | `Sommen.Hinkel.beurt / maten_voor / maten / keuze_getallen` | games-b §3.4 |
+  | `Sommen.Was.kies_t / verdeel / soorten_voor / recept` | games-b §4.3 |
+  | `Sommen.Kraam.schuif_van / opzet / keuring / splits_met` + `WAREN` `MUNTEN` `SPOOK_MUNT` | games-b §5.3 |
+  | `Sommen.Sleutels.maak_opdracht / controleer / kies_blanco / rij_van / variant_van / aantal_haken / aantal_sleutels` | games-a §4.2 |
+  | `Sommen.Tobbe.recept / soorten` + `PLAFOND` `CAP` `HAND` | games-a §6.2 |
+  | `Sommen.Bedden.opdracht(band, dag, N, cap, max_stroken)` | games-a §3.3 |
+  | `Sommen.Meubels.max_lijst / buidel_max / wisselgeld / buidel_cap / prijs_van` + `WINKEL` `VERSIERING` | games-a §5.2–§5.3 |
+  | `Sommen.Voerkar.som_regel / volgende_hand` + `HAND` | games-a §7.2 |
+
+  The dictionary keys keep the JavaScript names (`L`, `M`, `T`, `k`, `r`, `per`…);
+  a JS `null` is `""` for a text field and `{}` for a record. Every one of these was
+  compared case by case against the original JavaScript in node — **23 042 cases,
+  0 differences**, PRNG doubles included down to the bit (`tests/test_sommen_kruis.gd`).
 * Every function is `static` and pure. No autoload, no state, no `randf()`.
 
 ### 2.3 Signatures (already implemented, do not change)
@@ -176,6 +195,23 @@ godot --headless --path godot/dierenhotel --script res://tests/run_tests.gd
 method on a fresh instance of `Proef` (`res://tests/proef.gd`: `gelijk`, `waar`, `fout`),
 prints one line per test and exits 1 on any failure.
 
+**A test file that does not compile is a failure, never a skip** (W5-F1). `load()` on a
+script with a parse error hands back a `GDScript` that is *not* null but whose method list
+is empty, so the runner used to walk past it without a word: the bare `--script` command
+printed `n goed, 0 fout` while a test file was broken, and only the stderr grep in
+`tools/test.sh` noticed. The runner now reports `FOUT <bestand>: kan niet laden —
+parseerfout?` when the script is null or `can_instantiate()` is false, `geen enkele
+test_-methode — parseerfout?` when it compiled to nothing, and `kan geen exemplaar maken`
+when `new()` fails — each of them exits 1 from the bare command as well.
+
+The test method is invoked as `await proef.call(naam)`, and the `await` is not optional
+(fixed in W5). A test method that awaits anything is a coroutine; calling one without
+`await` logs `SCRIPT ERROR: Trying to call an async function without "await"` and then
+**abandons the rest of that file** — the test and every test after it in the same file
+vanish from the suite without a line of output. Measured on `tests/test_ui.gd`: 14 test
+methods, 13 result lines, and the missing one was red. Awaiting a value that is not a
+coroutine simply returns it, so the one word covers both kinds of test.
+
 **A runtime error is a failure, not a pass.** A GDScript runtime error (a null call, a
 bad index) aborts the test function and returns quietly, so a naive runner prints `ok`
 for a test that never reached its assertions. Two independent gates close that:
@@ -193,6 +229,20 @@ for a test that never reached its assertions. Two independent gates close that:
 Proven with a throwaway test that dereferences a null (`§14.3`): both the runner and the
 wrapper exit **1**, and the summary counts the test as `FOUT` with
 `1 motorfout(en) tijdens de test`.
+
+**A test may walk an error path on purpose** (W5). `Proef.verwacht_fout(aantal := 1,
+waarom := "")` announces that this test makes the engine log exactly `aantal` errors —
+`Art.registreer_model` refusing a protected name, a deliberately corrupt save file. The
+budget is **exact in both directions**: announcing one and causing two fails, and
+announcing one and causing none fails too, because then the error path was never walked
+and the test proved nothing. It may be called before or after the erroring call; only the
+totals are compared. The runner prints the suite total as its last line,
+`verwachte motorfouten: n`, and `tools/test.sh` allows exactly that many `ERROR:` lines
+and not one more — so gate 2 keeps its teeth. Proven green in
+`tests/test_sommen_runner.gd` and proven red with a throwaway file: an undeclared error,
+an over-budget error and an announced-but-absent error each report `FOUT`
+(`verwachtte 1 motorfout(en), kreeg er 2`) and exit **1** from both the runner and the
+wrapper.
 
 Rejected: **GUT** and **GdUnit4** — both are large third-party trees that have to track
 the engine version, both would sit in `addons/` inside the export filter, and the whole
@@ -225,8 +275,11 @@ Rejected, with the X4 evidence:
 * **(ii) `Node2D._draw` per model** — re-emitting 467–1365 polygons per model per frame
   is what the HTML deliberately does *not* do; the dirty rules of X4 §11.7 assume a blit.
 
-Rasterisation is **CPU-side** (`Image.fill_rect` per scanline span), not a SubViewport
-read-back. That buys three things the read-back cannot: the bake is deterministic, it
+Rasterisation is **CPU-side** — one prepared stamp per (face shape, scale, shade),
+blended with `Image.blend_rect`; W4 measured that this is roughly twice as fast as a
+`fill_rect` per scanline span, because a model uses at most 3 x 5 shades per base colour
+so the stamps are made once and the whole raster becomes native blends — not a
+SubViewport read-back. That buys three things the read-back cannot: the bake is deterministic, it
 needs no GPU round trip on the single-threaded web build, and it runs under
 `--headless`, which is what makes the golden-image test possible in CI.
 
@@ -259,10 +312,37 @@ Art.registreer_model(naam: String, fn: Callable) -> bool   # fn(params) -> Array
 Art.heeft_model(naam: String) -> bool
 Art.model(naam: String, params := {}) -> Array
 Art.plaat(naam: String, g: int, params := {}) -> Art.Plaat # {tex, dx, dy, w, h}, LRU-cached
-Art.bak(voxels: Array, g: int) -> Art.Plaat
+Art.bak(voxels: Array, g: int, opties := {}) -> Art.Plaat
 Art.wis_platen() -> void
 Art.gebakken() -> int                                      # bake counter, for tests
 ```
+
+W4 added, on top of that and without changing any line above (all of it is a new door
+onto the same cache, so nothing that was written against the seven calls has to move):
+
+```gdscript
+Art.dier(kind, pose, g, acc := null) -> Art.Plaat     # one guest; acc = list or "a,b"
+Art.kom(niveau, g, voor: bool, groot := true) -> Art.Plaat  # the bowl, split in two
+Art.niveau(aantal, per) -> int                        # how full the bowl looks, 0..4
+Art.water_plaat(kind, pose, g, top, acc := null)      # a swimmer with his water band
+Art.vloer_kleur(kamer, x, z) -> Color                 # = ArtVloer.kleur; takes a
+                                                      # Rooms.Kamer or a Dictionary
+Art.plaat_van(sleutel: String, maak: Callable)        # the generic LRU door
+Art.census(voxels) -> Dictionary                      # {voxels, vlakken, lxhxd}, diagnostic
+Art.platen_in_cache() -> int
+Art.DIER_ANKER = (13, 7.5)   Art.KOM_ANKER = (29.5, 7.5)
+```
+
+`opties` on `bak()` are all optional and all default to the plain case: `voor`
+(-1 = every face, 0/1 = only that group — the bowl's front wall is drawn after the
+animal), `omlijn` (false = no contour of its own), `silhouet_alles` (box and contour
+over every face, not only the selected group) and `vlaksleutel` (cache name for the
+culled face list, which is scale-free and therefore serves every `g`).
+
+The four guests and the bowl are registered as protected world models as well
+(`gast_hond`, `gast_poes`, `gast_konijn`, `gast_gans` with `params = {pose, acc}`, and
+`kom` with `{niveau, groot}`), so a `WereldObject` can carry one through the plain
+`Art.plaat()` door without knowing anything about poses.
 
 A model function must be **pure**: same `params`, same voxel list, because the cache key
 is `naam|g|JSON(params)`.
@@ -321,10 +401,8 @@ who owns them (`World.decor(...)` stamps the owner and enforces `LOS_MAX = 48` p
 
 ### 3.5 Cost, and the bake budget
 
-A bake is `faces × 2g` `Image.fill_rect` calls plus two per-pixel passes over the plate.
-The skeleton bakes 8 plates during boot without a hitch (browser probe: `platen=8`,
-boot 2.0–2.2 s including the 39.5 MB wasm over loopback). Budget for W4, to be measured
-and reported in its ticket:
+A bake is one prepared stamp per (face shape, scale, shade) blended per face, plus two
+native passes over the plate. Budget:
 
 * ≤ 8 ms per plate at `g = 4` on this desktop, ≤ 25 ms in the browser;
 * the current room's models are baked when the room is entered — the 300 ms camera slide
@@ -332,15 +410,110 @@ and reported in its ticket:
 * if a measurement blows the budget, the fix is inside `Art.bak()` (span batching,
   reusing the silhouette image) and the plate API does not change.
 
+**Measured by W4** on this desktop, with the real models
+(`tests/gouden/_meet.gd` prints the whole table):
+
+| what | `g = 2` | `g = 3` | `g = 4` |
+|---|---:|---:|---:|
+| average of 12 decor models | 7.1 ms | 8.8 ms | 12.2 ms |
+| the heaviest model (`hok`, 11 088 voxels) | 15.1 | 18.3 | 23.4 |
+| a guest (`gast_hond`, 3 102 voxels, model build included) | 11.1 | 13.2 | 16.3 |
+| **the whole receptie set cold** (15 plates: 11 decor + 4 guests) | **103 ms** | **121 ms** | **151 ms** |
+| the same room warm (every plate from the cache) | 0.03 ms | 0.03 ms | 0.03 ms |
+| the same room at another `g` (face list still cached) | — | — | 34 ms |
+
+(Measured while five other wave-1 workers were running on the same machine, so these
+are pessimistic by 10–30 %; a quiet run gives 147 ms for the receptie set at `g = 4`.)
+
+The **room-level budget holds with room to spare** — 147 ms of the 300 ms slide, and
+nothing at all on a second visit. The **per-plate 8 ms does not hold for the four
+biggest models** (`hok`, `kar`, `boom`, `kast`, 4 700–11 000 voxels): a bake is
+dominated by GDScript walking the voxel list, not by the raster, and a model of 11 000
+dictionaries costs ~15 ms there whatever the raster does. Three things were done inside
+`Art.bak()` first, and they took a `hok` plate from 48 ms to 24: a dense occupancy grid
+instead of a Dictionary, a counting sort on `d` instead of `sort_custom`, and one
+prepared stamp per (shape, scale, shade) instead of a `fill_rect` per span. What is
+left would need the voxel format itself to stop being `Array[Dictionary]`, which is the
+published model contract, so it was not done. The **face list is cached scale-free**
+(`vlaksleutel`), so the second and third scale of the same model are ~40 % cheaper and a
+resize of a whole room costs 34 ms instead of 151.
+
+**In the browser** (W4-F1). There is no way to time a wasm bake from the outside, so the
+web build answers a query flag: `index.html?bakmeting` makes `Art` bake the model set of
+the receptie and of the tuin at the scale the world actually chose and print one
+`[probe]` line per room. Without the flag nothing runs. Measured in chromium with the
+swiftshader flags of T0 gotcha G4 (`.fanout/scratch/w4/probe-bak.js`, 0 console errors in
+every profile):
+
+| profile | `g` | receptie (12 plates) | tuin (17 plates) | worst single plate |
+|---|---:|---:|---:|---|
+| iPad landscape 1024 x 768 dpr 2 | 4 | **174–183 ms** | **161–165 ms** | `balie(z)` 34–41 ms |
+| iPad portrait 768 x 1024 dpr 2 | 3 | **146–206 ms** | **127–173 ms** | `baliez` 32–46 ms |
+| iPhone landscape 844 x 390 dpr 3 | 2 | **136–179 ms** | **119–148 ms** | `baliez` 28–40 ms |
+
+(Two independent runs; the high end is a machine with five parallel workers on it, the
+low end a quiet one.)
+
+**Neither room exceeds the 300 ms slide** in wasm — the widest measurement is 206 ms,
+two thirds of the window — so a child never sees a room arrive late. The **≤ 25 ms per
+plate browser budget is exceeded** by the two heaviest models: `baliez` (a `balie` of
+5 790 voxels, mirrored, so 11 580 dictionaries are built) reaches 32–46 ms and `hok`
+(11 088 voxels) 31–43 ms; wasm is 1.2–1.5x slower than this desktop for the same bake. Proposed, **not
+implemented** (it changes the plate lifecycle, which is W1's `World.naar()`): spread a
+room's cold bake over the frames of the slide instead of one burst — twelve plates across
+~18 frames is ~15 ms of work per frame and fits the budget without touching the
+rasteriser. The second lever, worth more but wider, is dropping `Array[Dictionary]` as
+the model voxel format: the model *build* is the dominant term in every one of these
+numbers, not the raster.
+
+There is no second floor renderer: `scenes/vloer.gd` (W1) draws the floor and both back
+walls as one `ArrayMesh` with per-vertex colours, and `ArtVloer.kleur(kamer, x, z)` is
+the colour table it reads — one authority, no plate. An `Art.vloer_plaat()` existed
+briefly in W4 and was deleted in W4-F1: at 163 ms and three megapixels per room it was
+not a fallback but a fork.
+
 ### 3.6 The golden-image oracle
 
 `/tmp/dh-art/*.png` (64 plates, extracted losslessly from the running HTML engine) is the
 reference. W4 ships `res://tests/test_art.gd`, which bakes the same model/pose/`g` and
 compares per pixel with a tolerance for the rasteriser difference between canvas2d
-(anti-aliased) and this integer filler: **≤ 2 % of pixels may differ by more than 16 in
-any channel, and the alpha silhouette must match within 1 px**. The extractor and its
-PNGs must be copied into `godot/dierenhotel/tests/gouden/` by W4 (they currently live in
-`/tmp`, which does not survive a reboot).
+(anti-aliased) and this integer filler. The extractor and its PNGs now live in
+`godot/dierenhotel/tests/gouden/` (**72 plates**, 73 rows in `meta.json` because
+`gast_hond_rust_g4` is both a pose and a species, + `extract.js`), under a `.gdignore` so
+Godot neither imports them nor packs them into the web export; the test reads them with
+`FileAccess` + `Image.load_png_from_buffer`. W4-F1 added the nine that were missing: the
+pose coverage was dog-only, so `poes`, `konijn` and `gans` now also come out in `lig`,
+`loopA` and `loopB` at `g = 4` — the three poses that exercise the post-transforms
+(`liggen()` squashes the legs and lays a rabbit's ears flat) and the gaits (a rabbit hops,
+a goose waddles). There is no pose `zwem`: art.js has fifteen and swimming is none of
+them; a swimmer keeps his pose and gets the water band of §11.5 over him, which
+`test_water_alleen_op_de_zwemmer` asserts instead.
+
+**The tolerance, revised by W4 after measuring** (this is the one contract change of the
+ticket). The rule was "≤ 2 % of pixels may differ by more than 16 in any channel, and the
+alpha silhouette must match within 1 px". The second half holds exactly — **0 silhouette
+pixels are more than 1 px off on all 64 plates** — but the first half is not
+scale-invariant: the difference is an *edge* phenomenon (canvas anti-aliases every
+polygon edge and strokes it 1 px wide; this integer filler rounds the span outward), so
+it scales with the plate's **perimeter**, not its area. Measured: 1.19 % on a 436 × 316
+counter and 14.36 % on a 44 × 44 ball — but a near-constant 2.7–3.8 differing pixels per
+unit of perimeter across every plate. The rule is therefore:
+
+> per plate, the pixels whose channel difference exceeds 16 must stay under
+> `2 % · w · h + 5 · (w + h)`, and no silhouette pixel may be more than 1 px off.
+
+Measured with that rule: **73/73 plate comparisons pass**, aggregate 3.3 % of the pixels,
+worst plate `decor_bal_g2` at 14.36 % (2.72 px per unit of perimeter, against the 5 the
+rule allows). Of the differing pixels ~59 % sit where the golden image has a
+partial alpha (the anti-aliased outline ring) and ~41 % are one-pixel seams between two
+faces of the same object, where canvas blends the two shades and this filler picks one.
+Three rasterisation rules were tried against the oracle before settling — outward
+rounding over the row, pixel-centre sampling, and pixel-centre of the stroked shape —
+and outward rounding (the shipped one) is the best of the three; softening the outermost
+pixel row to alpha 96/128/160 made it *worse*, so the browser's fill+stroke edge really
+is nearly opaque. **Everything that is not the edge matches exactly**: plate size,
+`dx`/`dy` offset, voxel count, culled-face count and `l × h × d` are identical to
+`meta.json` for all 64 plates and all four species.
 
 ---
 
@@ -475,6 +648,18 @@ One pass per drawn frame:
 The object rectangle is exact, because it comes from the baked plate
 (`World.vlak_van()` / `WereldObject.vlak()`), not from a DOM measurement.
 
+**Where that rectangle comes from, in order (W3-F1).** A caller may hand it in
+(`vlak`), name the object (`obj`), or hand in neither — and the hotel's own
+buttons hand in neither: they know where the bowl *is*, not how big it draws. So
+when `vlak` is absent `Hits` looks the object up by position in the room (loose
+things, a game's loose decor, slots, fixed decor, within `VLAK_NABIJ = 2` voxels
+of the aim point) and bakes its plate rectangle. The lookup is cached per room +
+`World.decor_versie()`; the rectangle is recomputed every pass, because the
+camera moves. Without this, `Hits.dekking()` returned 0 % for every hotel button
+simply because it had never been told what to avoid — a green number that proved
+nothing. The browser probe prints `vlakken=<n>` beside `dekking_max` so the
+denominator is visible.
+
 Proven, in `res://tests/test_hits.gd` (headless) at frames 1000 × 648, 744 × 904,
 296 × 314 and 676 × 320: coverage 0.00 %, every button ≥ 48 × 48, every button inside
 the frame, and four buttons competing for one object do not overlap. Proven again in the
@@ -485,8 +670,11 @@ Hits.maak(o: Dictionary) -> String    # id
 #   o = {id, kamer, x, z, y, icoon, label, getal, badge, titel, kind, drop, klas,
 #        prio, vast, d, op, volg: Callable, aan: Callable, on_weg: Callable, door,
 #        vlak: Rect2}
-#   kind: "btn" | "drop" | "tag" | "kaart" | "keuzes"
-#   op:   "auto" | "boven" | "onder" | "midden" | "rand"
+#   kind: "btn" | "drop" | "tag" | "kaart" | "keuzes" | "pad" | "wolk" | "bron"
+#   op:   "auto" | "boven" | "onder" | "midden" | "rand" | "voet"
+#         "voet" is the keypad band: docked to the bottom edge of the frame,
+#         horizontally centred, reserving its cells like every other element.
+#   val:  Callable(lading, data) — the drop handler of a hotspot with `drop`
 #   maat: Vector2 — an explicit minimum size (a tag may be smaller than 48 x 48;
 #         a button never is).  The grid reserves whole cells for it.
 #   kleef_aan: String — glue my top edge under the rect of that hotspot
@@ -494,6 +682,8 @@ Hits.weg(id: String) -> void
 Hits.wis_eigenaar(door: String) -> void
 Hits.wis_alles() -> void
 Hits.voorrang(spel_id: String) -> void      # "" = nobody
+Hits.leen(id, door, fn) -> bool             # ctx.hotspots.pak: borrow a hotel button
+Hits.geef_terug(door: String) -> void       # ctx.hotspots.laat; wis_eigenaar does it too
 Hits.spot(id: String) -> Hits.Spot
 Hits.debug() -> Dictionary   # id -> {rect, vlak, dekking, op, laag, prio, krap}
 Hits.dekking(id: String) -> float           # % of its own object covered — must be 0
@@ -502,15 +692,34 @@ signal hotspot_getikt(id: String)
 
 ### 4.4 Cards, the keypad band and the choice strip
 
+* A **sheet** (`Ui.blad_open`) fills the screen with its backdrop and centres a
+  panel of `min(560, frame − 24)` units wide and exactly its own content tall,
+  capped at 92 % of the screen and scrolling beyond that. Two Godot traps make
+  that harder than it reads, and both cost W3 a review round:
+  `Control.set_anchors_preset()` keeps the offsets — on a Control built in code
+  that means it stays 0 × 0 — so it must be `set_anchors_and_offsets_preset()`;
+  and a `Label` with autowrap reports its height *for the width it currently has*,
+  which before the first layout pass is one character per line (the start screen's
+  two sentences claimed 2970 units), so a sheet measures its content child by
+  child at the width it will really give it (`UiThema.wrap_hoogte`).
 * A **sum card** (`Ui.somkaart`) is a `PanelContainer > VBoxContainer` with the mandatory
   sentence (`Label`, `autowrap`, never ellipsised), the sum line and the answer box. It is
   `vast: true`, `prio 14`, layer `VAST`; it takes its cells first and never moves.
 * The **keypad** is one Control docked to the bottom of the world frame, inside the
   `KADER_ONDER = 132` unit strip the camera already keeps free. Two rows of six keys
   (112 units incl. gaps) or **one row of twelve when the frame is ≥ 660 units wide**
-  (60 units). Keys are 48 × 48, 44 × 44 only below a 360-unit frame width. There is no
+  (60 units). Keys are 48 × 48, 44 × 44 only below a **360 px screen** — measured on
+  the window, never on the world frame, and 48 at exactly 360
+  (art-sound-rules.md §16.5: `max-width:359px` drops to 44 and `min-width:360px`
+  puts it back). A fingertip does not shrink because the chrome took some room;
+  the shell reports the CSS size with `Ui.zet_scherm()` and the frame decides
+  only the *shape*. There is no
   `binnen`/`buiten` switch, no dead zone and no switch counter: `padPlek` disappears from
   the API. Key order is unchanged: `1 2 3 4 5 ⌫ 6 7 8 9 0 ✓`.
+  It is a hotspot of kind `pad` with `op: "voet"` and `vast: true`, so the band grid
+  reserves its cells: a fixed card that would land on it lifts itself in whole bands
+  instead of the pad sliding over the floor. There is exactly one keypad on screen —
+  `kaart.open()` takes it over from whichever card had it (world.md §5.5).
 * The **choice strip** is an `HBoxContainer` in a hotspot of kind `keuzes`, glued under
   the card with `kleef_aan: <card id>` (5 units, at any scale). Long words are used when
   `strip.get_combined_minimum_size().x + 8 ≤ frame_w`, short words (`kort`) otherwise —
@@ -530,7 +739,11 @@ signal hotspot_getikt(id: String)
   `< 360` (44 px keys, card ≈ 170 units, every sentence wraps), `< 520` (base font 17,
   footer hidden), `≥ 900 landscape` (side-by-side, `#app` cap 1180 units, centred),
   `landscape and height < 450` (compact shell: one chrome row, logo hidden, room bar
-  becomes a 3-column rail beside the frame).
+  becomes a 3-column rail beside the frame). The rail is exactly
+  `3 × 48 + 2 × 4 = 152` units wide (art-sound-rules.md §16.4); the word stays and
+  wraps whole under the picture, and what gives way when nine chips do not fit the
+  height is the *picture* — and only at the last step the word, down to the 12 px
+  floor and never below it.
 * `KADER_MIN = 200` units: if the frame would fall below it, the chrome gives way, never
   the world.
 * **The extreme case, spelled out for W3.** At the smallest legal frame (200 units high)
@@ -576,16 +789,28 @@ Main (Node, scenes/main.gd)
 ├── Achtergrond (ColorRect)                            background #FFF7EC
 ├── Scherm (MarginContainer, safe areas)
 │   └── Kolom (VBoxContainer)
-│       ├── Chroom (HBox)   HUD: day, coins, stars, letters, sound, round, prikbord, evening
-│       ├── Kader (Control, clip_contents, EXPAND|FILL)   ← the world frame
-│       │   ├── Beeld (TextureRect ← SubViewport)
-│       │   ├── Knoplaag (Control)     ← every hotspot, card, keypad
-│       │   └── Naamlaag (Control)     ← name plates
-│       └── Kamerbalk (HBox)           room chips + map
-└── Toastlaag (Control, mouse_filter = IGNORE)
+│       ├── Chroom (HFlowContainer)  HUD: day, coins, stars, letters, sound, round,
+│       │                            prikbord, evening — wraps rather than shrinking
+│       ├── Middenrij (HBoxContainer)
+│       │   ├── Kaderdoos (PanelContainer, EXPAND|FILL)   the 5 unit frame border
+│       │   │   └── Kader (Control, clip_contents)        ← the world frame
+│       │   │       ├── Beeld (TextureRect ← SubViewport)
+│       │   │       ├── Vanglaag (Control)  ← drop catch areas, under the buttons
+│       │   │       ├── Knoplaag (Control)  ← every hotspot, card, keypad
+│       │   │       └── Naamlaag (Control)  ← name plates
+│       │   └── Rail (VBoxContainer)  the room bar when it stands beside the frame
+│       ├── Kamerbalk (GridContainer)  room chips + map, wrapping
+│       └── Voet (Label)               the footer, hidden below 520 units
+├── Toastlaag (Control, mouse_filter = IGNORE)
+└── Bladlaag (Control)                 the modal sheet
 ```
 
-`Ui.registreer_lagen(knoplaag, naamlaag, toastlaag)` and
+`Middenrij`, `Kaderdoos`, `Vanglaag`, `Rail`, `Voet` and `Bladlaag` are W3's; the world
+frame is still exactly one Control, and hotspot coordinates are still relative to it.
+
+`Ui.registreer_lagen(knoplaag, naamlaag, toastlaag, bladlaag, vanglaag)`,
+`Ui.registreer_wortels([scherm, toastlaag, bladlaag])` (§7.5: a Control inherits a theme
+only from a Control or Window ancestor, and this root is a plain Node) and
 `World.registreer_viewport(subviewport, kamer_scene)` wire the autoloads to the scene;
 `Kader.resized` → `World.meet(Rect2(Vector2.ZERO, kader.size))` → `World.kader_veranderd`.
 
@@ -699,6 +924,7 @@ ctx.hotspots.pak(id, fn) / laat()     # borrow one of the hotel's own buttons  [
 ctx.ui.wolk(o) -> String              # speech bubble on an object or an animal
 ctx.ui.wolk_weg(id)
 ctx.ui.somkaart(obj, som, o) -> Ui.Kaart   # the mini squared-paper card + strip
+ctx.ui.getal_tag(obj, n, o := {}) -> String # a bare number ON an object; n = null removes
 ctx.ui.toast(tekst, soort := "")
 ctx.ui.op_kader(fn) -> Callable       # unsubscribe
 ```
@@ -711,13 +937,26 @@ The band, the guest, the room, the day and the save slot reach the game as
 are implemented in the skeleton, the keypad half is W3):
 
 ```gdscript
-kaart.regel(zin: String)   kaart.som(tekst: String)   kaart.zet(tekst: String)
-kaart.hulp(tekst: String)  kaart.open()  kaart.klaar()  kaart.weg()
+kaart.regel(zin: String)   kaart.regel2(zin: String)   kaart.som(tekst: String)
+kaart.zet(tekst: String)   kaart.hulp(tekst: String)
+kaart.open()  kaart.klaar()  kaart.weg()
 kaart.getal() -> Variant   kaart.id : String
-# o = {id, kamer, hoog, icoon, regel (mandatory), klas, pad, open, max, keuzes,
-#      keuze_titel, on_ok: Callable(n, kaart)}
+# o = {id, kamer, hoog, icoon, regel (mandatory), regel2, klas, pad, open, max,
+#      keuzes, keuze_titel, on_ok: Callable(n, kaart)}
 # keuzes = [{id, icoon, tekst, kort, kies: Callable(k, kaart)}]
+# `regel2` is held to the same 8-word / 40-character budget as `regel`.
+# `on_ok` and `kies` are called with as many arguments as they DECLARE (`Ui.roep`),
+# so a game may write `func(n)` or `func(n, kaart)` — the reference game in
+# `res://games/_voorbeeld/` uses the one-argument form.
 ```
+
+`regel2` is an optional **second** sentence on its own line, drawn under `regel`
+and checked against F4 **separately** (each line ≤ 8 words and ≤ 40 characters,
+the pictogram on the first one). The HTML passes an array to `regel` for exactly
+this; the two check-in questions of world.md §3.3 and the two-line cards of
+games-a.md need it, and one joined string would break the 40-character budget
+that F4 measures per sentence. `Ui.Kaart.regel(zin)` keeps writing line one;
+`Ui.Kaart.regel2(zin)` writes line two. Added by W2, implemented by W3.
 
 ### 6.4 Movement — awaitable, not promises
 
@@ -748,6 +987,20 @@ jumping deliberately does not glide.
 `decor_wis_eigenaar` keep their world.md §1.7 behaviour, including `LOS_MAX = 48` per
 room and the ownership rule (starting or stopping any game wipes the loose decor of every
 other game). [W1]
+
+W1 added, all of them additive — no signature above changed:
+`World.zet(id, kamer, x, z, o)` takes an optional `{naam, kind, acc, nr}`;
+`sync(gasten)` / `zet_dag(dag)` / `weg(id)` keep the world in step with the save;
+`ding(id)` / `dingen(kamer)` / `zet_ding(id, o)` are the two movable things of
+world.md §1.3; `zet_bak(kamer, slot, 0..4)` / `bak_stand()` / `voer_niveau(n, per)` are
+the feeding bowls of §2.8; `accessoire(id, naam, aan)`, `feest(ids)`, `slaapt(id)`,
+`behoefte_klaar`, `voeg_bed`, `plaats_meubel`, `getal_tag` are the calls the wave-2
+specs make on `ctx.wereld`; `naam_punt(id)` gives `Ui` the point a name plate hangs on;
+`vlak_van()` takes an optional anchor and `vlak_van_dier(id)` fills it in for a guest;
+`glij()` is how far the world is between two ticks (the room scene glides on it) and
+`pauzeer(aan)` is the hidden-tab switch of world.md §6.6.
+A world model is named after world.md §1.7 (`bed`, `plant`, …); a guest is
+`gast_<kind>` with `params {pose, acc}` and the bowl is `Art.kom(niveau, g, voor)`.
 
 ### 6.5 Lifecycle, worked out: one turn of `wekker`
 
@@ -1023,17 +1276,38 @@ swiftshader flags of T0 gotcha G4 apply on a runner as well.
 The layout was measured against Comic Sans; a web export cannot rely on any installed
 font. Decision:
 
-* **Text: one bundled rounded sans with a full Dutch glyph set** — `Nunito` (SIL OFL) at
-  18 px base, 17 px below 520 units. W3 re-measures the "one line up to ~34 characters"
-  guarantee of F4 against it and records the number in the spec; the card wraps rather
-  than shrinks, so a wrong guess costs a second line, never readability.
-* **Emoji: a subset of a colour emoji font.** ~70 distinct glyphs are used (X4 §12.3).
-  W3 vendors `fonttools`-subsetted `Noto Color Emoji` under
-  `godot/dierenhotel/fonts/` with the subset command in a `tools/emoji-subset.sh`, adds
-  it as a `FontVariation` fallback on the theme's default font, and ships a test that
-  scans every child-facing string for a glyph the subset does not contain.
-* Until W3 lands, the skeleton uses Godot's default font and the placeholder UI avoids
-  emoji, so nothing renders as tofu in the meantime.
+* **Text: one bundled rounded sans with a full Dutch glyph set** — `Nunito` (SIL OFL),
+  pinned to two static instances (400 / 700) and subsetted to Latin-1 plus the
+  punctuation F3 needs (`− … × € ≤ ≥`): `fonts/Nunito-Regular.ttf` and
+  `fonts/Nunito-Bold.ttf`, 45 kB each. Base 18 px, 17 px below 520 units.
+  **Measured (W3, `tests/test_ui.gd::test_kaartzin_past_op_een_regel`): the sum card's
+  sentence renders at the 12 px floor size (14 px at base 18), where 34 characters take
+  236 units — inside the card's 270 unit sentence width, so the one-line guarantee of F4
+  holds to at least 37 characters.** Below a 360 unit frame the card is 170 units wide
+  and every sentence wraps to a second line instead of shrinking.
+* **Symbols: `Noto Sans Symbols 2` (SIL OFL), subsetted to three glyphs** —
+  `fonts/Symbolen.ttf`, 6.5 kB. Nunito has neither `⌫` nor `✓` nor `▸`, and neither does
+  Noto Color Emoji; without this the keypad and `Verder spelen ▸` would be tofu.
+* **Emoji: a subset of `Noto Color Emoji` (SIL OFL)** — `fonts/Emoji.ttf`, 200 kB for
+  111 glyphs; the CBDT/CBLC colour bitmaps are subsetted with them (24 MB → 200 kB).
+* All three are **fallbacks on one `FontFile`**, so one Label carries Dutch letters,
+  keypad symbols and colour emoji without any call site knowing. The glyph inventory is
+  `fonts/tekens.txt` and `fonts/maak-fonts.sh` rebuilds all three subsets from it. (This
+  document first named that script `tools/emoji-subset.sh`; it lives next to the fonts
+  because `tools/` is not in W3's write set and it builds the text subsets as well.)
+  `tests/test_ui.gd::test_alle_schermteksten_hebben_een_glyph` scans every child-facing
+  shell string, every room name, every keypad key and every number word for a glyph the
+  subset does not carry.
+* **The theme is stamped on the shell's top-level Controls, not only on the Window.**
+  A Control inherits a theme from a Control or Window *ancestor*, and `scenes/main.tscn`
+  has a plain `Node` as its root (§5), so `get_window().theme` never reaches `Scherm`.
+  `Ui.registreer_wortels([...])` closes that, and the shell test asserts that a Label
+  inside the chrome really reads the bundled font — the tofu this caused was invisible
+  to an assertion on `Ui.thema` itself.
+* The OFL text of all three fonts sits next to them in `fonts/`. Those `.txt` files are
+  **not** packed into the PCK (`export_filter="all_resources"` packs resources only); a
+  one-line `include_filter="fonts/*.txt"` in `export_presets.cfg` would ship them with
+  the build. That file is frozen, so the change is proposed, not applied.
 
 ---
 
@@ -1055,10 +1329,64 @@ which becomes a 16-bit mono `AudioStreamWAV` at 22 050 Hz, played on one of six
 * There are no angry sounds. `zacht` means "not yet" and is the most-used sound in the
   game; it is never a buzzer (F5).
 
-`tik`, `ja`, `zacht`, `ster`, `plop`, `plons` are implemented in the skeleton; W4 adds
-`terug`, `tover`, `dag`, `brief`, `hoera`, `bel`, `deur`, `kar`, `munt`, `au`, `klok`,
-`hup` from the parameter table of X4 §15.3 and asserts each one's peak and audible
-length against `/tmp/dh-snd/meta.json` (±1 dB, ±10 ms).
+**All eighteen are in** (W4). The oracle is `tests/gouden/wav/*.wav` — the eighteen
+sounds as the browser renders them offline at 48 kHz, trimmed to their audible length
+plus 30 ms of tail, 445 kB instead of 2.6 MB of silence — with
+`tests/gouden/snd-oracle.json` beside it: per sound the sample count, peak, RMS, audible
+length, an RMS envelope in 16 slices, and the spread over **eight** independent export
+runs. Nothing depends on `/tmp` any more (W4-F1). `res://tests/test_snd.gd` reads the
+WAVs back (a hand-parsed RIFF, because the folder is `.gdignore`d) and asserts peak
+(±1 dB), audible length (±10 ms), sample count, format, mix rate **and the RMS envelope
+against the browser's own render** — the last one is what catches a wrong envelope, a
+wrong glide or a wrong filter, which a peak measurement sleeps through. Measured worst
+case: peak −0.52 dB (`munt`, a triangle whose apex a 22 050 Hz sampler misses), length
+±2 ms, envelope ≤ 0.71 dB per slice for the fourteen oscillator sounds and ≤ 2.4 dB for
+the four that carry noise.
+
+**The `kar` level, reconciled** (W4-F1). X4 §15.3 prints −29.6 dBFS and the first export
+−31.5; the review asked which is right. Neither is wrong: `kar` is
+`papier(0.24, 300, 0.26)` plus a tone, and `papier()` draws from `Math.random()`, so its
+peak is a random variable. Eight fresh exports of the untouched HTML give **−31.77 …
+−29.90 dBFS, mean −31.06** — both published numbers are draws from that one
+distribution, and this port's mean (−31.0) sits on top of it. The same holds for `brief`
+(−28.85 … −26.09) and `plons` (−23.24 … −21.54); `deur` is fixed at −28.87 because its
+peak comes from the tone, not from the noise. All fourteen oscillator sounds are
+bit-identical across all eight runs. `snd-oracle.json` therefore carries the mean and the
+range, and the test measures the noise sounds against the *distribution* instead of
+against one lucky splash.
+
+Three things W4 had to settle to make that comparison honest:
+
+* **`papier` is a real bandpass.** WebAudio's `BiquadFilterNode` of type `bandpass` is
+  the RBJ constant-0-dB-peak biquad; a one-pole approximation is several dB out. It is
+  ported as that biquad, `Q = 0.7`.
+* **The noise is normalised for the sample rate.** White noise carries its power per
+  *sample*, so the same bandpass at 22 050 Hz passes a louder band than at the 48 kHz the
+  reference was rendered at. The factor is the ratio of the two filters'
+  impulse-response energies (0.689 at 300 Hz, 0.732 at 1500 Hz — a flat
+  `sqrt(SR/48000)` is not enough, the digital bandwidth is frequency-warped). Without it
+  every splash is 3.4 dB too loud.
+* **The four noise sounds need a statistical form of the ±1 dB.** Their peak is a random
+  variable by design (fresh noise per call, X4 §15.4 finding 1) and the export froze one
+  particular splash; a single render sits between −1.9 and +1.6 dB from that one. The
+  test therefore asserts the mean over 48 renders within 1.5 dB (measured: `brief` −0.39,
+  `deur` +0.07, `kar` +0.57, `plons` −0.84), that the frozen peak lies inside the range
+  this generator produces, and the median audible length within 10 ms.
+
+(The old `snd-meta.json` was deleted with it: two files describing the same eighteen
+sounds is one source of truth too many.)
+
+`Snd.klok()` is throttled at 120 ms (§6.5, step 8), `Snd.monster(naam)` and
+`Snd.stream(naam)` hand a test the raw buffer or the finished stream without waking the
+band, and `Snd.namen()` lists the eighteen in the order of X4 §15.3. Generating all
+eighteen, WAV encoding included, costs **69 ms** once.
+
+Proven in the browser as well (`.fanout/scratch/w4/probe-geluid.js`, chromium with the
+real autoplay policy, one finger tap on a hotspot): the page is patched before Godot
+boots so every `AudioContext` is recorded and everything that connects to `destination`
+is tee'd into an `AnalyserNode`. Peak leaving the engine **before** the first touch:
+`0.000000`. **After** one tap: `0.065132`, one context in state `running`, zero console
+errors. That measures the samples, not a log line.
 
 ---
 
@@ -1096,6 +1424,7 @@ web, so it survives a reload and an "Add to Home Screen" install). Written atomi
 | `uitcheck` | array of guest ids | guests due to leave |
 | `nieuweGast` | guest record or null | the guest standing at the desk |
 | `checkin` | object or null | a half-finished check-in |
+| `rekening` | object or null | a half-counted bill: `{gastId, fam, nachten, prijs, totaal, stap, pogingen, telPog, wisselPog, hand: [int], bank: [int], t0, tw}` (Q-X1-4) |
 | `geluid` | bool | replaces the separate `kws-geluid` key |
 
 Rules:
@@ -1105,6 +1434,12 @@ Rules:
 * **Corrupt or foreign file → start screen with a fresh hotel.** Unparsable JSON, a
   wrong `v`, a missing `s`: `State.lees()` returns `false`, nothing is half-loaded and
   nothing is thrown. Tested (`test_skelet.gd::test_opslag_rondrit`).
+  A valid envelope is not enough: `lees()` shape-checks **every** field of the table
+  above down to the leaves it will later index (a list is a list, a counted field is a
+  number, `rekening.hand`/`rekening.bank` are lists of numbers), then normalises and
+  repairs a **candidate** copy, checks the shape once more, and only then swaps it in.
+  A hand-edited blob therefore never half-loads and never reaches a `for` over a
+  String. Tested with fourteen broken files (`test_state.gd::test_kapotte_opslag_geeft_het_startscherm`).
 * **Nothing is saved before the start screen has been answered** (`State.start_gekozen()`),
   so looking at the start screen can never destroy a save.
 * **JSON has no integers.** Every number returns as a float; `State._normaliseer()` casts
@@ -1113,7 +1448,15 @@ Rules:
   `ctx.taak_klaar`, every accessory change, furniture changes, `morgen()`, and on
   `NOTIFICATION_WM_CLOSE_REQUEST` / `NOTIFICATION_APPLICATION_PAUSED`.
 * `rekening` is now saved as well (Q-X1-4 in §13): a reload in the middle of a bill
-  resumes it instead of losing the counted coins.
+  resumes it instead of losing the counted coins. It leaves the save the moment the
+  bill is **paid** — before the 1100 ms the goodbye bubble hangs there (world.md §3.5)
+  and therefore before `Econ.rekening_klaar` fires, so a reload during that beat can
+  never resume a bill that is already settled. The guest is only removed from `gasten`
+  by that callback, so the 👋 bubble always has an animal to hang on.
+* `meubels`/`meubelNr` are mirrored out of `Rooms` on every `Rooms.kamers_veranderd`
+  (`Hotel.bewaar_inrichting`) and replayed into the rooms at boot
+  (`Hotel.herstel_inrichting`). `Rooms.herstel()` alone is the **base** layout and would
+  throw away every bought bed — and with it the guest cap — on each start.
 
 ---
 
@@ -1159,11 +1502,13 @@ Rules:
 | `export_presets.cfg` | §7.2, complete | — |
 | `.gitignore` | `.godot/`, `build/web/` | — |
 | `build/.gdignore` | mandatory (T0 G2) | — |
-| `icon.svg` | placeholder app icon | W3 |
+| `icon.svg` | the app icon: the reception bell and one paw print | W3 |
+| `ui/**` | the shell's Controls: theme, card, keypad, choice strip, bubble, source, number tag, name plate, HUD, room bar, map, sheet, catch area, and every verbatim shell string (`ui/teksten.gd`) | W3 |
+| `fonts/**` | the three bundled OFL subsets, their licences, the glyph inventory and the script that rebuilds them (§7.5) | W3 |
 | `core/jsgetal.gd` | JS integer semantics (§2.1) | W5 (frozen) |
 | `core/sommen.gd` | the frozen number core (§2.2) | W5 adds the planbord solver |
 | `autoload/art.gd` | the voxel baker, complete and under test; two placeholder models | W4 adds the real models |
-| `autoload/rooms.gd` | API + one placeholder room `proefkamer` | W1 |
+| `autoload/rooms.gd` | the eight rooms, doors, floors, slots, furniture (§1 of world.md) | W1 |
 | `autoload/hits.gd` | the band grid, complete and under test | W3 refines the widgets |
 | `autoload/world.gd` | scale, camera, projection, `vlak_van`, a walking animal, `stappen` | W1 |
 | `autoload/snd.gd` | both generators + 6 of the 18 sounds | W4 |
@@ -1176,8 +1521,10 @@ Rules:
 | `spel/ctx.gd` | `SpelCtx` with owner stamping (§6.3) | W3 completes `pak`/`laat` |
 | `scenes/main.tscn` + `main.gd` | the shell, one unit = one CSS px, probe lines | W3 |
 | `scenes/kamer.tscn` + `kamer.gd` | the four-layer room scene | W1 |
-| `scenes/vloer.gd` | placeholder floor + walls | W1/W4 |
-| `scenes/proef_modellen.gd` | the two placeholder voxel models, registered from `Rooms._ready()` | W1 deletes it |
+| `scenes/vloer.gd` | floor + walls as one `ArrayMesh` in voxel-px, drawn in one call | W1 |
+| `scenes/dier.gd` | one guest: gliding position, ground shadow, water band | W1 |
+| `wereld/voor.gd` | the `Voor` layer: the 💤 over a sleeper and the particles | W1 |
+| `wereld/proefwereld.gd` | the vertical slice of §14.4, only with `?demo=1` / `--demo` | W1 |
 | `tools/test.sh` | the test command CI uses: suite + stderr gate (§2.4) | W5 |
 | `scenes/wereldobject.gd` | the node every thing in a room is | W1 |
 | `games/_voorbeeld/spel.tscn` + `spel.gd` | the reference game: exercises the whole contract | — |
@@ -1187,10 +1534,15 @@ Rules:
 | `tests/test_skelet.gd` | autoloads, baker, registry scan, save round trip, band | W1 |
 
 The placeholder room `proefkamer` (48 × 36, wall 24) and the two placeholder models
-`proef_dier` / `proef_blok` exist so that the vertical slice is provable **without
-porting any real world content**. They live in files W1 owns — `autoload/rooms.gd` and
-`scenes/proef_modellen.gd` — and W1 deletes both in its first commit, together with the
-two assertions in `tests/test_skelet.gd` that name them.
+`proef_dier` / `proef_blok` proved the vertical slice **without any real world
+content**. W1 removed all three together with `scenes/proef_modellen.gd`; the two
+assertions in `tests/test_skelet.gd` that named them now bake a 4 × 4 × 4 cube of the
+test's own, so the plate geometry of §3.2 is still asserted on a shape whose box is
+known by hand. What the slice proved is now proved by the world itself: the browser
+probe of §14.4 loads the exported build with `?demo=1`, which is the only thing that
+starts `res://wereld/proefwereld.gd` — two guests walk in the receptie, one sleeps in
+kamer1, one swims in the pool, and the camera visits all eight rooms. Without that flag
+not one line of it runs, so a child never sees it.
 
 ---
 
@@ -1203,7 +1555,7 @@ any change to them goes through the foreman.
 
 | # | ticket | write set (under `godot/dierenhotel/` unless stated) | depends on | what the skeleton already gives it |
 |---|---|---|---|---|
-| **W1** | world + rooms + guests + movement | `autoload/rooms.gd`, `autoload/world.gd`, `scenes/kamer.tscn`, `scenes/kamer.gd`, `scenes/vloer.gd`, `scenes/wereldobject.gd`, `scenes/proef_modellen.gd` (deletes it), `tests/test_rooms.gd`, `tests/test_world.gd`, `tests/test_skelet.gd` | `Art.plaat`, `Sommen.Prng/hash2`, `Hits.maak` | projection, `schaal()`, `cam_doel()`, `vlak_van()`, the 15 Hz tick, `stappen()` as a coroutine, the four-layer room scene, `WereldObject` |
+| **W1** | world + rooms + guests + movement | `autoload/rooms.gd`, `autoload/world.gd`, `scenes/kamer.tscn`, `scenes/kamer.gd`, `scenes/vloer.gd`, `scenes/wereldobject.gd`, `scenes/dier.gd`, `wereld/**`, `scenes/proef_modellen.gd` (deletes it), `tests/test_rooms.gd`, `tests/test_world.gd`, `tests/test_skelet.gd` | `Art.plaat`, `Sommen.Prng/hash2`, `Hits.maak` | projection, `schaal()`, `cam_doel()`, `vlak_van()`, the 15 Hz tick, `stappen()` as a coroutine, the four-layer room scene, `WereldObject` |
 | **W2** | hotel: day cycle, economy, wishes, prikbord, save | `autoload/hotel.gd`, `autoload/econ.gd`, `autoload/state.gd`, `tests/test_hotel.gd`, `tests/test_econ.gd`, `tests/test_state.gd` | `Rooms.*`, `World.*`, `Ui.*` (signatures in §4–6), `Sommen.*` | the save envelope + atomic write + corrupt rule, `band()`, `tel()`, `spel_data()`, `Econ.sterren/geef_munt`, every `Hotel` signal |
 | **W3** | UI shell: cards, keypad, HUD, room bar, sheets, start screen | `autoload/ui.gd`, `autoload/hits.gd`, `autoload/games.gd`, `spel/ctx.gd`, `spel/minigame.tscn`, `scenes/main.tscn`, `scenes/main.gd`, `ui/**`, `fonts/**`, `icon.svg`, `tests/test_ui.gd`, `tests/test_hits.gd` | `World.mik_punt/vlak_van/kader_veranderd`, `Hotel` signals, `State` | the band grid (working, tested), the button factory, toast, `wolk`, `op_kader`, the registry, `SpelCtx`, the shell that keeps 1 unit = 1 CSS px |
 | **W4** | art baker + sounds | `autoload/art.gd`, `autoload/snd.gd`, `art/**`, `tests/test_art.gd`, `tests/test_snd.gd`, `tests/gouden/**` | nothing (pure) | the whole baker (culling, shading, spans, `omlijn`, `rondAf`, LRU), both sound generators, six sounds |
@@ -1224,6 +1576,14 @@ Two integration points to watch, both named here so no worker invents them:
   signals.
 * `Rooms.get_kamer()` returns only `proefkamer` until W1 lands. Anything that needs a
   real room id must go through `Rooms.lijst()`.
+* **The hotspot owner `"hotel"` is reserved for `Hotel.hotspots()`**, which opens with
+  `Hits.wis_eigenaar("hotel")` and rebuilds that whole layer on every `Hotel.render()`
+  — the doors, the bell, the prikbord, the beds, the bowls, the play basket and the
+  wish bubbles. A button somebody else stamps `door: "hotel"` therefore disappears at
+  the next render (and `Games.stop()` calls one). Test fixtures and games use their own
+  owner name; a game that wants one of the hotel's buttons borrows it with
+  `ctx.hotspots.pak(id, fn)` (§6.3). **(W1 landed: the eight real rooms are
+  there, `proefkamer` is gone.)**
 
 ### 12.2 Wave 2 — one ticket per game, confined to `res://games/<id>/`
 
@@ -1281,6 +1641,7 @@ green headlessly.
 | 10 | frame constants tuned against CSS | **Re-derived in §4.** Hard rules: the floor is never cut, the prikbord stays visible, ≥ 48 px targets, ≥ 12 px text, `KADER_MIN = 200`, `KADER_ONDER = 132`, `WAND_ZICHT = 56`. Dropped as HTML workarounds: the 60 % fill rule, the 300/340 keypad dead zone, the aspect-ratio caps |
 | 11 | `registerModel` name policy | **Namespaced and enforced**: `Art.registreer_wereldmodel()` (W1/W4) marks a name protected; `Art.registreer_model()` (a game) refuses a protected name outright and warns when the name is not `<spel>_<naam>` |
 | 12 | wasserij / zwembad never entered on their own | **Confirmed**, idle wandering never leaves a room; both are reached by a game or a wish |
+| 13 | **the receptie desk stands in the walking line** (raised by the owner on the first screenshots, not by X1) | **Owner decision, overrides world.md §1.3 for this one room.** In the HTML the door to the gang is in the back-right wall (`z`, at 87) *behind* the L-shaped desk, and a guest walking in walks straight through the desk. In the port the desk is **one straight run along the back-right wall** (`balie` at 48,20 and 83,20, with `bel` 36, `kassa` 60, `boek` 84 and the desk lamp 99 on it) and the **door moved to the back-left wall** (`wand: "x", at: 24` → point (0,30), inside (8,30)). The room keeps its size, its mat, its key board and its notice board (moved to x 12 so the desk cannot hide it). Because the desk now hugs one wall, the floor a guest may stand on is the **convex** strip `z ≥ 36` (`Kamer.vrij_z0`), and its footprint is `Kamer.balie = {28..102, 13..27}`: every straight walk between the door, the mat, the waiting places and the wander places stays in front of it. `tests/test_rooms.gd::test_niemand_loopt_door_de_balie` asserts exactly that, over every pair of those places. W1 |
 
 `games-a.md` §9 — Q-X2-n:
 
@@ -1404,6 +1765,12 @@ Two red-to-green proofs, both run and then reverted:
   (the wrapper additionally prints `FOUT: de motor logde fouten tijdens de suite`).
   Before this fix the same test printed `ok` and the suite exited 0. The file was
   deleted again; the suite is back at `22 goed, 0 fout`, exit 0.
+* **A broken test file** (added W5-F1, after the review found the hole). A throwaway
+  `tests/test_kapot.gd` was made unloadable in three ways — a syntax error, a type error
+  the analyser rejects, and a file with no `test_` method at all. Before the fix the
+  **bare** command printed `… goed, 0 fout` and exit 0 for all three (only `tools/test.sh`
+  caught them, through stderr). After it, each reports its own `FOUT test_kapot.gd: …`
+  line and **exit 1** from the bare command too. The file was deleted again.
 
 ### 14.4 Browser probe (chromium via Playwright 1.60.0, swiftshader)
 
@@ -1447,10 +1814,13 @@ tap, or a missing lifecycle line, so it can be dropped into CI as is.
 
 ### 14.5 What is NOT verified yet, and by whom
 
-* No dpr-3 profile and no phone profile were run in the browser (X4 §18.3 asks for
-  `1024 × 768 @ 3`, `360 × 740`, `320 × 640`). The headless placement tests do cover
-  `360 × 740`, `296 × 314` and `676 × 320`; W3 adds the browser profiles together with
-  the real shell.
+* ~~No dpr-3 profile and no phone profile were run in the browser~~ — **done by W3**:
+  `.fanout/scratch/godot-w3/probe.js` runs six profiles on the exported build
+  (1024 × 768 @2, 768 × 1024 @2, 1280 × 800 @2, 360 × 740 @3, 740 × 360 @3 and
+  1024 × 768 @3, the last one proving the density cap of §4.2a: `dicht` stays 2.03 and
+  the SubViewport stays 2008 × 1292 at dpr 3). All six: 0 console errors, 0 warnings,
+  0 failed requests, one finger tap = one press, `krap=0`, `dekking_max=0.00`.
+  Screenshots and `rapport.json`: `.fanout/scratch/godot-w3/shots/`.
 * The baker was never measured against the golden images — there is no real model yet.
   W4 (§3.6).
 * Sound was not heard in the browser; the probe only proves that nothing errors before

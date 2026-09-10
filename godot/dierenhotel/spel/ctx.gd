@@ -61,11 +61,15 @@ class Knoppen extends RefCounted:
 		return Ui.bron(obj, kopie)
 	func lijst() -> Array[String]:
 		return Hits.lijst()
-	## Borrow one of the hotel's own buttons while the game runs.
-	func pak(_id: String, _fn: Callable) -> void:
-		push_warning("hotspots.pak: W3")     # W3
+	## Borrow one of the hotel's own buttons while the game runs: it keeps its
+	## place and its picture, only what it does changes.  Every borrowed button
+	## is handed back by `Games.stop()` (world.md §5.3).
+	func pak(id: String, fn: Callable) -> bool:
+		return Hits.leen(id, _door, fn)
 	func laat() -> void:
-		push_warning("hotspots.laat: W3")    # W3
+		Hits.geef_terug(_door)
+	func spot(id: String) -> Hits.Spot:
+		return Hits.spot(id)
 
 ## Owner-stamped card/bubble API (`ctx.ui`).
 class UiVoor extends RefCounted:
@@ -82,6 +86,11 @@ class UiVoor extends RefCounted:
 		var kopie := o.duplicate()
 		kopie["door"] = _door
 		return Ui.somkaart(obj, som, kopie)
+	## A bare number ON an object (world.md §5.6); `n == null` removes it.
+	func getal_tag(obj: Variant, n: Variant, o: Dictionary = {}) -> String:
+		var kopie := o.duplicate()
+		kopie["door"] = _door
+		return Ui.getal_tag(obj, n, kopie)
 	func toast(tekst: String, soort: String = "") -> void:
 		Ui.toast(tekst, soort)
 	func op_kader(fn: Callable) -> Callable:
