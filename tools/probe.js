@@ -15,6 +15,8 @@
 //   blad      the start sheet is up, so a save survived      -> "[probe] bladknop <id>=", else a
 //                                                               tap on the world is swallowed
 //   verder    pressing the sheet's button gives the hotel back -> the world answers a tap again
+//             (the shell reprints "[probe] knop <id>=" after the start choice, because
+//              the restored day lays its buttons out again; that fresh rect is used)
 //
 // Headless chromium needs --enable-unsafe-swiftshader --use-gl=angle
 // --use-angle=swiftshader for WebGL 2, or the canvas never initialises
@@ -328,12 +330,19 @@ function opVoorkeur(knoppen) {
       zet('verder', false, 'geen blad om weg te tikken');
     } else if (bladknoppen.length && wereldKnop) {
       const doel = midden(bladknoppen[0].vlak);
+      const voorKnop = logs.length;
       await page.touchscreen.tap(doel.x, doel.y);
       await page.waitForTimeout(900);
-      const r = await tikOp(midden(wereldKnop.vlak), 1200);
+      // "Verder spelen" restores a SAVED day, so the hotel lays its buttons out
+      // again; the shell reprints them and the confirming tap uses that fresh
+      // rectangle instead of the one from the boot block.
+      const vers = knoppenUit(logs.slice(voorKnop)).find(k => k.id === wereldKnop.id);
+      const mikpunt = midden((vers || wereldKnop).vlak);
+      const r = await tikOp(mikpunt, 1200);
       verderPunt = doel; verderPogingen = 1;
       zet('verder', r.tikken.length >= 1,
         r.tikken.length >= 1 ? `blad-knop ${bladknoppen[0].id}, daarna reageerde ${wereldKnop.id} weer`
+          + (vers ? ' (verse plek)' : '')
           : `blad-knop ${bladknoppen[0].id} aangetikt, maar de wereld bleef stil`);
     } else if (!scan) {
       zet('verder', false, 'geen "[probe] blad <id>=" regel en --geen-scan');

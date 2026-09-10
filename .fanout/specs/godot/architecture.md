@@ -622,20 +622,33 @@ One pass per drawn frame:
    columns:
    * `midden` (fixed cards, `y ≤ 0`, own html): on the aim point, clamped to the frame,
      and it reserves every cell it covers — everything else gives way to it;
-   * `rand` (number tags): bottom edge just over the object's top edge, covering at most
-     `TAG_IN` of it; it reserves its cells too;
+   * `rand` (number tags and **name plates**): bottom edge just over the object's top
+     edge, covering at most `TAG_IN` of it (a name plate keeps 2 units of air and covers
+     nothing); it reserves its cells too, and steps up in whole bands when the place it
+     wants is taken — that reservation is what keeps a plate off a button (I1 finding 3);
    * `kleef` (a choice strip under its card): top edge `KLEEF = 5` units under the rect
      of the hotspot named in `kleef_aan`, horizontally centred on it, and above it
      instead when there is no room below. `kleef` elements are placed last inside their
      layer, so the thing they glue onto already has a rectangle;
-   * **`boven` (the default for a button on an object): the lowest band whose bottom edge
-     is `≤ object_top − GAT`.** Because bands are quantised, the button *cannot* reach
-     the object: coverage is 0 % by construction, not by iteration;
-   * `onder`: the highest band whose top edge is `≥ object_floor + GAT`, used when
-     `boven` does not exist inside the frame;
+   * **`boven` (the default for a button on an object): the nearest band the element
+     FITS IN with its bottom edge `≤ object_top − GAT`** — it may sit at the very top of
+     that band, so the four units a 48 unit button has spare inside a 52 unit band are
+     used to hug the object instead of leaving up to 51 units of quantisation gap (I1).
+     Coverage is still 0 % by construction, not by iteration;
+   * `onder`: the same on the other side, top edge `≥ object_floor + GAT`;
    * inside a band, the free column block nearest the aim point (`ceil(w/KOL)` columns
      wide, `ceil(h/RIJ)` bands tall); a taken block is never handed out twice, so two
      buttons cannot overlap;
+   * **the two bands beside the object are weighed against each other, and the cell
+     whose centre is NEAREST the object wins** (I1 finding 2). Taking the first band
+     with any free cell is what put the 🔔 Bel button beside the door: the band above
+     the bell exists, but its free cells are 130 units away because the notice board
+     fills the rest of it. When neither band beside the object has a free block the
+     element stacks elsewhere and says so: `debug()[id].gestapeld` is `true`, and that
+     is the only case in which it may stand further away than one band / one column;
+   * at equal priority, an element that HANGS ON AN OBJECT is placed before one that
+     floats (a wish bubble, a board card): the bound one has a single good place, the
+     floating one has the whole frame;
    * the band search runs twice: first for a cell block that is free **and** touches no
      object, then — only if that fails anywhere in the frame — for the free cell block
      with the least object overlap. Both passes walk the bands closest-to-the-object
@@ -665,12 +678,31 @@ Proven, in `res://tests/test_hits.gd` (headless) at frames 1000 × 648, 744 × 9
 the frame, and four buttons competing for one object do not overlap. Proven again in the
 browser on the exported build: `dekking_gast_knop=0.00` in both orientations.
 
+**With the real receptie on screen (I1).** Two more tests build the whole shell in a
+SubViewport at 1024 × 768, 768 × 1024, 1280 × 800 and 360 × 740 — the camera only centres
+a room when a viewport is registered, so hotspots placed against a camera at the origin
+prove nothing about the room the child sees. They assert that every hotel button with an
+object stands within one band (52) of it vertically and within its object's width plus one
+column (56) horizontally, unless `gestapeld` says both bands were full; and that three
+guests at the desk get three name plates that touch neither each other nor a button.
+Against the wave-1 tree the first fails with `bel` 148 units beside the bell and the
+second with plates in the button layer, overlapping each other.
+
+**Every hotspot a finger can reach is a `BaseButton`** — `Hits` connects `pressed`, and
+nothing else. A speech bubble (`UiWolk`) was a `PanelContainer` and therefore silently
+swallowed every tap: the prikbord's task cards did nothing at all (I1 finding 1). A
+Control that carries a Container inside a non-Container answers `inhoud_maat()` with the
+size of that content, because `Button` computes its minimum size in C++ and never asks
+the script.
+
 ```gdscript
 Hits.maak(o: Dictionary) -> String    # id
 #   o = {id, kamer, x, z, y, icoon, label, getal, badge, titel, kind, drop, klas,
 #        prio, vast, d, op, volg: Callable, aan: Callable, on_weg: Callable, door,
 #        vlak: Rect2}
-#   kind: "btn" | "drop" | "tag" | "kaart" | "keuzes" | "pad" | "wolk" | "bron"
+#   kind: "btn" | "drop" | "tag" | "naam" | "kaart" | "keuzes" | "pad" | "wolk" | "bron"
+#         "naam" is a guest's name plate: it is placed and RESERVED like a tag but
+#         its Control lives in `Naamlaag`, under the buttons (`Ui.laag_voor`)
 #   op:   "auto" | "boven" | "onder" | "midden" | "rand" | "voet"
 #         "voet" is the keypad band: docked to the bottom edge of the frame,
 #         horizontally centred, reserving its cells like every other element.
@@ -685,7 +717,8 @@ Hits.voorrang(spel_id: String) -> void      # "" = nobody
 Hits.leen(id, door, fn) -> bool             # ctx.hotspots.pak: borrow a hotel button
 Hits.geef_terug(door: String) -> void       # ctx.hotspots.laat; wis_eigenaar does it too
 Hits.spot(id: String) -> Hits.Spot
-Hits.debug() -> Dictionary   # id -> {rect, vlak, dekking, op, laag, prio, krap}
+Hits.debug() -> Dictionary   # id -> {rect, vlak, dekking, op, laag, prio, krap, gestapeld}
+#   gestapeld: the band directly above/below the object had no free block left
 Hits.dekking(id: String) -> float           # % of its own object covered — must be 0
 signal hotspot_getikt(id: String)
 ```
@@ -702,6 +735,15 @@ signal hotspot_getikt(id: String)
   which before the first layout pass is one character per line (the start screen's
   two sentences claimed 2970 units), so a sheet measures its content child by
   child at the width it will really give it (`UiThema.wrap_hoogte`).
+  Two more, found by I1: `wrap_hoogte` must add the Label's own `line_spacing` per
+  line (4 units here) or every child is measured 4 units short — the start screen
+  then clipped its own "Verder spelen ▸" off the bottom of the sheet and a phone
+  could not answer it at all; and the sheet re-measures itself one frame later
+  (`UiBlad._hermeet`), because a `Button` reports a smaller minimum before its first
+  layout pass than the height it really takes. The same trap hits a speech bubble,
+  which pins BOTH sides of its sentence Label and sets `clip_text` so the Label's
+  own guess (375 units for four words at width 1) cannot reach the sum — without
+  that the prikbord's cards came back 441 units tall after "Verder spelen".
 * A **sum card** (`Ui.somkaart`) is a `PanelContainer > VBoxContainer` with the mandatory
   sentence (`Label`, `autowrap`, never ellipsised), the sum line and the answer box. It is
   `vast: true`, `prio 14`, layer `VAST`; it takes its cells first and never moves.
@@ -744,6 +786,17 @@ signal hotspot_getikt(id: String)
   wraps whole under the picture, and what gives way when nine chips do not fit the
   height is the *picture* — and only at the last step the word, down to the 12 px
   floor and never below it.
+* **A phone in portrait (`width < 520`, I1 finding 4).** The chrome wrapped to three rows
+  and the room bar to four, which left the world 402 of 740 units — 54 %. The phone shell
+  drops the two items that carry neither a number nor an action (the logo and the round
+  name), which puts day · coins · stars · letters · sound on ONE row and the two round
+  buttons on a second (100 units instead of 152; seven items of ≥ 48 units cannot share a
+  336 unit row, so two rows is the floor), and the room bar becomes ONE horizontally
+  scrolling row of whole chips (48 instead of 152) with the current room always scrolled
+  into view — the map chip still opens the sheet that lists every room, so nothing is
+  reachable only by swiping. Measured on the real shell: 360 × 740 → frame 326 × 558
+  (54 % → 75 %), 390 × 844 → 356 × 662 (60 % → 78 %); the tablets are untouched
+  (1024 × 768 → 990 × 637).
 * `KADER_MIN = 200` units: if the frame would fall below it, the chrome gives way, never
   the world.
 * **The extreme case, spelled out for W3.** At the smallest legal frame (200 units high)
@@ -1641,7 +1694,7 @@ green headlessly.
 | 10 | frame constants tuned against CSS | **Re-derived in §4.** Hard rules: the floor is never cut, the prikbord stays visible, ≥ 48 px targets, ≥ 12 px text, `KADER_MIN = 200`, `KADER_ONDER = 132`, `WAND_ZICHT = 56`. Dropped as HTML workarounds: the 60 % fill rule, the 300/340 keypad dead zone, the aspect-ratio caps |
 | 11 | `registerModel` name policy | **Namespaced and enforced**: `Art.registreer_wereldmodel()` (W1/W4) marks a name protected; `Art.registreer_model()` (a game) refuses a protected name outright and warns when the name is not `<spel>_<naam>` |
 | 12 | wasserij / zwembad never entered on their own | **Confirmed**, idle wandering never leaves a room; both are reached by a game or a wish |
-| 13 | **the receptie desk stands in the walking line** (raised by the owner on the first screenshots, not by X1) | **Owner decision, overrides world.md §1.3 for this one room.** In the HTML the door to the gang is in the back-right wall (`z`, at 87) *behind* the L-shaped desk, and a guest walking in walks straight through the desk. In the port the desk is **one straight run along the back-right wall** (`balie` at 48,20 and 83,20, with `bel` 36, `kassa` 60, `boek` 84 and the desk lamp 99 on it) and the **door moved to the back-left wall** (`wand: "x", at: 24` → point (0,30), inside (8,30)). The room keeps its size, its mat, its key board and its notice board (moved to x 12 so the desk cannot hide it). Because the desk now hugs one wall, the floor a guest may stand on is the **convex** strip `z ≥ 36` (`Kamer.vrij_z0`), and its footprint is `Kamer.balie = {28..102, 13..27}`: every straight walk between the door, the mat, the waiting places and the wander places stays in front of it. `tests/test_rooms.gd::test_niemand_loopt_door_de_balie` asserts exactly that, over every pair of those places. W1 |
+| 13 | **the receptie desk stands in the walking line** (raised by the owner on the first screenshots, not by X1) | **Owner decision, overrides world.md §1.3 for this one room.** In the HTML the door to the gang is in the back-right wall (`z`, at 87) *behind* the L-shaped desk, and a guest walking in walks straight through the desk. In the port the desk is **one straight run along the back-right wall** (`balie` at 48,20 and 83,20, with `bel` 36, `kassa` 60, `boek` 84 and the desk lamp 99 on it) and the **door moved to the back-left wall** (`wand: "x", at: 24` → point (0,30), inside (8,30)). The room keeps its size, its mat, its key board and its notice board (moved to x 12 so the desk cannot hide it). Because the desk now hugs one wall, the floor a guest may stand on is the **convex** strip `z ≥ 36` (`Kamer.vrij_z0`), and its footprint is `Kamer.balie = {28..102, 13..27}`: every straight walk between the door, the mat, the waiting places and the wander places stays in front of it. `tests/test_rooms.gd::test_niemand_loopt_door_de_balie` asserts exactly that, over every pair of those places. W1. **I1:** the bill's counting counter moved with the desk — `TOONBANK = plek(0.15, 0.5) = (18, 60)` was the arm of the old L-shaped desk and is open floor in the walking line now, so `HotelRekening` counts on the till (`kassa`, and otherwise the middle of the `Kamer.balie` footprint) and the bill's cards hang over the desk; `tests/test_econ.gd::test_toonbank_ligt_op_de_balie` holds it there and cross-checks that no walking cell lies on the desk |
 
 `games-a.md` §9 — Q-X2-n:
 
@@ -1811,6 +1864,14 @@ Screenshots: `.fanout/scratch/godot-a1/shots/{ipad-land,ipad-port}.png`,
 strip, in the running wasm build), `…-spel.png`. Machine-readable: `shots/rapport.json`. The probe exits
 non-zero if any profile has a console error, a failed request, more than one press per
 tap, or a missing lifecycle line, so it can be dropped into CI as is.
+
+**Two lines the shell owes the probe (I1).** `[probe] kaart <id>=<rect>` is printed when
+a sum card opens, so "a tap produced a card" is positive evidence and not the absence of
+a second press; and the whole `[probe] knop <id>=` block is printed AGAIN after the start
+screen is answered, because "Verder spelen" restores a saved day and the hotel lays its
+buttons out for that day — a probe that kept tapping the boot rectangles tapped empty
+glass. Both wait two frames: a tap is handled after `Hits.plaats()` in the same frame on
+the web export, so one frame of waiting reports the previous layout.
 
 ### 14.5 What is NOT verified yet, and by whom
 

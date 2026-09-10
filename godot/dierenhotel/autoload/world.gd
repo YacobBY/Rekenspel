@@ -378,6 +378,36 @@ func vlak_van(model: String, x: float, z: float, y: float, params: Dictionary = 
 		(anker.x + anker.y) * (Art.S / 2.0) * g)
 	return Rect2((mid + Vector2(p.dx, p.dy) - ank) / dicht, Vector2(p.w, p.h) / dicht)
 
+## The screen rectangle of a door opening, in frame units (I1 finding 5).
+##
+## A door is not a model: `scenes/vloer.gd` cuts the hole out of the wall, so
+## its rectangle is that hole projected — the door point plus the opening's own
+## width and the `min(wand − 6, 26)` height the wall drawing uses.  Without it a
+## door button had nothing to stay off and `Hits.dekking()` proved nothing for
+## it.  A garden gate cuts no hole; its frame is measured the same way, which is
+## what the gate model fills.
+func vlak_van_deur(kamer_id: String, naar: String) -> Rect2:
+	var r := Rooms.get_kamer(kamer_id)
+	if r == null:
+		return Rect2()
+	for dr in r.deuren:
+		if str(dr.get("naar", "")) != naar:
+			continue
+		var a := float(dr.get("at", 0))
+		var b := a + float(dr.get("breed", 12))
+		var h := float(maxi(6, mini(int(r.wand) - 6, 26)))
+		var langs_z := str(dr.get("wand", "z")) == "z"
+		var randen: Array = [[a, 0.0], [b, 0.0]] if langs_z else [[0.0, a], [0.0, b]]
+		var hoeken: Array[Vector2] = []
+		for xz in randen:
+			hoeken.append(mik_punt(float(xz[0]), float(xz[1]), 0.0))
+			hoeken.append(mik_punt(float(xz[0]), float(xz[1]), h))
+		var vak := Rect2(hoeken[0], Vector2.ZERO)
+		for p in hoeken:
+			vak = vak.expand(p)
+		return vak
+	return Rect2()
+
 ## The rectangle of one guest, from its own plate — used by the hotspot layer.
 func vlak_van_dier(id: String) -> Rect2:
 	var d: Dier = _dieren.get(id)

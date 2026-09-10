@@ -112,6 +112,19 @@ func ververs() -> void:
 		"vrij": ronde_label.text = UiTekst.RONDE_VRIJ
 		_: ronde_label.text = UiTekst.RONDE_OCHTEND
 
-## The compact landscape shell hides the title — it is decoration, not a button.
+## What the chrome drops when the screen is small (architecture.md §4.5).
+##
+## `compact` is the landscape shell under 450 units high; `telefoon` is a
+## portrait phone.  Both hide the title, which is decoration.  A phone hides the
+## round name as well: it is the only other item that carries no number and no
+## action, and with it gone the five badges fit on ONE row and the two round
+## buttons on a second — 100 units instead of 152, which is what gives the world
+## frame back its 60 % of a 740 unit screen (I1 finding 4).  Seven items of at
+## least 48 units cannot share one 336 unit row, so two is the floor here.
+func zet_vorm(compact: bool, telefoon: bool = false) -> void:
+	logo.visible = not compact and not telefoon
+	ronde_label.visible = not telefoon
+
+## Kept for the older call sites: the compact landscape shell.
 func zet_compact(compact: bool) -> void:
-	logo.visible = not compact
+	zet_vorm(compact, false)

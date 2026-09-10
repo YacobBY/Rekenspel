@@ -123,6 +123,7 @@ func bouw(o: Dictionary, mt: Dictionary, kader: Vector2) -> void:
 					aan.call())
 			rij.add_child(b)
 	_meet(breed, kader)
+	_hermeet(breed, kader)
 
 ## How tall the sheet really is.
 ##
@@ -144,6 +145,21 @@ func _meet(breed: float, kader: Vector2) -> void:
 	# units, one character per line — reach the panel again).
 	var nodig := _inhoud_hoogte(binnen)
 	_rol.custom_minimum_size = Vector2(binnen, minf(nodig + 2.0, maxi_h))
+
+## And how tall it turned out to be.  The estimate above is made before the
+## first layout pass, and a `Button` reports a smaller minimum then than the one
+## it really takes (the two start-screen buttons measured 48 and drew 59), so
+## the sheet clipped its own button row off the bottom — on a 360 unit phone
+## that made "Verder spelen ▸" untappable (I1 finding 1, seen in the probe).
+## One frame later every child knows its real width, so the column's minimum is
+## honest and the panel is corrected upwards, still capped at 92 % of the screen.
+func _hermeet(breed: float, kader: Vector2) -> void:
+	await get_tree().process_frame
+	if not is_instance_valid(_rol) or not is_instance_valid(_kolom):
+		return
+	var maxi_h := maxf(120.0, kader.y * HOOG_DEEL - 2 * VULLING - 2 * RAND)
+	var echt := _kolom.get_combined_minimum_size().y + 2.0
+	_rol.custom_minimum_size.y = clampf(echt, _rol.custom_minimum_size.y, maxi_h)
 
 func _inhoud_hoogte(binnen: float) -> float:
 	var sep := float(_kolom.get_theme_constant("separation"))

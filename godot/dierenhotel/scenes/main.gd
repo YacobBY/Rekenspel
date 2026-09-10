@@ -16,6 +16,7 @@ const APP_MAX := 1180          ## units; the reading width cap on a big tablet
 const BREED_ZIJ := 900         ## landscape from here on is the wide shell
 const LAAG_LANDSCHAP := 450    ## landscape under this is the compact shell
 const VOET_UIT := 520          ## the footer disappears below this width
+const TELEFOON := 520          ## portrait under this width is the phone shell
 
 @onready var wereld_vp: SubViewport = $Wereld
 @onready var kamer_scene: Node2D = $Wereld/Kamer
@@ -39,6 +40,7 @@ var _gemeld := false
 var _tikken := 0
 var _geluid_klaar := false
 var _compact := false
+var _telefoon := false
 
 func _ready() -> void:
 	Ui.registreer_lagen(knoplaag, naamlaag, toastlaag, bladlaag, vanglaag)
@@ -52,6 +54,7 @@ func _ready() -> void:
 	Hits.hotspot_getikt.connect(func(id: String) -> void:
 		_tikken += 1
 		print("[probe] tik=", _tikken, " id=", id))
+	Ui.kaart_geopend.connect(_meld_kaart)
 
 	_bouw_chroom()
 	Hotel.hud_veranderd.connect(_ververs_chroom)
@@ -89,12 +92,14 @@ func _begin() -> void:
 		Hotel.start()
 		_ververs_chroom()
 		_meld_stand("verder")
+		_meld_knoppen()
 	var nieuw := func() -> void:
 		State.nieuw_spel()
 		State.start_gekozen()
 		Hotel.start()
 		_ververs_chroom()
 		_meld_stand("nieuw")
+		_meld_knoppen()
 	print("[probe] opslag= dag=", int(bewaard.get("dag", 1)),
 		" sterren=", int(bewaard.get("sterren", 0)),
 		" munten=", int(bewaard.get("munten", 0)),
@@ -227,7 +232,11 @@ func _pas_shell() -> void:
 		hoog = float(win.content_scale_size.y)
 	var landschap := breed > hoog
 	var compact := landschap and hoog < LAAG_LANDSCHAP
+	# A phone in portrait: the chrome and the room bar together took 304 of 740
+	# units and left the world 54 % (architecture.md §4.5, I1 finding 4).
+	var telefoon := not landschap and breed < TELEFOON
 	_compact = compact
+	_telefoon = telefoon
 	# The tap rule is measured on the screen, not on the world frame (§16.5).
 	Ui.zet_scherm(Vector2(breed, hoog))
 
@@ -254,16 +263,17 @@ func _pas_shell() -> void:
 	# every chip reachable while costing width instead of height.
 	var rail_aan := compact
 	voet.visible = breed >= VOET_UIT and not compact
-	chroom.zet_compact(compact)
-	_zet_balk(rail_aan, breed - links - rechts, hoog - boven - onder - chroom.get_combined_minimum_size().y - 8.0)
+	chroom.zet_vorm(compact, telefoon)
+	_zet_balk(rail_aan, breed - links - rechts,
+		hoog - boven - onder - chroom.get_combined_minimum_size().y - 8.0, telefoon)
 	if _kader_hoog(hoog, boven, onder, rail_aan) < KADER_MIN and voet.visible:
 		voet.visible = false
 	if _kader_hoog(hoog, boven, onder, rail_aan) < KADER_MIN and not compact:
-		chroom.zet_compact(true)
+		chroom.zet_vorm(true, telefoon)
 	if _kader_hoog(hoog, boven, onder, rail_aan) < KADER_MIN and not rail_aan:
 		rail_aan = true
 		_zet_balk(true, breed - links - rechts,
-			hoog - boven - onder - chroom.get_combined_minimum_size().y - 8.0)
+			hoog - boven - onder - chroom.get_combined_minimum_size().y - 8.0, telefoon)
 	_bezig = false
 	_op_kader()
 
@@ -276,15 +286,17 @@ func _kader_hoog(hoog: float, boven: int, onder: int, rail_aan: bool) -> float:
 		vrij -= voet.get_combined_minimum_size().y
 	return vrij - 8.0        # the column separations between the three rows
 
-## The room bar sits under the frame, or as a three-column rail beside it.
-func _zet_balk(rail_aan: bool, breed: float, hoogte: float = 0.0) -> void:
+## The room bar sits under the frame, as a three-column rail beside it, or — on
+## a phone in portrait — as one scrolling row under it (architecture.md §4.5).
+func _zet_balk(rail_aan: bool, breed: float, hoogte: float = 0.0, strook: bool = false) -> void:
 	var doel: Node = rail if rail_aan else kolom
 	if kamerbalk.get_parent() != doel:
 		kamerbalk.reparent(doel, false)
 		if not rail_aan:
 			kolom.move_child(kamerbalk, voet.get_index())
 	rail.visible = rail_aan
-	kamerbalk.pas_aan(kamerbalk.rail_breedte() if rail_aan else breed, rail_aan, hoogte)
+	kamerbalk.pas_aan(kamerbalk.rail_breedte() if rail_aan else breed, rail_aan, hoogte,
+		strook and not rail_aan)
 
 func _marge(l: int, t: int, r: int, b: int) -> void:
 	for paar in [["margin_left", l], ["margin_top", t], ["margin_right", r], ["margin_bottom", b]]:
@@ -342,6 +354,16 @@ func _meld_stand(waarom: String) -> void:
 		for k in rij.get_children():
 			print("[probe] bladknop ", k.name, "=", (k as Control).get_global_rect())
 
+## A sum card opened.  The rectangle is only real after the next placement
+## pass, so the line waits one frame — the browser probe reads it as the proof
+## that a tap produced a card and not only a press (I1 finding 1).
+func _meld_kaart(id: String) -> void:
+	await _na_plaatsing()
+	var s := Hits.spot(id)
+	if s == null or not is_instance_valid(s.knoop):
+		return
+	print("[probe] kaart ", id, "=", (s.knoop as Control).get_global_rect())
+
 ## One machine-readable line per fact, for the browser probe and the tests.
 func _meld_later() -> void:
 	await get_tree().create_timer(1.0).timeout
@@ -360,11 +382,11 @@ func _meld_later() -> void:
 	var chroom_font := chroom.dag_badge.get_theme_font("font")
 	print("[probe] font=", chroom_font.resource_path if chroom_font != null else "geen",
 		" emoji=", chroom_font != null and chroom_font.has_char(0x1F4C5))
-	print("[probe] shell=", "compact" if _compact else "gewoon",
+	print("[probe] shell=", "compact" if _compact else ("telefoon" if _telefoon else "gewoon"),
 		" basis=", Ui.basis_maat(), " tap=", Ui.tap_maat(), " voet=", voet.visible)
 	print("[probe] pad=", vorm["kolommen"], "x", 12 / int(vorm["kolommen"]),
 		" toets=", vorm["toets"])
-	print("[probe] balk=", kamerbalk.size, " kolommen=", kamerbalk.columns,
+	print("[probe] balk=", kamerbalk.size, " kolommen=", kamerbalk.kolommen(),
 		" chroom=", chroom.size, " midden=", middenrij.size)
 	print("[probe] kamers=", Rooms.lijst().size(), " kamer=", World.kamer_nu())
 	print("[probe] spellen=", Games.lijst())
@@ -389,8 +411,24 @@ func _meld_later() -> void:
 	for k in [chroom.munt_badge, chroom.brief_badge, chroom.geluid_knop,
 			chroom.prikbord_knop, chroom.avond_knop]:
 		print("[probe] chroomknop ", k.name, "=", k.get_global_rect())
-	for id in dbg.keys():
+	await _meld_knoppen()
+	print("[probe] klaar")
+
+## Wait until the hotspots that were just created have really been placed.
+## `World._process` runs `Hits.plaats()` once per frame, and a tap is handled
+## AFTER that pass in the same frame on the web export — so one frame of waiting
+## reports the previous layout and the freshly built buttons are missing.
+func _na_plaatsing() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+## Where every hotspot really is, right now.  Printed at boot AND again after
+## the start screen was answered: "Verder spelen" restores a saved day, the
+## hotel lays its buttons out for THAT day, and a probe that kept tapping the
+## boot rectangles would tap empty glass (I1 finding 1).
+func _meld_knoppen() -> void:
+	await _na_plaatsing()
+	for id in Hits.debug().keys():
 		var s := Hits.spot(id)
 		if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
 			print("[probe] knop ", id, "=", s.knoop.get_global_rect())
-	print("[probe] klaar")

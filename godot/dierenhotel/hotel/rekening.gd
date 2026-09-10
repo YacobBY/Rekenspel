@@ -338,24 +338,49 @@ func _volg_gast(id: String) -> Callable:
 		var d = World.dier(id)
 		if d == null:
 			return {}
-		return {"x": d.x, "z": d.z, "kamer": d.kamer}
+		return {"x": d.x, "z": d.z, "kamer": d.kamer,
+				"vlak": World.vlak_van_dier(id)}
 
 # Fractions of the room, so a room resize moves the whole desk with it
 # (world.md §1.6).  Read at call time: `Rooms` is only filled in its _ready.
 func _plek(fx: float, fz: float) -> Dictionary:
 	return Rooms.plek("receptie", fx, fz)
 
+## Where the bill's own cards hang: over the desk, beside the counted coins
+## (I1 finding 6) — not out on the open floor to the right of it.
 func _werkplek() -> Dictionary:
-	return _plek(0.875, 0.25)
+	return _balie_midden()
 
 func _werkhoog() -> int:
 	return Rooms.hoogte("receptie", 0.2)
 
+## The counting counter (I1 finding 6).  `plek(0.15, 0.5)` was the old L-shaped
+## desk arm; since the receptie was rebuilt along the back-right wall
+## (architecture.md §13, Q-X1-13) that spot is open floor, and the coins were
+## counted in the middle of the walking line.  The counter is the DESK: the till
+## when it stands there — then the coins land on the till and dragging onto it
+## works, because the catch area is button plus object — and otherwise the
+## middle of the `Kamer.balie` footprint.
 func _toonbank() -> Dictionary:
-	return _plek(0.15, 0.5)
+	var kassa := Hotel.decor_plek("receptie", "kassa")
+	if not kassa.is_empty():
+		return {"kamer": "receptie", "x": kassa["x"], "z": kassa["z"]}
+	return _balie_midden()
 
+## The middle of the desk footprint, so a room that changes shape takes the
+## counter with it.
+func _balie_midden() -> Dictionary:
+	var r = Rooms.get_kamer("receptie")
+	if r != null and not (r.balie as Dictionary).is_empty():
+		return {"kamer": "receptie",
+			"x": JsGetal.rond((int(r.balie["x0"]) + int(r.balie["x1"])) / 2.0),
+			"z": JsGetal.rond((int(r.balie["z0"]) + int(r.balie["z1"])) / 2.0)}
+	return _plek(0.5, 0.1667)
+
+## The desk top: the till, the book and the bell all stand at 14 voxels, so a
+## bubble or a tag over the counter hangs just above them.
 func _toonhoog() -> int:
-	return Rooms.hoogte("receptie", 0.225)
+	return Rooms.hoogte("receptie", 1.0 / 6.0)
 
 func _boek() -> Dictionary:
 	var p := Hotel.decor_plek("receptie", "boek")

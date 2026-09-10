@@ -333,6 +333,12 @@ func test_toast_is_geen_knop() -> void:
 	if t != null:
 		gelijk(t.mouse_filter, Control.MOUSE_FILTER_IGNORE, "een toast is nooit een knop")
 		waar(t.size.x <= 1000.0 * 0.92 + 0.5, "de toast blijft binnen 92 %")
+		# and it is a LINE, not a column: an autowrapping Label reports width 1,
+		# so a toast sized from its minimum came out 33 units wide with one
+		# letter per line — unreadable, and it stood over the whole world (I1).
+		waar(t.size.x >= 100.0, "de toast is een regel, geen kolom (%s)" % str(t.size))
+		waar(t.size.y <= 3.0 * Ui.maten["klein"] + 24.0,
+			"de toast blijft laag (%s)" % str(t.size))
 	_af()
 
 ## The sheet carries its title, its hint and a real `Sluiten` tap target — and

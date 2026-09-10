@@ -17,9 +17,13 @@ extends Node
 const TEKST_VLOER := UiThema.VLOER   ## px; never below this (HOTEL.md §9)
 const TAP := UiThema.HOT             ## px; minimum tap target (44 below 360 px)
 const TOAST_MS := 2600
+const PLAAT := "naam_"               ## hotspot id prefix of a name plate
 
 ## The breakpoint moved: the chrome rebuilds its own labels at the new size.
 signal thema_veranderd()
+## A sum card was opened — the shell reports it as one `[probe]` line, which is
+## how the browser probe knows a tap really produced a card (I1 finding 1).
+signal kaart_geopend(id: String)
 
 var knoplaag: Control = null     ## hotspot layer, exactly over the world frame
 var naamlaag: Control = null     ## name plates
@@ -57,6 +61,14 @@ func registreer_lagen(knop: Control, naam: Control, toast_l: Control,
 	toastlaag = toast_l
 	bladlaag = blad_l
 	vanglaag = vang_l
+
+## Which layer a hotspot Control belongs in.  Everything is a button over the
+## world; a name plate is the exception — it lives UNDER the buttons so a finger
+## always reaches the button, and it is not clickable at all (world.md §2.10).
+func laag_voor(kind: String) -> Control:
+	if kind == "naam" and naamlaag != null and is_instance_valid(naamlaag):
+		return naamlaag
+	return knoplaag
 
 # ------------------------------------------------------------------- thema
 
@@ -141,7 +153,7 @@ func smal() -> bool:
 # ---------------------------------------------------------------- knoppen
 
 ## The button factory used by `Hits`.
-## `kind` is btn | drop | tag | kaart | keuzes | pad | wolk | bron.
+## `kind` is btn | drop | tag | naam | kaart | keuzes | pad | wolk | bron.
 func maak_knop(kind: String, o: Dictionary) -> Control:
 	match kind:
 		"kaart":
@@ -172,6 +184,10 @@ func maak_knop(kind: String, o: Dictionary) -> Control:
 			var b := UiBron.new()
 			b.bouw(o, maten, _tap)
 			return b
+		"naam":
+			var n := UiNaamplaat.new()
+			n.bouw(str(o.get("tekst", o.get("label", ""))), maten)
+			return n
 	var knop := UiHotKnop.new()
 	knop.bouw(o, maten, _tap)
 	return knop
@@ -205,6 +221,21 @@ func toast(tekst: String, soort: String = "") -> void:
 	lbl.add_theme_color_override("font_color", letter)
 	doos.add_child(lbl)
 	toastlaag.add_child(doos)
+	# The Label trap of §4.4 again: an autowrapping Label reports width 1, so a
+	# PanelContainer that is sized from its minimum becomes a 33 unit column with
+	# one character per line.  The sentence gets the width it needs (capped at
+	# 92 % of the screen) and the height that width really takes.
+	var breed_max := maxf(120.0, toastlaag.size.x * 0.92 - 32.0)
+	var f := lbl.get_theme_font("font")
+	var nodig := breed_max
+	if f != null:
+		nodig = f.get_string_size(tekst, HORIZONTAL_ALIGNMENT_LEFT, -1,
+			lbl.get_theme_font_size("font_size")).x
+	var breed := clampf(nodig, 24.0, breed_max)
+	# `clip_text` takes the Label's own guess (one letter per line) out of the
+	# sum; the minimum below is the size it really needs, so nothing is clipped.
+	lbl.clip_text = true
+	lbl.custom_minimum_size = Vector2(breed, UiThema.wrap_hoogte(lbl, breed))
 	var maat := doos.get_combined_minimum_size()
 	maat.x = minf(maat.x, toastlaag.size.x * 0.92)
 	doos.size = maat
@@ -347,6 +378,7 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 		"max": kaart.max_cijfers, "keuzes": keuzes,
 		"on_weg": func(_s) -> void: _kaarten.erase(id),
 	})
+	kaart_geopend.emit(id)
 	keur_regel(id, o.get("regel", ""))
 	if not str(o.get("regel2", "")).is_empty():
 		keur_regel(id + " (regel2)", o.get("regel2", ""))
@@ -525,39 +557,54 @@ func kaart_van(id: String) -> Kaart:
 # -------------------------------------------------------------- naamplaten
 
 ## The name plate above a guest (world.md §2.10).  `World` owns the point.
-func naamplaat(id: String, naam: String, punt: Vector2) -> void:
+##
+## The plate is a hotspot of kind `naam`: it lives in `Naamlaag` (under the
+## buttons, never clickable) but it takes part in the band grid's RESERVATION
+## like a number tag, so a button can no longer land under it — that is what put
+## "Boef" over the Prikbord button (I1 finding 3).  It follows its guest by the
+## guest's own plate rectangle, so it hangs against the head at any scale.
+func naamplaat(id: String, naam: String, punt: Vector2 = Vector2.ZERO) -> void:
 	if naamlaag == null:
 		return
-	var p: UiNaamplaat = _naamplaten.get(id)
-	if p == null or not is_instance_valid(p):
-		p = UiNaamplaat.new()
-		p.name = "N" + id
-		naamlaag.add_child(p)
-		p.bouw(naam, maten)
-		_naamplaten[id] = p
-	elif p.text != naam:
-		p.text = naam
-	var bezet: Array[Rect2] = []
-	for ander_id in _naamplaten.keys():
-		if ander_id == id:
-			continue
-		var q: UiNaamplaat = _naamplaten[ander_id]
-		if is_instance_valid(q) and q.visible:
-			bezet.append(Rect2(q.position, q.size))
-	p.plaats(punt, bezet)
+	var spot_id := PLAAT + id
+	var s := Hits.spot(spot_id)
+	if s != null and is_instance_valid(s.knoop):
+		var p := s.knoop as UiNaamplaat
+		if p != null and p.text != naam:
+			p.text = naam
+			p.update_minimum_size()
+		return
+	var d = World.dier(id)
+	Hits.maak({
+		"id": spot_id, "kind": "naam", "door": PLAAT, "prio": 3,
+		"kamer": d.kamer if d != null else World.kamer_nu(),
+		"x": d.x if d != null else punt.x, "z": d.z if d != null else 0.0, "y": 0.0,
+		"tekst": naam, "volg": _volg_plaat(id),
+	})
+	_naamplaten[id] = spot_id
+
+## Where the plate hangs: on its guest, with the guest's own drawn rectangle so
+## the band grid knows exactly what to keep clear.
+func _volg_plaat(id: String) -> Callable:
+	return func() -> Dictionary:
+		var d = World.dier(id)
+		if d == null:
+			return {}
+		return {"x": d.x, "z": d.z, "kamer": d.kamer, "vlak": World.vlak_van_dier(id)}
 
 func naamplaat_weg(id: String) -> void:
-	var p = _naamplaten.get(id)
-	if p != null and is_instance_valid(p):
-		p.queue_free()
+	Hits.weg(PLAAT + id)
 	_naamplaten.erase(id)
 
 func naamplaten_leeg() -> void:
 	for id in _naamplaten.keys():
-		var p = _naamplaten[id]
-		if p != null and is_instance_valid(p):
-			p.queue_free()
+		Hits.weg(PLAAT + id)
 	_naamplaten.clear()
+
+## The live plate Control of a guest, for the tests.
+func naamplaat_van(id: String) -> UiNaamplaat:
+	var s := Hits.spot(PLAAT + id)
+	return null if s == null or not is_instance_valid(s.knoop) else s.knoop as UiNaamplaat
 
 # -------------------------------------------------------------- taalhulpjes
 

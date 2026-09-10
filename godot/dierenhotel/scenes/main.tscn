@@ -94,9 +94,10 @@ mouse_filter = 2
 visible = false
 layout_mode = 2
 
-[node name="Kamerbalk" type="GridContainer" parent="Scherm/Kolom"]
+[node name="Kamerbalk" type="ScrollContainer" parent="Scherm/Kolom"]
 layout_mode = 2
-columns = 1
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 0
 script = ExtResource("4_balk")
 
 [node name="Voet" type="Label" parent="Scherm/Kolom"]

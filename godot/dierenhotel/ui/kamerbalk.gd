@@ -1,12 +1,23 @@
 class_name UiKamerbalk
-extends GridContainer
+extends ScrollContainer
 ## The room bar (world.md §6.3): one chip per room, then the map chip.
 ##
 ## Built ONCE and only updated afterwards — in the HTML a rebuild scrolled the
 ## row back to the left on every event and the child tapped the wrong room.
-## It wraps instead of scrolling sideways, so all nine chips stay reachable, and
-## in the compact landscape shell it becomes a three-column rail beside the
-## frame (art-sound-rules.md §16.4).
+##
+## It has three shapes (architecture.md §4.5):
+##   * a wrapping grid, the default: every chip visible, as many columns as fit;
+##   * a three-column rail beside the frame in the compact landscape shell;
+##   * ONE SCROLLING ROW on a phone in portrait (I1 finding 4) — nine wrapped
+##     chips cost 152 units of a 740 unit screen there, which pushed the world
+##     frame down to 54 %.  The row keeps the whole chip (picture AND word,
+##     HOTEL.md §9), the current room is always scrolled into view, and the map
+##     chip opens the sheet that lists every room, so nothing becomes
+##     unreachable by scrolling.
+##
+## The scrolling is why this is a `ScrollContainer` with the grid inside it: with
+## both scroll modes disabled it measures and lays out exactly like the plain
+## grid it used to be.
 
 signal kamer_gekozen(kamer: String)
 signal kaart_gevraagd()
@@ -18,20 +29,35 @@ const VULLING := 6            ## the chip's own padding, both sides
 
 var _chips: Dictionary = {}   ## kamer id -> Button ("" = the map chip)
 var _rail := false
+var _strook := false
 var _maten: Dictionary = {}
+var _raster: GridContainer = null
 
 func bouw(mt: Dictionary) -> void:
 	name = "Kamerbalk"
 	_maten = mt
-	add_theme_constant_override("h_separation", GAT)
-	add_theme_constant_override("v_separation", GAT)
-	columns = 1
+	if _raster == null or not is_instance_valid(_raster):
+		_raster = GridContainer.new()
+		_raster.name = "Raster"
+		add_child(_raster)
+	_raster.add_theme_constant_override("h_separation", GAT)
+	_raster.add_theme_constant_override("v_separation", GAT)
+	_raster.columns = 1
+	follow_focus = true
+	_zet_rollen(false)
 	vul()
+
+## The bar only scrolls in the phone row; everywhere else it is a plain grid
+## that reports its full size, so the shell can give it exactly that.
+func _zet_rollen(strook: bool) -> void:
+	horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER if strook \
+		else ScrollContainer.SCROLL_MODE_DISABLED
+	vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 
 ## (Re)create the chips.  Called once at boot and again when `Rooms` changes.
 func vul() -> void:
-	for k in get_children():
-		remove_child(k)
+	for k in _raster.get_children():
+		_raster.remove_child(k)
 		k.queue_free()
 	_chips.clear()
 	for id in Rooms.lijst():
@@ -40,7 +66,7 @@ func vul() -> void:
 			continue
 		_chips[id] = _chip(id, r.icoon, r.naam, UiTekst.ga_naar(r.naam))
 	_chips[""] = _chip("", "🗺️", "Plattegrond", UiTekst.KAART_TITEL)
-	pas_aan(size.x, _rail)
+	pas_aan(size.x, _rail, 0.0, _strook)
 
 func _chip(id: String, icoon: String, naam: String, titel: String) -> Button:
 	var b := Button.new()
@@ -49,7 +75,7 @@ func _chip(id: String, icoon: String, naam: String, titel: String) -> Button:
 	b.tooltip_text = titel
 	b.focus_mode = Control.FOCUS_ALL
 	b.toggle_mode = true
-	add_child(b)
+	_raster.add_child(b)
 	# A Button is not a Container, so the content is anchored to its rectangle
 	# and the chip's minimum size is taken from that content once, here.
 	var rij := BoxContainer.new()
@@ -104,14 +130,30 @@ func ververs() -> void:
 			bdg.text = str(n)
 			bdg.visible = n > 0
 		b.set_pressed_no_signal(id != "" and id == World.kamer_nu())
+	_toon_huidige()
+
+## In the scrolling row the room you are in must be on screen — and only then is
+## anything scrolled, so the bar never jumps back under the child's finger.
+func _toon_huidige() -> void:
+	if not _strook or size.x <= 0.0:
+		return
+	var b: Button = _chips.get(World.kamer_nu())
+	if b == null or not is_instance_valid(b):
+		return
+	var links := b.position.x - scroll_horizontal
+	if links < 0.0 or links + b.size.x > size.x:
+		ensure_control_visible(b)
 
 ## Lay the chips out for the space they got.  `rail` is the compact landscape
 ## shell: three fixed columns of 48 units beside the frame (§16.4), the word
 ## wrapping whole under the picture.  `hoogte` is what the rail may use: it
 ## keeps its width and shrinks its PICTURE (and, at the last step, its word to
 ## the 12 px floor) until all nine chips fit — the word is never cut.
-func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0) -> void:
+## `strook` is the phone row: every chip at its natural width, one line, scrolled.
+func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = false) -> void:
 	_rail = rail
+	_strook = strook and not rail
+	_zet_rollen(_strook)
 	for b in _chips.values():
 		var rij: BoxContainer = b.get_node_or_null("Rij")
 		if rij != null:
@@ -133,7 +175,7 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0) -> void:
 			nm.max_lines_visible = -1
 	if rail:
 		_meet_rail(hoogte)
-		columns = RAIL_KOLOMMEN
+		_raster.columns = RAIL_KOLOMMEN
 		return
 	var breedtes: Array[float] = []
 	for b in _chips.values():
@@ -144,24 +186,38 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0) -> void:
 		b.custom_minimum_size = Vector2(maxf(UiThema.HOT, nodig.x + 2 * VULLING),
 			maxf(UiThema.HOT, nodig.y + 4.0))
 		breedtes.append(b.custom_minimum_size.x)
+	if _strook:
+		# one row, as wide as it needs to be: the ScrollContainer takes the
+		# overflow instead of the world frame taking three rows of chips
+		_raster.columns = maxi(1, _chips.size())
+		_toon_huidige()
+		return
 	# A GridContainer sizes each column to its OWN widest chip, so the honest
 	# question is "how many columns still fit", not "how many chips of the
 	# widest size fit".  With nine chips that is nine cheap sums, and it is the
 	# difference between one row and two on a 1000 unit tablet.
-	columns = 1
+	_raster.columns = 1
 	for k in range(breedtes.size(), 0, -1):
 		if _rij_breedte(breedtes, k) <= breedte:
-			columns = k
+			_raster.columns = k
 			break
 
-func _rij_breedte(breedtes: Array[float], kolommen: int) -> float:
-	var som := float((kolommen - 1) * GAT)
-	for k in kolommen:
+## How many columns the bar ended up with — one machine-readable number for the
+## browser probe and the layout test.
+func kolommen() -> int:
+	return _raster.columns if _raster != null else 0
+
+func rijen() -> int:
+	return int(ceil(_chips.size() / float(maxi(1, kolommen()))))
+
+func _rij_breedte(breedtes: Array[float], kolommen_n: int) -> float:
+	var som := float((kolommen_n - 1) * GAT)
+	for k in kolommen_n:
 		var breedst := 0.0
 		var i := k
 		while i < breedtes.size():
 			breedst = maxf(breedst, breedtes[i])
-			i += kolommen
+			i += kolommen_n
 		som += breedst
 	return som
 
@@ -176,7 +232,7 @@ func _rij_breedte(breedtes: Array[float], kolommen: int) -> float:
 ## own minimum; a colour-emoji line is much taller than its font size (35 units
 ## at size 20), which is why the picture is the first thing to shrink.
 func _meet_rail(hoogte: float) -> void:
-	var rijen := int(ceil(_chips.size() / float(RAIL_KOLOMMEN)))
+	var rijen_n := int(ceil(_chips.size() / float(RAIL_KOLOMMEN)))
 	var trappen := [
 		[int(_maten["icoon_keuze"]), int(_maten["klein"])],
 		[18, maxi(UiThema.VLOER, int(_maten["klein"]) - 1)],
@@ -184,7 +240,7 @@ func _meet_rail(hoogte: float) -> void:
 	]
 	for trap in trappen:
 		var hoogst := _zet_rail(int(trap[0]), int(trap[1]))
-		if hoogte <= 0.0 or rijen * (hoogst + GAT) - GAT <= hoogte:
+		if hoogte <= 0.0 or rijen_n * (hoogst + GAT) - GAT <= hoogte:
 			return
 
 ## One rail step: give every chip this picture and word size, and return the

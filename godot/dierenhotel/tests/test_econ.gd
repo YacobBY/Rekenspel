@@ -119,6 +119,51 @@ func test_rekening_drie_stappen() -> void:
 	gelijk(uit[0]["pogingen"], 3, "1 som + 1 tellen + 1 wisselgeld")
 	gelijk(uit[0]["gastId"], "boef", "en over welke gast het ging")
 
+## I1 finding 6: the counting counter is the DESK.  `plek(0.15, 0.5)` = (18, 60)
+## was the arm of the old L-shaped desk; since the receptie was rebuilt along
+## the back-right wall (architecture.md §13, Q-X1-13) that spot is open floor in
+## the middle of the walking line, so the coins were counted where the guests
+## walk and `test_rooms.gd::test_niemand_loopt_door_de_balie` keeps free.
+func test_toonbank_ligt_op_de_balie() -> void:
+	_voor()
+	var boom := Engine.get_main_loop() as SceneTree
+	var laag := Control.new()
+	laag.size = Vector2(1000, 648)
+	boom.root.add_child(laag)
+	Ui.registreer_lagen(laag, laag, null, laag, laag)
+	World.meet(Rect2(Vector2.ZERO, Vector2(1000, 648)))
+	World.naar("receptie")
+	var g := _gast()
+	World.zet(str(g["id"]), "receptie", 60.0, 60.0, {"kind": "hond", "naam": "Boef"})
+	Econ.rekening({"gast": g, "fam": "Bakker", "nachten": 2, "prijs": 3,
+		"totaal": 6, "betaald": 6})
+	await Econ.som_ok(6)
+	var r = Rooms.get_kamer("receptie")
+	var balie: Dictionary = r.balie
+	for id in ["rek_bank", "rek_som", "rek_bon"]:
+		var s := Hits.spot(id)
+		if s == null:
+			continue
+		waar(s.x >= float(balie["x0"]) and s.x <= float(balie["x1"]),
+			"%s staat in de breedte van de balie (x = %.0f, %s..%s)"
+				% [id, s.x, balie["x0"], balie["x1"]])
+		waar(s.z >= float(balie["z0"]) and s.z <= float(balie["z1"]),
+			"%s staat in de diepte van de balie (z = %.0f, %s..%s)"
+				% [id, s.z, balie["z0"], balie["z1"]])
+	waar(Hits.spot("rek_bank") != null, "de toonbank is een echte drop-plek")
+	# and the guests keep the floor they walk on: the desk is not floor, which
+	# is the other half of test_rooms.gd::test_niemand_loopt_door_de_balie
+	var op_balie := 0
+	for cel in r.vrij:
+		if float(cel["x"]) >= float(balie["x0"]) - 2 and float(cel["x"]) <= float(balie["x1"]) + 2 \
+				and float(cel["z"]) >= float(balie["z0"]) - 2 and float(cel["z"]) <= float(balie["z1"]) + 2:
+			op_balie += 1
+	gelijk(op_balie, 0, "geen loopcel op de balie: de munten liggen niet in de looplijn")
+	Econ.rekening_stop()
+	Hits.wis_alles()
+	Ui.registreer_lagen(null, null, null)
+	laag.queue_free()
+
 ## Exactly paid: no change step at all.
 func test_rekening_precies_betaald() -> void:
 	_voor()

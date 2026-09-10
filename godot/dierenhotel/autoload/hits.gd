@@ -30,7 +30,7 @@ var _voorrang: String = ""         ## the game that picks its places first
 var _bezet: Dictionary = {}        ## "rij|kol" -> true, rebuilt every placement
 var _geplaatst: Array[Rect2] = []  ## the rectangles already handed out this pass
 var _vakken: Array[Rect2] = []     ## object boxes in view; a button avoids all of them
-var _laatste: Dictionary = {}      ## id -> {rect, vlak, dekking, op, laag, prio, krap}
+var _laatste: Dictionary = {}   ## id -> {rect, vlak, dekking, op, laag, prio, krap, gestapeld}
 
 class Spot extends RefCounted:
 	var id: String
@@ -45,7 +45,7 @@ class Spot extends RefCounted:
 	var _voorwerp_sleutel := ""
 	var maat: Vector2 = Vector2.ZERO   ## explicit minimum size (0 = ask the Control)
 	var kleef_aan: String = ""     ## glue my top edge under the rect of this id
-	var kind: String = "btn"       ## btn | drop | tag
+	var kind: String = "btn"       ## btn | drop | tag | naam | ...
 	var op: String = "auto"        ## auto | boven | onder | midden | rand
 	var prio: int = 5
 	var vast := false
@@ -107,7 +107,7 @@ func maak(o: Dictionary) -> String:
 			hotspot_getikt.emit(s.id)
 			if s.aan.is_valid():
 				Ui.roep(s.aan, [s]))
-	Ui.knoplaag.add_child(s.knoop)
+	Ui.laag_voor(s.kind).add_child(s.knoop)
 	if s.drop != "" and Ui.vanglaag != null:
 		s.vangvlak = UiVangvlak.new()
 		s.vangvlak.name = "V" + id
@@ -233,6 +233,14 @@ func plaats() -> void:
 			return not ak          # what glues onto something is placed last
 		if a.prio != b.prio:
 			return a.prio > b.prio
+		# What hangs on an object has exactly ONE good place; what floats over
+		# the room may go anywhere, so the bound element chooses first (I1
+		# finding 2 — the morning board's task card used to take the cell under
+		# the bell and push the 🔔 button a whole band further down).
+		var av := a.vlak_nu.size.x > 0.0 and a.vlak_nu.size.y > 0.0
+		var bv := b.vlak_nu.size.x > 0.0 and b.vlak_nu.size.y > 0.0
+		if av != bv:
+			return av
 		return _diepte(a) > _diepte(b))
 	for i in lijstje.size():
 		if i >= MAX_PER_KAMER:
@@ -262,6 +270,9 @@ func plaats() -> void:
 		_laatste[s.id] = {
 			"id": s.id, "op": uit["op"], "laag": s.laag, "prio": s.prio,
 			"rect": rect, "vlak": s.vlak_nu, "krap": uit["krap"],
+			# true when the two bands beside the object were full and the
+			# element had to stack somewhere else in the frame
+			"gestapeld": uit.get("gestapeld", false),
 			"dekking": _dekking(rect, s.vlak_nu),
 		}
 		_zet_vangvlak(s, rect)
@@ -341,20 +352,29 @@ func _bruikbaar(stuk: Variant) -> bool:
 	var naam := str(d.get("model", d.get("n", "")))
 	return not naam.is_empty() and Art.heeft_model(naam)
 
-## A tap target is at least 48 x 48; a number tag keeps its natural size.
+## A tap target is at least 48 x 48; a number tag and a name plate keep their
+## natural size — neither is clickable, so neither is a fingertip.
 func _maat_van(s: Spot) -> Vector2:
-	var maat := s.knoop.get_combined_minimum_size()
+	# A Control that carries a Container inside a NON-Container says how big its
+	# content is (`UiWolk` is a Button with a row in it); everything else answers
+	# with its combined minimum, which for a Container is the same thing.
+	var maat := Vector2.ZERO
+	if s.knoop.has_method("inhoud_maat"):
+		maat = s.knoop.call("inhoud_maat")
+	var eigen := s.knoop.get_combined_minimum_size()
+	maat.x = maxf(maat.x, eigen.x)
+	maat.y = maxf(maat.y, eigen.y)
 	if s.maat.x > 0.0:
 		maat.x = maxf(maat.x, s.maat.x)
 	if s.maat.y > 0.0:
 		maat.y = maxf(maat.y, s.maat.y)
-	if s.kind != "tag":
+	if s.kind != "tag" and s.kind != "naam":
 		maat.x = maxf(maat.x, 48.0)
 		maat.y = maxf(maat.y, 48.0)
 	return maat
 
 func _laag_van(s: Spot) -> int:
-	if s.vast or s.kind == "tag" or s.kind == "pad":
+	if s.vast or s.kind == "tag" or s.kind == "naam" or s.kind == "pad":
 		return Laag.VAST
 	if _voorrang != "" and s.door == _voorrang:
 		return Laag.SPEL
@@ -372,7 +392,7 @@ func _op_van(s: Spot) -> String:
 		return "kleef"
 	if s.op != "auto":
 		return s.op
-	if s.kind == "tag":
+	if s.kind == "tag" or s.kind == "naam":
 		return "rand"
 	if s.vast or s.y <= 0.0:
 		return "midden"
@@ -406,7 +426,7 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 		var r := _klem(Rect2(Vector2(kader.size.x * 0.5 - maat.x * 0.5,
 			kader.size.y - RAND - maat.y), maat), kader)
 		_reserveer(r, kader)
-		return {"rect": r, "op": op, "krap": false}
+		return {"rect": r, "op": op, "krap": false, "gestapeld": false}
 	if op == "midden":
 		return _plaats_midden(mik, maat, kader, s.vlak_nu)
 	if s.kleef_aan != "":
@@ -422,38 +442,85 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 					r = boven_r
 			var krap := _botst(r)
 			_reserveer(r, kader)
-			return {"rect": r, "op": "kleef", "krap": krap}
+			return {"rect": r, "op": "kleef", "krap": krap, "gestapeld": false}
 		# the thing it glues onto is not on screen: fall back to the aim point
 		return _plaats_midden(mik, maat, kader, s.vlak_nu)
 	if op == "rand":
-		var y := top - maat.y + minf(maat.y, vlak.size.y * TAG_IN)
+		# A number tag may cover a tenth of its own object; a name plate hangs
+		# clear of the guest.  Neither may land on something already placed —
+		# that is what put the "Boef" plate over the Prikbord button (I1
+		# finding 3), so it steps up in whole bands until it is free.
+		var in_vlak := minf(maat.y, vlak.size.y * TAG_IN) if s.kind != "naam" else -2.0
+		var y := top - maat.y + in_vlak
 		var r := _klem(Rect2(Vector2(mik.x - maat.x * 0.5, y), maat), kader)
+		r = _wijk_omhoog(r, kader)
+		var krap_rand := _botst(r)
 		_reserveer(r, kader)
-		return {"rect": r, "op": op, "krap": false}
+		return {"rect": r, "op": op, "krap": krap_rand, "gestapeld": false}
 	var volgorde := _bandvolgorde(op, top, voet, maat, rijen)
-	# pass 1: a cell that is free AND touches no object
-	for rij in volgorde:
-		var kand := _zoek_cel(rij, mik.x, maat, kolommen, rijen, false)
-		if kand["rect"].size.x > 0.0:
-			_reserveer(kand["rect"], kader)
-			return {"rect": kand["rect"], "op": _werd(op, rij, top, maat), "krap": false}
-	# pass 2: a free cell with the least object overlap
+	var doel := vlak.get_center() if vlak.size.y > 0.0 else mik
+	# pass 1a: the bands directly above and below the object, and in them the
+	# cell block NEAREST to the object — a free cell at the other end of the
+	# top band is not "above the bell", it is beside the door (I1 finding 2).
 	var beste := Rect2()
 	var beste_kosten := INF
+	var beste_kant := ""
+	var beste_dichtst := false
+	for i in volgorde.size():
+		var kant: String = volgorde[i]["kant"]
+		if kant.is_empty():
+			continue
+		var rij: int = volgorde[i]["rij"]
+		var kand := _zoek_cel(rij, mik.x, maat, kolommen, rijen, false,
+			_band_y(rij, maat, kant, top, voet))
+		if kand["rect"].size.x <= 0.0:
+			continue
+		# distance to the object, plus a hair per step down the preference list
+		# so the asked side still wins a tie
+		var afstand: float = (kand["rect"].get_center() - doel).length() + i * 0.01
+		if afstand < beste_kosten:
+			beste = kand["rect"]
+			beste_kosten = afstand
+			beste_kant = kant
+			beste_dichtst = bool(volgorde[i]["dichtst"])
+	if beste_kosten < INF:
+		_reserveer(beste, kader)
+		# `gestapeld` = the band DIRECTLY above or below the object had no free
+		# block left for me, so I am one band further out; that is the "unless
+		# the band is full" of architecture.md §4.3, said out loud instead of
+		# silently drifting.
+		return {"rect": beste, "op": beste_kant, "krap": false,
+			"gestapeld": not beste_dichtst}
+	# pass 1b: the stacking round — every remaining band from the top down
+	for k in volgorde:
+		if not str(k["kant"]).is_empty():
+			continue
+		var rij: int = k["rij"]
+		var kand := _zoek_cel(rij, mik.x, maat, kolommen, rijen, false, _band_y(rij, maat, "", top, voet))
+		if kand["rect"].size.x > 0.0:
+			_reserveer(kand["rect"], kader)
+			return {"rect": kand["rect"], "op": _werd(op, rij, top, maat), "krap": false,
+				"gestapeld": true}
+	# pass 2: a free cell with the least object overlap
 	var beste_rij := -1
-	for rij in volgorde:
-		var kand := _zoek_cel(rij, mik.x, maat, kolommen, rijen, true)
+	beste = Rect2()
+	beste_kosten = INF
+	for k in volgorde:
+		var rij: int = k["rij"]
+		var kand := _zoek_cel(rij, mik.x, maat, kolommen, rijen, true,
+			_band_y(rij, maat, str(k["kant"]), top, voet))
 		if kand["rect"].size.x > 0.0 and kand["kosten"] < beste_kosten:
 			beste = kand["rect"]
 			beste_kosten = kand["kosten"]
 			beste_rij = rij
 	if beste_kosten < INF:
 		_reserveer(beste, kader)
-		return {"rect": beste, "op": _werd(op, beste_rij, top, maat), "krap": true}
+		return {"rect": beste, "op": _werd(op, beste_rij, top, maat), "krap": true,
+			"gestapeld": true}
 	# nothing free in the whole frame: the aim point, clamped, and flagged
 	var laatste := _klem(Rect2(mik - maat * 0.5, maat), kader)
 	_reserveer(laatste, kader)
-	return {"rect": laatste, "op": op, "krap": true}
+	return {"rect": laatste, "op": op, "krap": true, "gestapeld": true}
 
 ## On the aim point, clamped into the frame, lifted clear of anything already
 ## placed and of its own object.
@@ -461,7 +528,7 @@ func _plaats_midden(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2) -> 
 	var r := _wijk_omhoog(_klem(Rect2(mik - maat * 0.5, maat), kader), kader, eigen)
 	var krap := _botst(r)
 	_reserveer(r, kader)
-	return {"rect": r, "op": "midden", "krap": krap}
+	return {"rect": r, "op": "midden", "krap": krap, "gestapeld": false}
 
 ## A fixed card lifts itself off whatever is already on screen (its own keypad,
 ## in practice), in whole bands, upwards first and then downwards.  The test is
@@ -528,34 +595,57 @@ func _werd(op: String, rij: int, top: float, maat: Vector2) -> String:
 
 ## Bands in order of preference: the side asked for (closest to the object
 ## first), then the other side, then every remaining band from the top down.
-func _bandvolgorde(op: String, top: float, voet: float, maat: Vector2, rijen: int) -> Array[int]:
+## Every entry says which side it is (`kant`); the stacking round carries "".
+##
+## A band qualifies when the element FITS INSIDE it while keeping `GAT` air to
+## the object — not when the whole band clears the object.  A 48 unit button in
+## a 52 unit band has four units of play, and that play is what lets it sit
+## against the bell instead of a whole dead band lower (I1 finding 2): the old
+## rule left up to 51 units of quantisation gap.
+func _bandvolgorde(op: String, top: float, voet: float, maat: Vector2, rijen: int) -> Array[Dictionary]:
 	var hoog := _rij_hoog(maat)
-	var boven: Array[int] = []
+	var boven: Array[Dictionary] = []
 	for r in range(rijen - hoog, -1, -1):
-		if RAND + (r + hoog) * RIJ <= top - GAT:
-			boven.append(r)
-	var onder: Array[int] = []
+		if RAND + r * RIJ + maat.y <= top - GAT:
+			boven.append({"rij": r, "kant": "boven", "dichtst": boven.is_empty()})
+	var onder: Array[Dictionary] = []
 	for r in range(0, rijen - hoog + 1):
-		if RAND + r * RIJ >= voet + GAT:
-			onder.append(r)
-	var uit: Array[int] = []
+		if RAND + (r + hoog) * RIJ - maat.y >= voet + GAT:
+			onder.append({"rij": r, "kant": "onder", "dichtst": onder.is_empty()})
+	var uit: Array[Dictionary] = []
 	if op == "onder":
 		uit.append_array(onder)
 		uit.append_array(boven)
 	else:
 		uit.append_array(boven)
 		uit.append_array(onder)
+	var gehad := {}
+	for k in uit:
+		gehad[k["rij"]] = true
 	for r in range(0, rijen - hoog + 1):
-		if not uit.has(r):
-			uit.append(r)
+		if not gehad.has(r):
+			uit.append({"rij": r, "kant": "", "dichtst": false})
 	return uit
+
+## Where the top edge of an element lands inside its band block: against the
+## object when the band is the one above or below it, centred otherwise.
+func _band_y(rij: int, maat: Vector2, kant: String, top: float, voet: float) -> float:
+	var hoog := _rij_hoog(maat)
+	var blok_top := float(RAND + rij * RIJ)
+	var blok_voet := float(RAND + (rij + hoog) * RIJ)
+	if kant == "onder":
+		return clampf(voet + GAT, blok_top, blok_voet - maat.y)
+	if kant == "boven":
+		return clampf(top - GAT - maat.y, blok_top, blok_voet - maat.y)
+	return blok_top + (hoog * RIJ - maat.y) * 0.5
 
 func _rij_hoog(maat: Vector2) -> int:
 	return maxi(1, ceili(maat.y / float(RIJ)))
 
 ## Nearest free column block in this band, searched outward from the aim point.
 ## Returns {rect, kosten}; an empty rect means "nothing free here".
-func _zoek_cel(rij: int, wens_x: float, maat: Vector2, kolommen: int, rijen: int, sta_vak_toe: bool) -> Dictionary:
+func _zoek_cel(rij: int, wens_x: float, maat: Vector2, kolommen: int, rijen: int,
+		sta_vak_toe: bool, y: float) -> Dictionary:
 	var breed := maxi(1, ceili(maat.x / float(KOL)))
 	var hoog := _rij_hoog(maat)
 	if rij < 0 or rij + hoog > rijen or breed > kolommen:
@@ -570,7 +660,7 @@ func _zoek_cel(rij: int, wens_x: float, maat: Vector2, kolommen: int, rijen: int
 				continue
 			if not _cellen_vrij(rij, k, breed, hoog):
 				continue
-			var r := _cel(rij, k, maat)
+			var r := _cel(rij, k, maat, y)
 			var kosten := _vak_kosten(r)
 			if kosten <= 0.0:
 				return {"rect": r, "kosten": 0.0}
@@ -602,12 +692,11 @@ func _reserveer(r: Rect2, kader: Rect2) -> void:
 	for cel in _cellen_van(r, kader):
 		_bezet[cel] = true
 
-## The rectangle of one cell block.  Inside the frame by construction.
-func _cel(rij: int, kol: int, maat: Vector2) -> Rect2:
+## The rectangle of one cell block.  Inside the frame by construction: `y` comes
+## from `_band_y`, which never leaves the block this call reserves.
+func _cel(rij: int, kol: int, maat: Vector2, y: float) -> Rect2:
 	var breed := maxi(1, ceili(maat.x / float(KOL)))
-	var hoog := _rij_hoog(maat)
 	var x := RAND + kol * KOL + (breed * KOL - maat.x) * 0.5
-	var y := RAND + rij * RIJ + (hoog * RIJ - maat.y) * 0.5
 	return Rect2(Vector2(x, y), maat)
 
 func _klem(r: Rect2, kader: Rect2) -> Rect2:

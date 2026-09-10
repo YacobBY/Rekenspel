@@ -14,7 +14,7 @@ const MATEN := [Vector2(1000, 648), Vector2(768, 1024), Vector2(360, 740),
 ## `test_ui.gd::test_shell_op_vijf_schermen` and pasted here so this suite does
 ## not have to build a window.  That test prints them, so a drift shows up.
 const KADERS := [Vector2(990, 637), Vector2(734, 788), Vector2(1170, 669),
-	Vector2(326, 402), Vector2(558, 289)]
+	Vector2(326, 558), Vector2(558, 289)]
 
 var _laag: Control = null
 
@@ -264,6 +264,141 @@ func test_elk_voorwerp_in_elke_kamer_blijft_vrij() -> void:
 				_af()
 	waar(stukken > 0, "er is decor gekeurd (%d plaatsingen, %d met een echte plaat)"
 		% [stukken, gemeten])
+
+# ------------------------------------------------------ de echte receptie
+
+## The screens the real shell is measured on for the two receptie tests below.
+const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(1280, 800),
+	Vector2i(360, 740)]
+
+## The whole shell in a SubViewport, with a fresh hotel in the receptie.  The
+## camera only centres a room when a viewport is registered, so a REAL receptie
+## needs the real shell — placing hotspots against a camera at the origin proves
+## nothing about the room the child sees.
+func _hotel_op(maat: Vector2i) -> Dictionary:
+	var boom := Engine.get_main_loop() as SceneTree
+	var vp := SubViewport.new()
+	vp.size = maat
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	boom.root.add_child(vp)
+	var scene: PackedScene = load("res://scenes/main.tscn")
+	var shell := scene.instantiate()
+	shell.set_meta("geen_start", true)     # never touch the save from a test
+	vp.add_child(shell)
+	for _f in 4:
+		await boom.process_frame
+	State.nieuw_spel()
+	State.start_gekozen()
+	Hotel.start()
+	for _f in 4:
+		await boom.process_frame
+	var kader: Control = shell.get_node("Scherm/Kolom/Middenrij/Kaderdoos/Kader")
+	return {"vp": vp, "shell": shell, "kader": kader.size}
+
+func _hotel_af(h: Dictionary) -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	Ui.naamplaten_leeg()
+	Hits.wis_alles()
+	(h["vp"] as SubViewport).queue_free()
+	await boom.process_frame
+	Ui.registreer_lagen(null, null, null)
+
+## How far a placed rectangle stands from the object it belongs to.
+func _gat_y(r: Rect2, vlak: Rect2) -> float:
+	return maxf(0.0, maxf(vlak.position.y - r.end.y, r.position.y - vlak.end.y))
+
+## I1 finding 2, with the room the owner asked for.  The desk stands along the
+## back-right wall now, so the band ABOVE the bell is the notice board's plate
+## and the band above the door is off the frame: a button that only asks for "a
+## free cell in the band above" slides along the top edge and ends up a screen's
+## width from the thing it belongs to (the 🔔 Bel button beside the door in
+## `.fanout/scratch/godot-w1/shots/ipad-land-receptie.png`).
+##
+## The rule this asserts: a button's centre is at most one band (52) from its
+## object vertically and at most one column (56) beyond its object's own width
+## horizontally — unless both bands beside the object were full, and then the
+## placement says so itself (`gestapeld`).
+func test_receptie_knoppen_staan_bij_hun_voorwerp() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	for maat in SCHERMEN:
+		var h: Dictionary = await _hotel_op(maat)
+		var kader: Vector2 = h["kader"]
+		var dbg := Hits.debug()
+		var gemeten := 0
+		var gestapeld := 0
+		for id in dbg.keys():
+			var d: Dictionary = dbg[id]
+			var vlak: Rect2 = d["vlak"]
+			if vlak.size.x <= 0.0 or vlak.size.y <= 0.0:
+				continue
+			if int(d["laag"]) == Hits.Laag.VAST:
+				continue          # a card and a tag may stand over the world
+			if bool(d.get("gestapeld", false)):
+				gestapeld += 1
+				continue          # both bands beside the object were full
+			gemeten += 1
+			var r: Rect2 = d["rect"]
+			waar(_gat_y(r, vlak) <= Hits.RIJ + 0.01,
+				"%s: %s staat %.0f eenheden van zijn voorwerp (max %d), knop %s voorwerp %s"
+					% [str(maat), id, _gat_y(r, vlak), Hits.RIJ, str(r), str(vlak)])
+			waar(absf(r.get_center().x - vlak.get_center().x) <= vlak.size.x + Hits.KOL + 0.01,
+				"%s: %s staat %.0f eenheden naast zijn voorwerp (max %.0f)"
+					% [str(maat), id, absf(r.get_center().x - vlak.get_center().x),
+						vlak.size.x + Hits.KOL])
+		waar(gemeten >= 2 and gemeten + gestapeld >= 3,
+			"%s: %d knoppen tegen hun voorwerp gemeten, %d gestapeld (band vol)"
+				% [str(maat), gemeten, gestapeld])
+		_keur(kader, "receptie %s" % str(maat))
+		await _hotel_af(h)
+	State.s = bewaard
+
+## I1 finding 3: three guests at the desk.  A name plate is a hotspot of kind
+## `naam` now, so it reserves its cells like a number tag and the Prikbord
+## button can no longer end up under "Boef".
+func test_naamplaten_nemen_hun_plek_in() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var boom := Engine.get_main_loop() as SceneTree
+	var soorten := ["hond", "poes", "konijn"]
+	var namen := ["Boef", "Mispel", "Pluis"]
+	for maat in [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740)]:
+		var h: Dictionary = await _hotel_op(maat)
+		var kader: Vector2 = h["kader"]
+		# three guests in front of the desk, where a family waits to check in
+		for i in 3:
+			World.zet("gast%d" % i, "receptie", 40.0 + i * 20.0, 48.0,
+				{"kind": soorten[i], "naam": namen[i], "nr": i})
+		World.vuil()
+		for _f in 4:
+			await boom.process_frame
+		var dbg := Hits.debug()
+		for i in 3:
+			var id := Ui.PLAAT + "gast%d" % i
+			waar(dbg.has(id), "%s: de naamplaat van %s staat er" % [str(maat), namen[i]])
+			if not dbg.has(id):
+				continue
+			var r: Rect2 = dbg[id]["rect"]
+			var dier := World.vlak_van_dier("gast%d" % i)
+			var snij := r.intersection(dier)
+			gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
+				"%s: %s staat niet op zijn gast" % [str(maat), namen[i]])
+			# against the head, or one whole band higher when that place was
+			# taken — the grid steps in bands, and the plate keeps 2 units of air
+			waar(_gat_y(r, dier) <= Hits.RIJ + Hits.GAT,
+				"%s: %s hangt tegen zijn gast (%s tegen %s)"
+					% [str(maat), namen[i], str(r), str(dier)])
+			waar(absf(r.get_center().x - dier.get_center().x) <= dier.size.x + Hits.KOL + 0.01,
+				"%s: %s hangt bij zijn gast" % [str(maat), namen[i]])
+			var spot := Hits.spot(id)
+			waar(spot != null and not (spot.knoop is BaseButton),
+				"%s: %s is geen knop" % [str(maat), namen[i]])
+			waar(spot != null and spot.knoop.get_parent() == Ui.naamlaag,
+				"%s: %s hangt in de naamlaag" % [str(maat), namen[i]])
+		# no plate on a button and no plate on a plate: `_keur`'s own rule
+		_keur(kader, "naamplaten %s" % str(maat))
+		for i in 3:
+			World.weg("gast%d" % i)
+		await _hotel_af(h)
+	State.s = bewaard
 
 # --------------------------------------------------------------------- lenen
 

@@ -1152,12 +1152,15 @@ func hotspots() -> void:
 			continue
 		var w := wacht_in(str(dp["naar"]))
 		var naar := str(dp["naar"])
+		# The door opening is its object (I1 finding 5): the button hangs beside
+		# the hole instead of over it, and `Hits.dekking` measures something.
 		Hits.maak({"id": "deur_%s_%s" % [nu, naar], "door": EIGENAAR, "kamer": nu,
 			"x": dp.get("x", 0), "z": dp.get("z", 0), "y": 9,
 			"icoon": doel.icoon, "label": doel.naam,
 			"titel": "Ga naar %s" % doel.naam,
 			"badge": str(w) if w > 0 else "", "klas": "hotdeur", "prio": 8,
 			"kind": "drop", "drop": "deur", "data": {"naar": naar, "kamer": nu},
+			"volg": _volg_deur(nu, naar),
 			"aan": func(_s): naar_kamer(naar)})
 	if nu == "receptie":
 		var bp := decor_plek("receptie", "bel")
@@ -1312,13 +1315,22 @@ func decor_plek(kamer_id: String, naam: String) -> Dictionary:
 		return {"kamer": str(stuk["kamer"]), "x": stuk["x"], "z": stuk["z"]}
 	return {}
 
+## A bubble that walks with its animal, and knows how big that animal draws:
+## with the guest's own rectangle the band grid keeps the guest whole
+## (HOTEL.md §9) instead of guessing from the aim point (I1 finding 5).
 func _volg_dier(id: String, hoog: float = 54.0) -> Callable:
 	return func() -> Dictionary:
 		var d = World.dier(id)
 		if d == null:
 			return {}
 		return {"x": d.x, "z": d.z, "y": hoog, "kamer": d.kamer,
-				"d": d.x + d.z + 0.6}
+				"vlak": World.vlak_van_dier(id), "d": d.x + d.z + 0.6}
+
+## The same for a door: its rectangle moves with the camera, so it is measured
+## every pass instead of once at creation.
+func _volg_deur(kamer_id: String, naar: String) -> Callable:
+	return func() -> Dictionary:
+		return {"vlak": World.vlak_van_deur(kamer_id, naar)}
 
 func _plek(fx: float, fz: float) -> Dictionary:
 	return Rooms.plek("receptie", fx, fz)

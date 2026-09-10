@@ -165,7 +165,7 @@ func _ververs_dieren() -> void:
 			_dieren[d.id] = beeld
 		beeld.volg()
 		if Ui.naamlaag != null and d.naam != "":
-			Ui.naamplaat(d.id, d.naam, World.naam_punt(d.id))
+			Ui.naamplaat(d.id, d.naam)
 	for id in _dieren.keys():
 		if not gezien.has(id):
 			_dieren[id].queue_free()

@@ -114,8 +114,15 @@ static func wrap_hoogte(l: Label, breed: float) -> float:
 		| TextServer.BREAK_ADAPTIVE
 	if l.autowrap_mode == TextServer.AUTOWRAP_ARBITRARY:
 		vlaggen = TextServer.BREAK_MANDATORY | TextServer.BREAK_GRAPHEME_BOUND
-	return f.get_multiline_string_size(l.text, l.horizontal_alignment, breed, maat,
+	var vak := f.get_multiline_string_size(l.text, l.horizontal_alignment, breed, maat,
 		-1, vlaggen).y
+	# `get_multiline_string_size` stacks the LINES; a `Label` also puts its own
+	# `line_spacing` under every one of them (4 units in this theme), and leaving
+	# that out is what made every sheet 4 units per child too short — the start
+	# screen clipped its own "Verder spelen ▸" off the bottom on a phone (I1).
+	var regel_h := maxf(1.0, f.get_height(maat))
+	var lijnen := maxf(1.0, round(vak / regel_h))
+	return lijnen * (regel_h + float(l.get_theme_constant("line_spacing")))
 
 # ------------------------------------------------------------- stijlblokken
 
