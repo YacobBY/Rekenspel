@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://games/kraam/spel.gd" id="1_kr"]
+
+[node name="Kraam" type="Node"]
+script = ExtResource("1_kr")
