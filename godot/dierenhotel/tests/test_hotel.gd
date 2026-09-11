@@ -9,6 +9,7 @@ const NEP := preload("res://spel/minigame.tscn")
 var _nep_ids: Array[String] = []
 
 func _voor() -> void:
+	alleen_spellen([])               # the real games are wave 2; these tests use stand-ins
 	State.nieuw_spel()
 	State.start_gekozen()
 	Econ.rekening_stop()

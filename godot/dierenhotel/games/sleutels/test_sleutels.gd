@@ -259,6 +259,7 @@ func test_een_hele_beurt_op_elke_band() -> void:
 
 ## De taak wordt afgevinkt op de naam én op de spel-id (world.md §5.3).
 func test_taak_wordt_afgevinkt() -> void:
+	alleen_spellen(["sleutels"])      # three chips fit; with ten games the chip rotates by day
 	_op()
 	# elk bed bezet, anders neemt het prio-0 kaartje "nog een bed vrij" de plek
 	# van het klusje op het bord in (er passen er maar drie)

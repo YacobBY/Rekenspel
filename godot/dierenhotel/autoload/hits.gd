@@ -447,7 +447,7 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 		_reserveer(r, kader)
 		return {"rect": r, "op": op, "krap": false, "gestapeld": false}
 	if op == "midden":
-		return _plaats_midden(mik, maat, kader, s.vlak_nu)
+		return _plaats_midden(mik, maat, kader, s.vlak_nu, s.kind == "kaart" or s.kind == "wolk")
 	if s.kleef_aan != "":
 		var aan: Dictionary = _laatste.get(s.kleef_aan, {})
 		if not aan.is_empty():
@@ -463,7 +463,7 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 			_reserveer(r, kader)
 			return {"rect": r, "op": "kleef", "krap": krap, "gestapeld": false}
 		# the thing it glues onto is not on screen: fall back to the aim point
-		return _plaats_midden(mik, maat, kader, s.vlak_nu)
+		return _plaats_midden(mik, maat, kader, s.vlak_nu, s.kind == "kaart" or s.kind == "wolk")
 	if op == "rand":
 		# A number tag may cover a tenth of its own object; a name plate hangs
 		# clear of the guest.  Neither may land on something already placed —
@@ -543,9 +543,11 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 
 ## On the aim point, clamped into the frame, lifted clear of anything already
 ## placed and of its own object.
-func _plaats_midden(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2) -> Dictionary:
-	# a fixed card gives way to the counter as well (V1 finding 4)
-	var r := _wijk_omhoog(_klem(Rect2(mik - maat * 0.5, maat), kader), kader, eigen, true)
+func _plaats_midden(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2, mijd_balie := true) -> Dictionary:
+	# A fixed card or cloud gives way to the counter as well (V1 finding 4); a
+	# game's own plates that HANG on the desk (the key board's hooks) do not, or
+	# the row would be torn apart band by band (I2, sleutels).
+	var r := _wijk_omhoog(_klem(Rect2(mik - maat * 0.5, maat), kader), kader, eigen, mijd_balie)
 	var krap := _botst(r)
 	_reserveer(r, kader)
 	return {"rect": r, "op": "midden", "krap": krap, "gestapeld": false}

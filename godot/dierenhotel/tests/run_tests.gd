@@ -118,6 +118,8 @@ func _draai_bestand(pad: String) -> void:
 		# lines of output).  Awaiting a value that is not a coroutine simply
 		# returns it, so this one word covers both kinds.
 		await proef.call(naam)
+		if proef.has_method("herstel_spellen"):
+			proef.herstel_spellen()
 		var motor := _teller.aantal - voor
 		var verwacht := 0
 		if proef.get("_verwacht") != null:

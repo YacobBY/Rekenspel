@@ -15,6 +15,7 @@ signal spel_gestopt(id: String)
 
 const MAP := "res://games"
 
+const KORT_KADER := 450         ## below this frame height other games' icons hide while one runs
 var _defs: Dictionary = {}      ## id -> definitie
 var _scenes: Dictionary = {}    ## id -> PackedScene
 var _ctx: Dictionary = {}       ## id -> SpelCtx
@@ -171,6 +172,10 @@ func hersteek() -> void:
 	if Ui.knoplaag == null:
 		return                     # headless, or before the shell registered
 	var nu := World.kamer_nu()
+	# On a short frame (under KORT_KADER units high) the entry icons of the OTHER
+	# games leave while one runs: the running game needs the bands for its own
+	# card and keypad (GAMES-API §9 "foreign buttons", architecture.md §4.5).
+	var kort := World.kader_rect().size.y < KORT_KADER
 	for sleutel in _defs.keys():
 		var id := str(sleutel)
 		var def: Dictionary = _defs[id]
@@ -178,7 +183,8 @@ func hersteek() -> void:
 		var hs: Dictionary = def.get("hotspot", {})
 		if hs.is_empty() or str(def.get("kamer", "")) != nu \
 				or not ontgrendeld(id) \
-				or (_actief == id and not bool(hs.get("blijf", false))):
+				or (_actief == id and not bool(hs.get("blijf", false))) \
+				or (kort and _actief != "" and _actief != id):
 			Hits.weg(knop_id)
 			continue
 		var plek := _plek_van(nu, str(hs.get("obj", "")))

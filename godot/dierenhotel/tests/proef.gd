@@ -38,6 +38,28 @@ func fout(melding: String) -> void:
 ## then the error path was not walked at all and the test proved nothing.
 ## May be called before or after the call that errors; the runner only compares
 ## the totals at the end of the test.
+## `alleen_spellen(ids)` — hide every registered game except `ids` for the
+## duration of this test (the hotel's wish and board rules depend on which
+## games exist).  The runner calls `herstel_spellen()` after each test.
+var _spellen_weg: Dictionary = {}
+var _scenes_weg: Dictionary = {}
+
+func alleen_spellen(ids: Array) -> void:
+	for k in Games._defs.keys().duplicate():
+		if not ids.has(str(k)):
+			_spellen_weg[k] = Games._defs[k]
+			_scenes_weg[k] = Games._scenes.get(k)
+			Games._defs.erase(k)
+			Games._scenes.erase(k)
+
+func herstel_spellen() -> void:
+	for k in _spellen_weg.keys():
+		Games._defs[k] = _spellen_weg[k]
+		if _scenes_weg.get(k) != null:
+			Games._scenes[k] = _scenes_weg[k]
+	_spellen_weg.clear()
+	_scenes_weg.clear()
+
 func verwacht_fout(aantal := 1, waarom := "") -> void:
 	_verwacht += aantal
 	if waarom != "":
