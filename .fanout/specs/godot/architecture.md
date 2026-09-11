@@ -656,7 +656,18 @@ One pass per drawn frame:
      "stacking" round);
    * if not one cell in the whole frame is free, the button falls back to its aim point
      and `debug()[id].krap` is `true`. That is a diagnosis, not a silent overlap: the
-     tests fail on any `krap`.
+     tests fail on any `krap`;
+   * **what this pass does not place, it hides** (V1 finding 1). A hotspot whose room is
+     not the room in view is skipped — and its Control used to stay on the glass at
+     whatever size it last had, which for a bubble made while its guest was still
+     elsewhere is 0 × 0: a ten-pixel blob with the sentence spilling down the frame, one
+     letter per line, for the three seconds the bubble lives. A bubble also pins its own
+     minimum (its content, never under 48 × 48), so it can never be drawn as a sliver;
+   * **a fixed card gives way to the counter** as well as to its own object: the desk
+     footprint (`Kamer.balie`, `World.vlak_van_balie()`) carries the bell, the till, the
+     book and the lamp, and a card that hides them hides what the child is counting
+     (V1 finding 4). Only `midden` cards are held to it — a number tag or a name plate
+     hangs on its own animal and must stay there.
 
 The object rectangle is exact, because it comes from the baked plate
 (`World.vlak_van()` / `WereldObject.vlak()`), not from a DOM measurement.
@@ -767,6 +778,11 @@ signal hotspot_getikt(id: String)
   `strip.get_combined_minimum_size().x + 8 ≤ frame_w`, short words (`kort`) otherwise —
   decided **before** the first draw, so `strookNakijken()` and the per-game width
   thresholds are gone. Pictogram **and** word, always (F4).
+* A **toast** is a message over the WORLD: it is drawn in the toast layer, which covers
+  the whole screen, but it is positioned inside the world frame — `Ui.toast_band()` —
+  so it can never cover the chrome or a room chip (V1 finding 4: "Precies! 🎉" sat on
+  the Zwembad chip while it faded). With the keypad open, or in a frame under 450 units,
+  it moves to the top of that band instead of the bottom.
 * At most one card, one keypad and one strip on screen at a time — unchanged rule.
 
 ### 4.5 Orientation, safe areas, breakpoints
@@ -1224,6 +1240,13 @@ mkdir -p godot/dierenhotel/build/web            # Godot does not create it (G1)
 godot --headless --path godot/dierenhotel --export-release "Web" build/web/index.html
 ```
 
+`tools/test.sh` gives every run its OWN `user://` (a temp `XDG_DATA_HOME`, removed
+afterwards, overridable with `DH_USERDATA`). That path is per USER, not per checkout, so
+ten worktrees running their suites in parallel — wave 2 — and a CI job on the same runner
+otherwise share one `dierenhotel.json`: `test_state.gd` writes a corrupt-save fixture and
+another process replaces it with a valid save between two lines, failing a test that is
+perfectly correct (V1-F1).
+
 Exit codes are honest; errors carry an `ERROR:` prefix on stderr. Output: 15 files,
 40,006,159 B, of which `index.wasm` is 39,514,754 B (**10,084,297 B gzipped**) and
 `index.pck` is 108,500 B. Serve with compression. `index.service.worker.js` is the only
@@ -1378,6 +1401,14 @@ which becomes a 16-bit mono `AudioStreamWAV` at 22 050 Hz, played on one of six
 * **No sound before the first real input**: `Snd.ontgrendel()` is called from the first
   touch/click, and every sound is silent before it. That satisfies the browser autoplay
   policy without the 1-sample-buffer trick.
+* **The save owns the mute, the first tap owns the unlock** (V1 finding 2). `Snd.schakel()`
+  is the child's toggle and writes `geluid` into the save; `Snd.stem_af(aan)` only reads
+  it, and the shell calls it whenever `State.s` is replaced — a fresh game, "Verder
+  spelen ▸", "Nieuw spel" — and once on the first input. Deciding the mute *on* that
+  first input was wrong: the first input IS the tap on "Verder spelen ▸", which happens
+  before the saved state is swapped in, so a saved `geluid=false` came back on for the
+  whole session. Proven in chromium by tee-ing every AudioContext into an analyser:
+  peak 0 after the reload (`.fanout/scratch/godot-w3/opslag-probe.js`).
 * Mute is persisted in the save (`s["geluid"]`), not in a separate key.
 * There are no angry sounds. `zacht` means "not yet" and is the most-used sound in the
   game; it is never a buzzer (F5).

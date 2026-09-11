@@ -65,6 +65,15 @@ func ontgrendeld() -> bool:
 func dempt() -> bool:
 	return _uit
 
+## Push the SAVED setting into the mixer.  `schakel()` is the child's own toggle
+## and WRITES the save; this one only reads it, because after a reload the save
+## is the truth and the shell has to hand it over — the mute used to be decided
+## on the first tap, which is the "Verder spelen ▸" tap that happens BEFORE the
+## saved state is swapped in, so a saved `geluid=false` came back on (V1-2).
+## It never unlocks the audio: that stays tied to the first real touch (§8).
+func stem_af(aan: bool) -> void:
+	_uit = not aan
+
 func schakel() -> bool:
 	_uit = not _uit
 	State.zet_geluid(not _uit)

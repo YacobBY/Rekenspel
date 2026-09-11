@@ -56,6 +56,9 @@ func _ready() -> void:
 		print("[probe] tik=", _tikken, " id=", id))
 	Ui.kaart_geopend.connect(_meld_kaart)
 
+	# The save owns the sound: every time `State.s` is replaced (a fresh game, a
+	# restored save) the mixer is told what the child chose last (V1 finding 2).
+	State.veranderd.connect(_volg_geluid)
 	_bouw_chroom()
 	Hotel.hud_veranderd.connect(_ververs_chroom)
 	Hotel.dag_veranderd.connect(func(_d: int) -> void: _meld_stand("dag"))
@@ -84,11 +87,13 @@ func _begin() -> void:
 	_ververs_chroom()
 	if not had_save:
 		State.start_gekozen()
+		_volg_geluid()
 		_meld_stand("vers")
 		return
 	var verder := func() -> void:
 		State.s = bewaard
 		State.start_gekozen()
+		_volg_geluid()
 		Hotel.start()
 		_ververs_chroom()
 		_meld_stand("verder")
@@ -96,6 +101,7 @@ func _begin() -> void:
 	var nieuw := func() -> void:
 		State.nieuw_spel()
 		State.start_gekozen()
+		_volg_geluid()
 		Hotel.start()
 		_ververs_chroom()
 		_meld_stand("nieuw")
@@ -330,8 +336,14 @@ func _input(event: InputEvent) -> void:
 	if raak:
 		_geluid_klaar = true
 		Snd.ontgrendel()
-		if not bool(State.s.get("geluid", true)):
-			Snd.schakel()
+		# what the child chose is in the save, not in this event
+		_volg_geluid()
+
+## The mixer follows the save, never the other way round.  `Snd.schakel()` is
+## the child's toggle and writes the save; this only reads it, so it is safe to
+## call after every swap of `State.s` (V1 finding 2).
+func _volg_geluid() -> void:
+	Snd.stem_af(bool(State.s.get("geluid", true)))
 
 # ------------------------------------------------------------------- probe
 
