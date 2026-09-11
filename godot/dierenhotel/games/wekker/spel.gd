@@ -91,6 +91,8 @@ var _kaart: Ui.Kaart = null
 var _kader_af: Callable = Callable()
 var _t0 := 0                      ## begin van deze beurt, voor state.tel()
 var _zeg := ""                    ## wat er nu bij de gast staat
+var _gongspeler: AudioStreamPlayer = null
+var _gongstream: AudioStreamWAV = null
 
 # ---------------------------------------------------------------- aanmelding
 
@@ -125,8 +127,7 @@ func definitie() -> Dictionary:
 				for g in gasten:
 					if str(g.get("bed", "")).is_empty():
 						continue
-					var d = World.dier(str(g.get("id", "")))
-					if d != null and (d.staat == "slaap" or d.slaap_doel != ""):
+					if World.slaapt(str(g.get("id", ""))):
 						return true
 				return false,
 		},
@@ -224,6 +225,9 @@ func stop() -> void:
 	ctx.wereld.decor_wis_eigenaar(ctx.id)
 	ctx.hotspots.wis_alles()
 	ctx.hotspots.laat()
+	if _gongspeler != null and is_instance_valid(_gongspeler):
+		_gongspeler.queue_free()
+	_gongspeler = null
 	_s = {}
 
 func _op_kader(_rect: Rect2, _schaal: Dictionary) -> void:
@@ -286,10 +290,7 @@ func ronde_rij() -> Array:
 func slaapt_gast(g: Dictionary) -> bool:
 	if g.is_empty():
 		return false
-	var d = ctx.wereld.dier(str(g.get("id", "")))
-	if d == null:
-		return false
-	return d.staat == "slaap" or d.slaap_doel != ""
+	return bool(ctx.wereld.slaapt(str(g.get("id", ""))))
 
 func gast_van(id: String) -> Dictionary:
 	if id.is_empty():
@@ -749,7 +750,7 @@ func _wakker_worden() -> void:
 	_s["stap"] = "wakker"
 	_s["hulp"] = ""
 	ctx.state.tel(int(_s.get("missers", 0)) == 0, Time.get_ticks_msec() - _t0)
-	ctx.snd.klok()                # de slag bij het goede uur
+	_gong()                       # de slag bij het goede uur: nooit afgeremd
 	if _kaart != null:
 		# De hint hoort bij het zoeken, niet bij het feest: laat hij staan, dan
 		# wordt de kaart hoger en dekt hij de klok af.  Eén regel, om dezelfde
@@ -781,6 +782,29 @@ func _wakker_worden() -> void:
 	if _s.is_empty() or str(_s.get("stap", "")) != "wakker":
 		return
 	volgende()
+
+## De slag bij het goede uur, NOOIT afgeremd (games-b.md §2.9).
+##
+## CONTRACTGAT.  `Snd.klok()` remt zichzelf af op 120 ms — precies goed terwijl
+## het kind aan de wijzers draait (elke draai slaat), maar het feest mag er niet
+## door wegvallen: wie vlak na een laatste draai op ✅ Klaar tikt, hoorde de
+## slag bij het goede uur dan niet.  `Snd` kent geen `klok(force)`, dus speelt
+## dit spel die ene slag zelf af: dezelfde stream (`Snd.stream("klok")`), dezelfde
+## bus, dezelfde demp- en ontgrendelregels als `Snd._speel`.  Zodra er een
+## `Snd.klok(force)` is kan dit hele blok weg.  Zie het verslag onder
+## "Contract gaps".
+func _gong() -> void:
+	if not ctx.snd.ontgrendeld() or ctx.snd.dempt():
+		return
+	if _gongstream == null:
+		_gongstream = ctx.snd.stream("klok")
+	if _gongspeler == null or not is_instance_valid(_gongspeler):
+		_gongspeler = AudioStreamPlayer.new()
+		_gongspeler.name = "Wekkergong"
+		_gongspeler.bus = "Master"
+		add_child(_gongspeler)
+	_gongspeler.stream = _gongstream
+	_gongspeler.play()
 
 func _ja_straks() -> void:
 	if not await na(JA_S):

@@ -236,6 +236,19 @@ func _speel_beurt(band_n: int, dag: int, kunnen: int, verwacht_band: int) -> voi
 		"⏰ %s is wakker" % str(State.s["gasten"][0]["naam"]), "de feestkaart")
 	waar(Hits.spot("wk_gast") == null, "het wekkerkaartje bij de gast is weg")
 	waar(Hits.spot("wk_zon") != null, "en er hangt een ☀-wolkje")
+	gelijk(World.kamer_nu(), str(State.s["gasten"][0]["kamer"]),
+		"de camera springt naar de kamer van de gast")
+	# Alles wat in de gang hangt is dan van de ruit af: `Hits.plaats()` verbergt
+	# elke hotspot die het deze ronde niet plaatst (V1-F1).  Zonder dat bleef de
+	# kaart of het cijfertagje in de hoek van het kader staan, zonder indeling.
+	Hits.plaats()
+	for id in Hits.lijst():
+		var q := Hits.spot(id)
+		if q == null or q.door != ID or not is_instance_valid(q.knoop):
+			continue
+		waar(q.kamer == World.kamer_nu() or not q.knoop.visible,
+			"%s hoort bij %s maar staat zichtbaar in %s (band %d)"
+				% [id, q.kamer, World.kamer_nu(), verwacht_band])
 	_af()
 
 func test_beurt_band_3() -> void:
@@ -391,6 +404,47 @@ func test_wekkerkaartje_alleen_in_de_kamer_van_de_gast() -> void:
 	World.naar("gang")
 	Hits.plaats()
 	waar(Hits.spot("wk_gast") == null, "terug in de gang is het wolkje weer weg")
+	_af()
+## De slag bij het goede uur wordt NOOIT afgeremd (games-b.md §2.9).
+##
+## Het kind draait altijd vlak vóór ✅ Klaar nog aan de wijzers, en elke draai
+## slaat de klok — `Snd.klok()` remt zichzelf 120 ms af, dus langs die weg zou
+## juist de feestslag wegvallen.  De test rekent dat na: de laatste draai zet de
+## rem, en de slag die daarna komt klinkt toch.
+func test_de_wekslag_wordt_nooit_afgeremd() -> void:
+	_op()
+	_gasten(2, 1, 3)
+	Snd.ontgrendel()
+	waar(Games.start(ID), "het spel start")
+	var spel := _spel()
+	if spel == null:
+		_af()
+		return
+	var s: Dictionary = spel.stand()
+	var rondjes := 0
+	while not spel.goed() and rondjes < 200:
+		rondjes += 1
+		if not _tik("uur") and not _tik("kwartier") and not _tik("vijf"):
+			break
+	waar(spel.goed(), "de klok staat goed")
+	# de laatste draai heeft `Snd.klok()` net geslagen: de rem staat erop
+	waar(Snd.ontgrendeld() and not Snd.dempt(), "de geluidsband is open")
+	waar(_tik("klaar"), "✅ Klaar")
+	gelijk(str(s["stap"]), "wakker", "de gast wordt wakker")
+	var speler := spel.get_node_or_null("Wekkergong") as AudioStreamPlayer
+	waar(speler != null, "de wekslag heeft zijn eigen speler (geen 120 ms rem)")
+	if speler != null:
+		waar(speler.stream != null, "met een stream erin")
+		waar(speler.playing, "en hij speelt, ook al sloeg de klok net")
+	Games.stop()
+	# `queue_free()` gebeurt aan het eind van de frame; de knoop staat dan al in
+	# de rij en wordt niet meer getekend of gehoord.
+	var weg := spel.get_node_or_null("Wekkergong")
+	waar(weg == null or weg.is_queued_for_deletion(),
+		"stop() ruimt de eigen speler op")
+	# De geluidsband blijft anders open voor elke test die hierna draait;
+	# `Snd` kent geen tegenhanger van `ontgrendel()`.
+	Snd.set("_wakker", false)
 	_af()
 # ------------------------------------------------------------ 5. herstellen
 
