@@ -320,7 +320,7 @@ func meubel_zet(kamer_id: String, type: String, x: float = NAN, z: float = NAN,
 		_nr = maxi(_nr, _nr_uit_id(id))
 	var uit: Dictionary
 	if soort["soort"] == "decor":
-		uit = {"n": soort["model"], "x": x, "z": z, "meubel": id, "type": type,
+		uit = {"id": id, "n": soort["model"], "x": x, "z": z, "meubel": id, "type": type,
 			"kamer": kamer_id, "rot": rot}
 		r.decor.append(uit)
 	else:

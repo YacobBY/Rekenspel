@@ -40,7 +40,7 @@ func _op(kader := Vector2(1000, 648), gasten := 3, munten := 12, kunnen := 5) ->
 ## van de VOLGENDE test: `tests/test_hits.gd` rekent op 44 px onder een 360 px
 ## scherm.  Zie "Contract gaps" bij dit ticket.
 func _scherm_los() -> void:
-	Ui.set("_scherm", Vector2.ZERO)
+	Ui.vergeet_scherm()
 
 func _af() -> void:
 	if Games.actief() != "":

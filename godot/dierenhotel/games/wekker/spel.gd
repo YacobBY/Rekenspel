@@ -91,8 +91,6 @@ var _kaart: Ui.Kaart = null
 var _kader_af: Callable = Callable()
 var _t0 := 0                      ## begin van deze beurt, voor state.tel()
 var _zeg := ""                    ## wat er nu bij de gast staat
-var _gongspeler: AudioStreamPlayer = null
-var _gongstream: AudioStreamWAV = null
 
 # ---------------------------------------------------------------- aanmelding
 
@@ -225,9 +223,6 @@ func stop() -> void:
 	ctx.wereld.decor_wis_eigenaar(ctx.id)
 	ctx.hotspots.wis_alles()
 	ctx.hotspots.laat()
-	if _gongspeler != null and is_instance_valid(_gongspeler):
-		_gongspeler.queue_free()
-	_gongspeler = null
 	_s = {}
 
 func _op_kader(_rect: Rect2, _schaal: Dictionary) -> void:
@@ -783,28 +778,9 @@ func _wakker_worden() -> void:
 		return
 	volgende()
 
-## De slag bij het goede uur, NOOIT afgeremd (games-b.md §2.9).
-##
-## CONTRACTGAT.  `Snd.klok()` remt zichzelf af op 120 ms — precies goed terwijl
-## het kind aan de wijzers draait (elke draai slaat), maar het feest mag er niet
-## door wegvallen: wie vlak na een laatste draai op ✅ Klaar tikt, hoorde de
-## slag bij het goede uur dan niet.  `Snd` kent geen `klok(force)`, dus speelt
-## dit spel die ene slag zelf af: dezelfde stream (`Snd.stream("klok")`), dezelfde
-## bus, dezelfde demp- en ontgrendelregels als `Snd._speel`.  Zodra er een
-## `Snd.klok(force)` is kan dit hele blok weg.  Zie het verslag onder
-## "Contract gaps".
+## De slag bij het goede uur, nooit afgeremd (games-b.md §2.9): `Snd.klok(true)`.
 func _gong() -> void:
-	if not ctx.snd.ontgrendeld() or ctx.snd.dempt():
-		return
-	if _gongstream == null:
-		_gongstream = ctx.snd.stream("klok")
-	if _gongspeler == null or not is_instance_valid(_gongspeler):
-		_gongspeler = AudioStreamPlayer.new()
-		_gongspeler.name = "Wekkergong"
-		_gongspeler.bus = "Master"
-		add_child(_gongspeler)
-	_gongspeler.stream = _gongstream
-	_gongspeler.play()
+	ctx.snd.klok(true)
 
 func _ja_straks() -> void:
 	if not await na(JA_S):

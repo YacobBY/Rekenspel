@@ -887,12 +887,15 @@ func spel_taken() -> Array:
 		var tekst = t.get("tekst", def.get("naam", id))
 		if tekst is Callable:
 			tekst = tekst.call(State.s)
+		var prio = t.get("prio", HotelPrikbord.LAAG)
+		if prio is Callable:          # hinkel: 2 while a guest wants to play, else 5
+			prio = prio.call(State.s)
 		uit.append({
 			"id": str(t.get("id", id)), "spel": id,
 			"icoon": str(t.get("icoon", "✨")), "tekst": str(tekst),
 			"kamer": str(t.get("kamer", def.get("kamer", ""))),
 			"actie": "game:" + id,
-			"prio": int(t.get("prio", HotelPrikbord.LAAG)), "klaar": false,
+			"prio": int(prio), "klaar": false,
 		})
 	return uit
 

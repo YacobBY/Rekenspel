@@ -47,6 +47,7 @@ class Spot extends RefCounted:
 	var maat: Vector2 = Vector2.ZERO   ## explicit minimum size (0 = ask the Control)
 	var kleef_aan: String = ""     ## glue my top edge under the rect of this id
 	var kind: String = "btn"       ## btn | drop | tag | naam | ...
+	var geen_vlak := false         ## sits ON its object on purpose (a dial tag): no lift-off
 	var op: String = "auto"        ## auto | boven | onder | midden | rand
 	var prio: int = 5
 	var vast := false
@@ -83,6 +84,7 @@ func maak(o: Dictionary) -> String:
 	s.z = o.get("z", 0.0)
 	s.y = o.get("y", 0.0)
 	s.kind = o.get("kind", "btn")
+	s.geen_vlak = bool(o.get("geen_vlak", false))
 	s.op = o.get("op", "auto")
 	s.prio = o.get("prio", 5)
 	s.vast = o.get("vast", false)
@@ -224,7 +226,7 @@ func plaats() -> void:
 				s.vlak = v.get("vlak", s.vlak)
 		s.laag = _laag_van(s)
 		s.zichtbaar = s.kamer == World.kamer_nu()
-		s.vlak_nu = _vlak_van(s)
+		s.vlak_nu = Rect2() if s.geen_vlak else _vlak_van(s)
 		# While a game has priority the wish bubbles step aside (world.md §5.2).
 		if s.laag == Laag.WENS and _voorrang != "":
 			s.zichtbaar = false

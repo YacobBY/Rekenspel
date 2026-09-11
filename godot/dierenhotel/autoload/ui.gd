@@ -107,6 +107,10 @@ func zet_scherm(maat: Vector2) -> void:
 	_scherm = maat
 	_herzie_maten(World.kader_rect())
 
+## Tests build several shells in one process; this forgets the last one.
+func vergeet_scherm() -> void:
+	_scherm = Vector2.ZERO
+
 func scherm_maat() -> Vector2:
 	return _scherm if _scherm.x > 0.0 else World.kader_rect().size
 
@@ -394,9 +398,8 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 	kaart.door = o.get("door", "")
 	var keuzes: Array = o.get("keuzes", [])
 	kaart.heeft_pad = keuzes.is_empty() and bool(o.get("pad", true))
-	_kaarten[id] = kaart
 	var plek: Dictionary = _mik_van(obj, o)
-	Hits.maak({
+	var spot := {
 		"id": id, "kind": "kaart", "kamer": kaart.kamer,
 		"vlak": o.get("vlak", _vlak_van(plek, kaart.kamer)),
 		"x": plek.get("x", 0.0), "z": plek.get("z", 0.0), "y": o.get("hoog", 22.0),
@@ -406,7 +409,13 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 		"regel2": o.get("regel2", ""), "som": som,
 		"max": kaart.max_cijfers, "keuzes": keuzes,
 		"on_weg": func(_s) -> void: _kaarten.erase(id),
-	})
+	}
+	if o.has("volg"):
+		spot["volg"] = o["volg"]
+	# `Hits.maak` first: a spot with the same id is removed and its `on_weg`
+	# erases that id — only then may the new card be remembered (I2, hinkel).
+	Hits.maak(spot)
+	_kaarten[id] = kaart
 	kaart_geopend.emit(id)
 	keur_regel(id, o.get("regel", ""))
 	if not str(o.get("regel2", "")).is_empty():

@@ -58,7 +58,8 @@ func zet(n: int, in_hand: int = -1) -> void:
 		_telling.text = str(aantal)
 		_telling.visible = aantal > 0
 	if _hand_label != null:
-		_hand_label.text = "☝ %d" % hand
+		# one thing in hand is the pictogram alone (games-b §5.8); more is rare
+		_hand_label.text = "☝" if hand <= 1 else "☝ %d" % hand
 		_hand_label.visible = hand > 0
 
 # ------------------------------------------------------------------ slepen

@@ -31,7 +31,12 @@ func _init() -> void:
 
 ## `o` is the somkaart option dictionary; `smal` is true below a 360 unit frame.
 func bouw(o: Dictionary, mt: Dictionary, smal: bool) -> void:
-	var breed := BREED_KLEIN if smal else BREED
+	# On a narrow frame the card takes the frame width minus its margins, never
+	# less than BREED_KLEIN: a 28-character F4 sentence must stay on one line
+	# (I2, kraam at 360×740).
+	var breed := BREED
+	if smal:
+		breed = clampi(int(World.kader_rect().size.x) - 24, BREED_KLEIN, BREED)
 	add_theme_stylebox_override("panel", _papier())
 	var kolom := VBoxContainer.new()
 	kolom.name = "Kolom"

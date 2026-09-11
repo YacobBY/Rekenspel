@@ -431,17 +431,19 @@ func test_de_wekslag_wordt_nooit_afgeremd() -> void:
 	waar(Snd.ontgrendeld() and not Snd.dempt(), "de geluidsband is open")
 	waar(_tik("klaar"), "✅ Klaar")
 	gelijk(str(s["stap"]), "wakker", "de gast wordt wakker")
-	var speler := spel.get_node_or_null("Wekkergong") as AudioStreamPlayer
-	waar(speler != null, "de wekslag heeft zijn eigen speler (geen 120 ms rem)")
-	if speler != null:
-		waar(speler.stream != null, "met een stream erin")
-		waar(speler.playing, "en hij speelt, ook al sloeg de klok net")
+	# De slag klinkt via `Snd.klok(true)`: een van de stemmen van `Snd` speelt de
+	# klok-stream, ook al sloeg de klok net (de 120 ms rem geldt niet voor `force`).
+	waar(_klok_klinkt(), "de wekslag klinkt ondanks de 120 ms rem")
 	Games.stop()
-	# `queue_free()` gebeurt aan het eind van de frame; de knoop staat dan al in
-	# de rij en wordt niet meer getekend of gehoord.
-	var weg := spel.get_node_or_null("Wekkergong")
-	waar(weg == null or weg.is_queued_for_deletion(),
-		"stop() ruimt de eigen speler op")
+	# en de rem zelf werkt nog: twee gewone slagen binnen 120 ms geven er één
+	for p in Snd._spelers:
+		p.stop()
+	Snd._laatst.erase("klok")     # de hele test duurt korter dan 120 ms
+	Snd.klok()
+	Snd.klok()
+	gelijk(_klok_stemmen(), 1, "zonder force remt de klok af")
+	Snd.klok(true)
+	gelijk(_klok_stemmen(), 2, "met force slaat hij toch")
 	# De geluidsband blijft anders open voor elke test die hierna draait;
 	# `Snd` kent geen tegenhanger van `ontgrendel()`.
 	Snd.set("_wakker", false)
@@ -697,7 +699,7 @@ func _schil_af(h: Dictionary) -> void:
 	# De schil meldt de schermmaat aan `Ui`; die blijft anders staan voor elke
 	# test die hierna draait (het cijferpad kiest zijn toetsmaat erop).  `Ui`
 	# kent geen "vergeet het scherm" — zie het verslag onder "Contract gaps".
-	Ui.set("_scherm", Vector2.ZERO)
+	Ui.vergeet_scherm()
 	World.meet(Rect2(Vector2.ZERO, Vector2(1000, 648)))
 
 ## `Hits.dekking` is 0 % voor elke knop op een voorwerp, in vier schermmaten, en
@@ -821,3 +823,15 @@ func test_klokmodel() -> void:
 		gelijk((tag.knoop as Label).text, w, "en dat is de stand van de klok")
 		gelijk(tag.knoop.tooltip_text, "de klok staat op %s" % w, "met zijn titel")
 	_af()
+
+
+func _klok_stemmen() -> int:
+	var n := 0
+	var klok = Snd._cache.get("klok")
+	for p in Snd._spelers:
+		if p.playing and p.stream == klok:
+			n += 1
+	return n
+
+func _klok_klinkt() -> bool:
+	return _klok_stemmen() > 0

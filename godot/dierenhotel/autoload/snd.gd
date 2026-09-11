@@ -305,8 +305,9 @@ func au() -> void:
 	_speel("au", _bouw.bind("au"))
 
 ## de halklok slaat een keer: een zachte gong die nog even naklinkt
-func klok() -> void:
-	if _te_snel("klok", KLOK_MS):
+func klok(force := false) -> void:
+	# `force`: the strike at the right hour is never throttled (games-b §2.9)
+	if not force and _te_snel("klok", KLOK_MS):
 		return
 	_speel("klok", _bouw.bind("klok"))
 

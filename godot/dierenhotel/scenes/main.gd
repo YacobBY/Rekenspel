@@ -444,3 +444,9 @@ func _meld_knoppen() -> void:
 		var s := Hits.spot(id)
 		if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
 			print("[probe] knop ", id, "=", s.knoop.get_global_rect())
+
+## A shell that leaves the tree stops answering the theme signal: tests build
+## several shells in one process and a freed one must not answer (I2).
+func _exit_tree() -> void:
+	if Ui.thema_veranderd.is_connected(_op_thema):
+		Ui.thema_veranderd.disconnect(_op_thema)

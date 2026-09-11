@@ -48,7 +48,7 @@ func _af() -> void:
 ## as a contract gap: `Ui.zet_scherm(Vector2.ZERO)` should mean "no screen".
 func _scherm_terug() -> void:
 	if "_scherm" in Ui:
-		Ui.set("_scherm", Vector2.ZERO)
+		Ui.vergeet_scherm()
 	if _laag != null:
 		_laag.queue_free()
 		_laag = null
