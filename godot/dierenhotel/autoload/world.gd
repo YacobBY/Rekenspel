@@ -408,6 +408,28 @@ func vlak_van_deur(kamer_id: String, naar: String) -> Rect2:
 		return vak
 	return Rect2()
 
+## The screen rectangle of the reception desk (`Kamer.balie`), in frame units.
+##
+## The desk carries the bell, the till, the guest book and the lamp — everything
+## the child taps at the counter — so a fixed card may hang OVER the world but
+## never over this box (V1 finding 4).  It is the footprint projected at floor
+## level and at the desk top, so the front face counts too.
+const BALIE_HOOG := 16.0
+
+func vlak_van_balie(kamer_id: String = "") -> Rect2:
+	var r := Rooms.get_kamer(kamer_id if kamer_id != "" else _kamer_nu)
+	if r == null or (r.balie as Dictionary).is_empty():
+		return Rect2()
+	var x0 := float(r.balie["x0"])
+	var x1 := float(r.balie["x1"])
+	var z0 := float(r.balie["z0"])
+	var z1 := float(r.balie["z1"])
+	var vak := Rect2(mik_punt(x0, z0, 0.0), Vector2.ZERO)
+	for hoek in [[x0, z0], [x1, z0], [x1, z1], [x0, z1]]:
+		vak = vak.expand(mik_punt(hoek[0], hoek[1], 0.0))
+		vak = vak.expand(mik_punt(hoek[0], hoek[1], BALIE_HOOG))
+	return vak
+
 ## The rectangle of one guest, from its own plate — used by the hotspot layer.
 func vlak_van_dier(id: String) -> Rect2:
 	var d: Dier = _dieren.get(id)

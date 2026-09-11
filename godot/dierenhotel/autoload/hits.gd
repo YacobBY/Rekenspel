@@ -30,6 +30,7 @@ var _voorrang: String = ""         ## the game that picks its places first
 var _bezet: Dictionary = {}        ## "rij|kol" -> true, rebuilt every placement
 var _geplaatst: Array[Rect2] = []  ## the rectangles already handed out this pass
 var _vakken: Array[Rect2] = []     ## object boxes in view; a button avoids all of them
+var _kaart_vrij: Array[Rect2] = [] ## boxes a fixed card may not cover either (the desk)
 var _laatste: Dictionary = {}   ## id -> {rect, vlak, dekking, op, laag, prio, krap, gestapeld}
 
 class Spot extends RefCounted:
@@ -198,6 +199,12 @@ func plaats() -> void:
 	_bezet.clear()
 	_geplaatst.clear()
 	_vakken.clear()
+	# The counter is the one piece of world a card may not hide: the bell, the
+	# till, the book and the lamp all stand on it (V1 finding 4).
+	_kaart_vrij.clear()
+	var balie := World.vlak_van_balie()
+	if balie.size.x > 0.0 and balie.size.y > 0.0:
+		_kaart_vrij.append(balie)
 	var lijstje: Array[Spot] = []
 	for id in _volgorde.duplicate():
 		var s: Spot = _spots[id]
@@ -223,6 +230,13 @@ func plaats() -> void:
 			s.zichtbaar = false
 		if s.zichtbaar:
 			lijstje.append(s)
+		else:
+			# A hotspot in ANOTHER ROOM is not laid out this pass, so its Control
+			# has to be taken off the glass here — it used to keep `visible =
+			# true` at whatever size it last had, which for a bubble created
+			# while its guest was already elsewhere is 0 x 0: a 10 px blob with
+			# its sentence spilling down the frame, one letter per line (V1-1).
+			_verberg(s)
 	# cull: at most 16 per room, lowest layer and priority go first
 	lijstje.sort_custom(func(a: Spot, b: Spot) -> bool:
 		if a.laag != b.laag:
@@ -254,10 +268,7 @@ func plaats() -> void:
 	var kolommen := maxi(1, int((kader.size.x - 2 * RAND) / KOL))
 	for s in lijstje:
 		if not s.zichtbaar:
-			s.knoop.visible = false
-			if s.vangvlak != null and is_instance_valid(s.vangvlak):
-				s.vangvlak.visible = false
-			_laatste.erase(s.id)
+			_verberg(s)
 			continue
 		s.knoop.visible = true
 		var maat := _maat_van(s)
@@ -276,6 +287,14 @@ func plaats() -> void:
 			"dekking": _dekking(rect, s.vlak_nu),
 		}
 		_zet_vangvlak(s, rect)
+
+## Off the glass: a hotspot that is not placed this pass shows nothing at all.
+func _verberg(s: Spot) -> void:
+	if is_instance_valid(s.knoop):
+		s.knoop.visible = false
+	if s.vangvlak != null and is_instance_valid(s.vangvlak):
+		s.vangvlak.visible = false
+	_laatste.erase(s.id)
 
 ## The catch area is the union of the button and its object, so dragging onto
 ## the object itself works (world.md §5.4 step 8).  Nothing for a game to do:
@@ -525,7 +544,8 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 ## On the aim point, clamped into the frame, lifted clear of anything already
 ## placed and of its own object.
 func _plaats_midden(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2) -> Dictionary:
-	var r := _wijk_omhoog(_klem(Rect2(mik - maat * 0.5, maat), kader), kader, eigen)
+	# a fixed card gives way to the counter as well (V1 finding 4)
+	var r := _wijk_omhoog(_klem(Rect2(mik - maat * 0.5, maat), kader), kader, eigen, true)
 	var krap := _botst(r)
 	_reserveer(r, kader)
 	return {"rect": r, "op": "midden", "krap": krap, "gestapeld": false}
@@ -534,15 +554,15 @@ func _plaats_midden(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2) -> 
 ## in practice), in whole bands, upwards first and then downwards.  The test is
 ## a real rectangle overlap, not a shared grid cell: the choice strip is glued
 ## 5 units under its card ON PURPOSE and must not be pushed away for it.
-func _wijk_omhoog(r: Rect2, kader: Rect2, eigen := Rect2()) -> Rect2:
-	if not _bezet_voor(r, eigen):
+func _wijk_omhoog(r: Rect2, kader: Rect2, eigen := Rect2(), mijd_balie := false) -> Rect2:
+	if not _bezet_voor(r, eigen, mijd_balie):
 		return r
 	for stap in range(1, maxi(2, int(kader.size.y / RIJ)) + 1):
 		var op_r := Rect2(Vector2(r.position.x, r.position.y - stap * RIJ), r.size)
-		if op_r.position.y >= KRAP and not _bezet_voor(op_r, eigen):
+		if op_r.position.y >= KRAP and not _bezet_voor(op_r, eigen, mijd_balie):
 			return op_r
 		var neer := Rect2(Vector2(r.position.x, r.position.y + stap * RIJ), r.size)
-		if neer.end.y <= kader.size.y - KRAP and not _bezet_voor(neer, eigen):
+		if neer.end.y <= kader.size.y - KRAP and not _bezet_voor(neer, eigen, mijd_balie):
 			return neer
 	# Nowhere free: keep the aim point, but never at the cost of the invariant
 	# that two placed elements do not overlap — that one is checked separately
@@ -558,9 +578,13 @@ func _wijk_omhoog(r: Rect2, kader: Rect2, eigen := Rect2()) -> Rect2:
 
 ## A fixed card may stand over the world, but never over the object it belongs
 ## to: the sum hangs ABOVE the bowl, the guest stays whole (HOTEL.md §9).
-func _bezet_voor(r: Rect2, eigen: Rect2) -> bool:
+func _bezet_voor(r: Rect2, eigen: Rect2, mijd_balie := false) -> bool:
 	if _botst(r):
 		return true
+	for vrij in (_kaart_vrij if mijd_balie else [] as Array[Rect2]):
+		var s2 := r.intersection(vrij)
+		if s2.size.x > 0.001 and s2.size.y > 0.001:
+			return true
 	if eigen.size.x <= 0.0 or eigen.size.y <= 0.0:
 		return false
 	var snij := r.intersection(eigen)

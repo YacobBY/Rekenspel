@@ -104,7 +104,19 @@ func inhoud_maat() -> Vector2:
 			UiThema.wrap_hoogte(zeg_label, zin_breed))
 	# the row measures itself, never the size a previous pass handed the button
 	custom_minimum_size = Vector2.ZERO
-	return _doos.get_combined_minimum_size()
+	var nodig_maat := _doos.get_combined_minimum_size()
+	# and then it is PINNED: a bubble that `Hits` never got to place (its guest
+	# was in another room when it was made) must still be its own content and a
+	# real tap target, not a 0 x 0 stylebox blob with the sentence spilling out
+	# of it (V1 finding 1).
+	custom_minimum_size = Vector2(maxf(nodig_maat.x, UiThema.HOT),
+		maxf(nodig_maat.y, UiThema.HOT))
+	return nodig_maat
+
+## Pin the size the moment the bubble is in a themed tree, so it is never drawn
+## before `Hits` has measured it.
+func _ready() -> void:
+	inhoud_maat()
 
 func _regel(naam: String, tekst: String, maat: int) -> Label:
 	var l := Label.new()

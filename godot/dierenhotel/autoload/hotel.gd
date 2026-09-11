@@ -1004,6 +1004,9 @@ func toon_bord() -> void:
 		var q: Dictionary = t[i]
 		var p := _plek(0.075 + i * 0.325, 0.025 + i * 0.325)
 		Ui.wolk({"id": "bord_%d" % i, "door": BORD, "kamer": "receptie",
+			# the card is pinned on the notice board, so that is the thing it
+			# must not cover and the rect `Hits.dekking` measures (V1 finding 5)
+			"obj": "prikbord",
 			"x": p.get("x", 0), "z": p.get("z", 0), "hoog": 22, "prio": 10,
 			"icoon": "✅" if q.get("klaar", false) else str(q["icoon"]),
 			"tekst": str(q["tekst"]),
@@ -1172,10 +1175,13 @@ func hotspots() -> void:
 		var pp := decor_plek("receptie", "prikbord")
 		if not pp.is_empty():
 			var open := open_taken()
+			# Same priority as the bell and the board's own cards: they are the
+			# three controls of the morning round, and the button that opens the
+			# board must not be pushed off the board by the cards on it (V1-5).
 			Hits.maak({"id": "prikbord", "door": EIGENAAR, "kamer": "receptie",
 				"x": pp["x"], "z": pp["z"], "y": 22, "icoon": "📋",
 				"label": "Prikbord", "badge": str(open) if open > 0 else "",
-				"titel": "Het prikbord met de taakjes", "prio": 9,
+				"titel": "Het prikbord met de taakjes", "prio": 10,
 				"aan": func(_s): prikbord_tik()})
 		var lp := decor_plek("receptie", "balielamp")
 		if avond_klaar() and not lp.is_empty():

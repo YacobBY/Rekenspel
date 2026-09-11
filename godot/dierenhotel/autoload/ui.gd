@@ -221,11 +221,17 @@ func toast(tekst: String, soort: String = "") -> void:
 	lbl.add_theme_color_override("font_color", letter)
 	doos.add_child(lbl)
 	toastlaag.add_child(doos)
+	# The toast lives INSIDE the world frame (V1 finding 4): the toast layer
+	# covers the whole screen, so a toast at its bottom edge lay over the room
+	# bar — "Precies! 🎉" sat on the Zwembad chip and the chip could not be
+	# tapped while it faded.  The frame excludes the chrome and the room bar by
+	# construction, because it is the band between them.
+	var band := toast_band()
 	# The Label trap of §4.4 again: an autowrapping Label reports width 1, so a
 	# PanelContainer that is sized from its minimum becomes a 33 unit column with
 	# one character per line.  The sentence gets the width it needs (capped at
-	# 92 % of the screen) and the height that width really takes.
-	var breed_max := maxf(120.0, toastlaag.size.x * 0.92 - 32.0)
+	# 92 % of the band) and the height that width really takes.
+	var breed_max := maxf(120.0, band.size.x * 0.92 - 32.0)
 	var f := lbl.get_theme_font("font")
 	var nodig := breed_max
 	if f != null:
@@ -237,15 +243,35 @@ func toast(tekst: String, soort: String = "") -> void:
 	lbl.clip_text = true
 	lbl.custom_minimum_size = Vector2(breed, UiThema.wrap_hoogte(lbl, breed))
 	var maat := doos.get_combined_minimum_size()
-	maat.x = minf(maat.x, toastlaag.size.x * 0.92)
+	maat.x = minf(maat.x, band.size.x * 0.92)
 	doos.size = maat
-	# Under 450 units of height the toast moves to the top, out of the way of
-	# the keypad band (art-sound-rules.md §16.8).
-	var boven := toastlaag.size.y < 450.0
-	doos.position = Vector2(toastlaag.size.x * 0.5 - maat.x * 0.5,
-		58.0 if boven else toastlaag.size.y - maat.y - 18.0)
+	# Under 450 units of height, or with the keypad open, the toast moves to the
+	# top of the frame, out of the way of the keys (art-sound-rules.md §16.8).
+	var boven := band.size.y < 450.0 or _pad_open()
+	doos.position = band.position + Vector2(band.size.x * 0.5 - maat.x * 0.5,
+		12.0 if boven else band.size.y - maat.y - 18.0)
 	_toast = doos
 	_toast_tijd = TOAST_MS / 1000.0
+
+## The strip a toast may use, in toast-layer coordinates: the world frame, which
+## is exactly the band between the chrome and the room bar.  Without a frame
+## (headless, before the shell registered) the whole layer is the band.
+func toast_band() -> Rect2:
+	if knoplaag != null and is_instance_valid(knoplaag) and knoplaag.size.x > 1.0 \
+			and toastlaag != null and is_instance_valid(toastlaag):
+		var kader := knoplaag.get_global_rect()
+		var laag := toastlaag.get_global_rect()
+		if kader.size.x > 1.0 and laag.size.x > 1.0:
+			return Rect2(kader.position - laag.position, kader.size)
+	return Rect2(Vector2.ZERO, toastlaag.size if toastlaag != null else Vector2.ZERO)
+
+## Is a keypad on screen?  Then the bottom of the frame belongs to the keys.
+func _pad_open() -> bool:
+	for id in Hits.lijst():
+		var s := Hits.spot(id)
+		if s != null and s.kind == "pad" and is_instance_valid(s.knoop) and s.knoop.visible:
+			return true
+	return false
 
 func _process(delta: float) -> void:
 	if _toast_tijd > 0.0:
@@ -296,6 +322,9 @@ func wolk(o: Dictionary) -> String:
 	return Hits.maak({
 		"id": id, "kind": "wolk", "kamer": o.get("kamer", World.kamer_nu()),
 		"x": o.get("x", 0.0), "z": o.get("z", 0.0), "y": o.get("hoog", 20.0),
+		# what the bubble belongs to, when it is not simply standing on it: the
+		# board's task cards hang on the notice board (V1 finding 5)
+		"obj": o.get("obj", ""),
 		"icoon": o.get("icoon", ""), "getal": getal,
 		"tekst": o.get("tekst", ""), "label": zin,
 		"titel": o.get("titel", zin),

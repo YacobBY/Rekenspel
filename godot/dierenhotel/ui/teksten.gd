@@ -32,11 +32,13 @@ const VOET := "Dierenhotel Kwispelsteeg · demo · rustig aan, je mag alles zo v
 const START_TERUG := "Welkom terug in het Dierenhotel! 👋"
 const START_VERDER := "Verder spelen ▸"
 const START_NIEUW := "Nieuw spel"
-## `Je was bij <n dag|dagen> — met <n gast|gasten>, <munten> munten en <sterren> sterren.`
+## `Je was bij <n dag|dagen> — met <n gast|gasten>, <n munt|munten> en
+## <n ster|sterren>.`  world.md §7.10: `meervoud` is ALWAYS used — "1 sterren"
+## makes a six-year-old read the sentence twice (V1 finding 3).
 static func start_stand(dagen: int, gasten: int, munten: int, sterren: int) -> String:
-	return "Je was bij %s — met %s, %d munten en %d sterren." % [
+	return "Je was bij %s — met %s, %s en %s." % [
 		Ui.meervoud(dagen, "dag", "dagen"), Ui.meervoud(gasten, "gast", "gasten"),
-		munten, sterren]
+		Ui.meervoud(munten, "munt", "munten"), Ui.meervoud(sterren, "ster", "sterren")]
 
 ## The v5 shelter branch of world.md §6.2 cannot happen in this build: the Godot
 ## export lives on another origin and cannot read the HTML game's localStorage,
@@ -64,10 +66,11 @@ static func ga_naar(kamer_naam: String) -> String:
 const KASSA_TITEL := "💰 De kassa"
 const KASSA_UITLEG_1 := "Munten komen uit het uitchecken: elke gast betaalt zijn nachten. Sterren krijg je voor meedoen — of je som klopt of niet."
 const KASSA_UITLEG_2 := "In het meubelboek koop je straks nieuwe bedden, mandjes en badkuipen. Meer bedden = meer gasten = grotere sommen."
+## The same rule on the till sheet: `💰 1 munt`, `⭐ 1 ster` (V1 finding 3).
 static func kassa_munten(n: int) -> String:
-	return "💰 %d munten" % n
+	return "💰 %s" % Ui.meervoud(n, "munt", "munten")
 static func kassa_sterren(n: int) -> String:
-	return "⭐ %d sterren" % n
+	return "⭐ %s" % Ui.meervoud(n, "ster", "sterren")
 static func kassa_snoep(n: int) -> String:
 	return "🍬 %d in de snoeppot" % n
 

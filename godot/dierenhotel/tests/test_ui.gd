@@ -9,7 +9,7 @@ const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(1280, 800)
 	Vector2i(360, 740), Vector2i(740, 360)]
 ## and the world frames they produce, printed by test_shell_op_vijf_schermen.
 const KADERS_UNITS := [Vector2(990, 637), Vector2(734, 788), Vector2(1170, 669),
-	Vector2(326, 402), Vector2(558, 289)]
+	Vector2(326, 558), Vector2(558, 289)]
 
 var _laag: Control = null
 
@@ -457,6 +457,91 @@ func _meet_tikdoelen(k: Node, te_klein: Array[String], letters: Array[String]) -
 	for kind in k.get_children():
 		_meet_tikdoelen(kind, te_klein, letters)
 
+
+## V1 finding 4: a toast is a message over the WORLD, never over a tap target.
+## The toast layer covers the whole screen, so a toast at its bottom edge lay on
+## the room bar — "Precies! 🎉" covered the Zwembad chip for 2.6 s.  The world
+## frame is exactly the band between the chrome and the bar.
+func test_toast_blijft_in_het_kader() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var scherm := Control.new()            # the whole screen: chrome, frame, room bar
+	scherm.size = Vector2(1000, 700)
+	boom.root.add_child(scherm)
+	var kader := Control.new()             # the world frame, 60 units of chrome above
+	kader.position = Vector2(10, 60)
+	kader.size = Vector2(980, 560)
+	scherm.add_child(kader)
+	Ui.registreer_lagen(kader, kader, scherm, scherm, kader)
+	World.meet(Rect2(Vector2.ZERO, kader.size))
+	Ui.toast("Precies! 🎉", "happy")
+	var t: Control = scherm.get_node_or_null("Toast")
+	waar(t != null, "de toast staat er")
+	if t != null:
+		var r := Rect2(t.position, t.size)
+		var band := Rect2(kader.position, kader.size)
+		waar(band.encloses(r), "de toast blijft in het kader (%s in %s)" % [str(r), str(band)])
+		waar(r.position.y >= band.position.y and r.end.y <= band.end.y,
+			"dus niet op de chroom of de kamerbalk (%s)" % str(r))
+		waar(r.size.x > r.size.y and r.size.y <= 3.0 * Ui.maten["klein"] + 24.0,
+			"en het is nog steeds een regel, geen kolom (%s)" % str(r))
+	Hits.wis_alles()
+	Ui.registreer_lagen(null, null, null)
+	kader.queue_free()
+	scherm.queue_free()
+	await boom.process_frame
+
+## V1 finding 3 / world.md §7.10: every counted noun uses `meervoud`, so the
+## child never reads "1 sterren".  The plural forms are unchanged, so every
+## example in world.md §7.2 and §7.9 still matches word for word.
+func test_enkelvoud_en_meervoud_in_de_schermteksten() -> void:
+	gelijk(UiTekst.kassa_munten(1), "💰 1 munt", "1 munt")
+	gelijk(UiTekst.kassa_munten(0), "💰 0 munten", "0 munten")
+	gelijk(UiTekst.kassa_munten(12), "💰 12 munten", "12 munten")
+	gelijk(UiTekst.kassa_sterren(1), "⭐ 1 ster", "1 ster")
+	gelijk(UiTekst.kassa_sterren(5), "⭐ 5 sterren", "5 sterren")
+	gelijk(UiTekst.start_stand(1, 1, 1, 1),
+		"Je was bij 1 dag — met 1 gast, 1 munt en 1 ster.", "alles enkelvoud")
+	gelijk(UiTekst.start_stand(3, 2, 12, 5),
+		"Je was bij 3 dagen — met 2 gasten, 12 munten en 5 sterren.", "alles meervoud")
+
+## V1 finding 2: a saved mute must survive a reload.  The mute used to be
+## decided on the FIRST INPUT, and the first input is the tap on "Verder spelen
+## ▸" — which happens before `State.s` is swapped for the saved game, so a
+## `geluid=false` save came back with the sound on for the whole session.
+func test_bewaard_geluid_uit_komt_terug() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var bewaard: Dictionary = State.s.duplicate(true)
+	State.nieuw_spel()
+	State.start_gekozen()
+	State.s["dag"] = 3
+	State.s["geluid"] = false
+	waar(State.bewaar(), "er staat een stille opslag klaar")
+	Snd.stem_af(true)                         # this session starts with sound
+
+	var vp := SubViewport.new()
+	vp.size = Vector2i(1024, 768)
+	boom.root.add_child(vp)
+	var shell := (load("res://scenes/main.tscn") as PackedScene).instantiate()
+	vp.add_child(shell)
+	for _f in 5:
+		await boom.process_frame
+	# behind the sheet a FRESH game runs, and a fresh game has sound
+	waar(not Snd.dempt(), "achter het startblad speelt het verse spel geluid")
+	var verder: Button = shell.get_node_or_null("Bladlaag/Blad/Midden/Blad/Rol/Kolom/Knoppen/Kverder")
+	waar(verder != null, "de knop 'Verder spelen' staat er")
+	if verder != null:
+		verder.emit_signal("pressed")
+		await boom.process_frame
+		gelijk(int(State.s["dag"]), 3, "de opgeslagen dag is terug")
+		waar(Snd.dempt(), "en het geluid staat weer uit, zoals het kind het liet")
+	Hits.wis_alles()
+	vp.queue_free()
+	await boom.process_frame
+	Snd.stem_af(true)
+	State.nieuw_spel()
+	State.s = bewaard
+	Ui.registreer_lagen(null, null, null)
+	Ui.registreer_wortels([])
 
 ## world.md §6.2: with a save on disk the shell asks before it touches anything.
 ## Nothing is written before the child answered (architecture.md §9), and the

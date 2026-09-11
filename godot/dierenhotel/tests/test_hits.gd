@@ -287,8 +287,10 @@ func _hotel_op(maat: Vector2i) -> Dictionary:
 	vp.add_child(shell)
 	for _f in 4:
 		await boom.process_frame
+	# NO `State.start_gekozen()`: that would switch autosaving on for the rest of
+	# the suite, and a later fixture (a corrupt save, the start screen) would be
+	# raced by a timer of this shell writing a fresh day over it.
 	State.nieuw_spel()
-	State.start_gekozen()
 	Hotel.start()
 	for _f in 4:
 		await boom.process_frame
@@ -302,6 +304,7 @@ func _hotel_af(h: Dictionary) -> void:
 	(h["vp"] as SubViewport).queue_free()
 	await boom.process_frame
 	Ui.registreer_lagen(null, null, null)
+	State.nieuw_spel()          # and the save gate is shut again
 
 ## How far a placed rectangle stands from the object it belongs to.
 func _gat_y(r: Rect2, vlak: Rect2) -> float:
@@ -348,6 +351,16 @@ func test_receptie_knoppen_staan_bij_hun_voorwerp() -> void:
 		waar(gemeten >= 2 and gemeten + gestapeld >= 3,
 			"%s: %d knoppen tegen hun voorwerp gemeten, %d gestapeld (band vol)"
 				% [str(maat), gemeten, gestapeld])
+		# V1 finding 5: EVERY hotspot at boot knows the thing it belongs to, so
+		# `dekking_max = 0.00` in the browser probe counts all five and not three
+		# — the two task cards hang on the notice board they are pinned to.
+		var zonder: Array[String] = []
+		for id in dbg.keys():
+			var v: Rect2 = dbg[id]["vlak"]
+			if v.size.x <= 0.0 or v.size.y <= 0.0:
+				zonder.append(id)
+		gelijk(zonder.size(), 0,
+			"%s: elke hotspot kent zijn voorwerp, zonder: %s" % [str(maat), str(zonder)])
 		_keur(kader, "receptie %s" % str(maat))
 		await _hotel_af(h)
 	State.s = bewaard
@@ -399,6 +412,93 @@ func test_naamplaten_nemen_hun_plek_in() -> void:
 			World.weg("gast%d" % i)
 		await _hotel_af(h)
 	State.s = bewaard
+
+## V1 finding 4: a fixed card may hang over the world — that is what makes it a
+## card — but never over the COUNTER.  The bell, the till, the guest book and
+## the desk lamp all stand on `Kamer.balie`, and the bill's own card was anchored
+## on the desk since I1, so it covered the till while the child counted.
+func test_kaart_laat_de_balie_vrij() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var boom := Engine.get_main_loop() as SceneTree
+	for maat in [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740)]:
+		var h: Dictionary = await _hotel_op(maat)
+		Hotel.bel()                       # the check-in card, on the desk plek
+		for _f in 3:
+			await boom.process_frame
+		var gast: Dictionary = State.s["nieuweGast"] if State.s["nieuweGast"] != null else {}
+		if gast.is_empty() and not (State.s["gasten"] as Array).is_empty():
+			gast = State.s["gasten"][0]
+		Econ.rekening({"gast": gast, "fam": "Bakker", "nachten": 2, "prijs": 3,
+			"totaal": 6, "betaald": 6})   # and the bill's card, anchored on the desk
+		for _f in 3:
+			await boom.process_frame
+		var balie := World.vlak_van_balie("receptie")
+		waar(balie.size.x > 0.0 and balie.size.y > 0.0,
+			"%s: de balie heeft een vlak (%s)" % [str(maat), str(balie)])
+		var dbg := Hits.debug()
+		var kaarten := 0
+		for id in dbg.keys():
+			var d: Dictionary = dbg[id]
+			if str(d["op"]) != "midden":
+				continue
+			kaarten += 1
+			var snij: Rect2 = (d["rect"] as Rect2).intersection(balie)
+			gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
+				"%s: kaart %s laat de balie vrij (%s tegen %s)"
+					% [str(maat), id, str(d["rect"]), str(balie)])
+		waar(kaarten >= 1, "%s: er stond %d kaart op het scherm" % [str(maat), kaarten])
+		Econ.rekening_stop()
+		await _hotel_af(h)
+	State.s = bewaard
+
+## V1 finding 1: the checkout bubble "<naam> gaat naar huis" is made while its
+## guest may still be in another room.  A hotspot that is not laid out this pass
+## used to keep its Control on the glass at whatever size it had — for a bubble
+## that was never placed, 0 x 0: a stylebox blob of ten pixels with the sentence
+## spilling down the frame, one letter per line, for the three seconds the
+## bubble lives (`/tmp/v1/shots/E1-rekening-stap1.png`, copied to
+## `.fanout/scratch/godot-i1/`).  Two rules fix the class: `Hits` hides what it
+## does not place, and a bubble is never smaller than its own content or 48 px.
+func test_wolk_op_een_gast_in_een_andere_kamer() -> void:
+	var kader := Vector2(1000, 648)
+	_op(kader)
+	World.naar("receptie")
+	World.meet(Rect2(Vector2.ZERO, kader))
+	World.zet("weggast", "kamer1", 40.0, 40.0, {"kind": "hond", "naam": "Boef"})
+	var volg := func() -> Dictionary:
+		var d = World.dier("weggast")
+		if d == null:
+			return {}
+		return {"x": d.x, "z": d.z, "kamer": d.kamer, "vlak": World.vlak_van_dier("weggast")}
+	Ui.wolk({"id": "af", "door": "test", "kamer": "receptie", "volg": volg,
+		"hoog": 54, "icoon": "👪", "tekst": "Boef gaat naar huis", "klas": "goed"})
+	Hits.plaats()
+	var s := Hits.spot("af")
+	waar(s != null and is_instance_valid(s.knoop), "de wolk bestaat")
+	if s == null:
+		_af()
+		return
+	# the guest is in kamer1: nothing of the bubble is on the glass
+	waar(not s.knoop.visible, "een wolk op een gast in een andere kamer staat niet in beeld")
+	waar(not Hits.debug().has("af"), "en heeft geen plek in dit doorloopje")
+	var minimaal := s.knoop.get_combined_minimum_size()
+	waar(minimaal.x >= 48.0 and minimaal.y >= 48.0,
+		"en is nooit kleiner dan een tikdoel (%s)" % str(minimaal))
+	# the guest walks in: now the bubble is a real, readable bubble
+	World.zet("weggast", "receptie", 40.0, 40.0, {"kind": "hond", "naam": "Boef"})
+	Hits.plaats()
+	waar(s.knoop.visible, "zodra de gast er is, staat de wolk er wel")
+	var r: Rect2 = Hits.debug()["af"]["rect"]
+	waar(r.size.x >= 48.0 and r.size.y >= 48.0, "de wolk is minstens 48 x 48 (%s)" % str(r))
+	waar(Rect2(Vector2.ZERO, kader).encloses(r), "en staat in het kader (%s)" % str(r))
+	var w := s.knoop as UiWolk
+	waar(w != null and w.zeg_label.get_line_count() == 1,
+		"de zin staat op een regel (%d)" % (w.zeg_label.get_line_count() if w else -1))
+	waar(w != null and w.zeg_label.size.x >= 60.0,
+		"en de zin heeft echte breedte (%s)" % str(w.zeg_label.size if w else Vector2.ZERO))
+	_keur(kader, "afscheidswolk")
+	World.weg("weggast")
+	_af()
 
 # --------------------------------------------------------------------- lenen
 
