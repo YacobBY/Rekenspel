@@ -1,42 +1,54 @@
-# HANDOFF — Dierenhotel run "slaap-zwembad-kamers" (closed 2026-09-07)
+# HANDOFF — Dierenhotel Godot port, run "dierenhotel-godot" (closed 2026-09-11)
 
-Written by the lead so a fresh session (any agent or the owner) can continue without the chat history. Full append-only log: `.fanout/ledger.md`; tickets: `.fanout/tickets/`; per-ticket API notes: `.fanout/specs/api-*.md`; game design: `.fanout/specs/dierenhotel-golf3-games.md`; blind-verification brief: `.fanout/tickets/v-final.md`. Operating mode: standard fanout (Opus crew via the Agent tool, ticket → worker → reviewer → fix batch → merge → blind verifier), economical, chat in Dutch, persisted text in precise prose.
+Written by the lead so a fresh session (any agent or the owner) can continue without the chat history. Full append-only log: `.fanout/ledger.md` (section "Run dierenhotel-godot"); tickets `.fanout/tickets/godot/`; specs `.fanout/specs/godot/` (architecture.md is the binding design; world/games-a/games-b/art-sound-rules/toolchain are the port specifications extracted from the HTML original). The previous run's handoff (HTML version, run "slaap-zwembad-kamers") is in git history at e8c9bd2.
 
 ## 1. The task (owner, verbatim)
 
-"Mooi. Wanneer de dieren op hun bed gaan slapen dan slapen ze ernaast. Breidt het spel ook uit met meer minigames inclusief zwembad. Veel kamers voelen iets te klein maak ze 50% groter behalve de gang die ziet er wel goed uit." Later: "i also want the game to work on mobile" and "Bij veel objecten als de speelmand staat de text over het object". Zwembad rules are the owner's own design (variable pool length, 1 m per stroke, four choices, max 30 m per pick, too short → continue, too far → bump the wall and a short "Au!", never punishing). Extra games chosen: Wekkerdienst (klok), Hinkelpad (getallenlijn), Wasmandtoren (turven/staafdiagram), Souvenirkraam (geld/wisselgeld).
+"I want to rebuild the game with Godot it has grown out of scope for what it is now. Then I want to host it on a github page so i can play reach online. I want to play it from a tablet." Answers: only dierenhotel; all games at feature parity; Godot 4.3+ with GDScript in this repo; Godot and gh may be installed locally. Later: "De game hoeft niet exact te werken als nu. Als Godot verbeteringen biedt implementeer die dan." and "Kan de balie rechtsboven en de deur linksboven" (receptie relaid).
 
-## 2. Result — everything is on main
+## 2. Result — everything is on main (HEAD 9f79bff)
 
-HEAD after the run: see `git log` (last merges: G5-F2 66826b9, S4 6b0473b, then ledger commits; the final zwembad margin fix G1-F2 lands after afc872a). No open worktrees. Delivered and verified:
-
-- Guests sleep on their bed (lying pose, 💤, rotated beds, morning, reduced motion).
-- Rooms receptie, kamer1, kamer2, keuken exactly 1.5× (gang 120×36 unchanged, tuin unchanged by design); per-room camera; save v7 with v6 migration; corrupt saves boot to the start screen.
-- Prep APIs: rooms zwembad (bad, dek) and wasserij, tuin zones; Rooms.registerModel + runtime decor (ctx.wereld.decor…); movement promises loopNaar/stappen/pose with poses zwem (water band) and spring; wishes 🏊 zwemmen / 🎁 souvenir via `wens` in Games.register; accessories hoedje/sjaaltje/bal; sounds plons/au/klok/hup; hotspots on runtime decor (decorPlek); live star counter.
-- Five new games (nine total): zwembad (owner's rules verbatim), wekker, hinkel, was, kraam — each with its own suite `.fanout/scratch/dierenhotel/<id>/spel.js` (port + land + 360×740/320×640 + iPhone 13 tap pass).
-- Mobile: keypad strip under short frames (padPlek auto), compact landscape chrome, dvh/safe-area/overscroll, touch semantics (touch-action, ghost above the finger, single-fire taps), audio unlock on first tap, 12 px text floor, World.onKader layout bus, stable frame height, density cap on phones, redraw only on change, hidden-tab pause, hotel and existing games migrated; device suites mobiel.js (8 profiles, ~2900 assertions) and mobiel-perf.js.
-- Hotspot buttons sit above/below their object (coverage 0 % for every object button in 5 rooms × 4 viewports; the speelmand example fixed), short-frame hiding of foreign buttons, drop catch area = button ∪ object, 4-round evasion incl. stacking, fair prikbord rotation of low-priority game chips.
-- Docs: GAMES-API.md consolidated (incl. §9 "Op de telefoon"), HOTEL.md §1 room table.
-
-Blind verification (fanout-verifier, fresh context, brief `.fanout/tickets/v-final.md`, at afc872a): **PASS_WITH_NOTES** — criteria A–G PASS with independent probes (§9 audit 810/810; frozen math byte-identical to waggletail; mobile profiles clean); H: runner 48/49 OK, the one red row `zwembad-land 124/1` was a 1-px flush edge between the card and the swimmer box after the prikbord rotation changed the swimming guest (visually 0 px) → fixed by G1-F2 (margin ≥ 6 px + deterministic finish-card anchor; see the ledger for its numbers).
+- `godot/dierenhotel/`: Godot 4.7.2 project, GDScript, Compatibility renderer, single-threaded web export, PWA. Ten autoloads (Art, Rooms, Hits, World, Snd, Ui, State, Econ, Games, Hotel), the `MiniGame`/`SpelCtx` contract, eight rooms with guests and awaitable movement, day cycle/economy/wishes/prikbord/check-in/bill/letters, save v1 in `user://` (JSON, atomic, corrupt → start screen), voxel baker with golden-image oracle (72 plates, silhouettes within 1 px of the HTML), 18 procedural sounds with a WAV oracle, frozen math core byte-identical to the JavaScript (23 042 cases), band-grid hotspots (0 % coverage by construction), fonts subset (Nunito, Noto Symbols 2, Noto Color Emoji; OFL).
+- All ten minigames under `games/<id>/` (bedden, sleutels, meubels, tobbe, voerkar, zwembad, wekker, hinkel, was, kraam), each with its own headless test file; the owner's zwembad rules verbatim; wekker ghost hands at the 2nd miss; receptie desk top-right, door top-left.
+- Suite: `godot/dierenhotel/tools/test.sh` → 386 tests, 0 failures, about 95 s. Web export 40.9 MB (wasm 39.5 MB, gzips to 10 MB). Shell probe (`tools/probe.js`) passes all seven steps on 1024×768@2, 768×1024@2, 1280×800@2, 360×740@3 and 740×360@3 (the last with `--knop bel`).
+- CI: `.github/workflows/test.yml` (import, suite, export on every push/PR) and `pages.yml` (calls test.yml, then export → GitHub Pages). Not yet pushed or enabled (see §4).
 
 ## 3. How to run and test
 
-- Runner: `.fanout/scratch/dierenhotel/alles.sh` (~50 rows, ~25 min, each suite in its own process group, summary appended to `alles-samenvatting.txt` — read the last block). Single row: `./alles.sh <tag>`; `--tags` lists them.
-- Playwright: `require('/home/pc/work/ergomouse/node_modules/playwright')`, chromium only (no WebKit installed). Suites default to the main tree; `DH_SRC=<tree>/demos/dierenhotel DH_OUT=/tmp/x node <suite>` redirects. Sleutels suite is `sleutels/test.js`, bedden is `bedden/bedden.js`. Never `pkill -f chrome` blanket.
-- Browser: `python3 -m http.server 8642` at the repo root, open /demos/dierenhotel/index.html (or file://).
+- Godot: `~/.local/bin/godot` (4.7.2.stable), export templates in `~/.local/share/godot/export_templates/4.7.2.stable/`. gh CLI: `~/.local/bin/gh` (not logged in).
+- From the repo root: `tools/import.sh`, `tools/test.sh` (wraps `godot/dierenhotel/tools/test.sh`; isolates `user://` per run; `DH_TEST_FILTER=kraam` runs one game's tests), `tools/export.sh` (→ `godot/dierenhotel/build/web/`), `tools/serve.sh` (port 8642), `tools/probe.js --viewport 1024x768@2:ipad --knop bel` (chromium via Playwright at `/home/pc/work/ergomouse/node_modules/playwright`, swiftshader flags built in). Do not run the suite and an export at the same time in one project directory (the shared `.godot/` cache crashed the suite once).
+- Browser proof of a game at a given day/band: `index.html?opslag=<base64url of a complete save JSON>` writes the save before it is read; make the JSON with a headless script that calls `State.nieuw_spel()`, sets fields, `State.bewaar()` and prints `user://dierenhotel.json` (example in the ledger, 2026-09-11). Workers' game drivers live in `.fanout/scratch/godot-g-<id>/` (gitignored scratch; wekker's driver is proven against the final export).
+- Play locally: `tools/export.sh && tools/serve.sh`, open http://localhost:8642/ on the tablet in the same network.
 
-## 4. Known limits and deferred items
+## 4. Publishing to GitHub Pages (owner action, once)
 
-- Real touch hardware and iOS Safari never tested (chromium device emulation only): dvh/svh, audio unlock and rubber-banding deserve one real-iPhone pass.
-- Rare flake: zwembad "eindkaart hangt op de plek van de vraagkaarten" (kaart.y=0) seen once in batch runs; G1-F2 makes the anchor deterministic — watch the next full runs.
-- Landscape 568×320 band 4/5 sleutels has no fitting layout (documented in api-x1.md); 320×640 band 4 was-crates draw 2-voxel blocks; band-5 7×6 bedden arrays need a bigger room; tobbe tool row width; eb0db0b layout blind re-check never completed (superseded by this run's verifier).
-- Cosmetic: the Bedden game button stacks above a mattress in kamer1 when it shares the mand anchor; tuin floor extends past its frame by design.
-- Engine notes for future games: GAMES-API.md §9 (phone rules), decorPlek for hotspots on runtime decor, decorWisAlles in stop(), World.hermeet after chrome changes, Ui.opKader instead of window listeners.
+1. `gh auth login` (browser flow, no sudo), then `git push origin main`.
+2. Repo Settings → Pages → Source = "GitHub Actions". The `pages.yml` workflow then runs the suite, exports and deploys; the site root is the game. Every later push to main redeploys after a green suite.
+3. On the tablet open the Pages URL; "Add to Home Screen" installs the PWA (offline after the first load).
 
-## 5. Facts that cost time to rediscover
+## 5. Verification status (honest)
 
-- The sandbox rejects long shell heredocs for agents (use the Write tool); worktree-isolated agents cannot Edit main-tree files (they stage scratch copies; the lead installs them).
-- Session limits hit four times this run (Fable twice, Opus twice); dead agents keep their worktree — resume with SendMessage if the process still exists, else re-dispatch with "audit the partial diff first".
-- Merge recipe: commit on the worktree branch, `git merge --no-ff`, re-run the suites on main, `git worktree remove --force`, `git branch -d`.
-- HOTEL.md §9 rules are binding for every child-facing string (≤ 8 words / 40 chars above a sum, icon with its word, ≥ 48 px targets, 44 only below 360 px, never punishing, curriculum bands groep 3 ≤ 20 / groep 4 tafels 1–5 and 10, ≤ 100 / groep 5 ≤ 100, money whole euros ≤ €20).
+- Wave 1 (world, hotel, UI, art, sound, math, CI): reviewed by three fanout-reviewers, blind-verified (V1: FAIL on two HIGH items → fixed in V1-F1; the fixes were re-checked by the lead's probes, not by a second blind pass).
+- Wave 2 (games): kraam reviewed LOOKS_GOOD; wekker reviewed FIX_FIRST → fixed. hinkel, zwembad, sleutels, meubels, was, bedden, voerkar, tobbe: self-reviewed by the lead through their suites, the merged suite and the shell/driver probes; NOT blind-verified (the Opus session limit ended the reviewers; the owner switched to fonly mode). A future run should start with one blind verifier pass over the ten games (brief: play one turn per band per game in chromium via the `?opslag=` hook, check strings against games-a/games-b, coverage, reload, stop()).
+- Real iPad Safari and Android Chrome were never touched: chromium device emulation only. One real-device pass is the most valuable next step (audio unlock, IndexedDB persistence, memory, touch).
+
+## 6. Known limits and deferred items
+
+- Landscape phones (740×360): the three-column room-bar rail cuts long words mid-word ("Kame/r 1"); a two-column 80-unit rail was tried and reverted (segfault in the kraam shell tests during fast shell create/free). Cosmetic.
+- The generic probe's `kaart` step fails at 740×360 when it taps "prikbord" first; tapping `bel` works (7/7 with `--knop bel`).
+- A headless shell at 296×314 segfaults (pre-existing, no such device).
+- Suite time 95 s (budget was 60 s): four shell viewports per game test; share or cache shells per file if it grows.
+- Per-plate bake cost in the browser exceeds 25 ms for `baliez`/`hok` (28–46 ms) though every room stays inside the 300 ms slide; fix proposed: spread the bake over the slide frames.
+- Hits: door hotspots and guest-following spots have rects since I1; the two prikbord cards have rects since V1-F1; a speech cloud may still overlap the desk front.
+- Deviations accepted from the HTML (all documented in architecture.md §13 or the ledger): meubels does not surface the planbord solver; drag-to-door dropped; volgende() in wekker walks the row captured at round start; help-ladder sentences of zwembad are new (the spec fixed none); "🩺 Els" carries a word; tobbe and voerkar use 🔄 for "opnieuw" and ▸ for "→" (glyphs not in any bundled font).
+- Toolchain: `gh` not logged in; nothing pushed; Pages not enabled.
+
+## 7. Facts that cost time to rediscover
+
+- `user://` is per project name, so parallel worktrees and test runs share one save unless `XDG_DATA_HOME`/`DH_USERDATA` is set (test.sh does this now).
+- The runner buffers stdout: a crash loses every "ok" line; bisect with `DH_TEST_FILTER=<file part>`.
+- `set_anchors_preset` keeps offsets: a code-built full-rect Control stays 0×0; use `set_anchors_and_offsets_preset`.
+- A Label with word wrapping reports its longest word as minimum width; inside the shell that can loop the layout. The room bar uses ARBITRARY wrap on purpose.
+- `Games.registreer` writes into `Games._defs`; tests narrow the registry with `Proef.alleen_spellen(ids)` and the runner restores it after each test.
+- URL query base64: use base64url (`-`/`_`), `uri_decode()` turns `+` into a space.
+- Godot's `--script` SceneTree scripts cannot name autoloads at compile time; use `root.get_node("State")`.
