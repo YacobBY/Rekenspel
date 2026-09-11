@@ -462,7 +462,7 @@ func _teken() -> void:
 	elif int(_s["rek"]) < int(_s["T"]) or _iets_in_de_tobbes():
 		ctx.hotspots.maak({
 			"id": "tb_opnieuw", "kamer": KAMER, "x": hulp["x"], "z": hulp["z"], "y": 0.0,
-			"op": "onder", "obj": "tobbe", "icoon": "↩", "label": "opnieuw", "prio": 7,
+			"op": "onder", "obj": "tobbe", "icoon": "🔄", "label": "opnieuw", "prio": 7,
 			"titel": "opnieuw beginnen", "aan": func(_spot) -> void: _leeg()})
 	if int(_s["hulp"]) != 0:
 		_spook_neer()

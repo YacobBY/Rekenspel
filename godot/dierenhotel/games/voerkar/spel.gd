@@ -96,7 +96,7 @@ const ICO_SMUL := "😋"
 ## `↩` (U+21A9) zit niet in de meegeleverde emoji-subset; zonder terugval ziet
 ## een kind een leeg blokje.  De letterlijke tekst blijft hierboven staan, dus
 ## zodra het teken in het font zit komt hij vanzelf terug.
-const ICO_OPNIEUW := "↩"
+const ICO_OPNIEUW := "🔄"
 const ICO_OPNIEUW_TERUG := "🔄"
 
 ## De sleepnaam die de deuren en de bakjes van het hotel al dragen (hotel.gd:
@@ -395,7 +395,7 @@ func _chip(woord: String, getal, staart: String, doel) -> String:
 		return kop
 	var staartje := "· " + staart
 	if doel != null:
-		staartje += " " + (("→ %d" % int(doel)) if Ui.heeft_teken(0x2192) else ("(%d)" % int(doel)))
+		staartje += " " + (("▸ %d" % int(doel)) if Ui.heeft_teken(0x25B8) else ("(%d)" % int(doel)))
 	return kop + ("\n" if twee else " ") + staartje
 
 ## Hoe hoog een kaartje wordt: één regel is 48 (het tikdoel), twee regels 52.

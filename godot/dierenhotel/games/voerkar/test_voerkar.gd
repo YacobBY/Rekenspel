@@ -273,7 +273,7 @@ func test_kindteksten_staan_er_verbatim() -> void:
 			"Sleep de kar naar een deur", "Sleep de kar hierheen",
 			"Breng %d koekjes naar elke gast", "Alle bakjes vol!",
 			"koekjes", "koekjes elk",
-			"↩", "🛒", "🍪", "🫙", "🩺", "🛏", "👉", "✅", "😋"]:
+			"🔄", "🛒", "🍪", "🫙", "🩺", "🛏", "👉", "✅", "😋"]:
 		waar(bron.contains(zin), 'games-a.md §7.7: "%s" staat in de bron' % zin)
 	# elk kindwoord moet ook een glyph hebben in het meegeleverde font
 	var mist: Array[String] = []
@@ -463,7 +463,7 @@ func test_misser_en_hulpladder() -> void:
 	waar(_knop("vk_els") != null, "Els blijft staan zolang er twee pogingen op zitten")
 	# opnieuw beginnen zet alles terug in de zak
 	_tik("vk_opnieuw")
-	gelijk(int(spel.K["zak"]), int(spel.K["T"]), "↩ Opnieuw doet alles terug in de zak")
+	gelijk(int(spel.K["zak"]), int(spel.K["T"]), "🔄 Opnieuw doet alles terug in de zak")
 	gelijk(int(spel.K["pot"]), 0, "de pot is leeg")
 	gelijk(int(spel.K["spook"]), 0, "en Els kijkt niet meer mee")
 	waar(_knop("vk_els") != null, "maar haar knop blijft staan")

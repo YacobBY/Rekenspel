@@ -297,7 +297,7 @@ func _wissel_kaart() -> void:
 			State.gast_van(str(r["gastId"])).get("naam", "de gast"), betaald, int(r["totaal"])],
 		"on_ok": func(n, _k): wissel_ok(n)})
 	if int(r["wisselPog"]) == 1:
-		kaart.hulp("%d → %d" % [int(r["totaal"]), betaald])
+		kaart.hulp("%d ▸ %d" % [int(r["totaal"]), betaald])
 	if int(r["wisselPog"]) >= 2:
 		kaart.hulp(Econ.tel_mee(1, betaald - int(r["totaal"])))
 	if int(r["wisselPog"]) >= 3:

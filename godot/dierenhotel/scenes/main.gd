@@ -466,9 +466,11 @@ func _opslag_uit_url() -> void:
 	var i := s.find("opslag=")
 	if i < 0:
 		return
-	var b64 := s.substr(i + 7).split("&")[0].uri_decode()
+	# base64url (no + or /, so no percent-decoding trouble); plain base64 works too
+	var b64 := s.substr(i + 7).split("&")[0].replace("-", "+").replace("_", "/")
 	var json := Marshalls.base64_to_utf8(b64)
 	if json.is_empty():
+		print("[probe] opslag_uit_url=onleesbaar")
 		return
 	var f := FileAccess.open(State.PAD, FileAccess.WRITE)
 	if f != null:

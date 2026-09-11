@@ -73,6 +73,11 @@ func _initialize() -> void:
 			if f.begins_with("test_") and f.ends_with(".gd"):
 				bestanden.append("%s/%s/%s" % [SPELLEN, map, f])
 	bestanden.sort()
+	# `DH_TEST_FILTER=bedden` runs only the files whose path contains that text
+	# (bisecting a crash, one game while porting); CI never sets it.
+	var filter := OS.get_environment("DH_TEST_FILTER")
+	if not filter.is_empty():
+		bestanden = bestanden.filter(func(b: String) -> bool: return b.contains(filter))
 	for pad in bestanden:
 		await _draai_bestand(pad)
 	var ms := Time.get_ticks_msec() - start

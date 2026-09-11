@@ -830,7 +830,7 @@ func _antwoord_som(n, k) -> void:
 		if int(O["band"]) == 4 and koop.size() >= 2:
 			S["hulp"] = Sommen.Kraam.tel_vanaf(int(koop[0]["prijs"]), int(koop[1]["prijs"]))
 		else:
-			S["hulp"] = "%s → %s" % [Sommen.Kraam.euro(int(O["kosten"])),
+			S["hulp"] = "%s ▸ %s" % [Sommen.Kraam.euro(int(O["kosten"])),
 				Sommen.Kraam.euro(int(O["betaald"]))]
 		_zeg(null)
 		State.bewaar()
