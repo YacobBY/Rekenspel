@@ -80,6 +80,7 @@ func _ready() -> void:
 ## and only then ask.  Nothing is written before the child answered
 ## (architecture.md §9), so looking at the start screen cannot destroy a save.
 func _begin() -> void:
+	_opslag_uit_url()
 	var had_save := State.lees()
 	var bewaard: Dictionary = State.s.duplicate(true) if had_save else {}
 	State.nieuw_spel()
@@ -450,3 +451,27 @@ func _meld_knoppen() -> void:
 func _exit_tree() -> void:
 	if Ui.thema_veranderd.is_connected(_op_thema):
 		Ui.thema_veranderd.disconnect(_op_thema)
+
+## Probe hook (architecture.md §14.4, I2): `index.html?opslag=<base64 JSON>`
+## writes that save to `user://` BEFORE it is read, so a browser proof can start
+## on any day and band without playing the days first.  Without the flag nothing
+## is written; a corrupt payload is caught by `State.lees()` like any other file.
+func _opslag_uit_url() -> void:
+	if not OS.has_feature("web"):
+		return
+	var zoek = JavaScriptBridge.eval("location.search", true)
+	if zoek == null:
+		return
+	var s := str(zoek)
+	var i := s.find("opslag=")
+	if i < 0:
+		return
+	var b64 := s.substr(i + 7).split("&")[0].uri_decode()
+	var json := Marshalls.base64_to_utf8(b64)
+	if json.is_empty():
+		return
+	var f := FileAccess.open(State.PAD, FileAccess.WRITE)
+	if f != null:
+		f.store_string(json)
+		f.close()
+		print("[probe] opslag_uit_url=%d" % json.length())
