@@ -38,6 +38,8 @@ const WOLK := Color("#FFFDF6")
 const WOLK_GOED := Color("#E4F7EC")
 const WOLK_HULP := Color("#FFF8E7")
 const SCHERM_WAAS := Color(0.29, 0.231, 0.2, 0.333)   ## #4a3b3355
+const SCHADUW_KL := Color(0.29, 0.231, 0.2, 0.12)
+const SCHADUW_DIEP := Color(0.29, 0.231, 0.2, 0.20)
 
 const RONDING := 22
 const TAP := 52          ## `--tap`: the default minimum of a chrome button
@@ -126,13 +128,17 @@ static func wrap_hoogte(l: Label, breed: float) -> float:
 
 # ------------------------------------------------------------- stijlblokken
 
-static func vlak(kleur: Color, ronding: int, rand := 0, rand_kleur := WIT) -> StyleBoxFlat:
+static func vlak(kleur: Color, ronding: int, rand := 0, rand_kleur := WIT, schaduw := false) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = kleur
 	sb.set_corner_radius_all(ronding)
 	if rand > 0:
 		sb.set_border_width_all(rand)
 		sb.border_color = rand_kleur
+	if schaduw:
+		sb.shadow_color = SCHADUW_KL
+		sb.shadow_size = 4
+		sb.shadow_offset = Vector2(0, 2)
 	return sb
 
 static func vulling(sb: StyleBoxFlat, links: int, boven: int, rechts := -1, onder := -1) -> StyleBoxFlat:
@@ -163,6 +169,7 @@ static func bouw(basis: int) -> Theme:
 	t.set_stylebox("normal", "Button", knop_uit)
 	t.set_stylebox("hover", "Button", knop_over)
 	t.set_stylebox("pressed", "Button", knop_in)
+	t.set_stylebox("hover_pressed", "Button", knop_in)
 	t.set_stylebox("focus", "Button", vlak(Color(0, 0, 0, 0), 16, 2, PERZIK_D))
 	t.set_stylebox("disabled", "Button", vulling(vlak(BG2, 16, 2, WIT), 12, 8))
 	t.set_color("font_color", "Button", INKT)
@@ -178,10 +185,20 @@ static func bouw(basis: int) -> Theme:
 	t.set_stylebox("panel", "PanelContainer", vulling(vlak(KAART, RONDING, 2, WIT), 10, 8))
 
 	_variant(t, "KnopGroot", "Button", vulling(vlak(PERZIK, 18, 2, WIT), 16, 12), mt["knop_groot"], vet)
+	_variant(t, "KnopActief", "Button", vulling(vlak(ZON, 18, 2, PERZIK_D), 16, 12), mt["knop_groot"], vet)
 	_variant(t, "Hotknop", "Button", vulling(vlak(KAART, 16, 2, WIT), 8, 6), mt["klein"], vet)
 	_variant(t, "Padtoets", "Button", vulling(vlak(WIT, 12, 2, KURK), 4, 2), mt["toets"], vet)
 	_variant(t, "Keuzeknop", "Button", vulling(vlak(KAART, 14, 2, WIT), 8, 6), mt["klein"], vet)
-	_variant(t, "Kamerchip", "Button", vulling(vlak(KAART, 14, 2, WIT), 6, 4), mt["klein"], vet)
+
+	var chip_sb := vulling(vlak(KAART, 14, 2, WIT), 6, 4)
+	_variant(t, "Kamerchip", "Button", chip_sb, mt["klein"], vet)
+	var chip_in := chip_sb.duplicate() as StyleBoxFlat
+	chip_in.bg_color = ZON.lerp(WIT, 0.25)
+	chip_in.border_color = PERZIK_D
+	chip_in.set_border_width_all(2)
+	t.set_stylebox("pressed", "Kamerchip", chip_in)
+	t.set_stylebox("hover_pressed", "Kamerchip", chip_in)
+
 	_variant(t, "Badge", "Button", vulling(vlak(KAART, 999, 2, WIT), 9, 4), mt["badge"], vet)
 	_variant(t, "Kaartknop", "Button", vulling(vlak(KURK, 14, 2, WIT), 10, 8), mt["klein"], vet)
 
@@ -215,6 +232,7 @@ static func _variant(t: Theme, naam: String, basis_type: String, sb: StyleBoxFla
 	in_druk.content_margin_top = sb.content_margin_top + 2
 	in_druk.content_margin_bottom = maxf(0.0, sb.content_margin_bottom - 2)
 	t.set_stylebox("pressed", naam, in_druk)
+	t.set_stylebox("hover_pressed", naam, in_druk)
 	t.set_stylebox("focus", naam, vlak(Color(0, 0, 0, 0), 14, 2, PERZIK_D))
 	t.set_font_size("font_size", naam, maat)
 	t.set_color("font_color", naam, INKT)

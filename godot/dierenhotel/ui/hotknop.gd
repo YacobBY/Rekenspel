@@ -10,6 +10,16 @@ var badge_label: Label = null
 var _icoon := ""
 var _label := ""
 
+func _ready() -> void:
+	pressed.connect(_op_getikt)
+
+func _op_getikt() -> void:
+	if not Ui.rust_modus() and DisplayServer.get_name() != "headless" and is_inside_tree():
+		pivot_offset = size * 0.5
+		scale = Vector2(0.92, 0.92)
+		var tw := create_tween()
+		tw.tween_property(self, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
 func bouw(o: Dictionary, mt: Dictionary, tap: int) -> void:
 	theme_type_variation = "Hotknop"
 	_icoon = str(o.get("icoon", ""))

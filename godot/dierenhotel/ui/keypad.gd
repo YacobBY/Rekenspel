@@ -51,6 +51,15 @@ func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	tooltip_text = "Cijfers"
 
+func _ready() -> void:
+	if not Ui.rust_modus() and DisplayServer.get_name() != "headless" and is_inside_tree() and not Engine.is_editor_hint():
+		pivot_offset = custom_minimum_size * 0.5
+		scale = Vector2(0.94, 0.94)
+		modulate.a = 0.0
+		var tw := create_tween().set_parallel()
+		tw.tween_property(self, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(self, "modulate:a", 1.0, 0.12)
+
 func bouw(kader: Vector2, mt: Dictionary) -> void:
 	_vorm = vorm(kader)
 	var sb := StyleBoxFlat.new()
@@ -62,6 +71,9 @@ func bouw(kader: Vector2, mt: Dictionary) -> void:
 	sb.content_margin_right = RAND
 	sb.content_margin_top = RAND
 	sb.content_margin_bottom = RAND
+	sb.shadow_color = UiThema.SCHADUW_KL
+	sb.shadow_size = 6
+	sb.shadow_offset = Vector2(0, 3)
 	add_theme_stylebox_override("panel", sb)
 	var raster := GridContainer.new()
 	raster.name = "Toetsen"
@@ -82,6 +94,11 @@ func bouw(kader: Vector2, mt: Dictionary) -> void:
 		k.tooltip_text = "wissen" if teken == WIS else ("klaar" if teken == OK else teken)
 		k.pressed.connect(func() -> void:
 			Snd.tik()
+			if not Ui.rust_modus() and DisplayServer.get_name() != "headless" and k.is_inside_tree():
+				k.pivot_offset = k.size * 0.5
+				k.scale = Vector2(0.90, 0.90)
+				var tw := k.create_tween()
+				tw.tween_property(k, "scale", Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 			toets_getikt.emit(teken))
 		raster.add_child(k)
 

@@ -29,6 +29,15 @@ var _af := false
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
+func _ready() -> void:
+	if not Ui.rust_modus() and DisplayServer.get_name() != "headless" and is_inside_tree() and not Engine.is_editor_hint():
+		pivot_offset = custom_minimum_size * 0.5
+		scale = Vector2(0.92, 0.92)
+		modulate.a = 0.0
+		var tw := create_tween().set_parallel()
+		tw.tween_property(self, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(self, "modulate:a", 1.0, 0.12)
+
 ## `o` is the somkaart option dictionary; `smal` is true below a 360 unit frame.
 func bouw(o: Dictionary, mt: Dictionary, smal: bool) -> void:
 	# On a narrow frame the card takes the frame width minus its margins, never
@@ -145,6 +154,9 @@ func _papier() -> StyleBoxFlat:
 	sb.content_margin_right = 10
 	sb.content_margin_top = 7
 	sb.content_margin_bottom = 9
+	sb.shadow_color = UiThema.SCHADUW_KL
+	sb.shadow_size = 4
+	sb.shadow_offset = Vector2(0, 2)
 	return sb
 
 func _verf_vak() -> void:
@@ -163,6 +175,11 @@ func _verf_vak() -> void:
 func zet_goed(goed: bool) -> void:
 	_goed = goed
 	_verf_vak()
+	if goed and vak_label != null and not Ui.rust_modus() and DisplayServer.get_name() != "headless" and is_inside_tree():
+		vak_label.pivot_offset = vak_label.size * 0.5
+		vak_label.scale = Vector2(1.15, 1.15)
+		var tw := vak_label.create_tween()
+		tw.tween_property(vak_label, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func zet_af() -> void:
 	_af = true

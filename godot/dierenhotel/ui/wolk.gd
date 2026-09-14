@@ -117,6 +117,13 @@ func inhoud_maat() -> Vector2:
 ## before `Hits` has measured it.
 func _ready() -> void:
 	inhoud_maat()
+	if not Ui.rust_modus() and DisplayServer.get_name() != "headless" and is_inside_tree() and not Engine.is_editor_hint():
+		pivot_offset = custom_minimum_size * 0.5
+		scale = Vector2(0.9, 0.9)
+		modulate.a = 0.0
+		var tw := create_tween().set_parallel()
+		tw.tween_property(self, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(self, "modulate:a", 1.0, 0.12)
 
 func _regel(naam: String, tekst: String, maat: int) -> Label:
 	var l := Label.new()
@@ -141,5 +148,11 @@ func _vel(kleur: Color, staat: String) -> StyleBoxFlat:
 	sb.corner_radius_bottom_left = 6
 	sb.set_border_width_all(2)
 	sb.border_color = UiThema.INKT if staat == "focus" else UiThema.WIT
+	sb.shadow_color = UiThema.SCHADUW_KL
+	sb.shadow_size = 4
+	sb.shadow_offset = Vector2(0, 2)
+	if staat == "pressed":
+		sb.shadow_size = 1
+		sb.shadow_offset = Vector2(0, 1)
 	return sb
 

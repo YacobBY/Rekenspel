@@ -127,7 +127,13 @@ func ververs() -> void:
 			var n := 0
 			if id != "" and Hotel.has_method("wacht_in"):
 				n = int(Hotel.call("wacht_in", id))
-			bdg.text = str(n)
+			var nieuw_tekst := str(n)
+			if bdg.text != nieuw_tekst and n > 0 and not Ui.rust_modus() and DisplayServer.get_name() != "headless" and bdg.is_inside_tree():
+				bdg.pivot_offset = bdg.size * 0.5
+				bdg.scale = Vector2(1.2, 1.2)
+				var tw := bdg.create_tween()
+				tw.tween_property(bdg, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			bdg.text = nieuw_tekst
 			bdg.visible = n > 0
 		b.set_pressed_no_signal(id != "" and id == World.kamer_nu())
 	_toon_huidige()

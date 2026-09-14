@@ -1171,9 +1171,11 @@ func hotspots() -> void:
 	if nu == "receptie":
 		var bp := decor_plek("receptie", "bel")
 		if not bp.is_empty():
+			var vrij := not State.bed_vrij().is_empty() and State.s["nieuweGast"] == null
 			Hits.maak({"id": "bel", "door": EIGENAAR, "kamer": "receptie",
 				"x": bp["x"], "z": bp["z"], "y": 20, "icoon": "🔔", "label": "Bel",
-				"titel": "Bel voor de volgende gast", "klas": "hotbel", "prio": 10,
+				"badge": "!" if vrij else "",
+				"titel": "Bel voor de volgende gast", "klas": "hotbel vrij" if vrij else "hotbel", "prio": 10,
 				"aan": func(_s): bel()})
 		var pp := decor_plek("receptie", "prikbord")
 		if not pp.is_empty():

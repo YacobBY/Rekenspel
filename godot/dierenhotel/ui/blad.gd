@@ -49,11 +49,24 @@ func bouw(o: Dictionary, mt: Dictionary, kader: Vector2) -> void:
 
 	_paneel = PanelContainer.new()
 	_paneel.name = "Blad"
-	_paneel.add_theme_stylebox_override("panel",
-		UiThema.vulling(UiThema.vlak(UiThema.KAART, 26, 3, UiThema.WIT), 14, 12))
+	var sb := UiThema.vulling(UiThema.vlak(UiThema.KAART, 26, 3, UiThema.WIT), 14, 12)
+	sb.shadow_color = UiThema.SCHADUW_DIEP
+	sb.shadow_size = 10
+	sb.shadow_offset = Vector2(0, 5)
+	_paneel.add_theme_stylebox_override("panel", sb)
 	var breed := minf(BREED, maxf(240.0, kader.x - 2 * RAND))
 	_paneel.custom_minimum_size = Vector2(breed, 0)
 	midden.add_child(_paneel)
+
+	if not Ui.rust_modus() and DisplayServer.get_name() != "headless" and not Engine.is_editor_hint():
+		waas.modulate.a = 0.0
+		_paneel.pivot_offset = Vector2(breed * 0.5, 120.0)
+		_paneel.scale = Vector2(0.92, 0.92)
+		_paneel.modulate.a = 0.0
+		var tw := create_tween().set_parallel()
+		tw.tween_property(waas, "modulate:a", 1.0, 0.16)
+		tw.tween_property(_paneel, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(_paneel, "modulate:a", 1.0, 0.14)
 
 	# A ScrollContainer has minimum height 0, so inside a CenterContainer the
 	# panel would shrink to its padding and clip everything.  The sheet is
@@ -110,8 +123,8 @@ func bouw(o: Dictionary, mt: Dictionary, kader: Vector2) -> void:
 			b.tooltip_text = str(kn.get("titel", kn.get("tekst", "")))
 			b.custom_minimum_size = Vector2(UiThema.TAP, UiThema.TAP)
 			b.clip_text = false
-			if bool(kn.get("groot", false)):
-				b.theme_type_variation = "KnopGroot"
+			if bool(kn.get("groot", false)) or bool(kn.get("primair", false)):
+				b.theme_type_variation = "KnopActief"
 				b.add_theme_font_size_override("font_size", mt["knop_groot"])
 			var aan: Callable = kn.get("aan", Callable())
 			var dicht := bool(kn.get("dicht", true))
@@ -223,4 +236,9 @@ func inhoud() -> VBoxContainer:
 
 func sluit() -> void:
 	gesloten.emit()
-	queue_free()
+	if not Ui.rust_modus() and DisplayServer.get_name() != "headless" and is_inside_tree() and not Engine.is_editor_hint():
+		var tw := create_tween().set_parallel()
+		tw.tween_property(self, "modulate:a", 0.0, 0.12)
+		tw.finished.connect(queue_free)
+	else:
+		queue_free()
