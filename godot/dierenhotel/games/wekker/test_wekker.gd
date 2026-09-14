@@ -721,11 +721,12 @@ func test_dekking_in_vier_kaders() -> void:
 				"%s: %s binnen het kader (%s)" % [str(maat), id, str(r)])
 			waar(not a["krap"], "%s: %s vond een echte plek (%s)" % [str(maat), id, str(r)])
 			if int(a["laag"]) != Hits.Laag.VAST:
-				gelijk(Hits.dekking(str(id)), 0.0,
+				var aan := str(a.get("op", "")) == "aan"     # a hotel button ON its own thing
+				waar(aan or Hits.dekking(str(id)) <= 0.0,
 					"%s: %s dekt zijn voorwerp niet" % [str(maat), id])
 				for ander in ids:
 					var v: Rect2 = dbg[ander]["vlak"]
-					if v.size.x <= 0.0:
+					if v.size.x <= 0.0 or (aan and v.is_equal_approx(a["vlak"])):
 						continue
 					var snij := r.intersection(v)
 					gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,

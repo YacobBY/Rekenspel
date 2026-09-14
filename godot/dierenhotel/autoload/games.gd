@@ -204,7 +204,7 @@ func hersteek() -> void:
 		Hits.maak({
 			"id": knop_id, "door": EIGENAAR, "kamer": nu, "x": x, "z": z, "y": y,
 			"icoon": str(hs.get("icoon", "")), "label": str(hs.get("label", def.get("naam", id))),
-			"titel": str(def.get("naam", id)), "prio": 7,
+			"titel": str(def.get("naam", id)), "prio": 7, "op": "aan",
 			"klas": "hotgame aan" if _actief == id else "hotgame",
 			"volg": volg, "aan": func(_s) -> void: start(id),
 		})

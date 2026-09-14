@@ -694,11 +694,12 @@ func _keur_kader(maat: Vector2i, kader: Vector2, wat: String) -> void:
 			"%s %s: %s past in het kader %s (%s)" % [str(maat), wat, id, str(kader), str(r)])
 		if int(d["laag"]) == Hits.Laag.VAST:
 			continue
-		gelijk(Hits.dekking(id), 0.0,
+		var aan := str(d.get("op", "")) == "aan"     # a hotel button ON its own thing
+		waar(aan or Hits.dekking(id) <= 0.0,
 			"%s %s: %s dekt 0 %% van zijn voorwerp" % [str(maat), wat, id])
 		for ander in dbg.keys():
 			var v: Rect2 = dbg[ander]["vlak"]
-			if v.size.x <= 0.0:
+			if v.size.x <= 0.0 or (aan and v.is_equal_approx(d["vlak"])):
 				continue
 			var snij := r.intersection(v)
 			gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,

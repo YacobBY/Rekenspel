@@ -34,6 +34,7 @@ const BADKANT := [Color("#5AA3C2"), Color("#66ABC8")]
 const BADRAND := [Color("#FFFDF3"), Color("#FCF8EA")]
 const HEK_X := 10          ## inside the fence the meadow becomes garden grass
 const HEK_Z := 10
+const DEK := 16            ## the tiled deck round an outdoor pool, in voxels
 
 ## Read one field from a `Rooms.Kamer` or from a plain Dictionary.
 static func _veld(r, naam: String, terug):
@@ -62,10 +63,8 @@ static func kleur(r, x: int, z: int) -> Color:
 				and z >= int(mat["z0"]) and z < int(mat["z1"]):
 			return mat["kl"][k & 1]
 	var soort := str(_veld(r, "vloer", "hout"))
-	if soort == "gras":
-		if x < HEK_X or z < HEK_Z:
-			return WEI[k & 1]
-		return GRAS[k & 3]
+	# the water first: a pool on a lawn (the outdoor pool) keeps its water, its
+	# rim and a tiled deck of DEK voxels round it
 	var bad = _veld(r, "bad", {})
 	if bad is Dictionary and not (bad as Dictionary).is_empty():
 		var x0 := int(bad["x0"])
@@ -78,6 +77,13 @@ static func kleur(r, x: int, z: int) -> Color:
 			return BADWATER[k & 3]
 		if x >= x0 - 4 and x < x1 + 4 and z >= z0 - 4 and z < z1 + 4:
 			return BADRAND[((x >> 2) + (z >> 2)) & 1]
+		if soort == "gras" and x >= x0 - DEK and x < x1 + DEK and z >= z0 - DEK and z < z1 + DEK \
+				and x >= HEK_X and z >= HEK_Z:
+			return TEGEL[((x >> 2) + (z >> 2)) & 1]
+	if soort == "gras":
+		if x < HEK_X or z < HEK_Z:
+			return WEI[k & 1]
+		return GRAS[k & 3]
 	if soort == "tegel":
 		return TEGEL[((x >> 2) + (z >> 2)) & 1]
 	if soort == "loper":

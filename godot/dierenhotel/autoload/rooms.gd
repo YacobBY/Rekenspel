@@ -564,17 +564,23 @@ func _bouw_kamers() -> void:
 			{"n": "tobbe", "x": 32, "z": 94}, {"n": "bal", "x": 120, "z": 76},
 			{"n": "kist", "x": 95, "z": 23}, {"n": "poort", "x": 10, "z": 40, "ver": true}],
 		"slots": [{"id": "tobbe", "soort": "vrij", "model": "tobbe", "x": 32, "z": 94}]})
+	# Outdoors (owner, 2026-09-14: "het zwembad wil ik graag ook buiten"): lawn
+	# and a fence like the garden's, the water with a tiled deck round it, and
+	# a gate in the side fence towards the garden.
 	_kamer({"id": "zwembad", "naam": "Zwembad", "icoon": "🏊", "w": 144, "d": 88,
-		"wand": 50, "vloer": "tegel", "loop": 1.5,
+		"wand": 0, "vloer": "gras", "loop": 1.5, "erf": true,
+		"vast_kader": [-190, 300, -60, 250],
 		"bad": {"x0": 18, "x1": 134, "z0": 12, "z1": 44},
 		"dek": {"start": Vector2(12, 56), "over": Vector2(132, 56)},
-		"deuren": [{"naar": "tuin", "wand": "x", "at": 60, "breed": 12}],
-		"decor": [{"n": "mat", "x": 9, "z": 28}, {"n": "plant", "x": 136, "z": 80}]})
+		"deuren": [{"naar": "tuin", "wand": "x", "at": 60, "breed": 12, "poort": true}],
+		"decor": [{"n": "mat", "x": 9, "z": 28}, {"n": "plant", "x": 136, "z": 80},
+			{"n": "poort", "x": 10, "z": 66, "ver": true}]})
 	_kamer({"id": "wasserij", "naam": "Wasserij", "icoon": "🧺", "w": 100, "d": 90,
 		"wand": 52, "vloer": "tegel", "loop": 1.25,
 		"deuren": [{"naar": "keuken", "wand": "z", "at": 62, "breed": 12}],
 		"decor": [{"n": "kast", "x": 28, "z": 6}, {"n": "tobbe", "x": 80, "z": 74}]})
 	_bouw_tuin(_kamers["tuin"])
+	_bouw_zwembad(_kamers["zwembad"])
 	for id in _volgorde:
 		bouw_af(_kamers[id])
 
@@ -606,6 +612,27 @@ func _kamer(o: Dictionary) -> void:
 		r.slots[s["id"]] = s
 	_kamers[r.id] = r
 	_volgorde.append(r.id)
+
+## The pool's fence: the back fence whole, the side fence with the gate to the
+## garden (door at z 60..72), and a few tufts on the lawn beyond the deck.
+func _bouw_zwembad(r: Kamer) -> void:
+	var z := HEK_Z
+	while z <= r.d:
+		if z < 56 or z > 76:
+			r.decor.append({"n": "hekz", "x": HEK_X, "z": z, "hek": true})
+		z += 14
+	var x := 24
+	while x <= r.w:
+		r.decor.append({"n": "hekx", "x": x, "z": HEK_Z, "hek": true})
+		x += 14
+	var rnd := Sommen.Prng.new(TUFT_ZAAD + 7)
+	for i in 12:
+		var px := 16 + JsGetal.rond(rnd.volgende() * (r.w - 24))
+		var pz := 58 + JsGetal.rond(rnd.volgende() * (r.d - 62))
+		if absf(px - 132) + absf(pz - 56) < 18 or absf(px - 12) + absf(pz - 56) < 18 \
+				or absf(px - 136) + absf(pz - 80) < 14:
+			continue
+		r.decor.append({"n": "pol%d" % (i % 5), "x": px, "z": pz, "pol": true})
 
 ## world.md §1.3 — the fence and the 30 grass tufts, deterministic, once.
 func _bouw_tuin(r: Kamer) -> void:

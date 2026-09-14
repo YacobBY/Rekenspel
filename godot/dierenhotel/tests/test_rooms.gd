@@ -25,7 +25,7 @@ func test_maten_en_vloeren() -> void:
 		"kamer2": [114, 114, 58, "zacht", 1.5],
 		"keuken": [120, 114, 56, "tegel", 1.5],
 		"tuin": [130, 130, 0, "gras", 1.0],
-		"zwembad": [144, 88, 50, "tegel", 1.5],
+		"zwembad": [144, 88, 0, "gras", 1.5],
 		"wasserij": [100, 90, 52, "tegel", 1.25],
 	}
 	for id in verwacht:
@@ -46,7 +46,7 @@ func test_kamerkaders() -> void:
 		"kamer2": [-238, 238, -128, 238],
 		"keuken": [-238, 250, -124, 244],
 		"tuin": [-170, 190, -70, 220],
-		"zwembad": [-186, 298, -112, 242],
+		"zwembad": [-190, 300, -60, 250],
 		"wasserij": [-190, 210, -116, 200],
 	}
 	for id in verwacht:
@@ -155,8 +155,10 @@ func test_vloerkleuren() -> void:
 	waar(kant == Color("#5AA3C2") or kant == Color("#66ABC8"), "de rand van het water")
 	var steen := Rooms.vloer_kleur(bad, 16, 28)
 	waar(steen == Color("#FFFDF3") or steen == Color("#FCF8EA"), "de stenen rand eromheen")
-	var tegel := Rooms.vloer_kleur(bad, 70, 70)
+	var tegel := Rooms.vloer_kleur(bad, 70, 52)
 	waar(tegel == Color("#EDE6DA") or tegel == Color("#D9E6E2"), "en tegels op het dek")
+	var achter := Rooms.vloer_kleur(bad, 70, 76)
+	waar(ArtVloer.GRAS.has(achter), "en gras achter het dek: het bad ligt buiten")
 
 ## Every model a room places must exist in the baker.
 func test_decor_staat_er_en_is_bakbaar() -> void:

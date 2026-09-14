@@ -990,7 +990,7 @@ func test_dekking_is_nul_in_vier_kaders() -> void:
 					"%s %s: %s blijft in het kader (%s in %s)"
 						% [str(maat), fase, str(id), str(r), str(kader)])
 				knoppen += 1
-				if str(d["op"]) == "rand" or str(d["op"]) == "midden":
+				if str(d["op"]) in ["rand", "midden", "aan"]:
 					continue          # a fixed card and a `rand` plate may stand
 									  # over the world (architecture.md §4.3);
 									  # test_kratplaatjes... checks the real bar

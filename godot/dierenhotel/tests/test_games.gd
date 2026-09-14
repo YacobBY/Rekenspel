@@ -94,7 +94,11 @@ func test_ingangsknop_hangt_aan_zijn_voorwerp() -> void:
 	waar(s != null, "de ingangsknop staat er")
 	if s != null:
 		gelijk(s.door, "registry", "de eigenaar is het register")
-		gelijk(Hits.dekking("spel__voorbeeld"), 0.0, "de knop dekt zijn voorwerp niet")
+		# `op: aan` (owner, 2026-09-14): a big thing like the chest may carry
+		# its button; a small one keeps it just above or below
+		var d: Dictionary = Hits.debug()["spel__voorbeeld"]
+		waar(Hits.dekking("spel__voorbeeld") <= 0.0 or str(d["op"]) == "aan",
+			"de knop hangt aan zijn voorwerp (%s, %.1f %%)" % [d["op"], Hits.dekking("spel__voorbeeld")])
 		var r: Rect2 = Hits.debug()["spel__voorbeeld"]["rect"]
 		waar(r.size.x >= 48.0 and r.size.y >= 48.0, "en is een tikdoel")
 	_af()

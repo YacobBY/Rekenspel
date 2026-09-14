@@ -1208,7 +1208,7 @@ func hotspots() -> void:
 			"x": dp.get("x", 0), "z": dp.get("z", 0), "y": 9,
 			"icoon": doel.icoon, "label": doel.naam,
 			"titel": "Ga naar %s" % doel.naam,
-			"badge": str(w) if w > 0 else "", "klas": "hotdeur", "prio": 8,
+			"badge": str(w) if w > 0 else "", "klas": "hotdeur", "prio": 8, "op": "aan",
 			"kind": "drop", "drop": "deur", "data": {"naar": naar, "kamer": nu},
 			"volg": _volg_deur(nu, naar),
 			"aan": func(_s): naar_kamer(naar)})
@@ -1218,7 +1218,7 @@ func hotspots() -> void:
 			var vrij := not State.bed_vrij().is_empty() and State.s["nieuweGast"] == null
 			Hits.maak({"id": "bel", "door": EIGENAAR, "kamer": "receptie",
 				"x": bp["x"], "z": bp["z"], "y": 20, "icoon": "🔔", "label": "Bel",
-				"badge": "!" if vrij else "",
+				"op": "aan", "badge": "!" if vrij else "",
 				"titel": "Bel voor de volgende gast", "klas": "hotbel vrij" if vrij else "hotbel", "prio": 10,
 				"aan": func(_s): bel()})
 		var pp := decor_plek("receptie", "prikbord")
@@ -1228,7 +1228,7 @@ func hotspots() -> void:
 			# three controls of the morning round, and the button that opens the
 			# board must not be pushed off the board by the cards on it (V1-5).
 			Hits.maak({"id": "prikbord", "door": EIGENAAR, "kamer": "receptie",
-				"x": pp["x"], "z": pp["z"], "y": 22, "icoon": "📋",
+				"x": pp["x"], "z": pp["z"], "y": 22, "icoon": "📋", "op": "aan",
 				"label": "Prikbord", "badge": str(open) if open > 0 else "",
 				"titel": "Het prikbord met de taakjes", "prio": 10,
 				"aan": func(_s): prikbord_tik()})
@@ -1236,7 +1236,7 @@ func hotspots() -> void:
 		if avond_klaar() and not lp.is_empty():
 			Hits.maak({"id": "lamp", "door": EIGENAAR, "kamer": "receptie",
 				"x": lp["x"], "z": lp["z"], "y": 20, "icoon": "🌙", "label": "Avond",
-				"titel": "De avondronde", "klas": "hotlamp aan", "prio": 9,
+				"op": "aan", "titel": "De avondronde", "klas": "hotlamp aan", "prio": 9,
 				"aan": func(_s): avondronde()})
 		else:
 			Hits.weg("lamp")
@@ -1249,7 +1249,7 @@ func hotspots() -> void:
 			continue
 		Hits.maak({"id": "bed_%s_%s" % [nu, sid], "door": EIGENAAR, "kamer": nu,
 			"x": slot.get("x", 0), "z": slot.get("z", 0), "y": 13,
-			"icoon": "🛏", "label": "Vrij bed", "titel": "Een vrij bed",
+			"icoon": "🛏", "label": "Vrij bed", "titel": "Een vrij bed", "op": "aan",
 			"kind": "drop", "drop": "bed", "data": {"kamer": nu, "slot": sid},
 			"klas": "hotbed vrij", "prio": 7,
 			"aan": func(_s): tik_bed(nu, sid)})
@@ -1261,7 +1261,7 @@ func hotspots() -> void:
 					and not g.get("blij", false):
 				wil += 1
 		Hits.maak({"id": "mand_%s" % nu, "door": EIGENAAR, "kamer": nu,
-			"x": mp["x"], "z": mp["z"], "y": 8, "icoon": "🧶", "label": "Speelmand",
+			"x": mp["x"], "z": mp["z"], "y": 8, "icoon": "🧶", "label": "Speelmand", "op": "aan",
 			"titel": "De speelmand", "badge": str(wil) if wil > 0 else "", "prio": 7,
 			"aan": func(_s): tik_mand(nu)})
 	for slot in _slots(nu, "bak"):
@@ -1281,7 +1281,7 @@ func hotspots() -> void:
 			"badge": "!" if niveau == 0 and hier > 0 else "",
 			"titel": "Er ligt eten in het bakje" if niveau > 0 else "Het bakje is nog leeg",
 			"kind": "drop", "drop": "bak", "data": {"kamer": nu, "slot": sid},
-			"klas": "hotbak vol" if niveau > 0 else "hotbak", "prio": 7,
+			"klas": "hotbak vol" if niveau > 0 else "hotbak", "prio": 7, "op": "aan",
 			"aan": func(_s): tik_bak(nu, sid)})
 	_wens_wolken(nu)
 

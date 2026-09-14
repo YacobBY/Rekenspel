@@ -17,6 +17,7 @@ const RIJ := 52             ## band height  = 48 px tap target + 4 px air
 const KOL := 56             ## column width = the hits.js fallback button width
 const RAND := 6             ## air to the frame edge
 const TAG_IN := 0.1         ## a number tag may cover a tenth of its object
+const GROOT := 3.0          ## `op: "aan"`: an object this many button areas big may carry the button
 const KRAP := 2             ## the hard frame edge: nothing goes past it
 const KLEEF := 5            ## css-px between a card and its choice strip
 
@@ -280,7 +281,7 @@ func plaats() -> void:
 		# the 📋 button lay over it).  A game with priority keeps its own
 		# plates on the desk (the key board's hooks, I2); everything of the
 		# hotel stays off it.
-		_mijd_balie_nu = s.laag != Laag.SPEL
+		_mijd_balie_nu = s.laag != Laag.SPEL and s.op != "aan"
 		var uit := _blijf_staan(s, mik, maat, kader)
 		if uit.is_empty():
 			uit = _kies_plek(s, mik, maat, kader, rijen, kolommen)
@@ -312,7 +313,7 @@ func _blijf_staan(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2) -> Diction
 	if l.is_empty() or not l.has("mik"):
 		return {}
 	var op := str(l["op"])
-	if op in ["voet", "midden", "kleef", "rand"] or bool(l["krap"]):
+	if op in ["voet", "midden", "kleef", "rand", "aan"] or bool(l["krap"]):
 		return {}
 	var r: Rect2 = l["rect"]
 	if not r.size.is_equal_approx(maat) or (l["mik"] as Vector2).distance_to(mik) > BLIJF_MIK:
@@ -446,6 +447,8 @@ func _diepte(s: Spot) -> float:
 func _op_van(s: Spot) -> String:
 	if s.op == "voet":
 		return "voet"
+	if s.op == "aan":
+		return "aan" if s.vlak_nu.size.y > 0.0 else "boven"
 	if s.kleef_aan != "":
 		return "kleef"
 	if s.op != "auto":
@@ -487,6 +490,31 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 		return {"rect": r, "op": op, "krap": false, "gestapeld": false}
 	if op == "midden":
 		return _plaats_midden(mik, maat, kader, s.vlak_nu, s.kind == "kaart" or s.kind == "wolk")
+	if op == "aan":
+		# AT its own thing (owner, 2026-09-14): the thing stays visible, the
+		# button sits right under it or right above it, whichever fits; a BIG
+		# thing (the notice board, GROOT button areas or more) may carry the
+		# button on itself, centred on the aim point.  Anything else placed and
+		# every other object box stay clear — otherwise the bands decide.
+		var groot := vlak.size.x * vlak.size.y >= GROOT * maat.x * maat.y
+		var x0 := mik.x - maat.x * 0.5
+		var kandidaten: Array[Rect2] = []
+		if groot:
+			kandidaten.append(Rect2(Vector2(x0, mik.y - maat.y * 0.5), maat))
+		kandidaten.append(Rect2(Vector2(x0, voet + GAT), maat))
+		kandidaten.append(Rect2(Vector2(x0, top - GAT - maat.y), maat))
+		for i in kandidaten.size():
+			var r := _klem(kandidaten[i], kader)
+			var eigen_mag := groot and i == 0
+			if _botst(r):
+				continue
+			if _vak_kosten(r, vlak if eigen_mag else Rect2()) > 0.0:
+				continue
+			if not eigen_mag and _dekking(r, vlak) > 0.0:
+				continue
+			_reserveer(r, kader)
+			return {"rect": r, "op": "aan", "krap": false, "gestapeld": false}
+		op = "onder"
 	if s.kleef_aan != "":
 		var aan: Dictionary = _laatste.get(s.kleef_aan, {})
 		if not aan.is_empty():
@@ -754,9 +782,11 @@ func _cellen_vrij(rij: int, kol: int, breed: int, hoog: int) -> bool:
 	return true
 
 ## How much of the world this rectangle would cover.  0 = it covers nothing.
-func _vak_kosten(r: Rect2) -> float:
+func _vak_kosten(r: Rect2, eigen := Rect2()) -> float:
 	var som := 0.0
 	for v in _vakken:
+		if eigen.size.x > 0.0 and v.is_equal_approx(eigen):
+			continue
 		var snij := r.intersection(v)
 		if snij.size.x > 0.0 and snij.size.y > 0.0:
 			som += snij.size.x * snij.size.y

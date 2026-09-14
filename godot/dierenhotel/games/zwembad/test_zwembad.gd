@@ -655,11 +655,12 @@ func test_geen_knop_staat_op_een_voorwerp() -> void:
 				met_vlak += 1
 			if int(a["laag"]) == Hits.Laag.VAST:
 				continue
-			gelijk(Hits.dekking(id), 0.0,
+			var aan := str(a.get("op", "")) == "aan"     # a hotel button ON its own thing
+			waar(aan or Hits.dekking(id) <= 0.0,
 				"%s: %s dekt zijn voorwerp niet" % [str(kader), id])
 			for ander in dbg.keys():
 				var vv: Rect2 = dbg[ander]["vlak"]
-				if vv.size.x <= 0.0:
+				if vv.size.x <= 0.0 or (aan and vv.is_equal_approx(a["vlak"])):
 					continue
 				var snij := r.intersection(vv)
 				gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,

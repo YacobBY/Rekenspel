@@ -50,6 +50,8 @@ func _keur(kader: Vector2, wat: String) -> void:
 				var v: Rect2 = dbg[ids[j]]["vlak"]
 				if v.size.x <= 0.0:
 					continue
+				if str(a.get("op", "")) == "aan" and v.is_equal_approx(a["vlak"]):
+					continue          # `op: aan` hangs ON its own thing, by design
 				var snij := ra.intersection(v)
 				gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
 					"%s: %s dekt voorwerp van %s" % [wat, ids[i], ids[j]])

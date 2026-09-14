@@ -273,7 +273,8 @@ func test_dekking_in_vier_kaders() -> void:
 				var wolk := spot != null and (spot.kind == "wolk" or spot.kind == "tag")
 				# a speech cloud or number tag may sit on a tenth of its own thing
 				# (Hits.TAG_IN); a button never
-				waar(Hits.dekking(str(id)) <= (Hits.TAG_IN * 100.0 + 0.01 if wolk else 0.0),   # dekking is a percentage
+				waar(str(a.get("op", "")) == "aan"
+					or Hits.dekking(str(id)) <= (Hits.TAG_IN * 100.0 + 0.01 if wolk else 0.0),   # dekking is a percentage
 					"%s: %s dekt zijn voorwerp niet (%.2f)" % [str(maat), id, Hits.dekking(str(id))])
 		waar(eigen >= 3, "%s: het spel staat op het scherm (%d knoppen)" % [str(maat), eigen])
 		await _schil_af(h)
