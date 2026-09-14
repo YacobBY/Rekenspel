@@ -3,7 +3,7 @@ extends Proef
 ##
 ## Elke beurt wordt door de CTX gespeeld, nooit door een interne functie aan te
 ## roepen: een knop wordt ingedrukt zoals een vinger dat doet
-## (`Hits.spot(id).knoop.pressed.emit()`), een getal wordt op het cijferpad
+## (`Hits.spot(id).knoop.pressed.emit()`), een getal wordt op de antwoordstrook
 ## getikt en een keuze op de strook.  Dat is de enige manier waarop een test
 ## kan bewijzen dat het kind erbij kan.
 
@@ -143,28 +143,31 @@ func _zoek_knop(k: Node, naam: String) -> Button:
 			return t
 	return null
 
-## Een getal op het cijferpad van een kaart, gevolgd door ✓.
+## Een getal tikken op de antwoordstrook onder een kaart (vier knoppen, geen ✓).
 func _typ(kaart_id: String, getal: int) -> bool:
-	var pad := Hits.spot(kaart_id + "_pad")
-	if pad == null or not is_instance_valid(pad.knoop):
-		fout("het cijferpad van %s staat er niet" % kaart_id)
+	var strook := Hits.spot(kaart_id + "_keuzes")
+	if strook == null or not is_instance_valid(strook.knoop):
+		fout("de antwoordstrook van %s staat er niet" % kaart_id)
 		return false
-	var toetsen := pad.knoop.get_node_or_null("Toetsen")
-	if toetsen == null:
-		fout("het cijferpad heeft geen toetsen")
+	var k := strook.knoop.get_node_or_null("Rij/Kn%d" % getal) as Button
+	if k == null:
+		fout("knop %d staat niet op de strook van %s" % [getal, kaart_id])
 		return false
-	for teken in str(getal):
-		var k := toetsen.get_node_or_null("T" + teken) as Button
-		if k == null:
-			fout("toets %s ontbreekt" % teken)
-			return false
-		k.pressed.emit()
-	var ok := toetsen.get_node_or_null("Tok") as Button
-	if ok == null:
-		fout("de ✓-toets ontbreekt")
-		return false
-	ok.pressed.emit()
+	k.pressed.emit()
 	return true
+
+## Een fout getal tikken: de eerste knop van de strook die niet `goed` is.
+func _typ_fout(kaart_id: String, goed: int) -> bool:
+	var strook := Hits.spot(kaart_id + "_keuzes")
+	if strook == null or not is_instance_valid(strook.knoop):
+		fout("de antwoordstrook van %s staat er niet" % kaart_id)
+		return false
+	for k in strook.knoop.get_node("Rij").get_children():
+		if k.name != "Kn%d" % goed:
+			(k as Button).pressed.emit()
+			return true
+	fout("de strook van %s heeft alleen het goede getal" % kaart_id)
+	return false
 
 func _kaart_tekst(kaart_id: String, veld: String) -> String:
 	var s := Hits.spot(kaart_id)
@@ -325,7 +328,7 @@ func test_beurt_band_4() -> void:
 	gelijk(_kaart_tekst("mb_som", "som"), "€1 + €3 =", "de som staat op de kassa")
 	gelijk(_kaart_tekst("mb_som", "regel"), "🛒 Plant €1 en mandje €3", "de somzin")
 	gelijk(_kaart_tekst("mb_som", "regel2"), Spel.T_SAMEN, "en de vraag")
-	waar(_typ("mb_som", 4), "tik 4 op het cijferpad")
+	waar(_typ("mb_som", 4), "tik 4 op de strook")
 	await _wacht(0.6)
 	await _tel_frames()
 	# stap munten: buidel(12) = [5,2,2,2,1]; €5 is te veel -> wisselgeld
@@ -495,17 +498,17 @@ func test_hulpladder_en_nooit_straffen() -> void:
 	var sterren_voor := int(State.s["sterren"])
 	gelijk(_kaart_tekst("mb_som", "hulp"), "", "eerst geen hulpregel")
 	# 1e misser: samen doortellen
-	waar(_typ("mb_som", 7), "een fout antwoord")
+	waar(_typ_fout("mb_som", 4), "een fout antwoord")
 	await _tel_frames()
 	gelijk(_kaart_tekst("mb_som", "hulp"), "2 … 3 … 4", "samen doortellen vanaf 1")
 	waar(not _er_is("mb_spook"), "nog geen spookmunten")
 	# 2e misser: nog steeds samen doortellen
-	waar(_typ("mb_som", 8), "nog een fout antwoord")
+	waar(_typ_fout("mb_som", 4), "nog een fout antwoord")
 	await _tel_frames()
 	gelijk(_kaart_tekst("mb_som", "hulp"), "2 … 3 … 4", "nog steeds doortellen")
 	waar(not _er_is("mb_spook"), "en nog steeds geen spookmunten")
 	# 3e misser: spookmunten
-	waar(_typ("mb_som", 9), "en nog een")
+	waar(_typ_fout("mb_som", 4), "en nog een")
 	await _tel_frames()
 	waar(_er_is("mb_spook"), "nu liggen de spookmunten er")
 	gelijk(_titel("mb_spook"), Spel.T_SPOOK_SAMEN, "met het juiste label")

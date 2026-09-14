@@ -139,24 +139,21 @@ func _sorteer_alles() -> int:
 			break
 	return veilig
 
-## Type a number on the keypad band and press ✓.
+## Tap the number `n` on the strip of four under the card (no keypad, no ✓).
 func _toets(n: int) -> bool:
-	var s := Hits.spot("ws_vraag_pad")
-	if s == null or not is_instance_valid(s.knoop):
+	return _kies("n%d" % n)
+
+## Tap a number on the strip that is NOT the right one.
+func _toets_fout() -> bool:
+	var s := Hits.spot("ws_vraag_keuzes")
+	var spel := _spel()
+	if s == null or not is_instance_valid(s.knoop) or spel == null:
 		return false
-	var raster := s.knoop.get_node_or_null("Toetsen")
-	if raster == null:
-		return false
-	for teken in str(n):
-		var k := raster.get_node_or_null("T" + teken) as BaseButton
-		if k == null:
-			return false
-		k.emit_signal("pressed")
-	var ok := raster.get_node_or_null("Tok") as BaseButton
-	if ok == null:
-		return false
-	ok.emit_signal("pressed")
-	return true
+	for k in s.knoop.get_node("Rij").get_children():
+		if k.name != "Kn%d" % int(spel.juist()):
+			(k as BaseButton).emit_signal("pressed")
+			return true
+	return false
 
 ## Press one button of the choice strip under the card.
 func _kies(knop_id: String) -> bool:
@@ -348,12 +345,18 @@ func test_de_vragen_letterlijk() -> void:
 			gelijk(_kaart_tekst("regel"), "📊 Welke stapel is het hoogst?", "band 3 vraag")
 			gelijk(Hits.spot("ws_vraag_keuzes").knoop.tooltip_text, "kies een stapel",
 				"strooktitel")
-			waar(Hits.spot("ws_vraag_pad") == null, "band 3 heeft geen cijferpad")
+			waar(Hits.spot("ws_vraag_keuzes").knoop.get_node_or_null("Rij/Kn%d" % (int(vak[h]) * per)) == null,
+				"band 3 kiest een stapel, geen getal")
 		elif band == 4:
 			gelijk(_kaart_tekst("regel"), "📊 Hoeveel meer %s dan %s?" % [hn, ln], "band 4 vraag 1")
 			gelijk(_kaart_tekst("som"), "%d − %d =" % [int(vak[h]) * per, int(vak[l]) * per],
 				"de sombalk met het echte minteken")
-			waar(Hits.spot("ws_vraag_pad") != null, "band 4 heeft een cijferpad")
+			waar(Hits.spot("ws_vraag_pad") == null, "band 4 heeft geen cijferpad meer")
+			var strook := Hits.spot("ws_vraag_keuzes")
+			waar(strook != null and strook.knoop.get_node("Rij").get_child_count() == 4,
+				"band 4 kiest uit vier getallen")
+			waar(strook != null and strook.knoop.get_node_or_null("Rij/Kn%d" % _spel().juist()) != null,
+				"en het goede staat ertussen")
 			_antwoord_goed()
 			await _spoel(1.0)
 			gelijk(_kaart_tekst("regel"), "📊 Hoeveel stuks samen?", "band 4 vraag 2")
@@ -420,8 +423,7 @@ func test_fout_antwoord_en_hulpladder() -> void:
 			if band == 3:
 				_kies(str(WasSoorten.soort(l)["id"]))     # the lowest pile, never right
 			else:
-				var s := _spel()
-				_toets(maxi(0, int(s.juist()) + 1) if int(s.juist()) < 9 else 0)
+				_toets_fout()
 		# 1st miss
 		fout_antwoord.call()
 		st = _stand()
@@ -590,8 +592,7 @@ func test_herstel_uit_ctx_data() -> void:
 		if int(st2["vak"][i]) < int(st2["vak"][l]):
 			l = i
 	for _p in 3:
-		var s := _spel()
-		_toets(maxi(0, int(s.juist()) + 1) if int(s.juist()) < 9 else 0)
+		_toets_fout()
 	gelijk(int(_stand()["missers"]), 3, "drie missers verdiend")
 	Games.stop()
 	Games.start(ID)

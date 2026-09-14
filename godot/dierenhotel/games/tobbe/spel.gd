@@ -599,7 +599,8 @@ func _teken_vraag() -> void:
 			"hoog": 26.0, "icoon": "🧴", "getal": basis,
 			"tekst": "morgen dubbel", "prio": 9})
 		_kaart = ctx.ui.somkaart(rij, "%d + %d =" % [basis, basis], {
-			"id": "tb_vraag", "kamer": KAMER, "hoog": 34.0, "open": true, "max": 2,
+			"id": "tb_vraag", "kamer": KAMER, "hoog": 34.0, "max": 2,
+			"goed": int(_s["T"]), "liever": [basis, basis + 1, int(_s["T"]) + 1],
 			"icoon": "🧴", "regel": "Morgen twee keer %d" % basis,
 			"regel2": "Hoeveel samen?", "titel": "de dubbele som",
 			"on_ok": func(n, k) -> void: _antwoord(n, int(_s["T"]), k)})
@@ -611,7 +612,8 @@ func _teken_vraag() -> void:
 		# over (band 5).  Dan zegt de zin dat ook, anders staat er een leesbare
 		# leugen boven de som.
 		_kaart = ctx.ui.somkaart(rij, "helft van %d =" % t, {
-			"id": "tb_vraag", "kamer": KAMER, "hoog": 34.0, "open": true, "max": 2,
+			"id": "tb_vraag", "kamer": KAMER, "hoog": 34.0, "max": 2,
+			"goed": int(_s["per"]), "liever": [t, rest, int(_s["per"]) + 1],
 			"icoon": "🚰",
 			"regel": ("%d halveren, %d over" % [t, rest]) if rest > 0
 				else ("De helft van %s" % _mv(t, "schepje", "schepjes")),

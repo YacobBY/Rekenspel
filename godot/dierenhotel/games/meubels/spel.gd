@@ -826,8 +826,11 @@ func _betaal_teken() -> void:
 		var prijzen := PackedStringArray()
 		for t in types:
 			prijzen.append(_eur(int(_artikel(str(t))["prijs"])))
+		var p0 := int(_artikel(str(types[0]))["prijs"])
+		var p1 := int(_artikel(str(types[types.size() - 1]))["prijs"])
 		var kaart := ctx.ui.somkaart(_kaart_obj(), " + ".join(prijzen) + " =", {
-			"id": "mb_som", "kamer": "receptie", "open": true, "max": 2, "icoon": "🛒",
+			"id": "mb_som", "kamer": "receptie", "max": 2, "icoon": "🛒",
+			"goed": totaal, "liever": [absi(p0 - p1), maxi(p0, p1), totaal + 1],
 			"vlak": _kaart_vlak(),
 			"regel": _som_zin(types), "regel2": T_SAMEN,
 			"on_ok": func(n) -> void: _som_ok(n)})
@@ -841,7 +844,8 @@ func _betaal_teken() -> void:
 		var betaald := _som(_bet["bank"])
 		var kaart := ctx.ui.somkaart(_kaart_obj(),
 			"%s − %s =" % [_eur(betaald), _eur(totaal)], {
-			"id": "mb_wissel", "kamer": "receptie", "open": true, "max": 2,
+			"id": "mb_wissel", "kamer": "receptie", "max": 2,
+			"goed": betaald - totaal, "liever": [totaal, betaald, betaald - totaal + 1],
 			"hoog": 26.0, "icoon": "👛", "vlak": _kaart_vlak(),
 			"regel": "Je gaf %s, het kost %s" % [_eur(betaald), _eur(totaal)],
 			"regel2": T_TERUG_VRAAG,
@@ -986,18 +990,18 @@ func _meld_betaal() -> void:
 		if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
 			print("[probe] mb=hot ", id, "=", s.knoop.get_global_rect(),
 				" dekking=", "%.2f" % Hits.dekking(id))
-	# de toetsen van het cijferpad, zodat een browserproef een getal kan tikken
+	# de knoppen van de antwoordstrook, zodat een browserproef een getal kan tikken
 	var kaart = _bet.get("kaart")
-	if kaart == null or str(kaart.pad_id).is_empty():
+	if kaart == null or str(kaart.strook_id).is_empty():
 		return
-	var pad := Hits.spot(str(kaart.pad_id))
-	if pad == null or not is_instance_valid(pad.knoop):
+	var strook := Hits.spot(str(kaart.strook_id))
+	if strook == null or not is_instance_valid(strook.knoop):
 		return
-	var toetsen := pad.knoop.get_node_or_null("Toetsen")
-	if toetsen == null:
+	var rij := strook.knoop.get_node_or_null("Rij")
+	if rij == null:
 		return
-	for k in toetsen.get_children():
-		print("[probe] mb=toets ", k.name, "=", (k as Control).get_global_rect())
+	for k in rij.get_children():
+		print("[probe] mb=keuze ", k.name, "=", (k as Control).get_global_rect())
 
 # ----------------------------------------------------------- de spookmunten
 

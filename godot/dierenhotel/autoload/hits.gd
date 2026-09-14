@@ -395,7 +395,7 @@ func _maat_van(s: Spot) -> Vector2:
 	return maat
 
 func _laag_van(s: Spot) -> int:
-	if s.vast or s.kind == "tag" or s.kind == "naam" or s.kind == "pad":
+	if s.vast or s.kind == "tag" or s.kind == "naam":
 		return Laag.VAST
 	if _voorrang != "" and s.door == _voorrang:
 		return Laag.SPEL
@@ -407,7 +407,7 @@ func _diepte(s: Spot) -> float:
 	return s.d if not is_nan(s.d) else s.x + s.z
 
 func _op_van(s: Spot) -> String:
-	if s.op == "voet" or s.kind == "pad":
+	if s.op == "voet":
 		return "voet"
 	if s.kleef_aan != "":
 		return "kleef"
@@ -455,17 +455,29 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 		if not aan.is_empty():
 			var kr: Rect2 = aan["rect"]
 			var mx := kr.position.x + kr.size.x * 0.5 - maat.x * 0.5
-			var r := _klem(Rect2(Vector2(mx, kr.end.y + KLEEF), maat), kader)
-			if _botst(r):
-				# no room under it: glue it above instead
-				var boven_r := _klem(Rect2(Vector2(mx, kr.position.y - KLEEF - maat.y), maat), kader)
-				if not _botst(boven_r):
-					r = boven_r
-			var krap := _botst(r)
-			_reserveer(r, kader)
-			return {"rect": r, "op": "kleef", "krap": krap, "gestapeld": false}
-		# the thing it glues onto is not on screen: fall back to the aim point
-		return _plaats_midden(mik, maat, kader, s.vlak_nu, s.kind == "kaart" or s.kind == "wolk")
+			# Under the card, else above it, else docked at the foot of the frame
+			# (the KADER_ONDER strip the camera keeps free under the room) — each
+			# only when it touches nothing placed AND no object box.  A strip of
+			# four numbers is as wide as a keypad row; simply hung under the card
+			# it covered the price tags (kraam, 740×360) and the till (meubels).
+			var kandidaten: Array[Rect2] = [
+				_klem(Rect2(Vector2(mx, kr.end.y + KLEEF), maat), kader),
+				_klem(Rect2(Vector2(mx, kr.position.y - KLEEF - maat.y), maat), kader),
+				_klem(Rect2(Vector2(kader.size.x * 0.5 - maat.x * 0.5,
+					kader.size.y - RAND - maat.y), maat), kader),
+			]
+			for i in kandidaten.size():
+				var r := kandidaten[i]
+				if not _botst(r) and _vak_kosten(r) <= 0.0:
+					_reserveer(r, kader)
+					return {"rect": r, "op": "voet" if i == 2 else "kleef", "krap": false,
+						"gestapeld": i == 2}
+			# nothing clean next to the card: the band grid below decides, with
+			# the same rules as any button (no reserved cell, no object box)
+			op = "onder"
+		else:
+			# the thing it glues onto is not on screen: fall back to the aim point
+			return _plaats_midden(mik, maat, kader, s.vlak_nu, s.kind == "kaart" or s.kind == "wolk")
 	if op == "rand":
 		# A number tag may cover a tenth of its own object; a name plate hangs
 		# clear of the guest.  Neither may land on something already placed —

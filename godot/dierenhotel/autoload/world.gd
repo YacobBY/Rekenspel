@@ -21,6 +21,7 @@ extends Node
 signal kader_veranderd(rect: Rect2, schaal: Dictionary)
 signal kamer_veranderd(kamer: String)
 signal getekend()
+signal reis_gestart(id: String, kamer: String)   ## a guest set off through the doors
 
 const TIK := 1.0 / 15.0     ## world.js STAP: one think tick
 const MAX_INHAAL := 3       ## at most 3 catch-up ticks per frame
@@ -115,6 +116,10 @@ class Dier extends RefCounted:
 	var spring_t := 0
 	var spring_van := Vector2.ZERO
 	var spring_naar := Vector2.ZERO
+	var reis_doel := ""            ## the room a `reis` heads for; "" once he is in it
+	var reis_deuren := 0           ## doors on that journey
+	var reis_klaar := 0            ## doors already passed
+	var been_van := Vector2.INF    ## where the leg he is walking started
 	var rnd: Sommen.Prng
 	var opdracht: Object = null    ## Opdracht, resolved true/false
 
@@ -907,6 +912,10 @@ func reis(id: String, kamer: String, o: Dictionary = {}) -> Array:
 		return []
 	_breek(d, false)
 	d.route = route.slice(1)
+	d.reis_doel = kamer
+	d.reis_deuren = d.route.size()
+	d.reis_klaar = 0
+	d.been_van = Vector2(d.x, d.z)
 	d.route_na = o.get("na", "")
 	d.route_doel = Vector2.INF
 	if o.has("x") and o.has("z"):
@@ -922,7 +931,42 @@ func reis(id: String, kamer: String, o: Dictionary = {}) -> Array:
 		return route
 	_volgende_deur(d)
 	vuil()
+	reis_gestart.emit(id, kamer)
 	return route
+
+## Guests walking to `kamer` through the doors who are not there yet — the
+## ones a "komt eraan" bubble is for (owner, 2026-09-14).
+func onderweg_naar(kamer: String) -> Array[String]:
+	var uit: Array[String] = []
+	for id in _volgorde:
+		var d: Dier = _dieren[id]
+		if d.reis_doel == kamer and d.kamer != kamer:
+			uit.append(id)
+	return uit
+
+## How far along his journey a guest is, 0..1, counted in doors: the doors
+## passed plus the part of the leg he is on, over the doors of the whole trip.
+## 1 the moment he steps into the room he is heading for.
+func reis_voortgang(id: String) -> float:
+	var d: Dier = _dieren.get(id)
+	if d == null or d.reis_doel == "" or d.reis_deuren <= 0:
+		return 1.0
+	var deel := 0.0
+	if not d.punten.is_empty() and is_finite(d.been_van.x):
+		var doel: Vector2 = d.punten[0]
+		var heel := d.been_van.distance_to(doel)
+		if heel > 0.001:
+			deel = clampf(1.0 - Vector2(d.x, d.z).distance_to(doel) / heel, 0.0, 1.0)
+	return clampf((float(d.reis_klaar) + deel) / float(d.reis_deuren), 0.0, 1.0)
+
+## The room a travelling guest steps out of into the room he is heading for —
+## that is the door his bubble hangs on.
+func reis_van(id: String) -> String:
+	var d: Dier = _dieren.get(id)
+	if d == null or d.reis_doel == "":
+		return ""
+	var route := Rooms.pad(d.kamer, d.reis_doel)
+	return "" if route.size() < 2 else str(route[route.size() - 2])
 
 ## Go to bed (world.md §2.7).  Already in that room — or reduced motion — and
 ## the animal lies down straight away.
@@ -1075,6 +1119,7 @@ func _breek(d: Dier, gehaald: bool) -> void:
 		op.rond(gehaald)
 	d.punten = []
 	d.per_stap = Callable()
+	d.reis_doel = ""
 	if d.staat == "slaap":
 		# out of bed: the next order is never "lie down again", and the bed
 		# target must go with it or he would climb back in on arrival
@@ -1531,6 +1576,7 @@ func _volgende_deur(d: Dier) -> void:
 		_klaar_met_route(d)
 		return
 	d.punten = [Vector2(dp["ix"], dp["iz"])]
+	d.been_van = Vector2(d.x, d.z)
 	d.staat = "loop"
 	d.na = "deur"
 
@@ -1541,6 +1587,9 @@ func _stap_door_deur(d: Dier) -> void:
 	var vorige := d.kamer
 	var naar: String = d.route.pop_front()
 	d.kamer = naar
+	d.reis_klaar += 1
+	if naar == d.reis_doel:
+		d.reis_doel = ""            # in view: the bubble may go
 	var terug := Rooms.deur(naar, vorige)
 	if not terug.is_empty():
 		_zet_plek(d, Vector2(terug["ix"], terug["iz"]))

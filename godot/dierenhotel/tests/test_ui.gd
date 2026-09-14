@@ -1,8 +1,8 @@
 extends Proef
 ## The UI shell's own contracts: the F4 text budget, the 12 px floor, the
-## bundled font subset, the answer-box contract of world.md §5.5, the keypad
-## shape rules of architecture.md §4.4/§4.5, and the whole shell measured on the
-## five viewports the ticket names.
+## bundled font subset, the answer-strip contract of world.md §5.5 (four
+## numbers, one tap), and the whole shell measured on the five viewports the
+## ticket names.
 
 ## The ticket's five screens (CSS px), portrait and landscape.
 const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(1280, 800),
@@ -129,8 +129,6 @@ func _schermteksten() -> Array[String]:
 	uit.append(UiTekst.kassa_munten(4))
 	uit.append(UiTekst.kassa_sterren(4))
 	uit.append(UiTekst.kassa_snoep(4))
-	for t in UiKeypad.TOETSEN:
-		uit.append(t)
 	for id in Rooms.lijst():
 		var r := Rooms.get_kamer(id)
 		if r != null:
@@ -143,157 +141,120 @@ func _schermteksten() -> Array[String]:
 	uit.append("✓")
 	return uit
 
-# -------------------------------------------------- world.md §5.5 antwoordvak
+# -------------------------------------------------- world.md §5.5 antwoordstrook
 
-## The answer box contract: at most `max` digits, ⌫ wipes one, ✓ hands over the
-## number (or `null` when nothing was typed), and `klaar()` ticks the card.
-func test_antwoordvak_en_toetsen() -> void:
+## Press one button of the strip glued under card `id`.
+func _kies(id: String, knop: String) -> bool:
+	var s := Hits.spot(id + "_keuzes")
+	if s == null or not is_instance_valid(s.knoop):
+		return false
+	var k := s.knoop.get_node_or_null("Rij/K" + knop) as BaseButton
+	if k == null:
+		return false
+	k.emit_signal("pressed")
+	return true
+
+func _strook_getallen(id: String) -> Array[int]:
+	var uit: Array[int] = []
+	var s := Hits.spot(id + "_keuzes")
+	if s == null or not is_instance_valid(s.knoop):
+		return uit
+	for k in s.knoop.get_node("Rij").get_children():
+		var laatste := str((k as Button).text).split(" ")[-1]
+		if laatste.is_valid_int():
+			uit.append(laatste.to_int())
+	return uit
+
+## The answer contract (owner, 2026-09-14): a card with `goed` carries a strip of
+## four numbers, pictogram and number in one button, exactly one right; a tap
+## puts the number in the box and hands it over at once — no ✓, no keypad.
+func test_antwoordstrook_vier_getallen_een_tik() -> void:
 	_op(Vector2(1000, 648))
 	var gekregen := [null]
 	var keer := [0]
 	var kaart := Ui.somkaart({"x": 20.0, "z": 20.0}, "3 + 2 =", {
-		"id": "ak", "door": "test", "kamer": World.kamer_nu(), "open": true, "max": 2,
-		"icoon": "🥄", "regel": "Hoeveel scheppen samen?",
+		"id": "ak", "door": "test", "kamer": World.kamer_nu(), "goed": 5, "max": 2,
+		"liever": [3, 2], "icoon": "🥄", "regel": "Hoeveel scheppen samen?",
 		"on_ok": func(n, _k) -> void:
 			gekregen[0] = n
 			keer[0] += 1})
 	Hits.plaats()
-	var pad := Hits.spot("ak_pad")
-	waar(pad != null, "het toetsenbord staat er")
-	if pad == null:
+	waar(Hits.spot("ak_pad") == null, "er is geen toetsenbord meer")
+	var strook := Hits.spot("ak_keuzes")
+	waar(strook != null, "de strook hangt aan de kaart")
+	if strook == null:
 		_af()
 		return
-	var toets := func(t: String) -> void:
-		(pad.knoop as UiKeypad).toets_getikt.emit(t)
-	toets.call("4")
-	gelijk(kaart.getal(), 4, "één cijfer")
-	toets.call("2")
-	gelijk(kaart.getal(), 42, "twee cijfers")
-	toets.call("7")
-	gelijk(kaart.getal(), 42, "een derde cijfer past niet in max 2")
-	toets.call(UiKeypad.WIS)
-	gelijk(kaart.getal(), 4, "⌫ wist er één")
-	toets.call(UiKeypad.OK)
-	gelijk(gekregen[0], 4, "✓ geeft het getal door")
+	var getallen := _strook_getallen("ak")
+	gelijk(getallen.size(), 4, "vier getallen: %s" % str(getallen))
+	waar(getallen.has(5), "het goede antwoord staat ertussen")
+	waar(getallen.has(3) and getallen.has(2), "de twee getallen uit de som ook (liever)")
+	var gesorteerd := getallen.duplicate()
+	gesorteerd.sort()
+	gelijk(getallen, gesorteerd, "op volgorde, als een getallenlijn")
+	for k in strook.knoop.get_node("Rij").get_children():
+		waar(str((k as Button).text).begins_with("🥄 "), "pictogram én getal: %s" % (k as Button).text)
+	var kaartknoop := Hits.spot("ak").knoop as UiSomkaart
+	waar(kaartknoop.vak_label.visible, "het antwoordvak blijft: daar komt het getikte getal")
+	waar(_kies("ak", "n3"), "3 is een knop")
+	gelijk(gekregen[0], 3, "één tik geeft het getal meteen door")
 	gelijk(keer[0], 1, "en precies één keer")
-	toets.call(UiKeypad.WIS)
-	toets.call(UiKeypad.OK)
-	waar(gekregen[0] == null, "leeg vak geeft null")
+	gelijk(kaart.getal(), 3, "en het staat in het vak")
+	waar(_kies("ak", "n5"), "5 is een knop")
+	gelijk(gekregen[0], 5, "de tweede tik ook")
 	kaart.klaar()
 	gelijk(kaart.getal(), null, "een afgevinkte kaart heeft geen getal meer")
-	waar(Hits.spot("ak_pad") == null, "klaar() haalt het toetsenbord weg")
+	waar(Hits.spot("ak_keuzes") == null, "klaar() haalt de strook weg")
 	kaart.weg()
 	_af()
 
-## There is exactly one keypad: a second card taking it over wins (world.md §5.5).
-func test_maar_een_toetsenbord_tegelijk() -> void:
+## The same card draws the same strip: after a slip the four choices come back
+## unchanged, and a reload shows what the child saw.
+func test_antwoordstrook_is_herhaalbaar_en_begrensd() -> void:
 	_op(Vector2(1000, 648))
-	var a := Ui.somkaart({"x": 20.0, "z": 20.0}, "1 + 1 =", {
-		"id": "ka", "door": "test", "kamer": World.kamer_nu(), "open": true,
-		"icoon": "🥄", "regel": "Hoeveel samen?"})
-	var b := Ui.somkaart({"x": 26.0, "z": 20.0}, "2 + 2 =", {
-		"id": "kb", "door": "test", "kamer": World.kamer_nu(), "open": true,
-		"icoon": "🥄", "regel": "En hoeveel nu?"})
-	waar(Hits.spot("ka_pad") == null, "de eerste kaart gaf het pad af")
-	waar(Hits.spot("kb_pad") != null, "de tweede kaart heeft het")
-	gelijk(a.pad_id, "", "en weet dat zelf ook")
-	gelijk(b.pad_id, "kb_pad", "de tweede houdt het vast")
+	var o := {"id": "hh", "door": "test", "kamer": World.kamer_nu(), "goed": 0, "max": 2,
+		"icoon": "🥄", "regel": "Hoeveel blijft over?", "on_ok": func(_n, _k) -> void: pass}
+	var a := Ui.somkaart({"x": 20.0, "z": 20.0}, "2 − 2 =", o)
+	var eerste := _strook_getallen("hh")
 	a.weg()
+	var b := Ui.somkaart({"x": 20.0, "z": 20.0}, "2 − 2 =", o)
+	gelijk(_strook_getallen("hh"), eerste, "dezelfde kaart, dezelfde strook")
+	for n in eerste:
+		waar(n >= 0 and n <= 99, "nooit onder nul of boven het cijferbudget: %d" % n)
+	gelijk(eerste.size(), 4, "ook bij 0 zijn er vier")
 	b.weg()
+	# a strip a game hands over is capped at four
+	var veel: Array = []
+	for i in 6:
+		veel.append({"id": "v%d" % i, "icoon": "🪨", "tekst": "%d keer" % i,
+			"kies": func(_id, _k) -> void: pass})
+	var c := Ui.somkaart({"x": 20.0, "z": 20.0}, "", {
+		"id": "zes", "door": "test", "kamer": World.kamer_nu(), "icoon": "🪨",
+		"regel": "Hoeveel keer?", "keuzes": veel})
+	gelijk(Hits.spot("zes_keuzes").knoop.get_node("Rij").get_child_count(), 4,
+		"hooguit vier knoppen op een strook")
+	c.weg()
 	_af()
 
-## `o.pad: false` means no keypad at all; `o.keuzes` replaces box and keypad.
-func test_kaart_zonder_pad_en_met_keuzes() -> void:
+## A card without `goed` or `keuzes` is a statement: no strip at all; a strip of
+## words replaces the answer box.
+func test_kaart_zonder_vraag_en_met_woorden() -> void:
 	_op(Vector2(1000, 648))
 	var zonder := Ui.somkaart({"x": 20.0, "z": 20.0}, "2 × 3 = 6", {
-		"id": "kz", "door": "test", "kamer": World.kamer_nu(), "pad": false,
+		"id": "kz", "door": "test", "kamer": World.kamer_nu(),
 		"icoon": "🥄", "regel": "Elke dag 3 scheppen"})
-	zonder.open()
-	waar(Hits.spot("kz_pad") == null, "pad:false laat geen toetsenbord toe")
+	waar(Hits.spot("kz_keuzes") == null, "zonder vraag geen strook")
 	var niets := func(_k) -> void: pass
 	var met := Ui.somkaart({"x": 26.0, "z": 20.0}, "", {
-		"id": "kw", "door": "test", "kamer": World.kamer_nu(), "open": true,
+		"id": "kw", "door": "test", "kamer": World.kamer_nu(),
 		"icoon": "📦", "regel": "Is er genoeg eten?",
 		"keuzes": [{"id": "a", "icoon": "⚖", "tekst": "precies", "kies": niets}]})
-	waar(Hits.spot("kw_pad") == null, "keuzes vervangen vak én toetsenbord")
 	waar(Hits.spot("kw_keuzes") != null, "de strook staat er wel")
 	var kaartknoop := Hits.spot("kw").knoop as UiSomkaart
-	waar(not kaartknoop.vak_label.visible, "het antwoordvak is weg bij keuzes")
+	waar(not kaartknoop.vak_label.visible, "het antwoordvak is weg bij woorden")
 	zonder.weg()
 	met.weg()
 	_af()
-
-# ------------------------------------------------------- het toetsenbord zelf
-
-## architecture.md §4.4/§4.5: two rows of six, one row of twelve from 660 units,
-## and the worked-out low-frame ladder 620 / 572.  The FRAME decides the shape;
-## the SCREEN decides the key size (art-sound-rules.md §16.5), so the size is
-## passed in here and checked on its own in the next test.
-func test_toetsenbord_vorm_per_kader() -> void:
-	var v := UiKeypad.vorm(Vector2(1000, 648), 48)
-	gelijk(v["kolommen"], 12, "een breed kader krijgt één rij van twaalf")
-	gelijk(v["toets"], 48, "met toetsen van 48")
-	v = UiKeypad.vorm(Vector2(600, 900), 48)
-	gelijk(v["kolommen"], 6, "een smal hoog kader krijgt twee rijen van zes")
-	gelijk(v["toets"], 48, "ook met toetsen van 48")
-	v = UiKeypad.vorm(Vector2(300, 700), 44)
-	gelijk(v["toets"], 44, "op een klein scherm mogen de toetsen 44 zijn")
-	gelijk(v["kolommen"], 6, "en het blijven twee rijen")
-	v = UiKeypad.vorm(Vector2(640, 400), 48)
-	gelijk(v["kolommen"], 12, "een laag kader van 640 krijgt één rij")
-	gelijk(v["toets"], 48, "met toetsen van 48")
-	v = UiKeypad.vorm(Vector2(600, 400), 48)
-	gelijk(v["kolommen"], 12, "tussen 572 en 620 nog steeds één rij")
-	gelijk(v["toets"], 44, "maar dan met toetsen van 44")
-	v = UiKeypad.vorm(Vector2(560, 400), 48)
-	gelijk(v["kolommen"], 6, "onder 572 breekt de strook naar twee rijen")
-	# the band must fit the strip it lives in
-	for kader in KADERS_UNITS:
-		var w := UiKeypad.vorm(kader, 48)
-		waar(float(w["breed"]) <= kader.x, "de band past in de breedte van %s" % str(kader))
-		waar(float(w["hoog"]) <= 132.0, "de band past in KADER_ONDER bij %s" % str(kader))
-		waar(int(w["toets"]) >= 44, "de toetsen blijven een tikdoel bij %s" % str(kader))
-
-## The lead decision of W3-F1 finding 6: 44 px keys only BELOW a 360 px screen,
-## 48 at exactly 360 (art-sound-rules.md §16.5 beats the looser reading of
-## HOTEL.md §9).  Measured on the window, never on the world frame — a fingertip
-## does not shrink because the chrome took some room.
-func test_toetsmaat_hangt_aan_het_scherm() -> void:
-	_op(Vector2(326, 402))                       # the frame a 360 px phone gives
-	Ui.zet_scherm(Vector2(360, 740))
-	gelijk(Ui.tap_maat(), 48, "bij precies 360 px scherm blijven de toetsen 48")
-	gelijk(UiKeypad.vorm(Vector2(326, 402))["toets"], 48, "en het toetsenbord ook")
-	waar(6 * 48 + 5 * UiKeypad.GAT + 2 * UiKeypad.RAND <= 326,
-		"zes toetsen van 48 passen in het kader van zo'n telefoon")
-	Ui.zet_scherm(Vector2(320, 640))
-	gelijk(Ui.tap_maat(), 44, "onder 360 px scherm mag 44")
-	Ui.zet_scherm(Vector2(1024, 768))
-	gelijk(Ui.tap_maat(), 48, "en op een tablet is het weer 48")
-	_af()
-
-## Every key is a real tap target once it is built.
-func test_toetsen_zijn_tikdoelen() -> void:
-	for paar in [[Vector2(1000, 648), Vector2(1024, 768), 48],
-			[Vector2(322, 562), Vector2(360, 740), 48],
-			[Vector2(290, 500), Vector2(320, 640), 44]]:
-		var kader: Vector2 = paar[0]
-		_op(kader)
-		Ui.zet_scherm(paar[1])
-		var pad := UiKeypad.new()
-		_laag.add_child(pad)
-		pad.bouw(kader, Ui.maten)
-		var raster: GridContainer = pad.get_node("Toetsen")
-		gelijk(raster.get_child_count(), 12, "twaalf toetsen bij %s" % str(kader))
-		var eis: int = paar[2]
-		for k in raster.get_children():
-			var maat: Vector2 = (k as Control).custom_minimum_size
-			waar(maat.x >= eis and maat.y >= eis,
-				"toets %s is %s (>= %d) bij scherm %s" % [k.name, str(maat), eis, str(paar[1])])
-		gelijk(raster.get_child(5).get("text"), UiKeypad.WIS, "⌫ staat op plek 6")
-		gelijk(raster.get_child(11).get("text"), UiKeypad.OK, "✓ staat op plek 12")
-		pad.queue_free()
-		_af()
-	Ui.zet_scherm(Vector2(1024, 768))
 
 # ------------------------------------------------------------- de keuzestrook
 
@@ -411,12 +372,9 @@ func test_shell_op_vijf_schermen() -> void:
 			"het kader haalt KADER_MIN bij %s (%s)" % [str(maat), str(kader.size)])
 		waar(kader.size.x <= float(maat.x) and kader.size.y <= float(maat.y),
 			"het kader past in het scherm %s" % str(maat))
-		# the keypad band of this frame fits inside it
-		var vorm := UiKeypad.vorm(kader.size)
-		waar(float(vorm["breed"]) <= kader.size.x,
-			"het toetsenbord past in het kader bij %s" % str(maat))
-		waar(float(vorm["hoog"]) <= kader.size.y,
-			"het toetsenbord past in de hoogte bij %s" % str(maat))
+		# four 48-unit buttons and their gaps fit in the width of every frame
+		waar(4 * 48.0 + 3 * 4.0 + 10.0 <= kader.size.x,
+			"vier antwoordknoppen passen in het kader bij %s" % str(maat))
 		# The theme must really reach the shell: a Control inherits it from a
 		# Control or Window ANCESTOR only, and the shell's root is a plain Node.
 		# Without this check the whole chrome silently falls back to Godot's

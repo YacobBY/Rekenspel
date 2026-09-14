@@ -2,14 +2,14 @@ extends Proef
 ## kraam — de souvenirkraam (games-b.md §5), headless.
 ##
 ## Everything is driven through the ctx the way a child drives it: a tap is a
-## `pressed` on the real Button, a typed answer goes through the keypad keys,
+## `pressed` on the real Button, a number answer taps a button of the strip,
 ## and a dragged coin travels the real drag payload from `UiBron` into the
 ## `UiVangvlak` of the counter.  Nothing calls a private method of the game.
 
 const SPEL := "kraam"
 const KAMER := "tuin"
 const KAART := "kr_som"
-const PAD := "kr_som_pad"
+const STROOK := "kr_som_keuzes"
 const BANK := "kr_geld"
 const KLAAR := "kr_ok"
 
@@ -102,24 +102,17 @@ func _tik(id: String) -> bool:
 	(k as BaseButton).pressed.emit()
 	return true
 
-## One key of the real keypad band.
-func _toets(teken: String) -> bool:
-	var pad := _knoop(PAD)
-	if pad == null:
-		fout("er is geen cijferpad")
-		return false
-	var naam := "T" + ("ok" if teken == UiKeypad.OK else ("wis" if teken == UiKeypad.WIS else teken))
-	var k := pad.get_node_or_null("Toetsen/" + naam)
-	if k == null:
-		fout("toets %s bestaat niet" % teken)
-		return false
-	(k as BaseButton).pressed.emit()
-	return true
-
+## One number of the real strip of four under the card (no keypad, no ✓).
 func _tel_in(getal: int) -> void:
-	for c in str(getal):
-		_toets(c)
-	_toets(UiKeypad.OK)
+	var strook := _knoop(STROOK)
+	if strook == null:
+		fout("er is geen antwoordstrook")
+		return
+	var k := strook.get_node_or_null("Rij/Kn%d" % getal)
+	if k == null:
+		fout("getal %d staat niet op de strook" % getal)
+		return
+	(k as BaseButton).pressed.emit()
 
 func _stand() -> Dictionary:
 	var d: Dictionary = State.spel_data(SPEL).get("stand", {})
@@ -237,14 +230,14 @@ func test_beurt_band_4() -> void:
 		Sommen.Kraam.euro(int(k2["prijs"]))], "de zin op de kaart")
 	gelijk(_kaart_tekst("Kolom/Regel2"), "Hoeveel euro samen?", "de vraag")
 	gelijk(_kaart_tekst("Kolom/Rij/Som"), str(o["vraag"]["som"]), "de som zelf")
-	waar(_knoop(PAD) != null, "het cijferpad hangt eraan")
+	waar(_knoop(STROOK) != null, "de antwoordstrook hangt eraan")
 	_tel_in(int(o["vraag"]["goed"]))
 	gelijk(_stand().get("stap", ""), "leg", "goed: door naar het leggen")
 	await _wacht(0.8)
 	gelijk(_kaart_tekst("Kolom/Regel"), "🎁 Samen kost het %s"
 		% Sommen.Kraam.euro(int(o["kosten"])), "de kaart vertelt wat het kost")
 	gelijk(_kaart_tekst("Kolom/Regel2"), "Leg de munten op de toonbank", "en wat je doet")
-	waar(_knoop(PAD) == null, "en het pad is weg")
+	waar(_knoop(STROOK) == null, "en de strook is weg")
 	var sterren := int(State.s["sterren"])
 	_leg_tot_doel(o)
 	gelijk(_stand().get("stap", ""), "af", "de beurt is af")
@@ -514,7 +507,7 @@ func test_stop_ruimt_alles_op() -> void:
 	var voor := World.kader_veranderd.get_connections().size()
 	Games.stop()
 	gelijk(World.decor_lijst("tuin").size(), 0, "na stop staat er geen los decor meer")
-	for id in [KAART, PAD, BANK, KLAAR, "kr_m1", "kr_p0", "kr_zeg", "kr_af"]:
+	for id in [KAART, STROOK, BANK, KLAAR, "kr_m1", "kr_p0", "kr_zeg", "kr_af"]:
 		gelijk(_knoop(id), null, "hotspot %s is opgeruimd" % id)
 	waar(World.kader_veranderd.get_connections().size() <= voor - 1,
 		"de kaderluisteraar is afgemeld")
@@ -653,7 +646,7 @@ func _shell_af(h: Dictionary) -> void:
 
 ## The ticket's own gate: 0 % coverage for every button of this game, in four
 ## frame sizes, plus the two structural rules the stall depends on — the card
-## never lies on the guest and the keypad band stands at the foot of the frame.
+## never lies on the guest and the strip of four numbers glues to the card.
 func test_dekking_in_vier_kaders() -> void:
 	_bewaard = State.s.duplicate(true)
 	var boom := Engine.get_main_loop() as SceneTree
@@ -663,15 +656,15 @@ func test_dekking_in_vier_kaders() -> void:
 		waar(Games.start(SPEL), "%s: het spel start" % str(maat))
 		for _f in 3:
 			await boom.process_frame
-		# step `som`: the card, the price tags and the keypad band
+		# step `som`: the card, the price tags and the strip of four numbers
 		_keur_kader(maat, kader, "som")
 		var dbg := Hits.debug()
-		waar(dbg.has(PAD), "%s: het cijferpad staat er" % str(maat))
-		if dbg.has(PAD):
-			gelijk(dbg[PAD]["op"], "voet", "%s: het pad hangt aan de voet" % str(maat))
-			var pad: Rect2 = dbg[PAD]["rect"]
-			waar(pad.end.y <= kader.y - Hits.KRAP + 0.01,
-				"%s: het pad staat binnen het kader (%s)" % [str(maat), str(pad)])
+		waar(dbg.has(STROOK), "%s: de antwoordstrook staat er" % str(maat))
+		if dbg.has(STROOK):
+			print("[maat] kraam %s: de strook staat %s" % [str(maat), dbg[STROOK]["op"]])
+			var strook: Rect2 = dbg[STROOK]["rect"]
+			waar(strook.end.y <= kader.y + 0.01 and strook.position.y >= -0.01,
+				"%s: de strook staat binnen het kader (%s)" % [str(maat), str(strook)])
 		# step `leg`: the busiest picture — counter, three coin sources, ✔ klaar
 		_tel_in(int(Sommen.Kraam.opzet(4, 4, 2)["vraag"]["goed"]))
 		await _wacht(0.8)

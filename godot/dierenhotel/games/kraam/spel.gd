@@ -537,17 +537,21 @@ func _meld() -> void:
 				print("[probe] kraamtoets ", k.name, "=", (k as Control).get_global_rect())
 
 func _teken_kaart() -> void:
-	var open := _stap() == "som"
+	var open := _stap() == "som" and not O.is_empty() and not (O.get("vraag", {}) as Dictionary).is_empty()
 	var zinnen := _zinnen()
 	var regel2: String = "" if _kort_kader() or zinnen.size() < 2 else str(zinnen[1])
+	var o := {
+		"id": KAART_ID, "kamer": KAMER, "hoog": _kaart_hoog(), "icoon": _kaart_ico(),
+		"regel": str(zinnen[0]), "regel2": regel2, "max": 2,
+		"vlak": _vrij_vlak(),
+	}
+	if open:
+		# the slips: the price alone, the note alone, the sum of both
+		o["goed"] = int(O["vraag"]["goed"])
+		o["liever"] = [int(O["kosten"]), int(O["betaald"]), int(O["kosten"]) + int(O["betaald"])]
+		o["on_ok"] = _antwoord_som
 	_kaart = ctx.ui.somkaart({"x": P["bank"]["x"], "z": P["bank"]["z"], "kamer": KAMER},
-		_som_lijn(), {
-			"id": KAART_ID, "kamer": KAMER, "hoog": _kaart_hoog(), "icoon": _kaart_ico(),
-			"regel": str(zinnen[0]), "regel2": regel2,
-			"open": open, "max": 2, "pad": open,
-			"vlak": _vrij_vlak(),
-			"on_ok": _antwoord_som,
-		})
+		_som_lijn(), o)
 	if _kaart == null:
 		return
 	# The card follows the guest, every drawn frame, with his own baked

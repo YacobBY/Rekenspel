@@ -24,6 +24,7 @@ const RAND_Y := 6
 var icoon_label: Label
 var getal_label: Label
 var zeg_label: Label
+var balk: ProgressBar = null    ## only on a "komt eraan" bubble (`voortgang`)
 var _doos: MarginContainer
 var _smal := false
 
@@ -54,7 +55,30 @@ func bouw(o: Dictionary, mt: Dictionary, smal: bool) -> void:
 	rij.name = "Rij"
 	rij.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rij.add_theme_constant_override("separation", 6)
-	_doos.add_child(rij)
+	if o.get("voortgang", null) == null:
+		_doos.add_child(rij)
+	else:
+		# the row, and under it a bar that fills while a guest walks in from a
+		# room you cannot see (owner, 2026-09-14)
+		var kolom := VBoxContainer.new()
+		kolom.name = "Kolom"
+		kolom.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		kolom.add_theme_constant_override("separation", 4)
+		_doos.add_child(kolom)
+		kolom.add_child(rij)
+		balk = ProgressBar.new()
+		balk.name = "Balk"
+		balk.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		balk.min_value = 0.0
+		balk.max_value = 1.0
+		balk.step = 0.001
+		balk.show_percentage = false
+		balk.custom_minimum_size = Vector2(0, 10)
+		balk.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		balk.add_theme_stylebox_override("background", UiThema.vlak(UiThema.KURK, 5))
+		balk.add_theme_stylebox_override("fill", UiThema.vlak(UiThema.MUNT_D, 5))
+		kolom.add_child(balk)
+		zet_voortgang(float(o["voortgang"]))
 
 	icoon_label = _regel("Icoon", str(o.get("icoon", "")), mt["icoon_wolk"])
 	rij.add_child(icoon_label)
@@ -124,6 +148,11 @@ func _ready() -> void:
 		var tw := create_tween().set_parallel()
 		tw.tween_property(self, "scale", Vector2.ONE, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw.tween_property(self, "modulate:a", 1.0, 0.12)
+
+## How far the guest is, 0..1.
+func zet_voortgang(f: float) -> void:
+	if balk != null:
+		balk.value = clampf(f, 0.0, 1.0)
 
 func _regel(naam: String, tekst: String, maat: int) -> Label:
 	var l := Label.new()

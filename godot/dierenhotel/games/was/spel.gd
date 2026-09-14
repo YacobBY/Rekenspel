@@ -601,7 +601,8 @@ func _vraag_kaart() -> Ui.Kaart:
 	var l := _laagste_idx()
 	var som := ""
 	var o := {"id": HOT_KAART, "kamer": KAMER, "hoog": KAART_HOOG, "icoon": "📊",
-		"open": true, "max": 2, "on_ok": func(n, k) -> void: _antwoord(n, k)}
+		"max": 2, "goed": _antwoord_nu(), "liever": [_stuks(h), _stuks(l), _samen()],
+		"on_ok": func(n, k) -> void: _antwoord(n, k)}
 	if band == 4:
 		if _stap_nu() == "vraag1":
 			o["regel"] = "Hoeveel meer %s dan %s?" % [str(WasSoorten.soort(h)["naam"]),
@@ -651,7 +652,7 @@ func _kies(n: int) -> bool:
 	_meld("mis")
 	return false
 
-## group 4 and 5: a number from the keypad
+## group 4 and 5: a number from the strip
 func _antwoord(n, k) -> bool:
 	if ctx == null or _s.is_empty() or _stap_nu() == "af":
 		return false
@@ -902,8 +903,8 @@ func _plaat_breedtes(m: int) -> Array:
 ##
 ## The card wants to be as LOW as the frame allows: everything of the bar chart
 ## that stands above its top edge stays countable (C2).  Its own aim point is
-## the front of the room, and the only thing under it is the keypad band, whose
-## height is a closed form as well (`UiKeypad.vorm`).  So the card is aimed at
+## the front of the room, and the only thing under it is its own strip of four
+## numbers, whose height is a closed form as well.  So the card is aimed at
 ## the gap that really exists instead of being dropped at a fixed height and
 ## then shoved a whole band at a time by the placement pass — which is what put
 ## it straight over the diagram on a compact landscape phone.
@@ -914,14 +915,13 @@ func _kaart_hoog(h_kaart: float) -> float:
 	var grond := World.mik_punt(p.x, p.y, 0.0).y
 	var onder := kader.y - float(Hits.KRAP)
 	if _heeft_pad():
-		var vorm := UiKeypad.vorm(kader)
-		onder = kader.y - float(Hits.RAND) - float(vorm.get("hoog", 0)) - float(Hits.GAT)
+		onder = kader.y - float(Hits.KRAP) - float(UiThema.HOT + 10) - float(Hits.KLEEF)
 	var doel: float = minf(grond - h_kaart * 0.5, onder - h_kaart)
 	doel = maxf(doel, float(Hits.KRAP))
 	return (grond - doel - h_kaart * 0.5) / (2.0 * k)
 
-## Does this question carry the keypad band?  Band 3 answers with a strip, the
-## end card with one button.
+## Does this question carry the strip of four numbers under the card?  Band 3
+## answers with a strip of piles, the end card with one button.
 func _heeft_pad() -> bool:
 	return _kaart != null and int(_s.get("band", 3)) != 3 \
 		and _stap_nu() != "af" and _stap_nu() != "sorteren"
@@ -982,26 +982,12 @@ func _meld(waarom: String) -> void:
 	_meld_knop(HOT_KAART)
 	for i in _m():
 		_meld_knop(_krat_hot(i))
-	_meld_toetsen()
 	_meld_keuzes()
 
 func _meld_knop(id: String) -> void:
 	var s := Hits.spot(id)
 	if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
 		print("[probe] was_knop ", id, "=", s.knoop.get_global_rect())
-
-## The twelve keys of the keypad band, by name, so a finger can type a number.
-func _meld_toetsen() -> void:
-	if _kaart == null or _kaart.pad_id == "":
-		return
-	var s := Hits.spot(_kaart.pad_id)
-	if s == null or not is_instance_valid(s.knoop):
-		return
-	var raster := s.knoop.get_node_or_null("Toetsen")
-	if raster == null:
-		return
-	for k in raster.get_children():
-		print("[probe] was_toets ", (k as Control).name, "=", (k as Control).get_global_rect())
 
 ## The buttons of the choice strip under the card, by name.
 func _meld_keuzes() -> void:

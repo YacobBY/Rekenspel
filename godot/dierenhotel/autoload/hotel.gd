@@ -78,6 +78,9 @@ func _ready() -> void:
 	_prikbord = HotelPrikbord.new()
 	_bouw_spel_taak()
 	Econ.rekening_klaar.connect(_rekening_klaar)
+	# "Boef komt eraan": refreshed with every drawn frame and every room change
+	World.getekend.connect(komt_eraan)
+	World.kamer_veranderd.connect(func(_k: String) -> void: komt_eraan())
 	# every furniture change, whoever made it, lands in the save at once
 	Rooms.kamers_veranderd.connect(bewaar_inrichting)
 
@@ -629,7 +632,9 @@ func paint_checkin() -> void:
 			v["invoer"] = "" if n == null else str(n)
 			antwoord1()
 		_ci_kaart = Ui.somkaart(plek, "%d + %d =" % [int(v["samen"]), int(v["extra"])], {
-			"id": "ci_som", "door": CHECKIN, "kamer": "receptie", "open": true,
+			"id": "ci_som", "door": CHECKIN, "kamer": "receptie",
+			"goed": int(v["nieuw"]), "liever": [int(v["samen"]), int(v["extra"]),
+				int(v["samen"]) + int(v["extra"]) + 1],
 			"max": 2, "hoog": _ci_hoog(), "icoon": "🥄",
 			"regel": "De gasten eten %s per dag" % scheppen(int(v["samen"])),
 			"regel2": "%s eet %d erbij. Samen?" % [g["naam"], int(v["extra"])],
@@ -1142,6 +1147,45 @@ func brievenmuur() -> Dictionary:
 	}
 
 # --------------------------------------------------------------- hotspots
+
+# ------------------------------------------------------------- komt eraan
+
+const KOMT := "komt"           ## owner of the "X komt eraan" bubbles
+const DIER_ICOON := {"hond": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆"}
+var _komt: Dictionary = {}     ## guest id -> spot id of its bubble
+
+## A guest walking in from a room you cannot see — after "Kies een bed", or on
+## his way to a wish — gets a bubble at the door he will come through, with his
+## pictogram, his name and a bar that fills until he steps into view (owner,
+## 2026-09-14).  Gone the moment he is in the room.  Owned by the hotel, so a
+## game's `wis_alles` and the hotel's own `render()` leave it alone.
+func komt_eraan() -> void:
+	if not scherm_klaar():
+		return
+	var nu := World.kamer_nu()
+	var gezien := {}
+	for id in World.onderweg_naar(nu):
+		var d = World.dier(id)
+		if d == null:
+			continue
+		gezien[id] = true
+		var f := World.reis_voortgang(id)
+		var sid: String = "%s_%s" % [KOMT, id]
+		var s := Hits.spot(sid)
+		if s != null and is_instance_valid(s.knoop):
+			(s.knoop as UiWolk).zet_voortgang(f)
+			continue
+		var dp := Rooms.deur(nu, World.reis_van(id))
+		Ui.wolk({"id": sid, "door": KOMT, "kamer": nu,
+			"x": float(dp.get("ix", 20.0)), "z": float(dp.get("iz", 20.0)), "hoog": 30,
+			"icoon": str(DIER_ICOON.get(str(d.kind), "🐾")),
+			"tekst": "%s komt eraan" % str(d.naam), "voortgang": f, "prio": 8,
+			"klas": "komt", "titel": "%s komt eraan" % str(d.naam)})
+		_komt[id] = sid
+	for id in _komt.keys():
+		if not gezien.has(id):
+			Hits.weg(_komt[id])
+			_komt.erase(id)
 
 ## Every button the hotel itself owns, laid out again after each render.
 func hotspots() -> void:

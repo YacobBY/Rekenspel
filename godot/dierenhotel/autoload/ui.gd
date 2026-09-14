@@ -1,5 +1,5 @@
 extends Node
-## Ui — cards, bubbles, the keypad, name plates, toasts and sheets.  Autoload #6.
+## Ui — cards, bubbles, choice strips, name plates, toasts and sheets.  Autoload #6.
 ## Port of `demos/dierenhotel/ui.js` + `style.css` (world.md §5.5-5.7, §6;
 ## art-sound-rules.md §16).
 ##
@@ -134,14 +134,6 @@ func _herzie_maten(rect: Rect2) -> void:
 	_tap = tap
 	if anders:
 		thema_veranderd.emit()
-	# A keypad built for 48 px keys does not fit a frame that just became
-	# narrow: rebuild the open one, and let the strip pick its words again.
-	if knoplaag == null:
-		return
-	for id in _kaarten.keys():
-		var k: Kaart = _kaarten[id]
-		if k != null and k.pad_id != "":
-			k.open()
 
 func basis_maat() -> int:
 	return _basis
@@ -157,7 +149,7 @@ func smal() -> bool:
 # ---------------------------------------------------------------- knoppen
 
 ## The button factory used by `Hits`.
-## `kind` is btn | drop | tag | naam | kaart | keuzes | pad | wolk | bron.
+## `kind` is btn | drop | tag | naam | kaart | keuzes | wolk | bron.
 func maak_knop(kind: String, o: Dictionary) -> Control:
 	match kind:
 		"kaart":
@@ -169,13 +161,6 @@ func maak_knop(kind: String, o: Dictionary) -> Control:
 			s.bouw(o.get("keuzes", []), World.kader_rect().size.x, maten,
 				str(o.get("titel", "")), o.get("kaart", null))
 			return s
-		"pad":
-			var p := UiKeypad.new()
-			p.bouw(World.kader_rect().size, maten)
-			var kaart = o.get("kaart", null)
-			if kaart != null:
-				p.toets_getikt.connect(kaart._toets)
-			return p
 		"tag":
 			var t := UiGetalTag.new()
 			t.bouw(o, maten)
@@ -249,9 +234,9 @@ func toast(tekst: String, soort: String = "") -> void:
 	var maat := doos.get_combined_minimum_size()
 	maat.x = minf(maat.x, band.size.x * 0.92)
 	doos.size = maat
-	# Under 450 units of height, or with the keypad open, the toast moves to the
-	# top of the frame, out of the way of the keys (art-sound-rules.md §16.8).
-	var boven := band.size.y < 450.0 or _pad_open()
+	# Under 450 units of height the toast moves to the top of the frame, out of
+	# the way of the card and its strip (art-sound-rules.md §16.8).
+	var boven := band.size.y < 450.0
 	doos.position = band.position + Vector2(band.size.x * 0.5 - maat.x * 0.5,
 		12.0 if boven else band.size.y - maat.y - 18.0)
 	_toast = doos
@@ -268,14 +253,6 @@ func toast_band() -> Rect2:
 		if kader.size.x > 1.0 and laag.size.x > 1.0:
 			return Rect2(kader.position - laag.position, kader.size)
 	return Rect2(Vector2.ZERO, toastlaag.size if toastlaag != null else Vector2.ZERO)
-
-## Is a keypad on screen?  Then the bottom of the frame belongs to the keys.
-func _pad_open() -> bool:
-	for id in Hits.lijst():
-		var s := Hits.spot(id)
-		if s != null and s.kind == "pad" and is_instance_valid(s.knoop) and s.knoop.visible:
-			return true
-	return false
 
 func _process(delta: float) -> void:
 	if _toast_tijd > 0.0:
@@ -335,6 +312,7 @@ func wolk(o: Dictionary) -> String:
 		"klas": "hotwolk " + str(o.get("klas", "")), "prio": o.get("prio", 9),
 		"door": o.get("door", ""), "volg": o.get("volg", Callable()),
 		"vlak": o.get("vlak", Rect2()), "aan": tik,
+		"voortgang": o.get("voortgang", null),
 	})
 
 func wolk_weg(id: String) -> void:
@@ -381,8 +359,15 @@ func bron_van(id: String) -> UiBron:
 # ------------------------------------------------------------------ kaart
 
 ## `Ui.somkaart(obj, som, o)` — the mini squared-paper card: one mandatory Dutch
-## sentence, the sum line, an answer box with its keypad, or one strip of
-## choices glued 5 units under it at any scale (world.md §5.5).
+## sentence, the sum line, and one strip of choices glued 5 units under it at
+## any scale (world.md §5.5).
+##
+## Every answer is a tap on the strip — there is no keypad and no ✓ (owner,
+## 2026-09-14).  A game gives either its own `keuzes` (at most four, pictogram
+## AND word) or the right number in `goed`: then the strip carries four numbers
+## from `Afleiders.vier` (plus `liever`, the slips the game expects, and `min`),
+## the tapped number lands in the answer box and `on_ok(n, kaart)` is called at
+## once.  `max` is the digit budget of the box and the ceiling of the numbers.
 ##
 ## `o.regel` is mandatory and binding (HOTEL.md §9, architecture.md §1.1 F4):
 ## one plain sentence with a verb or a question word, pictogram first on that
@@ -397,7 +382,14 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 	kaart.kamer = o.get("kamer", World.kamer_nu())
 	kaart.door = o.get("door", "")
 	var keuzes: Array = o.get("keuzes", [])
-	kaart.heeft_pad = keuzes.is_empty() and bool(o.get("pad", true))
+	var vak := keuzes.is_empty()
+	if keuzes.is_empty() and o.has("goed"):
+		keuzes = _getal_keuzes(id, int(o["goed"]), kaart, o)
+	elif keuzes.is_empty() and kaart.on_ok.is_valid():
+		push_warning('somkaart "%s" heeft on_ok maar geen goed of keuzes: er valt niets te kiezen' % id)
+	if keuzes.size() > MAX_KEUZES:
+		push_warning('somkaart "%s" heeft %d keuzes; hooguit %d' % [id, keuzes.size(), MAX_KEUZES])
+		keuzes = keuzes.slice(0, MAX_KEUZES)
 	var plek: Dictionary = _mik_van(obj, o)
 	var spot := {
 		"id": id, "kind": "kaart", "kamer": kaart.kamer,
@@ -407,7 +399,7 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 		"door": kaart.door, "titel": o.get("titel", ""),
 		"icoon": o.get("icoon", ""), "regel": o.get("regel", ""),
 		"regel2": o.get("regel2", ""), "som": som,
-		"max": kaart.max_cijfers, "keuzes": keuzes,
+		"max": kaart.max_cijfers, "keuzes": keuzes, "vak": vak,
 		"on_weg": func(_s) -> void: _kaarten.erase(id),
 	}
 	if o.has("volg"):
@@ -429,9 +421,32 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 			"kleef_aan": id, "keuzes": keuzes, "kaart": kaart,
 			"titel": o.get("keuze_titel", "kies er een"),
 		})
-	elif kaart.heeft_pad and bool(o.get("open", false)):
-		kaart.open()
 	return kaart
+
+## At most this many buttons on one strip (owner, 2026-09-14).
+const MAX_KEUZES := 4
+
+## The four number buttons of a card with `goed`: pictogram and number in one
+## button (HOTEL.md §9), the tapped number in the box, `on_ok` straight away.
+## The seed is the card, the answer and the day, so a slip brings the same
+## strip back and a reload draws the same one.
+func _getal_keuzes(id: String, goed: int, kaart: Kaart, o: Dictionary) -> Array:
+	var dag: int = int(State.s.get("dag", 1)) if State.s is Dictionary else 1
+	var zaad: int = int(o.get("zaad", (hash(id) % 100003) + dag * 17))
+	var plafond: int = int(pow(10, kaart.max_cijfers)) - 1
+	var getallen := Afleiders.vier(goed, zaad,
+		{"min": o.get("min", 0), "max": o.get("max_getal", plafond), "liever": o.get("liever", [])})
+	var icoon := str(o.get("icoon", ""))
+	var uit: Array = []
+	for g in getallen:
+		var n: int = g
+		uit.append({"id": "n%d" % n, "icoon": icoon, "tekst": str(n), "kort": str(n),
+			"titel": str(n),
+			"kies": func(_k, k: Kaart) -> void:
+				k.zet(str(n))
+				k.zet_goed(false)
+				roep(k.on_ok, [n, k])})
+	return uit
 
 ## The mandatory sentence, checked.  Returns true when it fits the budget.
 func keur_regel(id: String, zin: String) -> bool:
@@ -475,13 +490,11 @@ func _mik_van(obj: Variant, o: Dictionary) -> Dictionary:
 class Kaart extends RefCounted:
 	var id: String
 	var strook_id := ""
-	var pad_id := ""
 	var kamer := ""
 	var door := ""
 	var max_cijfers := 2
-	var heeft_pad := true
 	var on_ok: Callable
-	var _getikt := ""            ## what the child typed, never what a game wrote
+	var _getikt := ""            ## what the child chose, never what a game wrote
 
 	func _knoop() -> UiSomkaart:
 		var s = Hits.spot(id)
@@ -524,50 +537,16 @@ class Kaart extends RefCounted:
 			return null
 		return _getikt.to_int()
 
-	## Open the keypad band under the world (architecture.md §4.4).  There is at
-	## most one: a second card taking it over wins, exactly as in the HTML.
-	func open() -> void:
-		if not heeft_pad:
-			return
-		Ui.pad_weg_behalve(id)
-		pad_id = id + "_pad"
-		Hits.maak({
-			"id": pad_id, "kind": "pad", "kamer": kamer,
-			"x": 0.0, "z": 0.0, "y": 0.0, "op": "voet",
-			"vast": true, "prio": 15, "door": door,
-			"titel": "Cijfers", "kaart": self,
-		})
+	func zet_goed(goed: bool) -> void:
+		var k := _knoop()
+		if k != null:
+			k.zet_goed(goed)
 
-	func pad_dicht() -> void:
-		if pad_id != "":
-			Hits.weg(pad_id)
-			pad_id = ""
-
-	## One key.  `⌫` wipes the last digit, `✓` hands the number to the game.
-	func _toets(teken: String) -> void:
-		if teken == UiKeypad.WIS:
-			if not _getikt.is_empty():
-				zet(_getikt.substr(0, _getikt.length() - 1))
-			return
-		if teken == UiKeypad.OK:
-			var k := _knoop()
-			if k != null:
-				k.zet_goed(false)
-			if on_ok.is_valid():
-				Ui.roep(on_ok, [getal(), self])
-			return
-		if not _getikt.is_empty() and not _getikt.is_valid_int():
-			_getikt = ""          # the box carried a ✓ or a game's own text
-		if _getikt.length() >= max_cijfers:
-			return
-		zet(_getikt + teken)
-
-	## Tick the card: the strip and the keypad go, the card stays readable.
+	## Tick the card: the strip goes, the card stays readable.
 	func klaar() -> void:
 		if strook_id != "":
 			Hits.weg(strook_id)
 			strook_id = ""
-		pad_dicht()
 		var k := _knoop()
 		if k != null:
 			k.zet_goed(true)
@@ -578,16 +557,7 @@ class Kaart extends RefCounted:
 		if strook_id != "":
 			Hits.weg(strook_id)
 			strook_id = ""
-		pad_dicht()
 		Hits.weg(id)
-
-## Exactly one keypad on screen (world.md §5.5).
-func pad_weg_behalve(id: String) -> void:
-	for k in _kaarten.keys():
-		if k != id:
-			var kaart: Kaart = _kaarten[k]
-			if kaart != null:
-				kaart.pad_dicht()
 
 func kaart_van(id: String) -> Kaart:
 	return _kaarten.get(id)

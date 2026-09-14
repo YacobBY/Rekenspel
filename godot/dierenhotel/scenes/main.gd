@@ -385,7 +385,6 @@ func _meld_later() -> void:
 	_gemeld = true
 	var win := get_window()
 	var sch := World.schaal()
-	var vorm := UiKeypad.vorm(kader.size)
 	print("[probe] versie=", Engine.get_version_info()["string"])
 	print("[probe] venster=", win.size, " css=", win.content_scale_size,
 		" dpr=", DisplayServer.screen_get_scale())
@@ -397,8 +396,6 @@ func _meld_later() -> void:
 		" emoji=", chroom_font != null and chroom_font.has_char(0x1F4C5))
 	print("[probe] shell=", "compact" if _compact else ("telefoon" if _telefoon else "gewoon"),
 		" basis=", Ui.basis_maat(), " tap=", Ui.tap_maat(), " voet=", voet.visible)
-	print("[probe] pad=", vorm["kolommen"], "x", 12 / int(vorm["kolommen"]),
-		" toets=", vorm["toets"])
 	print("[probe] balk=", kamerbalk.size, " kolommen=", kamerbalk.kolommen(),
 		" chroom=", chroom.size, " midden=", middenrij.size)
 	print("[probe] kamers=", Rooms.lijst().size(), " kamer=", World.kamer_nu())

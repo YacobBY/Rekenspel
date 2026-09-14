@@ -227,7 +227,9 @@ func bon_zin() -> String:
 func _som_stap() -> void:
 	var r := stand()
 	var kaart := Ui.somkaart(_werkplek(), "%d × €%d =" % [int(r["nachten"]), int(r["prijs"])], {
-		"id": "rek_som", "door": EIGENAAR, "kamer": "receptie", "open": true,
+		"id": "rek_som", "door": EIGENAAR, "kamer": "receptie",
+		"goed": int(r["totaal"]), "liever": [int(r["nachten"]) + int(r["prijs"]),
+			int(r["totaal"]) + int(r["prijs"]), int(r["totaal"]) - int(r["prijs"])],
 		"max": 2, "hoog": _werkhoog(), "icoon": "🛏", "regel": bon_zin(),
 		"on_ok": func(n, _k): som_ok(n)})
 	# the same ladder everywhere: count along once, count along again, and
@@ -291,7 +293,9 @@ func _wissel_kaart() -> void:
 	var r := stand()
 	var betaald := geteld()
 	var kaart := Ui.somkaart(_werkplek(), "€%d − €%d =" % [betaald, int(r["totaal"])], {
-		"id": "rek_wissel", "door": EIGENAAR, "kamer": "receptie", "open": true,
+		"id": "rek_wissel", "door": EIGENAAR, "kamer": "receptie",
+		"goed": betaald - int(r["totaal"]), "liever": [int(r["totaal"]), betaald,
+			betaald - int(r["totaal"]) + 1],
 		"max": 2, "hoog": _werkhoog(), "icoon": "👛",
 		"regel": "%s gaf €%d, het kost €%d" % [
 			State.gast_van(str(r["gastId"])).get("naam", "de gast"), betaald, int(r["totaal"])],

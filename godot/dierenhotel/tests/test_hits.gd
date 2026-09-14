@@ -3,8 +3,8 @@ extends Proef
 ##
 ## Two invariants, in every frame size and every shape the reviewer could think
 ## of: no placed element overlaps another, and no button (layer SPEL/HOTEL/WENS)
-## overlaps ANY object box in view. A fixed card, a number tag and the keypad
-## band are the only things allowed over the world, and they choose first.
+## overlaps ANY object box in view. A fixed card and a number tag are the only
+## things allowed over the world, and they choose first.
 
 const MATEN := [Vector2(1000, 648), Vector2(768, 1024), Vector2(360, 740),
 	Vector2(296, 314), Vector2(676, 320)]
@@ -136,32 +136,39 @@ func test_twee_knoppen_delen_geen_plek() -> void:
 	_keur(Vector2(1000, 648), "vier")
 	_af()
 
-# ------------------------------------------------------------ het toetsenbord
+# ---------------------------------------------------------- de antwoordstrook
 
-## The keypad band docks to the bottom of the world frame (architecture.md
-## §4.4), reserves its cells, and the card lifts itself off it instead of the
-## pad sliding over the floor.  Every key stays a real tap target.
-func test_toetsenbord_staat_onderaan_en_neemt_zijn_plek() -> void:
+## The strip of four numbers glues under its card (or above it when there is no
+## room below), stays inside the frame and every button is a real tap target —
+## on every frame size, the low landscape phone included.
+func test_antwoordstrook_kleeft_aan_de_kaart() -> void:
 	for kader in MATEN + KADERS:
 		_op(kader)
 		var kaart := Ui.somkaart({"x": 24.0, "z": 20.0}, "3 + 2 =", {
-			"id": "pk", "door": "test", "kamer": World.kamer_nu(), "open": true,
-			"icoon": "🥄", "regel": "Hoeveel scheppen samen?", "max": 2})
+			"id": "pk", "door": "test", "kamer": World.kamer_nu(), "goed": 5,
+			"icoon": "🥄", "regel": "Hoeveel scheppen samen?", "max": 2,
+			"on_ok": func(_n, _k) -> void: pass})
 		Hits.plaats()
 		var dbg := Hits.debug()
-		waar(dbg.has("pk_pad"), "het toetsenbord staat er bij kader %s" % str(kader))
-		if dbg.has("pk_pad"):
-			var pad: Rect2 = dbg["pk_pad"]["rect"]
-			gelijk(dbg["pk_pad"]["op"], "voet", "het pad hangt aan de voet, %s" % str(kader))
-			waar(pad.end.y <= kader.y - Hits.KRAP + 0.01 and pad.end.y >= kader.y - Hits.RIJ,
-				"het pad staat onderaan het kader %s (%s)" % [str(kader), str(pad)])
-			waar(pad.position.x >= 0.0 and pad.end.x <= kader.x + 0.01,
-				"het pad past in de breedte van %s (%s)" % [str(kader), str(pad)])
+		waar(not dbg.has("pk_pad"), "geen toetsenbord meer bij kader %s" % str(kader))
+		waar(dbg.has("pk_keuzes"), "de strook staat er bij kader %s" % str(kader))
+		if dbg.has("pk_keuzes"):
+			var st: Rect2 = dbg["pk_keuzes"]["rect"]
 			var kr: Rect2 = dbg["pk"]["rect"]
-			var snij := kr.intersection(pad)
-			gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
-				"de kaart tilt zichzelf van het pad, kader %s" % str(kader))
-		_keur(kader, "pad %s" % str(kader))
+			waar(dbg["pk_keuzes"]["op"] in ["kleef", "voet"],
+				"de strook kleeft of staat aan de voet, %s (%s)" % [str(kader), dbg["pk_keuzes"]["op"]])
+			waar(st.position.x >= 0.0 and st.end.x <= kader.x + 0.01
+				and st.position.y >= 0.0 and st.end.y <= kader.y + 0.01,
+				"de strook past in het kader %s (%s)" % [str(kader), str(st)])
+			var afstand := minf(absf(st.position.y - kr.end.y), absf(kr.position.y - st.end.y))
+			waar(afstand <= Hits.KLEEF + 0.01 or dbg["pk_keuzes"]["op"] == "voet",
+				"de strook zit tegen de kaart aan, kader %s (%.1f)" % [str(kader), afstand])
+			var knoop := Hits.spot("pk_keuzes").knoop
+			gelijk(knoop.get_node("Rij").get_child_count(), 4, "vier knoppen, %s" % str(kader))
+			for k in knoop.get_node("Rij").get_children():
+				var m: Vector2 = (k as Control).custom_minimum_size
+				waar(m.x >= 44.0 and m.y >= 44.0, "knop %s is een tikdoel bij %s" % [k.name, str(kader)])
+		_keur(kader, "strook %s" % str(kader))
 		kaart.weg()
 		_af()
 

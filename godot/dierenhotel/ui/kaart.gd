@@ -97,7 +97,8 @@ func bouw(o: Dictionary, mt: Dictionary, smal: bool) -> void:
 	vak_label.custom_minimum_size = Vector2(32, 32) if smal else Vector2(40, 34)
 	vak_label.add_theme_font_size_override("font_size", mt["somvak"] if not smal else maxi(UiThema.VLOER, mt["somvak"] - 4))
 	vak_label.add_theme_color_override("font_color", UiThema.INKT)
-	vak_label.visible = bool(o.get("keuzes", []).is_empty())
+	# the box shows the number the child tapped; a strip of WORDS needs no box
+	vak_label.visible = bool(o.get("vak", (o.get("keuzes", []) as Array).is_empty()))
 	_verf_vak()
 	rij.add_child(vak_label)
 
