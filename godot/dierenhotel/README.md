@@ -14,10 +14,12 @@ Op een tablet in hetzelfde netwerk: open het adres van deze computer op poort 86
 ## Ontwikkelen
 
 - Godot 4.7.2 (`~/.local/bin/godot`), export templates in `~/.local/share/godot/export_templates/4.7.2.stable/`.
-- Tests: `tools/test.sh` (386 tests, ±95 s). Eén spel: `DH_TEST_FILTER=kraam tools/test.sh`.
+- Tests: `tools/test.sh` (±390 tests, ±95 s). Eén spel: `DH_TEST_FILTER=kraam tools/test.sh`.
 - Browser-controle: `tools/probe.js --viewport 1024x768@2:ipad --knop bel`.
 - Een spel op een bepaalde dag/band bekijken: `index.html?opslag=<base64url van een volledige save>`.
 - Ontwerp: `.fanout/specs/godot/architecture.md`. Regels voor kindteksten: `HOTEL.md` §9.
+- Antwoorden: altijd een strook van hooguit vier knoppen onder het kaartje (`"goed": n` op `Ui.somkaart` maakt er vier getallen van via `ui/afleiders.gd`); er is geen cijferpad.
+- Een gast die uit een kamer buiten beeld komt aanlopen krijgt een bubbel met balk bij de deur (`Hotel.komt_eraan`).
 
 ## Structuur
 

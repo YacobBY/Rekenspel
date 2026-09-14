@@ -672,6 +672,31 @@ func verplaats(id: String, aantal: int) -> void:
 	_bewaar_kar()
 	_teken()
 	ctx.snd.plop(int(K["hand"]))
+	_kruimels(id)
+
+## Crumbs fall into the bowl a scoop landed in (review plan pillar 4).
+func _kruimels(id: String) -> void:
+	var p := bak_plek(_bak_index(id))
+	ctx.wereld.spetter(KAMER, float(p.get("x", 0.0)), float(p.get("z", 0.0)),
+		ArtEffect.KRUIMEL_N, ArtEffect.KRUIMEL_KL, false, 6.0)
+
+## Sparkles over every bowl: the sharing is right (pillar 4).
+func _fonkel_bakjes() -> void:
+	var n := deelnemers().size()
+	for i in n:
+		var p := bak_plek(i)
+		ctx.wereld.spetter(KAMER, float(p.get("x", 0.0)), float(p.get("z", 0.0)),
+			ArtEffect.STER_N * 2, ArtEffect.STER_KL[i % 2], true, 8.0)
+
+## The bowl of a guest, in the order of `deelnemers()`; -1 for the pot.
+func _bak_index(id: String) -> int:
+	if id == "__pot":
+		return -1
+	var g := deelnemers()
+	for i in g.size():
+		if str(g[i]["id"]) == id:
+			return i
+	return -1
 
 func opnieuw() -> void:
 	if K.is_empty() or bool(K["vol"]):
@@ -720,6 +745,7 @@ func check() -> bool:
 	ctx.state.tel(int(K["missers"]) == 0, Time.get_ticks_msec() - int(K["t0"]))
 	ctx.taak_klaar("voer", {"sterren": 1})
 	ctx.snd.tover()
+	_fonkel_bakjes()
 	_bakjes_weg()
 	_bewaar_kar()
 	_rondje()
@@ -940,6 +966,12 @@ func lever(kamer_id: String, slot_id: String) -> bool:
 	_bewaar_kar()
 	Hotel.render()
 	_rondje()
+	# every bowl in the hotel is full: sparkles on this one and a cheer
+	if open_kamers().is_empty():
+		var sl: Dictionary = ctx.wereld.slot(kamer_id, slot_id)
+		ctx.wereld.spetter(kamer_id, float(sl.get("x", 0.0)), float(sl.get("z", 0.0)),
+			ArtEffect.STER_N * 3, ArtEffect.STER_KL[0], true, 6.0)
+		ctx.snd.hoera()
 	# ná _rondje(), want dat begint met wis_alles() en zou dit wolkje meteen
 	# weer weghalen (games-a.md §7.6)
 	ctx.ui.wolk({"id": "vk_smul", "kamer": kamer_id, "hoog": 54.0,

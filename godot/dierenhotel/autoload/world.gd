@@ -1702,5 +1702,18 @@ func _pluis(d: Dier, n: int, kl: Color, omhoog: bool) -> void:
 		q["kamer"] = d.kamer
 		_deeltjes.append(q)
 
+## Particles at a floor point of a room, for the games (review plan pillar 4):
+## crumbs fall (`omhoog` false), sparkles and soap bubbles rise.  `hoog` lifts
+## the source in voxels.  Nothing in reduced motion.
+func spetter(kamer: String, x: float, z: float, n: int, kl: Color, omhoog := true, hoog := 0.0) -> void:
+	if rust() or not Rooms.bestaat(kamer):
+		return
+	var basis := Vector2((x - z) * Art.S, (x + z) * (Art.S / 2.0) - hoog * Art.HG)
+	basis.y -= 14.0 if omhoog else 4.0
+	for q in ArtEffect.pluis(n, basis.x, basis.y, kl, omhoog, _rnd):
+		q["kamer"] = kamer
+		_deeltjes.append(q)
+	vuil()
+
 func _deeltjes_tik() -> void:
 	ArtEffect.pluis_stap(_deeltjes)

@@ -19,6 +19,7 @@ const STER_KL := [Color("#FFE9A8"), Color("#FFF7EC")]
 const PLONS_KL := [Color("#E6F5FF"), Color("#FFFFFF"), Color("#CFE9FF")]
 const KRUIMEL_N := 3
 const STER_N := 2
+const ZEEP_KL := Color("#EAF6FF")                 ## a soap bubble over the tub
 
 ## `pluis(st, n, x, y, kleur, omhoog)` — n particles with a spawn jitter of
 ## x +- 7, y +- 3.5 and vx = (rand - 0.5) * 3.2.  Sparkles fly up and hang

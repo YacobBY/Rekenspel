@@ -341,6 +341,24 @@ func start(_c: SpelCtx) -> void:
 		_herschaal(_p.size())
 	_bewaar()
 	_teken()
+	if str(_s["stap"]) == "baden":
+		_bubbels()
+
+## Zeepbellen boven wie in bad zit, zolang de badstap duurt (review plan
+## pijler 4).  Eén lus tegelijk; `na()` stopt hem met het spel.
+var _bubbelt := false
+func _bubbels() -> void:
+	if _bubbelt:
+		return
+	_bubbelt = true
+	while actief and not _s.is_empty() and str(_s["stap"]) == "baden":
+		for id in _in_bad_ids():
+			var d := World.dier(str(id))
+			if d != null and d.kamer == KAMER:
+				ctx.wereld.spetter(KAMER, d.x, d.z, 1, ArtEffect.ZEEP_KL, true, 7.0)
+		if not await na(0.45):
+			break
+	_bubbelt = false
 
 ## Geen gasten of geen plek: één wolkje, en na 1800 ms sluit het spel.
 func _meld_en_sluit(icoon: String, tekst: String) -> void:
@@ -876,6 +894,7 @@ func _geslaagd() -> void:
 	ctx.snd.tover()
 	_bewaar()
 	_teken()
+	_bubbels()
 	var rij := _rij_punt()
 	ctx.ui.wolk({"id": "tb_goed", "kamer": KAMER, "x": rij["x"], "z": rij["z"],
 		"hoog": 34.0, "icoon": "✅", "getal": int(_s["per"]), "tekst": "even hoog",

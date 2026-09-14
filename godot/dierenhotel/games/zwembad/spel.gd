@@ -303,8 +303,15 @@ func _naar_water(doel_x: float) -> bool:
 	if not actief:
 		return false
 	ctx.snd.plons()
+	_spat(4)
 	return await ctx.wereld.loop_naar(_gast, doel_x, z,
 		{"pose": "zwem", "tempo": 1.1, "na": "zwem"})
+
+## A splash of water drops where the swimmer is (review plan pillar 4).
+func _spat(n: int) -> void:
+	var d = ctx.wereld.dier(_gast)
+	if d != null and d.kamer == KAMER:
+		ctx.wereld.spetter(KAMER, d.x, d.z, n, ArtEffect.PLONS_KL[0], true)
 
 ## `n` metres, one point per metre — the number on his back counts with him.
 func _zwem(n: int) -> bool:
@@ -327,6 +334,7 @@ func _zwem(n: int) -> bool:
 		_zet_gasttag()
 		if i % elke == 0:
 			ctx.snd.plons()
+			_spat(2)
 	return await ctx.wereld.stappen(_gast, punten, {"pose": "zwem",
 		"tempo": ZwembadBeurt.tempo_van(l), "per_stap": stap, "na": "zwem"})
 

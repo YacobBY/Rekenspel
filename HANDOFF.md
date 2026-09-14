@@ -1,6 +1,15 @@
-# HANDOFF — Dierenhotel Godot port, run "dierenhotel-godot" (closed 2026-09-11)
+# HANDOFF — Dierenhotel Godot port, run "dierenhotel-godot" (closed 2026-09-11; follow-up 2026-09-14 in §0)
 
 Written by the lead so a fresh session (any agent or the owner) can continue without the chat history. Full append-only log: `.fanout/ledger.md` (section "Run dierenhotel-godot"); tickets `.fanout/tickets/godot/`; specs `.fanout/specs/godot/` (architecture.md is the binding design; world/games-a/games-b/art-sound-rules/toolchain are the port specifications extracted from the HTML original). The previous run's handoff (HTML version, run "slaap-zwembad-kamers") is in git history at e8c9bd2.
+
+## 0. Follow-up 2026-09-14 (fonly mode, lead alone) — on main
+
+Owner asks, verbatim: "het klikken van antwoorden in een keer gaat zonder 'enter' klik, altijd alles multiple choice met max 4 opties", and "wanneer een dier vanuit een kamer komt die niet zichtbaar is naar een andere kamer … een cue … als een popup bubbel met het dier dat eraan komt en een progress bar". Plus the reviewer's implementation plan (another agent's `implementation_plan.md`: polish pillars 1–4).
+
+- **Answers**: `Ui.somkaart` with `goed` draws a strip of four numbers (`ui/afleiders.gd`: the game's `liever` slips first, then seeded neighbours, sorted; same card → same strip), pictogram + number per button, the tapped number lands in the box and `on_ok(n, kaart)` fires at once. Strips are capped at four. The keypad (`ui/keypad.gd`), `Kaart.open()`, `pad_id` and the `pad` hotspot kind are gone. Nine sites converted (check-in, bill ×2, meubels ×2, kraam, tobbe ×2, was). `Hits`: a glued strip must also clear every object box — under the card, above it, at the foot of the frame, else the band grid.
+- **Komt eraan**: `World.reis` records doors and legs (`reis_voortgang`, `onderweg_naar`, `reis_van`, signal `reis_gestart`); `Hotel.komt_eraan()` (on `World.getekend` and `kamer_veranderd`) hangs a `UiWolk` with a `ProgressBar` (`voortgang`) at the door the guest will come through: "🐶 Boef komt eraan". Gone when he steps into the room. Owner `komt`. Tests: `tests/test_komt.gd`.
+- **Polish (plan pillars)**: pillar 2/3 by the owner's other agent (drop shadows, pop-in/tap tweens, active room chip, bell badge when a bed is free; all skipped headless/rust). Pillar 1: `Snd.sfeer(kamer)` — looping generated ambience per room kind (`SFEER`: tuin wind, receptie tiktak, zwembad water, keuken/wasserij warm; corridor and bedrooms silent), own player, ≤ 30 % of MEESTER, off when muted/asleep/background; the 18 sounds untouched (`tests/test_sfeer.gd`). Pillar 4: `World.spetter(kamer, x, z, n, kl, omhoog, hoog)`; voerkar crumbs per scoop, sparkles when the sharing is right and a `hoera` when the last bowl in the hotel is filled; tobbe soap bubbles during the bath step; zwembad splashes at every plons.
+- Suite after this follow-up: see the last line of `tools/test.sh` (388+ tests, 0 failures at commit time). CI: the pages workflow's deploy step fails until the owner sets Settings → Pages → Source = "GitHub Actions" (the push itself and the CI suite/build were green).
 
 ## 1. The task (owner, verbatim)
 
@@ -10,7 +19,7 @@ Written by the lead so a fresh session (any agent or the owner) can continue wit
 
 - `godot/dierenhotel/`: Godot 4.7.2 project, GDScript, Compatibility renderer, single-threaded web export, PWA. Ten autoloads (Art, Rooms, Hits, World, Snd, Ui, State, Econ, Games, Hotel), the `MiniGame`/`SpelCtx` contract, eight rooms with guests and awaitable movement, day cycle/economy/wishes/prikbord/check-in/bill/letters, save v1 in `user://` (JSON, atomic, corrupt → start screen), voxel baker with golden-image oracle (72 plates, silhouettes within 1 px of the HTML), 18 procedural sounds with a WAV oracle, frozen math core byte-identical to the JavaScript (23 042 cases), band-grid hotspots (0 % coverage by construction), fonts subset (Nunito, Noto Symbols 2, Noto Color Emoji; OFL).
 - All ten minigames under `games/<id>/` (bedden, sleutels, meubels, tobbe, voerkar, zwembad, wekker, hinkel, was, kraam), each with its own headless test file; the owner's zwembad rules verbatim; wekker ghost hands at the 2nd miss; receptie desk top-right, door top-left.
-- Suite: `godot/dierenhotel/tools/test.sh` → 386 tests, 0 failures, about 95 s. Web export 40.9 MB (wasm 39.5 MB, gzips to 10 MB). Shell probe (`tools/probe.js`) passes all seven steps on 1024×768@2, 768×1024@2, 1280×800@2, 360×740@3 and 740×360@3 (the last with `--knop bel`).
+- Suite: `godot/dierenhotel/tools/test.sh` → 386 tests, 0 failures, about 95 s (at 9f79bff; see §0 for the 2026-09-14 state). Web export 40.9 MB (wasm 39.5 MB, gzips to 10 MB). Shell probe (`tools/probe.js`) passes all seven steps on 1024×768@2, 768×1024@2, 1280×800@2, 360×740@3 and 740×360@3 (the last with `--knop bel`).
 - CI: `.github/workflows/test.yml` (import, suite, export on every push/PR) and `pages.yml` (calls test.yml, then export → GitHub Pages). Not yet pushed or enabled (see §4).
 
 ## 3. How to run and test
@@ -41,7 +50,7 @@ Written by the lead so a fresh session (any agent or the owner) can continue wit
 - Per-plate bake cost in the browser exceeds 25 ms for `baliez`/`hok` (28–46 ms) though every room stays inside the 300 ms slide; fix proposed: spread the bake over the slide frames.
 - Hits: door hotspots and guest-following spots have rects since I1; the two prikbord cards have rects since V1-F1; a speech cloud may still overlap the desk front.
 - Deviations accepted from the HTML (all documented in architecture.md §13 or the ledger): meubels does not surface the planbord solver; drag-to-door dropped; volgende() in wekker walks the row captured at round start; help-ladder sentences of zwembad are new (the spec fixed none); "🩺 Els" carries a word; tobbe and voerkar use 🔄 for "opnieuw" and ▸ for "→" (glyphs not in any bundled font).
-- Toolchain: `gh` not logged in; nothing pushed; Pages not enabled.
+- Toolchain: pushed to origin/main on 2026-09-14; Pages source not yet set to "GitHub Actions", so the deploy job fails while test and build pass.
 
 ## 7. Facts that cost time to rediscover
 

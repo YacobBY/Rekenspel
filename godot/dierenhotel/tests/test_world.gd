@@ -503,3 +503,24 @@ func test_vlak_en_naamplaat_van_een_gast() -> void:
 	waar(plaat.y < vlak.position.y, "de naamplaat hangt boven het beeld")
 	gelijk(World.naam_punt("bestaat-niet"), Vector2.ZERO, "onbekend dier, geen plaat")
 	_na_afloop()
+
+# ------------------------------------------------------------------ deeltjes
+
+## `World.spetter` — particles at a floor point, for the games; none in rust.
+func test_spetter_zet_deeltjes_in_de_kamer() -> void:
+	var was_rust := Ui.rust_modus()
+	Ui.zet_rust_modus(false)
+	var voor := World.deeltjes().size()
+	World.spetter("tuin", 40.0, 40.0, 3, ArtEffect.KRUIMEL_KL, false)
+	gelijk(World.deeltjes().size(), voor + 3, "drie deeltjes erbij")
+	var laatste: Dictionary = World.deeltjes()[World.deeltjes().size() - 1]
+	gelijk(laatste["kamer"], "tuin", "in de kamer die gevraagd is")
+	World.spetter("nergens", 1.0, 1.0, 3, ArtEffect.STER_KL[0], true)
+	gelijk(World.deeltjes().size(), voor + 3, "een onbekende kamer krijgt niets")
+	Ui.zet_rust_modus(true)
+	World.spetter("tuin", 40.0, 40.0, 3, ArtEffect.STER_KL[0], true)
+	gelijk(World.deeltjes().size(), voor + 3, "in rust geen deeltjes")
+	Ui.zet_rust_modus(was_rust)
+	for _i in 12:
+		World._tik()
+	gelijk(World.deeltjes().size(), voor, "na twaalf tikken zijn ze op")

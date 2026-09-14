@@ -42,6 +42,9 @@ const RUIS := ["brief", "deur", "kar", "plons"]
 var _uit := false
 var _wakker := false
 var _spelers: Array[AudioStreamPlayer] = []
+var _sfeer: AudioStreamPlayer = null
+var _sfeer_naam := ""
+var _sfeer_cache: Dictionary = {}
 var _volgende := 0
 var _cache: Dictionary = {}
 var _laatst: Dictionary = {}
@@ -53,11 +56,16 @@ func _ready() -> void:
 		p.bus = "Master"
 		add_child(p)
 		_spelers.append(p)
+	_sfeer = AudioStreamPlayer.new()
+	_sfeer.bus = "Master"
+	add_child(_sfeer)
+	World.kamer_veranderd.connect(sfeer)
 
 ## No audio before the first real touch (browser autoplay policy).  After this
 ## every sound is a normal AudioStreamPlayer; there is no per-sound unlock trick.
 func ontgrendel() -> void:
 	_wakker = true
+	sfeer(World.kamer_nu())
 
 func ontgrendeld() -> bool:
 	return _wakker
@@ -73,6 +81,7 @@ func dempt() -> bool:
 ## It never unlocks the audio: that stays tied to the first real touch (§8).
 func stem_af(aan: bool) -> void:
 	_uit = not aan
+	sfeer(World.kamer_nu())
 
 func schakel() -> bool:
 	_uit = not _uit
@@ -80,14 +89,113 @@ func schakel() -> bool:
 	if not _uit:
 		ontgrendel()
 		tik()
+	sfeer(World.kamer_nu())
 	return _uit
 
 ## Everything stops when the app goes to the background — the browser suspends
 ## the audio band there too (§15.1).
 func _notification(wat: int) -> void:
-	if wat == NOTIFICATION_APPLICATION_PAUSED or wat == NOTIFICATION_WM_CLOSE_REQUEST:
+	if wat == NOTIFICATION_APPLICATION_PAUSED or wat == NOTIFICATION_WM_CLOSE_REQUEST \
+			or wat == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		for p in _spelers:
 			p.stop()
+		_sfeer_stop()
+	elif wat == NOTIFICATION_APPLICATION_RESUMED or wat == NOTIFICATION_APPLICATION_FOCUS_IN:
+		sfeer(World.kamer_nu())
+
+# ------------------------------------------------------------- sfeer (kamergeluid)
+#
+# Room ambience (review plan 2026-09-14, pillar 1): one looping buffer per kind
+# of room, generated like the sounds themselves and played on its own player
+# far under the master gain — the garden breathes, the hall clock ticks, the
+# pool laps, the kitchen and the laundry hum.  Not one of the 18 (`namen()` is
+# frozen by test_snd), never louder than a third of a sound, silent when the
+# game is muted, asleep or in the background.
+
+const SFEER := {"tuin": "wind", "receptie": "tiktak", "zwembad": "water",
+	"keuken": "warm", "wasserij": "warm"}
+const SFEER_DUUR := 4.0        ## seconds per loop; every modulation divides it
+const SFEER_TOP := 0.30        ## of MEESTER: the ceiling of any ambience sample
+
+## Which ambience a room has; "" for a quiet room (the corridor, the bedrooms).
+func sfeer_naam(kamer: String) -> String:
+	return str(SFEER.get(kamer, ""))
+
+## Play the ambience of `kamer`, or stop when it has none / the sound is off.
+func sfeer(kamer: String = "") -> void:
+	if _sfeer == null:
+		return
+	var naam := sfeer_naam(kamer if not kamer.is_empty() else World.kamer_nu())
+	if naam.is_empty() or _uit or not _wakker:
+		_sfeer_stop()
+		return
+	if naam == _sfeer_naam and _sfeer.playing:
+		return
+	_sfeer_naam = naam
+	if not _sfeer_cache.has(naam):
+		_sfeer_cache[naam] = sfeer_stream(naam)
+	_sfeer.stream = _sfeer_cache[naam]
+	_sfeer.play()
+
+func _sfeer_stop() -> void:
+	_sfeer_naam = ""
+	if _sfeer != null and _sfeer.playing:
+		_sfeer.stop()
+
+func sfeer_speelt() -> String:
+	return _sfeer_naam if _sfeer != null and _sfeer.playing else ""
+
+## The looping stream of one ambience, without playing it.
+func sfeer_stream(naam: String) -> AudioStreamWAV:
+	var buf := sfeer_monster(naam)
+	var wav := _stream(buf)
+	wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	wav.loop_begin = 0
+	wav.loop_end = buf.size()
+	return wav
+
+## The raw loop of one ambience, `SFEER_DUUR` seconds, seamless at the seam:
+## every low-frequency modulation has a whole number of periods in the loop.
+func sfeer_monster(naam: String) -> PackedFloat32Array:
+	var n := int(SFEER_DUUR * SR)
+	var b := PackedFloat32Array()
+	b.resize(n)
+	b.fill(0.0)
+	var rnd := RandomNumberGenerator.new()
+	rnd.seed = hash(naam)
+	match naam:
+		"wind":
+			# a summer breeze: low-passed noise that swells twice per loop, and
+			# two short bird chirps
+			_ruisband(b, rnd, 0.06, 0.05, 0.5)
+			_noot(b, 2300, 2900, 0.07, "sine", 0.06, 1.15)
+			_noot(b, 2700, 2200, 0.06, "sine", 0.05, 1.27)
+			_noot(b, 2500, 3100, 0.07, "sine", 0.06, 3.05)
+		"tiktak":
+			# the hall clock: tick at 0 s, tock at 1 s, and again — 60 a minute
+			for i in int(SFEER_DUUR):
+				_noot(b, 1500 if i % 2 == 0 else 1150, 0, 0.022, "sine", 0.11, float(i))
+		"water":
+			# the pool lapping: darker noise, one slow swell per loop
+			_ruisband(b, rnd, 0.03, 0.06, 0.25)
+		"warm":
+			# a cosy room: a very low hum with a breath of noise over it
+			var f := 110.0            # 440 whole periods in a 4 s loop
+			for i in n:
+				b[i] += sin(TAU * f * float(i) / SR) * 0.10 * MEESTER
+			_ruisband(b, rnd, 0.015, 0.025, 0.5)
+	return b
+
+## Low-passed white noise that swells with a slow sine: `alfa` is the one-pole
+## coefficient (smaller is darker), `top` the peak as a fraction of MEESTER,
+## `hz` the swell rate — a whole number of swells per loop keeps the seam clean.
+func _ruisband(b: PackedFloat32Array, rnd: RandomNumberGenerator, alfa: float, top: float, hz: float) -> void:
+	var y := 0.0
+	var n := b.size()
+	for i in n:
+		y += alfa * (rnd.randf_range(-1.0, 1.0) - y)
+		var zwel := 0.6 + 0.4 * sin(TAU * hz * float(i) / SR)
+		b[i] += y * zwel * top * MEESTER / maxf(0.05, sqrt(alfa))
 
 # ------------------------------------------------------------- generatoren
 
