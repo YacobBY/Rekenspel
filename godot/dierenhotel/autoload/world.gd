@@ -837,6 +837,16 @@ func stappen(id: String, punten: Array, o: Dictionary = {}) -> bool:
 	var lijst := _punten_van(punten)
 	if lijst.is_empty():
 		return true
+	if str(o.get("pose", "")).is_empty() and not (o.get("per_stap", o.get("perStap", Callable())) as Callable).is_valid():
+		# a walk: every leg goes round the water (a walk that counts its own
+		# points keeps them, or the count would be off)
+		var droog: Array = []
+		var van := Vector2(d.x, d.z)
+		for p in lijst:
+			droog.append_array(Rooms.om_het_water(d.kamer, van, p))
+			droog.append(p)
+			van = p
+		lijst = droog
 	_breek(d, false)
 	d.beweeg_pose = o.get("pose", "")
 	d.beweeg_tempo = maxf(0.05, float(o.get("tempo", 1.0)))
@@ -863,6 +873,14 @@ func stappen(id: String, punten: Array, o: Dictionary = {}) -> bool:
 		_spring_start(d)
 	vuil()
 	return await op.af
+
+## The walking points to `doel` from where `d` stands: round the water when the
+## straight line would cut through it (Rooms.om_het_water).  Swimmers and
+## jumpers keep their own line.
+func _droog_pad(d: Dier, doel: Vector2) -> Array:
+	var uit: Array = Rooms.om_het_water(d.kamer, Vector2(d.x, d.z), doel)
+	uit.append(doel)
+	return uit
 
 ## Only finite points count; `{x, z}`, `[x, z]` and `Vector2` are all accepted.
 func _punten_van(punten: Array) -> Array:
@@ -895,7 +913,7 @@ func ga(id: String, x: float, z: float, na: String = "") -> bool:
 		_eind_staat(d)
 		vuil()
 		return true
-	d.punten = [Vector2(x, z)]
+	d.punten = _droog_pad(d, Vector2(x, z))
 	d.staat = "loop"
 	vuil()
 	return true
@@ -1575,7 +1593,7 @@ func _volgende_deur(d: Dier) -> void:
 		d.route = []
 		_klaar_met_route(d)
 		return
-	d.punten = [Vector2(dp["ix"], dp["iz"])]
+	d.punten = _droog_pad(d, Vector2(dp["ix"], dp["iz"]))
 	d.been_van = Vector2(d.x, d.z)
 	d.staat = "loop"
 	d.na = "deur"
@@ -1606,7 +1624,7 @@ func _klaar_met_route(d: Dier) -> void:
 		# would supersede the order that started this journey
 		var doel := d.route_doel
 		d.route_doel = Vector2.INF
-		d.punten = [doel]
+		d.punten = _droog_pad(d, doel)
 		d.staat = "loop"
 		d.na = d.route_na
 		d.v = maxf(d.v, 0.14 * d.vmax)
@@ -1628,7 +1646,7 @@ func _kies(d: Dier) -> void:
 	var rol := d.rnd.volgende()
 	if rol < w or rol < w + 0.17:
 		var p := _vrije_plek(d)
-		d.punten = [p]
+		d.punten = _droog_pad(d, p)
 		d.staat = "loop"
 		d.na = "" if rol < w else "snuif"
 		d.v = maxf(d.v, 0.14 * d.vmax)

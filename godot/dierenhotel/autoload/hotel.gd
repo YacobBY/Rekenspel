@@ -881,7 +881,7 @@ func spel_taken() -> Array:
 		var t = def["taak"] if def.has("taak") else _spel_taak.get(id, null)
 		if t == null or typeof(t) != TYPE_DICTIONARY:
 			continue
-		if not Games.ontgrendeld(id):
+		if not Games.ontgrendeld(id) or bool(def.get("stub", false)):
 			continue
 		var aan := true
 		var wanneer = t.get("wanneer", null)

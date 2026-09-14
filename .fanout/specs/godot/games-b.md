@@ -286,6 +286,8 @@ BANDEN = { 3: {k: 5, lo:  8, hi: 20, M: 10, plafond:  20},
 N   = max(1, N)          dag = max(1, dag)
 r   = (N + dag) mod k
 L   = klem(k·N + r, lo, hi)
+if k·N + r < lo:                  // Godot, eigenaar 2026-09-14: met één of twee
+        L = lo + (k·N + 3·dag) mod (hi − lo + 1)   // gasten was elke baan 8 m
 M   = (band < 5) ? BANDEN[band].M : (L >= 55 ? 40 : 30)
 if band >= 5 and L > M and (L − M) mod 10 == 0:
         L = klem(L + 3, lo, hi);  M = herbereken

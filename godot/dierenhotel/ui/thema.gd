@@ -218,6 +218,10 @@ static func bouw(basis: int) -> Theme:
 	t.set_type_variation("Voet", "Label")
 	t.set_font_size("font_size", "Voet", mt["voet"])
 	t.set_color("font_color", "Voet", INKT2)
+	# ---- tooltips (desktop only): ink on a card, not Godot's dark-on-dark
+	t.set_stylebox("panel", "TooltipPanel", vulling(vlak(KAART, 12, 2, KURK), 10, 6))
+	t.set_color("font_color", "TooltipLabel", INKT)
+	t.set_font_size("font_size", "TooltipLabel", mt["klein"])
 	return t
 
 static func _variant(t: Theme, naam: String, basis_type: String, sb: StyleBoxFlat,

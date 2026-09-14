@@ -524,3 +524,33 @@ func test_spetter_zet_deeltjes_in_de_kamer() -> void:
 	for _i in 12:
 		World._tik()
 	gelijk(World.deeltjes().size(), voor, "na twaalf tikken zijn ze op")
+
+# ------------------------------------------------------------- om het water
+
+## Owner, 2026-09-14: a guest on the far deck walked straight through the pool
+## to the entry mat.  Every walk now goes round the water; a swimmer keeps his
+## line, and from inside the water the straight way out is kept.
+func test_lopen_gaat_om_het_bad_heen() -> void:
+	var r := Rooms.get_kamer("zwembad")
+	var water := Rect2(float(r.bad["x0"]), float(r.bad["z0"]),
+		float(r.bad["x1"]) - float(r.bad["x0"]), float(r.bad["z1"]) - float(r.bad["z0"]))
+	var om := Rooms.om_het_water("zwembad", Vector2(132, 56), Vector2(9, 28))
+	waar(not om.is_empty(), "van het verre dek naar de mat gaat om het water (%s)" % str(om))
+	gelijk(Rooms.om_het_water("zwembad", Vector2(132, 56), Vector2(12, 56)), [], "langs het dek is de lijn droog")
+	gelijk(Rooms.om_het_water("zwembad", Vector2(60, 28), Vector2(12, 56)), [], "uit het water is de rechte weg de kortste")
+	gelijk(Rooms.om_het_water("receptie", Vector2(10, 10), Vector2(90, 90)), [], "een kamer zonder bad kent geen omweg")
+	World.naar("zwembad")
+	World.zet("t_droog", "zwembad", 132.0, 56.0, {"kind": "hond"})
+	World.ga("t_droog", 9.0, 28.0, "wacht")
+	var d := World.dier("t_droog")
+	waar(d.punten.size() >= 2, "de wandeling heeft een tussenpunt (%s)" % str(d.punten))
+	var t := 0
+	while not d.punten.is_empty() and t < 900:
+		World._tik()
+		t += 1
+		waar(not water.has_point(Vector2(d.x, d.z)), "tik %d: droog op (%.0f, %.0f)" % [t, d.x, d.z])
+	gelijk(Vector2(d.x, d.z), Vector2(9, 28), "en hij komt op de mat aan")
+	await World.loop_naar("t_droog", 60.0, 28.0, {"pose": "zwem", "na": "zwem"})
+	waar(water.has_point(Vector2(d.x, d.z)), "een zwemmer zwemt wel het water in")
+	World.weg("t_droog")
+	_na_afloop()

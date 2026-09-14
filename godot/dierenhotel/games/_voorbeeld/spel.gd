@@ -19,6 +19,7 @@ func definitie() -> Dictionary:
 	return {
 		"naam": "Voorbeeld",
 		"kamer": "gang",
+		"stub": true,     # a worked example for developers: never a task card or a button in the hotel (owner, 2026-09-14: "Doe het voorbeeld" hung over the desk)
 		"hotspot": {"obj": "kist", "icoon": "", "label": "Voorbeeld", "hoog": 14},
 		"unlock": func(n: int, _band: int) -> bool: return n >= 0,
 		"taak": {"id": "voorbeeld", "icoon": "", "tekst": "Doe het voorbeeld", "prio": 5},

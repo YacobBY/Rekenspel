@@ -566,7 +566,15 @@ class Zwembad extends RefCounted:
 		var d: int = maxi(1, dag)
 		var k := int(info["k"])
 		var r: int = posmod(n + d, k)
-		var l: int = clampi(k * n + r, int(info["lo"]), int(info["hi"]))
+		var lo := int(info["lo"])
+		var hi := int(info["hi"])
+		var l: int = clampi(k * n + r, lo, hi)
+		# Owner, 2026-09-14: with one or two guests k·N + r fell under `lo` every
+		# day and the clamp made every lane 8 m ("altijd 8 meter").  Under the
+		# window the day walks the lane through it instead — a deliberate
+		# deviation from the frozen JavaScript, documented in games-b.md §1.3.
+		if k * n + r < lo:
+			l = lo + posmod(k * n + 3 * d, hi - lo + 1)
 		var m := max_van(l, b)
 		if b >= 5 and l > m and (l - m) % 10 == 0:
 			l = clampi(l + 3, int(info["lo"]), int(info["hi"]))

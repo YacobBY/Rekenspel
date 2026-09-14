@@ -162,8 +162,10 @@ const VERWACHT := {
 	"zaadje": {"n": 6, "h": 2280994025,
 		"eerste": "1=[000000b62c44ce3f,0000c07621a2d73f,0000c02fc022e03f,0000a058678ee63f,000000c0dae0a93f]",
 		"laatste": "0=[000000b62c44ce3f,0000c07621a2d73f,0000c02fc022e03f,0000a058678ee63f,000000c0dae0a93f]"},
-	"zwembad_baan": {"n": 432, "h": 1366239585,
-		"eerste": "1,3,1=8/10/5/2/20",
+	# 2026-09-14: lanes under the window walk with the day (owner: "altijd 8
+	# meter"); the fingerprint is of the Godot rule, no longer of the JavaScript
+	"zwembad_baan": {"n": 432, "h": 3648792083,
+		"eerste": "1,3,1=16/10/5/2/20",
 		"laatste": "12,5,12=80/40/10/3/100"},
 	"zwembad_keuzes": {"n": 160, "h": 969817161,
 		"eerste": "43,30,0,4,0=[43,13,20,30]/30/3/43",

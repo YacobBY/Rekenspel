@@ -84,7 +84,10 @@ func bouw(kamer_id: String) -> void:
 		if stuk.get("ver", false):
 			ver.add_child(o)
 		else:
-			o.diepte_bias = 0.3 if hoog > 0.0 else 0.0
+			# `d` = an explicit depth bias for a thing that stands on a bigger
+			# thing whose centre lies deeper (the bell on the left end of the
+			# desk sorted behind the desk and was hidden, owner 2026-09-14)
+			o.diepte_bias = float(stuk.get("d", 0.3 if hoog > 0.0 else 0.0))
 			objecten.add_child(o)
 		o.zet_model(stuk["n"], stuk.get("params", {}), Vector2.ZERO, int(stuk.get("rot", 0)))
 		o.plaats(stuk["x"], stuk["z"], hoog)

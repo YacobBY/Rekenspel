@@ -241,6 +241,72 @@ func _cel_vrij(r: Kamer, x: int, z: int) -> bool:
 
 ## The wander places: walk the free cells in order and keep one only when it is
 ## at least 22 voxels (Manhattan) from every cell kept so far.
+## The way round the water (owner, 2026-09-14: "ze lopen door het bad heen").
+## A walk from one dry point to another that would cut through the pool goes
+## via the corners of the pool's margin instead: the shortest chain of at most
+## two corners whose legs all stay dry.  From INSIDE the water (leaving after a
+## swim) the straight line is kept: that is the shortest way out.
+## Returns the intermediate points only; empty when the line is dry already.
+const WATER_RAND := 5.0
+
+func om_het_water(kamer_id: String, van: Vector2, naar: Vector2) -> Array:
+	var r := get_kamer(kamer_id)
+	if r == null or r.bad.is_empty():
+		return []
+	var water := Rect2(float(r.bad["x0"]), float(r.bad["z0"]),
+		float(r.bad["x1"]) - float(r.bad["x0"]), float(r.bad["z1"]) - float(r.bad["z0"]))
+	if water.has_point(van) or water.has_point(naar) or not _snijdt(water, van, naar):
+		return []
+	var m := WATER_RAND
+	var hoeken: Array[Vector2] = [
+		Vector2(water.position.x - m, water.position.y - m),
+		Vector2(water.end.x + m, water.position.y - m),
+		Vector2(water.end.x + m, water.end.y + m),
+		Vector2(water.position.x - m, water.end.y + m),
+	]
+	var beste: Array = []
+	var beste_lengte := INF
+	for h in hoeken:
+		if not _snijdt(water, van, h) and not _snijdt(water, h, naar):
+			var l := van.distance_to(h) + h.distance_to(naar)
+			if l < beste_lengte:
+				beste_lengte = l
+				beste = [h]
+	if not beste.is_empty():
+		return beste
+	for i in hoeken.size():
+		for j in hoeken.size():
+			if i == j:
+				continue
+			var a := hoeken[i]
+			var b := hoeken[j]
+			if _snijdt(water, van, a) or _snijdt(water, a, b) or _snijdt(water, b, naar):
+				continue
+			var l := van.distance_to(a) + a.distance_to(b) + b.distance_to(naar)
+			if l < beste_lengte:
+				beste_lengte = l
+				beste = [a, b]
+	return beste
+
+## Does the open segment a–b pass through the rectangle?  Liang–Barsky.
+static func _snijdt(r: Rect2, a: Vector2, b: Vector2) -> bool:
+	var d := b - a
+	var t0 := 0.0
+	var t1 := 1.0
+	var p := [-d.x, d.x, -d.y, d.y]
+	var q := [a.x - r.position.x, r.end.x - a.x, a.y - r.position.y, r.end.y - a.y]
+	for i in 4:
+		if is_zero_approx(p[i]):
+			if q[i] < 0.0:
+				return false
+		else:
+			var t: float = q[i] / p[i]
+			if p[i] < 0.0:
+				t0 = maxf(t0, t)
+			else:
+				t1 = minf(t1, t)
+	return t0 < t1 - 0.0001
+
 func _bouw_plekken(r: Kamer) -> void:
 	var uit: Array = []
 	for cel in r.vrij:
@@ -446,7 +512,7 @@ func _bouw_kamers() -> void:
 		"deuren": [{"naar": "gang", "wand": "x", "at": 24, "breed": 12}],
 		"decor": [
 			{"n": "balie", "x": 48, "z": 20}, {"n": "balie", "x": 83, "z": 20},
-			{"n": "bel", "x": 36, "z": 20, "y": 14},
+			{"n": "bel", "x": 36, "z": 20, "y": 14, "d": 12.5},   # sorts after the desk piece at (48, 20)
 			{"n": "kassa", "x": 60, "z": 20, "y": 14},
 			{"n": "boek", "x": 84, "z": 20, "y": 14},
 			{"n": "lamp", "x": 99, "z": 20, "y": 14, "sleutel": "balielamp"},

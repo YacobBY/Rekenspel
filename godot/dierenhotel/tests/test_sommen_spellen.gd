@@ -10,6 +10,21 @@ extends Proef
 
 ## games-b.md §1.3, including the "Nagerekend" note: the window of band 5 is
 ## 31…80, not 31…76 (Q-X3-1 answered 80 in A1 §13).
+## Owner, 2026-09-14: with one guest every lane was 8 m.  Under the window the
+## day now walks the lane through it, so a week of swimming is a week of
+## different lanes — inside the band's window, still at most two strokes.
+func test_zwembad_baan_varieert_bij_een_gast() -> void:
+	for band in [3, 4, 5]:
+		var gezien := {}
+		for dag in range(1, 9):
+			var q := Sommen.Zwembad.baan(1, band, dag)
+			gezien[int(q["L"])] = true
+			var info: Dictionary = Sommen.Zwembad.BANDEN[band]
+			waar(int(q["L"]) >= int(info["lo"]) and int(q["L"]) <= int(info["hi"]),
+				"band %d dag %d: %d m ligt in het venster" % [band, dag, int(q["L"])])
+		waar(gezien.size() >= 5, "band %d: acht dagen, minstens vijf lengtes (%s)" % [band, str(gezien.keys())])
+	gelijk(int(Sommen.Zwembad.baan(2, 3, 1)["L"]), 13, "twee gasten in band 3 rekenen als vanouds: 10 + 3")
+
 func test_zwembad_baan() -> void:
 	var b := Sommen.Zwembad.baan(5, 4, 1)
 	gelijk(b["r"], 6, "baan(5,4,1).r = (5+1) mod 8")

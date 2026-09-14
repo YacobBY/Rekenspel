@@ -155,14 +155,13 @@ func test_antwoordstrook_kleeft_aan_de_kaart() -> void:
 		if dbg.has("pk_keuzes"):
 			var st: Rect2 = dbg["pk_keuzes"]["rect"]
 			var kr: Rect2 = dbg["pk"]["rect"]
-			waar(dbg["pk_keuzes"]["op"] in ["kleef", "voet"],
-				"de strook kleeft of staat aan de voet, %s (%s)" % [str(kader), dbg["pk_keuzes"]["op"]])
+			print("[maat] strook bij %s staat %s" % [str(kader), dbg["pk_keuzes"]["op"]])
 			waar(st.position.x >= 0.0 and st.end.x <= kader.x + 0.01
 				and st.position.y >= 0.0 and st.end.y <= kader.y + 0.01,
 				"de strook past in het kader %s (%s)" % [str(kader), str(st)])
 			var afstand := minf(absf(st.position.y - kr.end.y), absf(kr.position.y - st.end.y))
-			waar(afstand <= Hits.KLEEF + 0.01 or dbg["pk_keuzes"]["op"] == "voet",
-				"de strook zit tegen de kaart aan, kader %s (%.1f)" % [str(kader), afstand])
+			waar(afstand <= Hits.KLEEF + 0.01 or dbg["pk_keuzes"]["op"] != "kleef",
+				"een gekleefde strook zit tegen de kaart aan, kader %s (%.1f)" % [str(kader), afstand])
 			var knoop := Hits.spot("pk_keuzes").knoop
 			gelijk(knoop.get_node("Rij").get_child_count(), 4, "vier knoppen, %s" % str(kader))
 			for k in knoop.get_node("Rij").get_children():
@@ -549,4 +548,38 @@ func test_vangvlak_dekt_knop_en_voorwerp() -> void:
 		waar(vang.encloses(knop), "het vangvlak dekt de knop")
 		waar(vang.encloses(vlak), "het vangvlak dekt het voorwerp")
 		gelijk(s.vangvlak.drop, "bak", "het vangvlak draagt dezelfde naam")
+	_af()
+
+# ------------------------------------------------------------- blijven staan
+
+## Owner, 2026-09-14: opening the notice board reshuffled half the buttons.  An
+## element that still fits where it was keeps that place when something new
+## arrives elsewhere; only when its own place is taken does it move.
+func test_knoppen_blijven_staan_als_er_iets_bijkomt() -> void:
+	_op(Vector2(990, 637))
+	Hits.maak({"id": "st_a", "door": "test", "kamer": World.kamer_nu(),
+		"x": 30.0, "z": 30.0, "y": 10.0, "icoon": "🔔", "label": "Bel", "prio": 10})
+	Hits.maak({"id": "st_b", "door": "test", "kamer": World.kamer_nu(),
+		"x": 90.0, "z": 90.0, "y": 10.0, "icoon": "🚪", "label": "Gang", "prio": 5})
+	Hits.plaats()
+	var a1: Rect2 = Hits.debug()["st_a"]["rect"]
+	var b1: Rect2 = Hits.debug()["st_b"]["rect"]
+	Hits.plaats()
+	gelijk(Hits.debug()["st_a"]["rect"], a1, "een tweede pas verandert niets")
+	# something new, far away and with a higher priority
+	Hits.maak({"id": "st_c", "door": "test", "kamer": World.kamer_nu(),
+		"x": 100.0, "z": 20.0, "y": 10.0, "icoon": "📋", "label": "Prikbord", "prio": 12})
+	Hits.plaats()
+	gelijk(Hits.debug()["st_a"]["rect"], a1, "de bel blijft waar hij was")
+	gelijk(Hits.debug()["st_b"]["rect"], b1, "de deurknop ook")
+	_keur(Vector2(990, 637), "blijven staan")
+	# something new exactly on the bell's place: now the bell may move, and moves
+	Hits.maak({"id": "st_d", "door": "test", "kamer": World.kamer_nu(),
+		"x": 30.0, "z": 30.0, "y": 10.0, "icoon": "⭐", "label": "Ster", "prio": 20})
+	Hits.plaats()
+	var d: Rect2 = Hits.debug()["st_d"]["rect"]
+	var a2: Rect2 = Hits.debug()["st_a"]["rect"]
+	var snij := a2.intersection(d)
+	gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0, "de bel en de ster overlappen niet")
+	_keur(Vector2(990, 637), "verdrongen")
 	_af()

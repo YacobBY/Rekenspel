@@ -30,6 +30,7 @@ var _voorrang: String = ""         ## the game that picks its places first
 var _bezet: Dictionary = {}        ## "rij|kol" -> true, rebuilt every placement
 var _geplaatst: Array[Rect2] = []  ## the rectangles already handed out this pass
 var _vakken: Array[Rect2] = []     ## object boxes in view; a button avoids all of them
+var _mijd_balie_nu := false        ## while placing a hotel element: the desk is a box too
 var _kaart_vrij: Array[Rect2] = [] ## boxes a fixed card may not cover either (the desk)
 var _laatste: Dictionary = {}   ## id -> {rect, vlak, dekking, op, laag, prio, krap, gestapeld}
 
@@ -275,20 +276,56 @@ func plaats() -> void:
 		s.knoop.visible = true
 		var maat := _maat_van(s)
 		var mik := World.mik_punt(s.x, s.z, s.y)
-		var uit := _kies_plek(s, mik, maat, kader, rijen, kolommen)
+		# The counter is a thing too (owner, 2026-09-14: the board's cards and
+		# the 📋 button lay over it).  A game with priority keeps its own
+		# plates on the desk (the key board's hooks, I2); everything of the
+		# hotel stays off it.
+		_mijd_balie_nu = s.laag != Laag.SPEL
+		var uit := _blijf_staan(s, mik, maat, kader)
+		if uit.is_empty():
+			uit = _kies_plek(s, mik, maat, kader, rijen, kolommen)
 		var rect: Rect2 = uit["rect"]
 		s.knoop.custom_minimum_size = maat
 		s.knoop.size = maat
 		s.knoop.position = rect.position
 		_laatste[s.id] = {
 			"id": s.id, "op": uit["op"], "laag": s.laag, "prio": s.prio,
-			"rect": rect, "vlak": s.vlak_nu, "krap": uit["krap"],
+			"rect": rect, "vlak": s.vlak_nu, "krap": uit["krap"], "mik": mik,
 			# true when the two bands beside the object were full and the
 			# element had to stack somewhere else in the frame
 			"gestapeld": uit.get("gestapeld", false),
 			"dekking": _dekking(rect, s.vlak_nu),
 		}
 		_zet_vangvlak(s, rect)
+
+## Stay put (owner, 2026-09-14: opening the board reshuffled half the buttons).
+## A band-placed element keeps last frame's rectangle when its aim point has
+## not moved, the rectangle is the same size, still inside the frame, at most
+## two bands from the aim point, and touches nothing placed and no object box.
+## Anchored placements (a fixed card, a glued strip, a tag, the foot) choose
+## afresh every pass: their place IS the rule.
+const BLIJF_MIK := 4.0      ## css-px the aim point may drift before re-placing
+const BLIJF_BANDEN := 2     ## how far from the object a kept place may be
+
+func _blijf_staan(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2) -> Dictionary:
+	var l: Dictionary = _laatste.get(s.id, {})
+	if l.is_empty() or not l.has("mik"):
+		return {}
+	var op := str(l["op"])
+	if op in ["voet", "midden", "kleef", "rand"] or bool(l["krap"]):
+		return {}
+	var r: Rect2 = l["rect"]
+	if not r.size.is_equal_approx(maat) or (l["mik"] as Vector2).distance_to(mik) > BLIJF_MIK:
+		return {}
+	if r.position.x < 0.0 or r.position.y < 0.0 or r.end.x > kader.size.x or r.end.y > kader.size.y:
+		return {}
+	var afstand := minf(absf(r.position.y - mik.y), absf(r.end.y - mik.y))
+	if afstand > BLIJF_BANDEN * RIJ + maat.y:
+		return {}
+	if _botst(r) or _vak_kosten(r) > 0.0:
+		return {}
+	_reserveer(r, kader)
+	return {"rect": r, "op": op, "krap": false, "gestapeld": bool(l.get("gestapeld", false))}
 
 ## Off the glass: a hotspot that is not placed this pass shows nothing at all.
 func _verberg(s: Spot) -> void:
@@ -723,6 +760,11 @@ func _vak_kosten(r: Rect2) -> float:
 		var snij := r.intersection(v)
 		if snij.size.x > 0.0 and snij.size.y > 0.0:
 			som += snij.size.x * snij.size.y
+	if _mijd_balie_nu:
+		for v in _kaart_vrij:
+			var snij := r.intersection(v)
+			if snij.size.x > 0.0 and snij.size.y > 0.0:
+				som += snij.size.x * snij.size.y
 	return som
 
 ## A placed rectangle blocks every cell it touches — cards and clamped
