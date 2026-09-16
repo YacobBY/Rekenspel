@@ -13,6 +13,11 @@ set -uo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJ="$ROOT/godot/dierenhotel"
 GODOT="${GODOT:-godot}"
+# Godot writes its editor settings to $XDG_CONFIG_HOME/godot on every run; the
+# agent sandbox denies writes to ~/.config, which trips the ERROR gate below.
+# Redirect ONLY the config dir: moving HOME/XDG_DATA_HOME too would hide the
+# export templates in ~/.local/share/godot and break the export outright.
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-${TMPDIR:-/tmp}/godot-config}"
 PRESET="${PRESET:-Web}"
 DOEL="${1:-build/web/index.html}"
 LOG_DIR="${DH_LOG_DIR:-${TMPDIR:-/tmp}/dierenhotel-log}"
