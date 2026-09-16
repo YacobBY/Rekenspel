@@ -530,6 +530,63 @@ func test_te_ver_botst_zacht_en_geeft_toch_een_ster() -> void:
 	gelijk(int(State.s["sterren"]), sterren_voor + 1, "de ster hoort bij het meedoen")
 	await _af()
 
+## De twee klimaxmomenten spatten: de wand en de overkant (pijler 4).  Met de
+## rust aan slikt `World.spetter` elke druppel in, dus deze twee suites lopen
+## in opgewekte beweging en meten de piek van `World.deeltjes()` per frame.
+## Eén gast: band 3, baan 16 m — twee slagen, en over de laatste 6 m valt er
+## precies één plonsdruppel (elke 5 m), zodat een piek van 6 druppels alleen
+## van de klimax zelf kan komen.  De return zegt óf er tijdens het polled een
+## sterkleurig deeltje rondhing: dat hoort alleen bij de precieze overkant.
+func _klimax_spat(soort_ver: bool) -> bool:
+	_op()
+	_gasten(1)
+	gelijk(State.band(), 3, "één gast baant weg op band 3")
+	Ui.zet_rust_modus(false)
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_kaart_staat, 20000), "de vraagkaart staat er")
+	waar(_druk(_juist_nu()), "eerst de eerlijke slag")
+	waar(await _wacht(_kaart_staat, 20000), "de tweede kaart staat er")
+	var laatste := _juist_nu()
+	if soort_ver:
+		laatste = _ver_antwoord()
+		waar(laatste > 0, "er staat een te verre knop op de strook (%d)" % laatste)
+	var voor := World.deeltjes().size()
+	var piek := voor
+	var sprankel := false
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	waar(_druk(laatste), "de laatste knop is aan te tikken")
+	while Time.get_ticks_msec() - t0 < 25000 and _klaar().is_empty():
+		await boom.process_frame
+		piek = maxi(piek, World.deeltjes().size())
+		for q in World.deeltjes():
+			if q.get("c") == ArtEffect.STER_KL[0]:
+				sprankel = true
+	piek = maxi(piek, World.deeltjes().size())
+	Ui.zet_rust_modus(true)
+	gelijk(_klaar(), "bots" if soort_ver else "precies", "de beurt eindigt als verwacht")
+	waar(piek - voor >= 6,
+		"'%s' spoot over (piek %d, voor %d)" % [_klaar(), piek, voor])
+	await _af()
+	return sprankel
+
+## Een te verre slag spoot tegen de wand — 💛 Au! én een spat water.
+func test_spat_tege_de_wand() -> void:
+	await _klimax_spat(true)
+
+## Aankomst aan de overkant: ook daar spat het van het water af.
+func test_spat_aan_de_overkant() -> void:
+	await _klimax_spat(false)
+
+## "Precies" is het exacte antwoord en krijgt glans boven het water: er
+## sprikkelde sterkleur boven de zwemmer (de bots blijft zacht).
+func test_precies_sprankelt() -> void:
+	waar(await _klimax_spat(false), "er stegen sterren op boven de zwemmer")
+
+## De bots blijft zacht: water wel, sterren nooit (§1.7).
+func test_bots_sprankelt_niet() -> void:
+	waar(not await _klimax_spat(true), "bij een bots geen sterrendeeltje")
+
 ## The 🏊 wish is resolved, and only by the guest who had it (§1.7 step 2).
 func test_de_wens_wordt_ingelost() -> void:
 	_op()
@@ -703,6 +760,11 @@ func test_eigen_modellen_bakken() -> void:
 	for vox in ZwembadModellen.streep({"groot": true}):
 		var kl: Color = vox["k"]
 		waar(kl != Color("#EDEFF6"), "de streep is blauw, niet steenkleurig")
+	# a passed marker differs from a white one in the knob's colour only
+	var ge: Array = ZwembadModellen.streep({"groot": true, "gehaald": true})
+	var wit: Array = ZwembadModellen.streep({"groot": true})
+	gelijk(ge.size(), wit.size(), "gehaald verandert geen enkele voxel")
+	waar(ge != wit, "de gehaalde knop draagt de vlagkleur")
 
 ## The rim carries bare numbers on the big markers only, and never two labels
 ## closer than 34 px together (§1.9).
@@ -736,6 +798,80 @@ func test_de_meterstrepen_en_hun_cijfers() -> void:
 		waar(x - vorig >= 34.0 - 0.01,
 			"twee cijfers staan minstens 34 px uit elkaar (%d, %.1f)" % [i, x - vorig])
 		vorig = x
+	await _af()
+
+## Elke meterstreep die hij gezwommen is kleurt zijn knop roze als de vlag; de
+## strepen vóór hem blijven wit.  De getallenlijn laat dus zien hoe ver hij is
+## en hoeveel er nog over is ("tel de strepen tot de vlag").
+func test_gehaalde_strepen_kleuren_mee() -> void:
+	_op()
+	_gasten(1)
+	gelijk(State.band(), 3, "één gast baant weg op band 3")
+	Ui.zet_rust_modus(true)          # de zwemtocht kost geen muurkloktijd
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_kaart_staat, 20000), "de vraagkaart staat er")
+	waar(_druk(_juist_nu()), "één eerlijke slag")
+	waar(await _wacht(_kaart_staat, 20000), "de tweede kaart staat er")
+	var p := int(_beurt()["p"])
+	var Strepen := "zb_streep_".length()
+	var alle := 0
+	var gehaald := 0
+	for stuk in World.decor_lijst(ID):
+		var id := str(stuk.get("id", ""))
+		if not id.begins_with("zb_streep_"):
+			continue
+		var m := int(id.substr(Strepen))
+		var par: Dictionary = stuk.get("params", {})
+		var ge := bool(par.get("gehaald", false))
+		waar(ge == (m > 0 and m <= p),
+			"streep op %d m is %s (hij ligt op %d m)"
+			% [m, "gehaald" if ge else "nog wit", p])
+		alle += 1
+		if ge:
+			gehaald += 1
+	waar(alle > 0, "er staan meterstrepen in de bak")
+	waar(gehaald >= 1, "minstens één streep is gehaald en roos")
+	waar(alle - gehaald >= 1, "en minstens één vóór hem is nog wit")
+	await _af()
+
+## De eerste trede van de hulptrap zegt "tel de strepen tot de vlag": zolang die
+## kaart opstaat, lichten alle strepen vóór de vlag op — de gehaalde houden
+## hun roos.  Bij de volgende slag gaan de lichtjes weer uit.
+func test_eerste_hulp_licht_de_strepen_op() -> void:
+	_op()
+	_gasten(1)
+	gelijk(State.band(), 3, "één gast baant weg op band 3")
+	Ui.zet_rust_modus(true)          # de zwemtocht kost geen muurkloktijd
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_kaart_staat, 20000), "de vraagkaart staat er")
+	waar(_druk(_kort_antwoord()), "één te korte slag")
+	waar(await _wacht(_kaart_staat, 20000), "de tweede kaart staat er")
+	gelijk(int(_beurt()["misser"]), 1, "het ís de eerste misser")
+	var p := int(_beurt()["p"])
+	var Strepen := "zb_streep_".length()
+	var licht := 0
+	for stuk in World.decor_lijst(ID):
+		var id := str(stuk.get("id", ""))
+		if not id.begins_with("zb_streep_"):
+			continue
+		var m := int(id.substr(Strepen))
+		var par: Dictionary = stuk.get("params", {})
+		var lt := bool(par.get("licht", false))
+		var ge := bool(par.get("gehaald", false))
+		waar(lt == (m > p), "streep op %d m %s (hij ligt op %d m)"
+			% [m, "licht op" if lt else "blijft doof", p])
+		waar(ge == (m > 0 and m <= p), "streep op %d m is %s (hij ligt op %d m)"
+			% [m, "gehaald" if ge else "nog wit", p])
+		if lt:
+			licht += 1
+	waar(licht >= 1, "minstens één streep vóór de vlag licht op")
+	waar(_druk(_juist_nu()), "de volgende slag gaat weer zelf")
+	for stuk in World.decor_lijst(ID):    # nog vóór de nieuwe kaart: licht uit
+		var id2 := str(stuk.get("id", ""))
+		if not id2.begins_with("zb_streep_"):
+			continue
+		waar(not bool(stuk.get("params", {}).get("licht", false)),
+			"met de slag gaat het licht uit (%s)" % id2)
 	await _af()
 
 # ------------------------------------------------------------------- hulpjes

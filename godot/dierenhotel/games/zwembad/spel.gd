@@ -48,6 +48,7 @@ var _uit_kader: Callable = Callable()
 var _decor_ids: Array[String] = []
 var _label_ids: Array[String] = []
 var _kant := ""
+var _hulp_licht := false        ## rung 1: the markers ahead glow with the card
 
 # --------------------------------------------------------------- aanmelding
 
@@ -193,6 +194,10 @@ func _vraag() -> void:
 	var hulp := ZwembadBeurt.hulp_regel(int(_b["misser"]), m)
 	if not hulp.is_empty():
 		_kaart.hulp(hulp)
+	# the first rung shows WHAT to count: for as long as the card is up, every
+	# marker ahead of him lights up on the rim (games-b.md §0.5)
+	_hulp_licht = int(_b["misser"]) >= 1
+	_strepen_ververs()
 	if int(_b["misser"]) >= 3:
 		_spook_aan()
 	_meld_kaart()
@@ -216,6 +221,8 @@ func _kies(n: int) -> void:
 	_spook_uit()
 	ctx.ui.wolk_weg(WOLK_ID)
 	_kaart_weg()          # no card = no second tap on the same question
+	_hulp_licht = false   # the stroke starts: the help lights burn out again
+	_strepen_ververs()
 	_bewaar()
 	print("[probe] zwembad=kies n=", n, " soort=", soort, " meters=", meters,
 		" p=", p, " misser=", _b["misser"])
@@ -240,6 +247,8 @@ func _kies(n: int) -> void:
 		return
 	if int(_b["p"]) >= l:
 		ctx.snd.ja()
+		_spat(6)               # the arrival splash (pillar 4)
+		_sprankel()            # EXACTLY deserves a shine a bump never gets
 		await _afronden("precies")
 		return
 	if soort == "goed":
@@ -313,6 +322,14 @@ func _spat(n: int) -> void:
 	if d != null and d.kamer == KAMER:
 		ctx.wereld.spetter(KAMER, d.x, d.z, n, ArtEffect.PLONS_KL[0], true)
 
+## Star sparkles above the swimmer — ONLY for arriving exactly (§1.7: the
+## bump stays soft and keeps just its water splash).  `hoog` lifts the burst
+## above his back, so it reads as a shine and not as more water.
+func _sprankel() -> void:
+	var d = ctx.wereld.dier(_gast)
+	if d != null and d.kamer == KAMER:
+		ctx.wereld.spetter(KAMER, d.x, d.z, 10, ArtEffect.STER_KL[0], true, 10.0)
+
 ## `n` metres, one point per metre — the number on his back counts with him.
 func _zwem(n: int) -> bool:
 	var d = ctx.wereld.dier(_gast)
@@ -329,12 +346,19 @@ func _zwem(n: int) -> bool:
 	for i in range(1, aantal + 1):
 		punten.append(Vector2(ZwembadBeurt.baan_x(bad, l, p0 + i), z))
 	var elke := ZwembadBeurt.plons_elke(aantal)
+	var zrand := float(bad.get("z0", 12)) - 2.0
 	var stap := func(i: int, _punt: Vector2) -> void:
 		_b["p"] = mini(l, p0 + i + 1)
 		_zet_gasttag()
 		if i % elke == 0:
 			ctx.snd.plons()
 			_spat(2)
+		# the marker he has just swum past colours itself in (§1.9)
+		var p := int(_b["p"])
+		var sm := int(_b["stap"])
+		if p % sm == 0 and p < l:
+			_streep_zet(p, p % (2 * sm) == 0,
+				float(JsGetal.rond(ZwembadBeurt.baan_x(bad, l, p))), zrand)
 	return await ctx.wereld.stappen(_gast, punten, {"pose": "zwem",
 		"tempo": ZwembadBeurt.tempo_van(l), "per_stap": stap, "na": "zwem"})
 
@@ -343,6 +367,7 @@ func _zwem(n: int) -> bool:
 ## The soft bump against the wall — a 💛, never a cross and never a fright.
 func _bots() -> void:
 	ctx.snd.au()
+	_spat(6)                   # the bump throws a splash over the wall
 	_zeg(ZwembadBeurt.BOTS_ICOON, "", "Au!")
 	if not await na(BOTS_S):
 		return
@@ -431,6 +456,21 @@ func _sluit_als() -> void:
 
 # ------------------------------------------------------------------ decor
 
+## One metre marker, re-issued as it is (a `World.decor` with the same id and
+## `door` replaces the piece, which is how a marker recolours).  `gehaald`
+## falls out of `_b["p"]` alone, so a reload and a frame change derive it
+## again: the knobs he has swum past wear the flag pink.  `licht` is the first
+## rung of the help ladder: while the card is up, every marker AHEAD of him
+## glows so the child sees which ones to count.
+func _streep_zet(m: int, groot: bool, x: float, z: float) -> void:
+	var id := "zb_streep_%d" % m
+	ctx.wereld.decor(KAMER, {"id": id, "model": MODEL_STREEP, "door": ctx.id,
+		"x": x, "z": z, "params": {"groot": groot,
+			"gehaald": m > 0 and m <= int(_b["p"]),
+			"licht": _hulp_licht and m > int(_b["p"])}})
+	if not _decor_ids.has(id):
+		_decor_ids.append(id)
+
 func _bouw_decor() -> void:
 	var l := int(_b["L"])
 	var stap := int(_b["stap"])
@@ -445,11 +485,7 @@ func _bouw_decor() -> void:
 	while m < l:
 		var groot := (m % (2 * stap)) == 0
 		var x := float(JsGetal.rond(ZwembadBeurt.baan_x(bad, l, m)))
-		var id := "zb_streep_%d" % m
-		ctx.wereld.decor(KAMER, {"id": id, "model": MODEL_STREEP, "door": ctx.id,
-			"x": x, "z": z, "params": {"groot": groot}})
-		if not _decor_ids.has(id):
-			_decor_ids.append(id)
+		_streep_zet(m, groot, x, z)
 		# a bare number on the rim, but only on a BIG marker and only as often
 		# as two labels still stand 34 px apart
 		if groot and (m % lstap) == 0:
@@ -466,6 +502,20 @@ func _bouw_decor() -> void:
 		_decor_ids.append(VLAG_DECOR)
 	ctx.ui.getal_tag({"x": vx, "z": vz}, "%d m" % l,
 		{"id": VLAG_TAG, "kamer": KAMER, "y": 34, "prio": 8})
+
+## Re-issue only the markers of the rim, with the current `gehaald` and
+## `licht` — no numbers and no flag.  This is how the help light of the first
+## rung burns IN with a card and OUT again with the next stroke (§0.5).
+func _strepen_ververs() -> void:
+	var l := int(_b["L"])
+	var stap := int(_b["stap"])
+	var bad := _bad()
+	var z := float(bad.get("z0", 12)) - 2.0
+	var m := 0
+	while m < l:
+		var x := float(JsGetal.rond(ZwembadBeurt.baan_x(bad, l, m)))
+		_streep_zet(m, (m % (2 * stap)) == 0, x, z)
+		m += stap
 
 func _decor_weg() -> void:
 	for id in _decor_ids:
