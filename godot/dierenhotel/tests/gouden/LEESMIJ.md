@@ -1,5 +1,11 @@
 # tests/gouden — de gouden-plaat orakel
 
+> 2026-09-16: de HTML-motor (`demos/`) en de generatorscripts die hier stonden
+> (`extract.js`, `probe.html`, `modelmaat.js`, `posemaat.js`, `snd-export.js`,
+> `snd-probe.html`) zijn op verzoek van de eigenaar verwijderd.  De orakels
+> (platen, wav, json) blijven; opnieuw genereren kan alleen vanuit de
+> git-geschiedenis: `git show 7945251:demos/dierenhotel/art.js` enzovoort.
+
 63 PNG-platen, verliesloos uit de draaiende HTML-motor getrokken
 (`extract.js` + `probe.html`, Playwright/chromium, art-sound-rules.md §14.1),
 plus `meta.json` met per plaat de maat en de `dx`/`dy` offset.
