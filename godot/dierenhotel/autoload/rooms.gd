@@ -546,21 +546,52 @@ func _bouw_kamers() -> void:
 			{"n": "schilderij2", "x": 84, "z": 1, "y": 30, "ver": true},
 			{"n": "plant", "x": 44, "z": 8}, {"n": "plant", "x": 82, "z": 8},
 			{"n": "kist", "x": 114, "z": 14}]})
-	for nr in [1, 2]:
-		var mat_kl := [Color("#DFCBEA"), Color("#D6BFE4")] if nr == 1 \
-			else [Color("#CBE3D6"), Color("#BFDBCB")]
-		var plant_x := 102 if nr == 1 else 12
-		var plant_z := 12 if nr == 1 else 99
-		_kamer({"id": "kamer%d" % nr, "naam": "Kamer %d" % nr, "icoon": "🛏️",
-			"w": 114, "d": 114, "wand": 58, "vloer": "zacht", "loop": 1.5,
-			"matten": {"x0": 51, "x1": 93, "z0": 45, "z1": 87, "kl": mat_kl},
-			"deuren": [{"naar": "gang", "wand": "z", "at": 72, "breed": 12}],
-			"decor": [{"n": "plant", "x": plant_x, "z": plant_z},
-				{"n": "mand", "x": 93, "z": 99}],
-			"slots": [
-				{"id": "bed1", "soort": "bed", "model": "bed", "x": 30, "z": 27},
-				{"id": "bed2", "soort": "bed", "model": "bed", "x": 30, "z": 75},
-				{"id": "bak", "soort": "bak", "model": "kom", "x": 84, "z": 33}]})
+	# OWNER DECISION (2026-09-17): "kamer 2 lijkt exact op kamer 1, die mag wel
+	# iets anders".  The two bedrooms were one loop; they are two rooms now.
+	#
+	# Kamer 1, the lilac room: the two beds lie along x on the left half (their
+	# places are fixed facts — tests/test_rooms.gd `test_stavakken_van_de_slots`),
+	# a window on the back wall between the door and the corner, a bedside table
+	# with a picture over it against the left wall, blocks in the near corner.
+	_kamer({"id": "kamer1", "naam": "Kamer 1", "icoon": "🛏️",
+		"w": 114, "d": 114, "wand": 58, "vloer": "zacht", "loop": 1.5,
+		"matten": {"x0": 51, "x1": 93, "z0": 45, "z1": 87,
+			"kl": [Color("#DFCBEA"), Color("#D6BFE4")]},
+		"deuren": [{"naar": "gang", "wand": "z", "at": 72, "breed": 12}],
+		"decor": [
+			{"n": "raam", "x": 40, "z": 1, "y": 25, "ver": true},
+			{"n": "schilderijz", "x": 1, "z": 51, "y": 29, "ver": true},
+			{"n": "nachtkastje", "x": 8, "z": 51},
+			{"n": "blokken", "x": 14, "z": 100},
+			{"n": "plant", "x": 102, "z": 12},
+			{"n": "mand", "x": 93, "z": 99}],
+		"slots": [
+			{"id": "bed1", "soort": "bed", "model": "bed", "x": 30, "z": 27},
+			{"id": "bed2", "soort": "bed", "model": "bed", "x": 30, "z": 75},
+			{"id": "bak", "soort": "bak", "model": "kom", "x": 84, "z": 33}]})
+	# Kamer 2, the mint room: everything the child recognises sits somewhere
+	# else.  Both beds are `bedz` — turned a quarter, side by side along the back
+	# wall, leaving its right half for the door — the bowl stands in the far
+	# corner instead of beside the beds, the rug is a runner in front of them,
+	# the window hangs on the LEFT wall and the back wall carries a book shelf
+	# right of the door.  Slot ids stay bed1, bed2, bak.
+	_kamer({"id": "kamer2", "naam": "Kamer 2", "icoon": "🛏️",
+		"w": 114, "d": 114, "wand": 58, "vloer": "zacht", "loop": 1.5,
+		"matten": {"x0": 24, "x1": 96, "z0": 58, "z1": 76,
+			"kl": [Color("#CBE3D6"), Color("#BFDBCB")]},
+		"deuren": [{"naar": "gang", "wand": "z", "at": 72, "breed": 12}],
+		"decor": [
+			{"n": "raamz", "x": 1, "z": 72, "y": 25, "ver": true},
+			{"n": "schilderij", "x": 64, "z": 1, "y": 31, "ver": true},
+			{"n": "boekenplank", "x": 100, "z": 1, "y": 30, "ver": true},
+			{"n": "staande_lamp", "x": 12, "z": 52},
+			{"n": "speelgoedkist", "x": 104, "z": 44},
+			{"n": "mand", "x": 14, "z": 96},
+			{"n": "plant", "x": 48, "z": 102}],
+		"slots": [
+			{"id": "bed1", "soort": "bed", "model": "bedz", "x": 18, "z": 30},
+			{"id": "bed2", "soort": "bed", "model": "bedz", "x": 52, "z": 30},
+			{"id": "bak", "soort": "bak", "model": "kom", "x": 96, "z": 84}]})
 	_kamer({"id": "keuken", "naam": "Keuken", "icoon": "🍪", "w": 120, "d": 114,
 		"wand": 56, "vloer": "tegel", "loop": 1.5,
 		"deuren": [
