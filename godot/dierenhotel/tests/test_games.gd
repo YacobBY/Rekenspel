@@ -88,6 +88,9 @@ func test_ingangsknop_hangt_aan_zijn_voorwerp() -> void:
 		return                       # the placeholder room went with W1; nothing to hang on
 	World.naar(kamer)
 	World.meet(Rect2(Vector2.ZERO, Vector2(1000, 648)))
+	# the sample game is a stub and hangs no button in the real hotel (owner,
+	# 2026-09-14: "Doe het voorbeeld" on the board); for this test it is not
+	def["stub"] = false
 	Games.hersteek()
 	Hits.plaats()
 	var s := Hits.spot("spel__voorbeeld")
@@ -101,6 +104,9 @@ func test_ingangsknop_hangt_aan_zijn_voorwerp() -> void:
 			"de knop hangt aan zijn voorwerp (%s, %.1f %%)" % [d["op"], Hits.dekking("spel__voorbeeld")])
 		var r: Rect2 = Hits.debug()["spel__voorbeeld"]["rect"]
 		waar(r.size.x >= 48.0 and r.size.y >= 48.0, "en is een tikdoel")
+	def["stub"] = true
+	Games.hersteek()
+	waar(Hits.spot("spel__voorbeeld") == null, "een stub hangt geen knop in het hotel")
 	_af()
 
 ## One turn through the lifecycle: start stamps the owner and gives the game

@@ -38,6 +38,21 @@ const NAMEN := ["boom", "hok", "hekx", "hekz", "tobbe", "bal", "kist", "mat", "p
 ## The garden's grass tufts, laid out by a seeded PRNG.
 const POL_AANTAL := 5
 
+## The themed decor files (kitchen, laundry, bedrooms, reception and corridor)
+## each bring their own table; `tabel()` merges them and `alle_namen()` lists
+## every name, base set first.
+static func _extra() -> Array:
+	return [ArtDecorKeuken, ArtDecorWasserij, ArtDecorSlaapkamer, ArtDecorHotel]
+
+static func alle_namen() -> Array[String]:
+	var uit: Array[String] = []
+	uit.append_array(NAMEN)
+	for k in _extra():
+		for n in k.NAMEN:
+			if not uit.has(n):
+				uit.append(n)
+	return uit
+
 static func boom(_p := {}) -> Array:
 	var v: Array = []
 	var kl := [BLAD_A, BLAD_B, BLAD, BLAD_B, BLAD_A]
@@ -298,6 +313,17 @@ static func poort(_p := {}) -> Array:
 ## `naam -> Callable(params) -> Array`, the four `*z` variants mirrored over the
 ## diagonal by `ArtVorm.draai` — the same furniture, a quarter turn round.
 static func tabel() -> Dictionary:
+	var uit := _basis()
+	for k in _extra():
+		var t: Dictionary = k.tabel()
+		for n in t:
+			if uit.has(n):
+				push_error("ArtDecor: model '%s' is al een basismodel" % n)
+				continue
+			uit[n] = t[n]
+	return uit
+
+static func _basis() -> Dictionary:
 	return {
 		"boom": Callable(ArtDecor, "boom"),
 		"hok": Callable(ArtDecor, "hok"),

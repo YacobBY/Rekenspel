@@ -4,6 +4,29 @@ Project knowledge for the coding agent. Read this instead of scanning the tree:
 it names every file that matters, the commands, the contracts and the traps.
 Written 2026-09-16 against `main` (suite: 393 tests, 0 failures, ≈ 95 s).
 
+## 0. Tool rules and skills (read first)
+
+Skills live in `.dsh/skills/` and load with the `skill` tool: `dh-tools` (which
+tool for what — load it first on every task), `dh-tests`, `dh-minigame`,
+`dh-screenshot`, `dh-export`, `dh-spec`, `dh-commit`. They contain the
+procedures; this file contains the facts.
+
+- `read`/`grep`/`glob`/`edit`/`write` for files (an `edit` needs a `read` of that
+  file first); `bash` with `workdir` for commands (fresh shell per call);
+  commands over ~60 s (full suite, export, probe, kiek) as `run_in_background`
+  + one `job_output` with `wait: true`; `read_image` to look at a PNG.
+- Do not use `subagent`, `workflow`, `ralph`, `web_search`, `web_fetch`.
+- At most 8 read/grep calls before the first edit when the task names the
+  files; do not read ANALYSIS/HANDOFF/IDEAS/ledger unless asked.
+- A picture of a room or game: `node tools/kiek.js --kamer zwembad --tik spel_zwembad`
+  (see `dh-screenshot`), never a hand-written browser script.
+- **Always show the owner an image of a change when you finish, if the change
+  is visible in the world.** After the tests pass and the export is rebuilt,
+  take a screenshot of the affected room/game with `kiek.js` and present it
+  (the `present` tool) before reporting done — the owner wants to *see* what
+  changed, not just read about it. Skip only when the change has nothing to
+  show (pure maths/logic, no visual difference).
+
 ## 1. What this is
 
 A tablet maths game for Dutch children of 6–9 (groep 3–5): a voxel **animal
@@ -74,6 +97,7 @@ main.py                   PyCharm leftover, ignore
 | `tools/export.sh` | release web export → `godot/dierenhotel/build/web/` (≈ 41 MB) | ≈ 60 s |
 | `tools/serve.sh [port]` | static server on 8642 for the export | — |
 | `node tools/probe.js --viewport 1024x768@2:ipad --knop bel` | chromium finger probe of the export, screenshots + rapport.json | ≈ 60 s |
+| `node tools/kiek.js --kamer zwembad --tik spel_zwembad` | one screenshot of one room/game of the export (serves build/web itself, seeds a save) | ≈ 40 s |
 
 Godot is `~/.local/bin/godot` (4.7.2.stable); set `GODOT=` if it is not on
 `PATH`. Export templates: `~/.local/share/godot/export_templates/4.7.2.stable/`.

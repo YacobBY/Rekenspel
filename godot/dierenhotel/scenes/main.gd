@@ -442,6 +442,12 @@ func _meld_knoppen() -> void:
 		var s := Hits.spot(id)
 		if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
 			print("[probe] knop ", id, "=", s.knoop.get_global_rect())
+	# the room bar, so a probe can tap a room or the map ("kaart") by name
+	if kamerbalk != null:
+		for id in kamerbalk.chips():
+			var b: Control = kamerbalk.chips()[id]
+			if is_instance_valid(b) and b.visible:
+				print("[probe] chip ", id if id != "" else "kaart", "=", b.get_global_rect())
 
 ## A shell that leaves the tree stops answering the theme signal: tests build
 ## several shells in one process and a freed one must not answer (I2).

@@ -182,6 +182,7 @@ func hersteek() -> void:
 		var knop_id := "spel_" + id
 		var hs: Dictionary = def.get("hotspot", {})
 		if hs.is_empty() or str(def.get("kamer", "")) != nu \
+				or bool(def.get("stub", false)) \
 				or not ontgrendeld(id) \
 				or (_actief == id and not bool(hs.get("blijf", false))) \
 				or (kort and _actief != "" and _actief != id):

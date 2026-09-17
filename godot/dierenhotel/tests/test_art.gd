@@ -261,10 +261,11 @@ func test_niveau() -> void:
 # ---------------------------------------------------- register en plaatcache
 
 func test_elk_wereldmodel_bakt_op_elke_schaal() -> void:
-	var namen := ArtDecor.NAMEN.duplicate()
+	var namen := ArtDecor.alle_namen()
 	for n in ArtDecor.POL_AANTAL:
 		namen.append("pol%d" % n)
-	gelijk(namen.size(), 34, "34 decorstukken (art-sound-rules.md §8)")
+	gelijk(ArtDecor.NAMEN.size() + ArtDecor.POL_AANTAL, 34, "34 basisdecorstukken (art-sound-rules.md §8)")
+	waar(namen.size() >= 34, "plus de themabestanden: %d modellen" % namen.size())
 	for naam in namen:
 		waar(Art.heeft_model(naam), "model %s bestaat" % naam)
 		waar(Art.is_wereldmodel(naam), "model %s is beschermd" % naam)

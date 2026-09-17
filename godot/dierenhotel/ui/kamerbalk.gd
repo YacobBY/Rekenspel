@@ -68,6 +68,10 @@ func vul() -> void:
 	_chips[""] = _chip("", "🗺️", "Plattegrond", UiTekst.KAART_TITEL)
 	pas_aan(size.x, _rail, 0.0, _strook)
 
+## `kamer id -> Button` ("" = the map chip), for the probe.
+func chips() -> Dictionary:
+	return _chips
+
 func _chip(id: String, icoon: String, naam: String, titel: String) -> Button:
 	var b := Button.new()
 	b.name = "C" + (id if id != "" else "kaart")
