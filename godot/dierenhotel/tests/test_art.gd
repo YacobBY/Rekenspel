@@ -266,6 +266,15 @@ func test_elk_wereldmodel_bakt_op_elke_schaal() -> void:
 		namen.append("pol%d" % n)
 	gelijk(ArtDecor.NAMEN.size() + ArtDecor.POL_AANTAL, 34, "34 basisdecorstukken (art-sound-rules.md §8)")
 	waar(namen.size() >= 34, "plus de themabestanden: %d modellen" % namen.size())
+	# every themed file must bring its OWN names: a clash is silently dropped by
+	# the merge (with an engine error), and the room shows the wrong picture
+	var gezien := {}
+	for k in ArtDecor._extra():
+		for n in k.NAMEN:
+			waar(not gezien.has(n) and not ArtDecor.NAMEN.has(n),
+				"model '%s' bestaat maar één keer" % n)
+			gezien[n] = true
+			waar(k.tabel().has(n), "%s zit in de tabel van zijn bestand" % n)
 	for naam in namen:
 		waar(Art.heeft_model(naam), "model %s bestaat" % naam)
 		waar(Art.is_wereldmodel(naam), "model %s is beschermd" % naam)

@@ -5,7 +5,7 @@ extends RefCounted
 ## `ArtDecor.tabel()` and `ArtDecor.alle_namen()`).  Every model is anchored at
 ## (0, 0, 0) on the floor, y upward, and is registered as a protected world model.
 ##
-## Wall pieces (`klok`, `kapstok`, `schilderij`, `schilderij2`) lie flat against
+## Wall pieces (`klok`, `kapstok`, `poster_poot`, `poster_boom`) lie flat against
 ## the back wall and every detail on them is PAINTED on the layer the child
 ## looks at, never added in front of it.  Mind which layer that is: a slab
 ## `bx(v, x, y, 0, w, h, 2)` fills z = 0 AND z = 1, so its front face is z = 1
@@ -22,7 +22,7 @@ const HEMEL := Color("#CFE6F5")    ## vase and canvas sky
 
 ## Every model name this file provides, in a fixed order.
 const NAMEN: Array[String] = ["klok", "bloemen", "bankje", "bankjez", "koffer",
-	"kapstok", "schilderij", "schilderij2"]
+	"kapstok", "poster_poot", "poster_boom"]
 
 # ------------------------------------------------------------------ aan de wand
 
@@ -86,7 +86,7 @@ static func _lijst(lucht: Color) -> Array:
 	return v
 
 ## A pastel paw print — the picture over the bench and in the corridor.
-static func schilderij(_p := {}) -> Array:
+static func poster_poot(_p := {}) -> Array:
 	var v := _lijst(ArtDecor.KUSSEN)
 	ArtVorm.verf(v, -2, 1, 2, 4, 1, 1, ROZE)     # the pad
 	ArtVorm.verf(v, -3, -3, 5, 6, 1, 1, ROZE)    # four toes
@@ -96,7 +96,7 @@ static func schilderij(_p := {}) -> Array:
 	return v
 
 ## A little tree with the sun over it — the corridor's second picture.
-static func schilderij2(_p := {}) -> Array:
+static func poster_boom(_p := {}) -> Array:
 	var v := _lijst(HEMEL)
 	ArtVorm.verf(v, -4, -2, 6, 8, 1, 1, ZON)     # the sun
 	ArtVorm.verf(v, -5, -5, 7, 7, 1, 1, ZON)
@@ -165,6 +165,6 @@ static func tabel() -> Dictionary:
 		"bankjez": func(_p := {}): return ArtVorm.draai(bankje()),
 		"koffer": Callable(ArtDecorHotel, "koffer"),
 		"kapstok": Callable(ArtDecorHotel, "kapstok"),
-		"schilderij": Callable(ArtDecorHotel, "schilderij"),
-		"schilderij2": Callable(ArtDecorHotel, "schilderij2"),
+		"poster_poot": Callable(ArtDecorHotel, "poster_poot"),
+		"poster_boom": Callable(ArtDecorHotel, "poster_boom"),
 	}

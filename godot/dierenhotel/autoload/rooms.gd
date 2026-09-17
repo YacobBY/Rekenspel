@@ -524,7 +524,7 @@ func _bouw_kamers() -> void:
 			{"n": "lamp", "x": 99, "z": 20, "y": 14, "sleutel": "balielamp"},
 			{"n": "prikbord", "x": 12, "z": 1, "ver": true},
 			{"n": "klok", "x": 70, "z": 1, "y": 36, "ver": true},
-			{"n": "schilderij", "x": 112, "z": 1, "y": 32, "ver": true},
+			{"n": "poster_poot", "x": 112, "z": 1, "y": 32, "ver": true},
 			{"n": "sleutelbordz", "x": 1, "z": 84, "ver": true},
 			# the waiting corner along the left wall, between the door (z 24..36)
 			# and the key board (z 84): the bench runs z 48..67, the case z 70..73
@@ -542,8 +542,8 @@ func _bouw_kamers() -> void:
 		# and drops none of them.  The pictures hang at y = 30, above the
 		# foliage of the plants in front of them (they reach y = 21).
 		"decor": [{"n": "kapstok", "x": 12, "z": 1, "ver": true},
-			{"n": "schilderij", "x": 48, "z": 1, "y": 30, "ver": true},
-			{"n": "schilderij2", "x": 84, "z": 1, "y": 30, "ver": true},
+			{"n": "poster_poot", "x": 48, "z": 1, "y": 30, "ver": true},
+			{"n": "poster_boom", "x": 84, "z": 1, "y": 30, "ver": true},
 			{"n": "plant", "x": 44, "z": 8}, {"n": "plant", "x": 82, "z": 8},
 			{"n": "kist", "x": 114, "z": 14}]})
 	# OWNER DECISION (2026-09-17): "kamer 2 lijkt exact op kamer 1, die mag wel
