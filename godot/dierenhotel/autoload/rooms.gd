@@ -598,9 +598,22 @@ func _bouw_kamers() -> void:
 			{"naar": "gang", "wand": "x", "at": 75, "breed": 12},
 			{"naar": "tuin", "wand": "z", "at": 90, "breed": 12, "poort": true},
 			{"naar": "wasserij", "wand": "x", "at": 30, "breed": 12}],
-		"decor": [{"n": "kast", "x": 33, "z": 6}, {"n": "zak", "x": 66, "z": 18},
-			{"n": "kar", "x": 48, "z": 66, "sleutel": "kar"},
-			{"n": "plant", "x": 108, "z": 93}]})
+		# OWNER, 2026-09-17: "de keuken heeft een bed en kast en plant ipv
+		# kookgerei".  The kitchen now reads as a kitchen: one run along the back
+		# wall (voerkast, aanrecht with a sink, fornuis, koelkast in the corner)
+		# with a pannenrek and a pottenplank on the wall above it, and a little
+		# table with biscuits in the near corner instead of the plant.  Nothing
+		# stands in front of the tuin door (x 90..102) and the middle of the
+		# floor stays open for the guests and for the voerkar's bowls.
+		# `keukenkar` is the kitchen's own trolley model (art/decor_keuken.gd);
+		# it keeps the thing key "kar", so the game and the save do not notice.
+		"decor": [{"n": "kast", "x": 33, "z": 6}, {"n": "zak", "x": 12, "z": 22},
+			{"n": "aanrecht", "x": 60, "z": 6}, {"n": "fornuis", "x": 80, "z": 6},
+			{"n": "koelkast", "x": 112, "z": 8},
+			{"n": "pottenplank", "x": 55, "z": 2, "y": 18, "ver": true},
+			{"n": "pannenrek", "x": 79, "z": 2, "y": 20, "ver": true},
+			{"n": "keukentafel", "x": 104, "z": 98},
+			{"n": "keukenkar", "x": 48, "z": 66, "sleutel": "kar"}]})
 	_kamer({"id": "tuin", "naam": "Tuin", "icoon": "🌳", "w": 130, "d": 130,
 		"wand": 0, "vloer": "gras", "loop": 1.0, "erf": true,
 		"vast_kader": [-170, 190, -70, 220],
