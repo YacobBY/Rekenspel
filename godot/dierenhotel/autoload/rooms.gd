@@ -516,10 +516,19 @@ func _bouw_kamers() -> void:
 			{"n": "balie", "x": 48, "z": 20}, {"n": "balie", "x": 83, "z": 20},
 			{"n": "bel", "x": 36, "z": 20, "y": 14, "d": 12.5},   # sorts after the desk piece at (48, 20)
 			{"n": "kassa", "x": 60, "z": 20, "y": 14},
+			# flowers on the desk: like the bell they need a depth bias, or the
+			# desk piece at (83, 20) they stand on draws over them (103 > 92.3);
+			# 11.5 puts them in front of that piece and behind the book (104.3)
+			{"n": "bloemen", "x": 72, "z": 20, "y": 14, "d": 11.5},
 			{"n": "boek", "x": 84, "z": 20, "y": 14},
 			{"n": "lamp", "x": 99, "z": 20, "y": 14, "sleutel": "balielamp"},
 			{"n": "prikbord", "x": 12, "z": 1, "ver": true},
+			{"n": "klok", "x": 70, "z": 1, "y": 36, "ver": true},
+			{"n": "schilderij", "x": 112, "z": 1, "y": 32, "ver": true},
 			{"n": "sleutelbordz", "x": 1, "z": 84, "ver": true},
+			# the waiting corner along the left wall, between the door (z 24..36)
+			# and the key board (z 84): the bench runs z 48..67, the case z 70..73
+			{"n": "bankjez", "x": 6, "z": 58}, {"n": "koffer", "x": 6, "z": 72},
 			{"n": "plant", "x": 16, "z": 96}, {"n": "plant", "x": 104, "z": 96}]})
 	_kamer({"id": "gang", "naam": "Gang", "icoon": "🚪", "w": 120, "d": 36,
 		"wand": 56, "vloer": "loper", "loop": 1.0,
@@ -528,7 +537,14 @@ func _bouw_kamers() -> void:
 			{"naar": "kamer1", "wand": "z", "at": 24, "breed": 12},
 			{"naar": "kamer2", "wand": "z", "at": 60, "breed": 12},
 			{"naar": "keuken", "wand": "z", "at": 96, "breed": 12}],
-		"decor": [{"n": "plant", "x": 44, "z": 8}, {"n": "plant", "x": 82, "z": 8},
+		# the corridor is only 36 deep, so everything new hangs on the back wall
+		# (z = 1): a piece there is 23 voxels from the walking cells at z = 24
+		# and drops none of them.  The pictures hang at y = 30, above the
+		# foliage of the plants in front of them (they reach y = 21).
+		"decor": [{"n": "kapstok", "x": 12, "z": 1, "ver": true},
+			{"n": "schilderij", "x": 48, "z": 1, "y": 30, "ver": true},
+			{"n": "schilderij2", "x": 84, "z": 1, "y": 30, "ver": true},
+			{"n": "plant", "x": 44, "z": 8}, {"n": "plant", "x": 82, "z": 8},
 			{"n": "kist", "x": 114, "z": 14}]})
 	for nr in [1, 2]:
 		var mat_kl := [Color("#DFCBEA"), Color("#D6BFE4")] if nr == 1 \
@@ -590,10 +606,25 @@ func _bouw_kamers() -> void:
 		"decor": [{"n": "plant", "x": 136, "z": 80},
 			{"n": "poort", "x": 4, "z": 66, "ver": true},
 			{"n": "startblok", "x": 14, "z": 28}]})
+	# The laundry was "heel kaal" — a cupboard and a tub (owner, 2026-09-17).
+	# It is furnished with `art/decor_wasserij.gd` now, and every piece stands
+	# where the `was` game does NOT draw (games-b.md §4.4): its crates fill the
+	# diagonal x + z = 66, the pile lies at (60, 54), the question card at
+	# (88, 84) and the legend at (12, 27).  So: the back wall left of the door
+	# (two washing machines with the soap shelf over them), the narrow strip of
+	# back wall right of the door (the ironing board, low enough to stay under
+	# the kitchen door's button), the left wall in front of the crates (the
+	# drying rack) and the front-right corner (the tub with its basket).
+	# The tub stays at (80, 74): the game's entry button hangs on it.
 	_kamer({"id": "wasserij", "naam": "Wasserij", "icoon": "🧺", "w": 100, "d": 90,
 		"wand": 52, "vloer": "tegel", "loop": 1.25,
 		"deuren": [{"naar": "keuken", "wand": "z", "at": 62, "breed": 12}],
-		"decor": [{"n": "kast", "x": 28, "z": 6}, {"n": "tobbe", "x": 80, "z": 74}]})
+		"decor": [
+			{"n": "wasmachine", "x": 14, "z": 7}, {"n": "wasmachine", "x": 30, "z": 7},
+			{"n": "zeepplank", "x": 22, "z": 1, "ver": true},
+			{"n": "strijkplank", "x": 86, "z": 8},
+			{"n": "droogrekz", "x": 6, "z": 80},
+			{"n": "tobbe", "x": 80, "z": 74}, {"n": "wasmand", "x": 94, "z": 66}]})
 	_bouw_tuin(_kamers["tuin"])
 	_bouw_zwembad(_kamers["zwembad"])
 	for id in _volgorde:
