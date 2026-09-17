@@ -800,6 +800,46 @@ func test_de_meterstrepen_en_hun_cijfers() -> void:
 		vorig = x
 	await _af()
 
+## Eigenaar (2026-09-16): "de duikplek van het zwembad zit door een hek heen".
+## Instapvlonder, meterstrepen en vlag liggen daarom állemaal binnen het hek,
+## vóór het water — en de wandeling naar de start van de baan raakt het water
+## niet en snijdt nooit door een hek.
+func test_duikplek_ligt_binnen_het_hek() -> void:
+	_op()
+	var kamer = Rooms.get_kamer(ID)
+	var bad: Dictionary = kamer.bad
+	var mat := {}
+	for stuk in kamer.decor:
+		if stuk["n"] == "mat":
+			mat = stuk
+	waar(not mat.is_empty(), "de instapvlonder staat in de kamer")
+	waar(int(mat["x"]) > Rooms.HEK_X, "de duikplek ligt binnen het zijhek")
+	waar(int(mat["z"]) > int(bad["z1"]), "en de duikplek ligt vóór het water")
+	var gasten := _gasten(4)
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_kaart_staat), "de vraagkaart staat er")
+	var vlag := World.decor_plek("zb_vlag", ID)
+	waar(not vlag.is_empty(), "de vlag staat op de finish")
+	waar(float(vlag["z"]) > float(bad["z1"]), "de vlag staat vóór het water")
+	waar(float(vlag["x"]) > Rooms.HEK_X and float(vlag["z"]) > Rooms.HEK_Z,
+		"en de vlag staat binnen het hek")
+	for stuk in World.decor_lijst(ID):
+		var did := str(stuk.get("id", ""))
+		if did.begins_with("zb_streep_"):
+			waar(float(stuk["z"]) > float(bad["z1"]),
+				"%s staat vóór het water in plaats van in het hek" % did)
+			waar(float(stuk["x"]) > Rooms.HEK_X, "%s staat binnen het hek" % did)
+	# de instap: de baan begint bij het westeinde, vanaf het dek is dat een
+	# rechte wandeling die het water niet raakt en binnen het hek blijft
+	var instap := Vector2(float(bad["x0"]) - 1.0, ZwembadBeurt.baan_z(bad))
+	var dekplek: Vector2 = kamer.dek["start"]
+	waar(instap.x > Rooms.HEK_X and instap.y > Rooms.HEK_Z,
+		"het instappunt ligt binnen het hek")
+	waar(Rooms.om_het_water(ID, dekplek, instap).is_empty(),
+		"de wandeling naar het water is een rechte streep")
+	waar(World.dier(str(gasten[0]["id"])) != null, "de gast staat klaar op het dek")
+	await _af()
+
 ## Elke meterstreep die hij gezwommen is kleurt zijn knop roze als de vlag; de
 ## strepen vóór hem blijven wit.  De getallenlijn laat dus zien hoe ver hij is
 ## en hoeveel er nog over is ("tel de strepen tot de vlag").

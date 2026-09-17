@@ -236,9 +236,12 @@ x(p) = bad.x0 + (bad.x1 − bad.x0) · p / L        met p in meters, 0 ≤ p ≤
 zwembaan: z = (bad.z0 + bad.z1) / 2 = 28
 ```
 
-Kamer `zwembad`: 144 × 88 voxels, wandhoogte 50, vloer `tegel`, `loop: 1.5`, één
-deur naar de tuin in de linkerwand (`x = 0`, z 60…72). Vast decor: `mat` (de
-instapvlonder) op (9, 28) en `plant` op (136, 80). Dekplekken:
+Kamer `zwembad`: 144 × 88 voxels, **buiten** (2026-09-14): geen wanden, vloer
+`gras`, `erf`, `loop: 1.5`; de deur naar de tuin zit in het zijhek
+(`x = 0`, z 60…72, poort op (10, 66)). Vast decor: `mat` (de instapvlonder,
+waar het 🏊-icoontje aan hangt) op (26, 58) — binnen het hek, op het dek
+vóór het water (owner, 2026-09-16: "de duikplek van het zwembad zit door een
+hek heen") — en `plant` op (136, 80). Dekplekken:
 `dek.start = (12, 56)` en `dek.over = (132, 56)` — beide vóór het water.
 
 **Regel die hard is:** zet nooit een sta- of dwaalplek in het water. Alle
@@ -402,10 +405,12 @@ rood, geen ster minder, geen herhaling van de beurt.
   `x(p)`, dan meteen door; anders `naarWater`.
 * `naarWater`: is het dier niet in `zwembad`, dan `reis(id, 'zwembad',
   {x: dek.start.x, z: dek.start.z, na: 'wacht'})` en elke **220 ms** kijken of
-  hij er is, met een geduld van **25 000 ms**. Daarna eerst naar de
-  **instapvlonder** `x = max(4, bad.x0 − 9) = 9`, `z = 28`, met `tempo 1.2` — zo
-  loopt hij langs het water en niet erdoorheen. Dan `snd.plons()` en
-  `loopNaar(x(p), 28, {pose: 'zwem', tempo: 1.1})`.
+  hij er is, met een geduld van **25 000 ms**. Daarna naar het **westeinde van
+  het water**, `x = bad.x0 − 1 = 17`, `z = 28`, met `tempo 1.2` — daar begint
+  de baan bij de 0-streep, en `omHetWater` houdt de wandeling droog en binnen
+  het hek (owner, 2026-09-16: "de duikplek zit door een hek heen"; de oude
+  instap bij `x = max(4, bad.x0 − 9) = 9` viel buiten het zijhek). Dan
+  `snd.plons()` en `loopNaar(x(p), 28, {pose: 'zwem', tempo: 1.1})`.
 * `zwem(n, na)`: `n` wordt geklemd op `0…L−p`. De punten zijn **één per meter**:
   `[[x(p+1), 28], [x(p+2), 28], …]`. Opties `{pose: 'zwem', tempo: tempoVan(L)}`.
   In `perStap(i)`: `p = p0 + i + 1`, het cijfer op het dier wordt bijgewerkt, en
@@ -473,8 +478,11 @@ knopje bovenop.
 `i = 0…6` een `bx(1, 21−i, −1, 7−i, 1, 2)`.
 
 `bouwDecor()`: voor `m = 0, stap, 2·stap, …` tot (maar niet op) `L` een streep op
-`x = round(x(m))`, `z = bad.z0 − 2 = 10`, met `groot = (m mod 2·stap == 0)`. De
-vlag staat op `x = round(x(L))`, `z = bad.z0 − 6 = 6`.
+`x = round(x(m))`, `z = bad.z1 + 2 = 46` — de **voorrand**, want de getallenlijn
+ligt vóór het water en nooit in het achterhek (owner, 2026-09-16: "de duikplek
+zit door een hek heen"; oud: `bad.z0 − 2`), met `groot = (m mod 2·stap == 0)`.
+De vlag staat op `x = round(x(L))`, `z = bad.z1 + 6 = 50`, op het dek net
+achter de strepen (oud: `bad.z0 − 6`, dat buiten het hek viel).
 
 Cijfers op de rand: alleen op **grote** strepen, en alleen als `m mod labelStap
 == 0` met

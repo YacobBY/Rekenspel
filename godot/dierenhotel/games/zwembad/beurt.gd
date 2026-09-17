@@ -20,6 +20,16 @@ static func baan_x(bad: Dictionary, l: int, p: float) -> float:
 static func baan_z(bad: Dictionary) -> float:
 	return 28.0 if bad.is_empty() else (float(bad["z0"]) + float(bad["z1"])) / 2.0
 
+## Owner (2026-09-16): "de duikplek zit door een hek heen".  The outdoor room
+## fences off its BACK side, so the number line lies on the near edge: the
+## markers stand on the stone rim in front of the water, the flag on the deck
+## just behind them.  Both z's always sit inside the fence (z > HEK_Z).
+static func rand_z(bad: Dictionary) -> float:
+	return 46.0 if bad.is_empty() else float(bad["z1"]) + 2.0
+
+static func vlag_z(bad: Dictionary) -> float:
+	return 50.0 if bad.is_empty() else float(bad["z1"]) + 6.0
+
 ## games-b.md §1.6: the number on the swimmer stays readable (~5 m/s) and a
 ## whole lane never takes longer than ~15 s.
 static func tempo_van(l: int) -> float:

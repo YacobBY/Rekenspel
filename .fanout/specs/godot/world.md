@@ -134,7 +134,7 @@ movable **dingen**: `balielamp` (receptie 15, 105, y 14) and `kar` (keuken 48, 6
 | kamer2 | `plant` @ 12,99 · `mand` @ 93,99 |
 | keuken | `kast` @ 33,6 · `zak` @ 66,18 · `kar` @ 48,66 (→ ding `kar`) · `plant` @ 108,93 |
 | tuin | `boom` @ 16,68 · `hok` @ 67,19 · `tobbe` @ 32,94 · `bal` @ 120,76 · `kist` @ 95,23 · `poort` @ 10,40 `ver` · plus generated fence and grass tufts (below) |
-| zwembad | `mat` @ 9,28 (the entry mat on the deck) · `plant` @ 136,80 |
+| zwembad | `mat` @ 26,58 (the entry mat on the deck, INSIDE the fence — owner 2026-09-16: "de duikplek zit door een hek heen") · `plant` @ 136,80 · `poort` @ 10,66 `ver` · plus the generated fence and grass tufts |
 | wasserij | `kast` @ 28,6 · `tobbe` @ 80,74 |
 
 The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and two

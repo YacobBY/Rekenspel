@@ -305,9 +305,12 @@ func _naar_water(doel_x: float) -> bool:
 				break
 		if d.kamer != KAMER:
 			return false
-	# the entry mat first, so he walks BESIDE the water and never through it
-	var mat_x := maxf(4.0, float(bad.get("x0", 18)) - 9.0)
-	if not await ctx.wereld.loop_naar(_gast, mat_x, z, {"tempo": 1.2, "na": "wacht"}):
+	# the lane begins at the WEST end of the water: he walks there over dry
+	# ground — `om_het_water` sends him round the pool when he stands behind
+	# it — and never through the fence (owner, 2026-09-16: "de duikplek zit
+	# door een hek heen", so the entry moved inside the fence)
+	var instap_x := float(bad.get("x0", 18)) - 1.0
+	if not await ctx.wereld.loop_naar(_gast, instap_x, z, {"tempo": 1.2, "na": "wacht"}):
 		return false
 	if not actief:
 		return false
@@ -346,7 +349,7 @@ func _zwem(n: int) -> bool:
 	for i in range(1, aantal + 1):
 		punten.append(Vector2(ZwembadBeurt.baan_x(bad, l, p0 + i), z))
 	var elke := ZwembadBeurt.plons_elke(aantal)
-	var zrand := float(bad.get("z0", 12)) - 2.0
+	var zrand := ZwembadBeurt.rand_z(bad)
 	var stap := func(i: int, _punt: Vector2) -> void:
 		_b["p"] = mini(l, p0 + i + 1)
 		_zet_gasttag()
@@ -475,7 +478,7 @@ func _bouw_decor() -> void:
 	var l := int(_b["L"])
 	var stap := int(_b["stap"])
 	var bad := _bad()
-	var z := float(bad.get("z0", 12)) - 2.0
+	var z := ZwembadBeurt.rand_z(bad)
 	var k := float(ctx.wereld.schaal().get("k", 1.0))
 	var lstap := ZwembadBeurt.label_stap(l, stap, bad, k)
 	for id in _label_ids:
@@ -495,7 +498,7 @@ func _bouw_decor() -> void:
 			_label_ids.append(tid)
 		m += stap
 	var vx := float(JsGetal.rond(ZwembadBeurt.baan_x(bad, l, l)))
-	var vz := float(bad.get("z0", 12)) - 6.0
+	var vz := ZwembadBeurt.vlag_z(bad)
 	ctx.wereld.decor(KAMER, {"id": VLAG_DECOR, "model": MODEL_VLAG, "door": ctx.id,
 		"x": vx, "z": vz})
 	if not _decor_ids.has(VLAG_DECOR):
@@ -510,7 +513,7 @@ func _strepen_ververs() -> void:
 	var l := int(_b["L"])
 	var stap := int(_b["stap"])
 	var bad := _bad()
-	var z := float(bad.get("z0", 12)) - 2.0
+	var z := ZwembadBeurt.rand_z(bad)
 	var m := 0
 	while m < l:
 		var x := float(JsGetal.rond(ZwembadBeurt.baan_x(bad, l, m)))
@@ -530,7 +533,7 @@ func _spook_aan() -> void:
 	var juist := Sommen.Zwembad.juist_van(l, int(_b["M"]), p)
 	var bad := _bad()
 	var x := float(JsGetal.rond(ZwembadBeurt.baan_x(bad, l, p + juist)))
-	var z := float(bad.get("z0", 12)) - 2.0
+	var z := ZwembadBeurt.rand_z(bad)
 	ctx.wereld.decor(KAMER, {"id": SPOOK_ID, "model": MODEL_STREEP, "door": ctx.id,
 		"x": x, "z": z, "params": {"groot": true, "bleek": true}})
 	if not _decor_ids.has(SPOOK_ID):
@@ -608,7 +611,7 @@ func _vlag_vak() -> Rect2:
 	var l := int(_b.get("L", 1))
 	var r: Rect2 = ctx.wereld.vlak_van(MODEL_VLAG,
 		float(JsGetal.rond(ZwembadBeurt.baan_x(bad, l, l))),
-		float(bad.get("z0", 12)) - 6.0, 0.0, {})
+		ZwembadBeurt.vlag_z(bad), 0.0, {})
 	if r.size.x <= 0.0 or r.size.y <= 0.0:
 		return Rect2()
 	var hoog := 24.0

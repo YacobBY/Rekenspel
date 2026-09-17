@@ -567,13 +567,18 @@ func _bouw_kamers() -> void:
 	# Outdoors (owner, 2026-09-14: "het zwembad wil ik graag ook buiten"): lawn
 	# and a fence like the garden's, the water with a tiled deck round it, and
 	# a gate in the side fence towards the garden.
+	# The instapvlonder (`mat`), the metre markers and the finish flag all lie
+	# INSIDE the fence, on the deck in front of the water (owner, 2026-09-16:
+	# "de duikplek van het zwembad zit door een hek heen") — the fence lines
+	# the back of the room, so everything a child aims at sits between the
+	# gate and the near pool edge.
 	_kamer({"id": "zwembad", "naam": "Zwembad", "icoon": "🏊", "w": 144, "d": 88,
 		"wand": 0, "vloer": "gras", "loop": 1.5, "erf": true,
 		"vast_kader": [-190, 300, -60, 250],
 		"bad": {"x0": 18, "x1": 134, "z0": 12, "z1": 44},
 		"dek": {"start": Vector2(12, 56), "over": Vector2(132, 56)},
 		"deuren": [{"naar": "tuin", "wand": "x", "at": 60, "breed": 12, "poort": true}],
-		"decor": [{"n": "mat", "x": 9, "z": 28}, {"n": "plant", "x": 136, "z": 80},
+		"decor": [{"n": "mat", "x": 26, "z": 58}, {"n": "plant", "x": 136, "z": 80},
 			{"n": "poort", "x": 10, "z": 66, "ver": true}]})
 	_kamer({"id": "wasserij", "naam": "Wasserij", "icoon": "🧺", "w": 100, "d": 90,
 		"wand": 52, "vloer": "tegel", "loop": 1.25,
@@ -630,6 +635,7 @@ func _bouw_zwembad(r: Kamer) -> void:
 		var px := 16 + JsGetal.rond(rnd.volgende() * (r.w - 24))
 		var pz := 58 + JsGetal.rond(rnd.volgende() * (r.d - 62))
 		if absf(px - 132) + absf(pz - 56) < 18 or absf(px - 12) + absf(pz - 56) < 18 \
+				or absf(px - 26) + absf(pz - 58) < 18 \
 				or absf(px - 136) + absf(pz - 80) < 14:
 			continue
 		r.decor.append({"n": "pol%d" % (i % 5), "x": px, "z": pz, "pol": true})
