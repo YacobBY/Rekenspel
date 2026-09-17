@@ -34,7 +34,7 @@ const PAPIER := Color("#FFFDF3")
 const NAMEN := ["boom", "hok", "hekx", "hekz", "tobbe", "bal", "kist", "mat", "poort",
 	"balie", "baliez", "bel", "kassa", "boek", "prikbord", "sleutelbord", "bed", "bedz",
 	"mand", "kast", "kastz", "zak", "kar", "lamp", "lampaan", "plant",
-	"prikbordz", "sleutelbordz"]
+	"prikbordz", "sleutelbordz", "startblok"]
 ## The garden's grass tufts, laid out by a seeded PRNG.
 const POL_AANTAL := 5
 
@@ -66,6 +66,24 @@ static func mat(_p := {}) -> Array:
 	ArtVorm.verf(v, -8, 8, 0, 0, 8, 8, HOUT_D)
 	ArtVorm.verf(v, -8, -8, 0, 0, -8, 8, HOUT_D)
 	ArtVorm.verf(v, 8, 8, 0, 0, -8, 8, HOUT_D)
+	return v
+
+## A swimming start block with a little stair (owner, 2026-09-17:
+## "startblokken ... met een trappetje zodat het dier langzaam omhoog kan
+## springen").  It faces the water (+x): three metal steps climb to a blue
+## block with a white top at y = 7, the guest's standing height on it.
+static func startblok(_p := {}) -> Array:
+	var v: Array = []
+	# a big startblok with a little stair on the west side, facing the water
+	# (+x).  Bigger than the old one at the owner's word (2026-09-17: "Maak
+	# het startblok groter en doe 1 ipv 3"): wider in z and taller, the block
+	# front edge stops just short of the water so the dive clears it.
+	ArtVorm.bx(v, -8, 0, -2, 2, 3, 4, METAAL)
+	ArtVorm.bx(v, -6, 0, -2, 2, 6, 4, METAAL)
+	ArtVorm.bx(v, -4, 0, -2, 2, 8, 4, METAAL)
+	ArtVorm.bx(v, -2, 0, -3, 5, 8, 6, DEKEN_D)
+	ArtVorm.bx(v, -2, 8, -3, 5, 1, 6, KUSSEN)
+	ArtVorm.verf(v, 3, 3, 1, 8, -1, 1, DEKEN)
 	return v
 
 static func hekx(_p := {}) -> Array:
@@ -289,6 +307,7 @@ static func tabel() -> Dictionary:
 		"bal": Callable(ArtDecor, "bal"),
 		"kist": Callable(ArtDecor, "kist"),
 		"mat": Callable(ArtDecor, "mat"),
+		"startblok": Callable(ArtDecor, "startblok"),
 		"poort": Callable(ArtDecor, "poort"),
 		"balie": Callable(ArtDecor, "balie"),
 		"baliez": func(_p := {}): return ArtVorm.draai(balie()),

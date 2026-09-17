@@ -63,6 +63,11 @@ static func kleur(r, x: int, z: int) -> Color:
 				and z >= int(mat["z0"]) and z < int(mat["z1"]):
 			return mat["kl"][k & 1]
 	var soort := str(_veld(r, "vloer", "hout"))
+	# the fence line is per room: the garden keeps HEK_X/HEK_Z, the pool stands
+	# further off its fence (owner, 2026-09-17: "Doe het hek verder van beide
+	# kanten van het zwembad")
+	var hek_x := int(_veld(r, "hek_x", HEK_X))
+	var hek_z := int(_veld(r, "hek_z", HEK_Z))
 	# the water first: a pool on a lawn (the outdoor pool) keeps its water, its
 	# rim and a tiled deck of DEK voxels round it
 	var bad = _veld(r, "bad", {})
@@ -78,10 +83,10 @@ static func kleur(r, x: int, z: int) -> Color:
 		if x >= x0 - 4 and x < x1 + 4 and z >= z0 - 4 and z < z1 + 4:
 			return BADRAND[((x >> 2) + (z >> 2)) & 1]
 		if soort == "gras" and x >= x0 - DEK and x < x1 + DEK and z >= z0 - DEK and z < z1 + DEK \
-				and x >= HEK_X and z >= HEK_Z:
+				and x >= hek_x and z >= hek_z:
 			return TEGEL[((x >> 2) + (z >> 2)) & 1]
 	if soort == "gras":
-		if x < HEK_X or z < HEK_Z:
+		if x < hek_x or z < hek_z:
 			return WEI[k & 1]
 		return GRAS[k & 3]
 	if soort == "tegel":

@@ -154,10 +154,10 @@ func test_aanmelding_en_ontgrendeling() -> void:
 	gelijk(def.get("wens", ""), "zwemmen", "het lost de wens 🏊 in")
 	gelijk(def.get("stub", true), false, "en het is geen plaatshouder")
 	var hs: Dictionary = def.get("hotspot", {})
-	gelijk(hs.get("obj", ""), "mat", "het icoontje hangt op de instapvlonder")
+	gelijk(hs.get("obj", ""), "startblok", "het icoontje hangt op het startblok")
 	gelijk(hs.get("icoon", ""), "🏊", "icoon")
 	gelijk(hs.get("label", ""), "Zwemles", "label")
-	gelijk(hs.get("hoog", 0), 12, "hoogte")
+	gelijk(hs.get("hoog", 0), 13, "hoogte")
 	var slot: Callable = def["unlock"]
 	waar(not bool(slot.call(0, 3)), "zonder gast geen zwemles")
 	waar(bool(slot.call(1, 3)), "vanaf één gast wel")
@@ -801,43 +801,82 @@ func test_de_meterstrepen_en_hun_cijfers() -> void:
 	await _af()
 
 ## Eigenaar (2026-09-16): "de duikplek van het zwembad zit door een hek heen".
-## Instapvlonder, meterstrepen en vlag liggen daarom állemaal binnen het hek,
-## vóór het water — en de wandeling naar de start van de baan raakt het water
-## niet en snijdt nooit door een hek.
+## Meterstrepen en vlag liggen daarom állemaal binnen het hek, vóór het water —
+## en de wandeling naar de start van de baan raakt het water niet en snijdt
+## nooit door een hek.  Het zwembadhek staat op de eigen `hek_x`/`hek_z` van
+## de kamer (2026-09-17: verder van het water af).  De oude instapvlonder is
+## weg (2026-09-17: "haal de oude houten plank weg"); de instap is het
+## startblok geworden.
 func test_duikplek_ligt_binnen_het_hek() -> void:
 	_op()
 	var kamer = Rooms.get_kamer(ID)
 	var bad: Dictionary = kamer.bad
-	var mat := {}
+	var mat_aanwezig := false
 	for stuk in kamer.decor:
 		if stuk["n"] == "mat":
-			mat = stuk
-	waar(not mat.is_empty(), "de instapvlonder staat in de kamer")
-	waar(int(mat["x"]) > Rooms.HEK_X, "de duikplek ligt binnen het zijhek")
-	waar(int(mat["z"]) > int(bad["z1"]), "en de duikplek ligt vóór het water")
+			mat_aanwezig = true
+	waar(not mat_aanwezig, "de oude houten instapvlonder is weg")
 	var gasten := _gasten(4)
 	waar(Games.start(ID), "het spel start")
 	waar(await _wacht(_kaart_staat), "de vraagkaart staat er")
 	var vlag := World.decor_plek("zb_vlag", ID)
 	waar(not vlag.is_empty(), "de vlag staat op de finish")
 	waar(float(vlag["z"]) > float(bad["z1"]), "de vlag staat vóór het water")
-	waar(float(vlag["x"]) > Rooms.HEK_X and float(vlag["z"]) > Rooms.HEK_Z,
+	waar(float(vlag["x"]) > int(kamer.hek_x) and float(vlag["z"]) > int(kamer.hek_z),
 		"en de vlag staat binnen het hek")
 	for stuk in World.decor_lijst(ID):
 		var did := str(stuk.get("id", ""))
 		if did.begins_with("zb_streep_"):
 			waar(float(stuk["z"]) > float(bad["z1"]),
 				"%s staat vóór het water in plaats van in het hek" % did)
-			waar(float(stuk["x"]) > Rooms.HEK_X, "%s staat binnen het hek" % did)
-	# de instap: de baan begint bij het westeinde, vanaf het dek is dat een
-	# rechte wandeling die het water niet raakt en binnen het hek blijft
-	var instap := Vector2(float(bad["x0"]) - 1.0, ZwembadBeurt.baan_z(bad))
+			waar(float(stuk["x"]) > int(kamer.hek_x), "%s staat binnen het hek" % did)
+	# de instap: de baan begint bij het westeinde, op het startblok; vanaf
+	# het dek is de wandeling naar de trappenvoet een rechte streep die het
+	# water niet raakt en binnen het hek blijft
+	var voet := Vector2(ZwembadBeurt.trap_voet(bad), ZwembadBeurt.baan_z(bad))
 	var dekplek: Vector2 = kamer.dek["start"]
-	waar(instap.x > Rooms.HEK_X and instap.y > Rooms.HEK_Z,
-		"het instappunt ligt binnen het hek")
-	waar(Rooms.om_het_water(ID, dekplek, instap).is_empty(),
-		"de wandeling naar het water is een rechte streep")
+	waar(voet.x > int(kamer.hek_x) and voet.y > int(kamer.hek_z),
+		"de trappenvoet ligt binnen het hek")
+	waar(Rooms.om_het_water(ID, dekplek, voet).is_empty(),
+		"de wandeling naar de trappenvoet is een rechte streep")
 	waar(World.dier(str(gasten[0]["id"])) != null, "de gast staat klaar op het dek")
+	await _af()
+
+## Eigenaar (2026-09-17): "startblokken ... met een trappetje zodat het dier
+## langzaam omhoog kan springen" en "Maak het startblok groter en doe 1 ipv
+## 3".  Eén groot blok staat op het terras tussen het verplaatste hek en het
+## water, op de baan.  De trappenvoet ligt droog, het duikpunt in het water,
+## en de duik start aan de voorkant van het blok zodat hij het blok niet raakt.
+func test_startblokken_staan_klaar() -> void:
+	_op()
+	var kamer = Rooms.get_kamer(ID)
+	var bad: Dictionary = kamer.bad
+	var blokken := []
+	for stuk in kamer.decor:
+		if stuk["n"] == "startblok":
+			blokken.append(stuk)
+	gelijk(blokken.size(), 1, "één startblok langs de baan")
+	var blok: Dictionary = blokken[0]
+	waar(int(blok["x"]) > int(kamer.hek_x), "het blok staat binnen het zijhek")
+	waar(int(blok["z"]) > int(bad["z0"]) and int(blok["z"]) < int(bad["z1"]),
+		"en het blok ligt naast de baan")
+	waar(absf(float(blok["x"]) - ZwembadBeurt.blok_x(bad)) < 0.5
+			and absf(float(blok["z"]) - ZwembadBeurt.baan_z(bad)) < 0.5,
+		"het blok staat op de baan")
+	# de trappenvoet ligt droog en binnen het hek
+	var voet := ZwembadBeurt.trap_voet(bad)
+	waar(voet > float(kamer.hek_x), "de trappenvoet ligt binnen het hek")
+	waar(Rooms.om_het_water(ID, kamer.dek["start"], Vector2(voet, ZwembadBeurt.baan_z(bad))).is_empty(),
+		"de wandeling naar de trappenvoet raakt het water niet")
+	# de laatste hop landt aan de voorkant van het blok, vóór het water, en de
+	# duik komt in het water bij de 0-meter
+	var hop := ZwembadBeurt.trap_hoppen(bad)
+	var laatste: Array = hop[hop.size() - 1]
+	waar(float(laatste[0]) < float(bad["x0"]),
+		"de laatste hop landt nog op het blok, vóór het water")
+	waar(float(laatste[1]) > 0.0, "en die hop staat omhoog op het blok")
+	var duik := Vector2(ZwembadBeurt.duik_x(bad), ZwembadBeurt.baan_z(bad))
+	waar(duik.x >= float(bad["x0"]), "het duikpunt ligt in het water")
 	await _af()
 
 ## Elke meterstreep die hij gezwommen is kleurt zijn knop roze als de vlag; de

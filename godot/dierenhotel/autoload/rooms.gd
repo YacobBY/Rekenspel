@@ -48,6 +48,8 @@ class Kamer extends RefCounted:
 	var vloer: String
 	var loop: float = 1.0
 	var erf := false                ## the garden: no walls, wider margin
+	var hek_x := HEK_X              ## the fence line along x (inside ⇔ x > hek_x)
+	var hek_z := HEK_Z              ## the fence line along z (inside ⇔ z > hek_z)
 	var matten: Dictionary = {}     ## {x0, x1, z0, z1, kl: [Color, Color]}
 	var bad: Dictionary = {}        ## {x0, x1, z0, z1} — water is a floor rule
 	var balie: Dictionary = {}      ## the desk footprint; nobody walks over it
@@ -567,19 +569,27 @@ func _bouw_kamers() -> void:
 	# Outdoors (owner, 2026-09-14: "het zwembad wil ik graag ook buiten"): lawn
 	# and a fence like the garden's, the water with a tiled deck round it, and
 	# a gate in the side fence towards the garden.
-	# The instapvlonder (`mat`), the metre markers and the finish flag all lie
-	# INSIDE the fence, on the deck in front of the water (owner, 2026-09-16:
-	# "de duikplek van het zwembad zit door een hek heen") — the fence lines
-	# the back of the room, so everything a child aims at sits between the
-	# gate and the near pool edge.
+	# The metre markers and the finish flag lie INSIDE the fence, on the deck in
+	# front of the water (owner, 2026-09-16: "de duikplek van het zwembad zit
+	# door een hek heen").  The old instapvlonder (`mat`) is gone: the entry is
+	# the startblok now (owner, 2026-09-17: "haal de oude houten plank weg").
+	# The fence stands further from the water on both fenced sides (owner,
+	# 2026-09-17: "Doe het hek verder van beide kanten van het zwembad") and
+	# the back fence is dropped behind the water itself (owner, 2026-09-17:
+	# "Haal het hek gedeelte dat op het zwembad zit weg" → only behind the
+	# pool).  One big startblok with a little stair sits at the west end of the
+	# lane ("startblokken ... met een trappetje zodat het dier langzaam omhoog
+	# kan springen"; "Maak het startblok groter en doe 1 ipv 3").
 	_kamer({"id": "zwembad", "naam": "Zwembad", "icoon": "🏊", "w": 144, "d": 88,
 		"wand": 0, "vloer": "gras", "loop": 1.5, "erf": true,
+		"hek_x": 4, "hek_z": 4,
 		"vast_kader": [-190, 300, -60, 250],
 		"bad": {"x0": 18, "x1": 134, "z0": 12, "z1": 44},
 		"dek": {"start": Vector2(12, 56), "over": Vector2(132, 56)},
 		"deuren": [{"naar": "tuin", "wand": "x", "at": 60, "breed": 12, "poort": true}],
-		"decor": [{"n": "mat", "x": 26, "z": 58}, {"n": "plant", "x": 136, "z": 80},
-			{"n": "poort", "x": 10, "z": 66, "ver": true}]})
+		"decor": [{"n": "plant", "x": 136, "z": 80},
+			{"n": "poort", "x": 4, "z": 66, "ver": true},
+			{"n": "startblok", "x": 14, "z": 28}]})
 	_kamer({"id": "wasserij", "naam": "Wasserij", "icoon": "🧺", "w": 100, "d": 90,
 		"wand": 52, "vloer": "tegel", "loop": 1.25,
 		"deuren": [{"naar": "keuken", "wand": "z", "at": 62, "breed": 12}],
@@ -600,6 +610,8 @@ func _kamer(o: Dictionary) -> void:
 	r.vloer = o["vloer"]
 	r.loop = o.get("loop", 1.0)
 	r.erf = o.get("erf", false)
+	r.hek_x = int(o.get("hek_x", HEK_X))
+	r.hek_z = int(o.get("hek_z", HEK_Z))
 	r.matten = o.get("matten", {})
 	r.bad = o.get("bad", {})
 	r.balie = o.get("balie", {})
@@ -620,15 +632,21 @@ func _kamer(o: Dictionary) -> void:
 
 ## The pool's fence: the back fence whole, the side fence with the gate to the
 ## garden (door at z 60..72), and a few tufts on the lawn beyond the deck.
+## The pool stands further off the fence than the garden does (owner,
+## 2026-09-17), so the fence lines come from the room's own `hek_x`/`hek_z`.
 func _bouw_zwembad(r: Kamer) -> void:
-	var z := HEK_Z
+	var z := r.hek_z
 	while z <= r.d:
 		if z < 56 or z > 76:
-			r.decor.append({"n": "hekz", "x": HEK_X, "z": z, "hek": true})
+			r.decor.append({"n": "hekz", "x": r.hek_x, "z": z, "hek": true})
 		z += 14
 	var x := 24
 	while x <= r.w:
-		r.decor.append({"n": "hekx", "x": x, "z": HEK_Z, "hek": true})
+		# the back fence is dropped behind the water itself (owner, 2026-09-17:
+		# "Haal het hek gedeelte dat op het zwembad zit weg" → only behind the
+		# pool); the posts beyond the pool's ends stay
+		if x < float(r.bad["x0"]) or x > float(r.bad["x1"]):
+			r.decor.append({"n": "hekx", "x": x, "z": r.hek_z, "hek": true})
 		x += 14
 	var rnd := Sommen.Prng.new(TUFT_ZAAD + 7)
 	for i in 12:

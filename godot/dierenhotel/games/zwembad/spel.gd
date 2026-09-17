@@ -56,8 +56,8 @@ func definitie() -> Dictionary:
 	return {
 		"naam": "Zwembad",
 		"kamer": KAMER,
-		"hotspot": {"obj": "mat", "icoon": ZwembadBeurt.ICOON,
-			"label": ZwembadBeurt.LABEL, "hoog": 12},
+		"hotspot": {"obj": "startblok", "icoon": ZwembadBeurt.ICOON,
+			"label": ZwembadBeurt.LABEL, "hoog": 13},
 		"unlock": func(n: int, _band: int) -> bool: return n >= 1,
 		"wens": "zwemmen",
 		"stub": false,
@@ -305,12 +305,28 @@ func _naar_water(doel_x: float) -> bool:
 				break
 		if d.kamer != KAMER:
 			return false
-	# the lane begins at the WEST end of the water: he walks there over dry
-	# ground — `om_het_water` sends him round the pool when he stands behind
-	# it — and never through the fence (owner, 2026-09-16: "de duikplek zit
-	# door een hek heen", so the entry moved inside the fence)
-	var instap_x := float(bad.get("x0", 18)) - 1.0
-	if not await ctx.wereld.loop_naar(_gast, instap_x, z, {"tempo": 1.2, "na": "wacht"}):
+	# the lane begins at the WEST end of the water, UP ON THE STARTBLOK: he
+	# walks to the foot of its little stair, hops up slowly — three steps and
+	# the block — and dives in at the 0 m mark (owner, 2026-09-17:
+	# "startblokken ... met een trappetje zodat het dier langzaam omhoog kan
+	# springen").  The fence moved back on both sides to make room (same
+	# owner, same day: "Doe het hek verder van beide kanten van het zwembad").
+	if not await ctx.wereld.loop_naar(_gast, ZwembadBeurt.trap_voet(bad), z,
+			{"tempo": 1.2, "na": "wacht"}):
+		return false
+	for hop in ZwembadBeurt.trap_hoppen(bad):
+		if not actief:
+			return false
+		if not await ctx.wereld.loop_naar(_gast, hop[0], z,
+				{"pose": "spring", "tempo": 0.85, "land_hoogte": hop[1]}):
+			return false
+	if not actief:
+		return false
+	# a breath on the block before the dive
+	if not await na(0.7):
+		return false
+	if not await ctx.wereld.loop_naar(_gast, ZwembadBeurt.duik_x(bad), z,
+			{"pose": "spring", "tempo": 1.6, "land_hoogte": -ArtEffect.ZWEM_DIEP}):
 		return false
 	if not actief:
 		return false

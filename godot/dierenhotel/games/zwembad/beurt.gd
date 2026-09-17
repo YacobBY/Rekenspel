@@ -30,6 +30,29 @@ static func rand_z(bad: Dictionary) -> float:
 static func vlag_z(bad: Dictionary) -> float:
 	return 50.0 if bad.is_empty() else float(bad["z1"]) + 6.0
 
+## Owner (2026-09-17): "startblokken ... met een trappetje zodat het dier
+## langzaam omhoog kan springen" and "Maak het startblok groter en doe 1 ipv
+## 3".  The one big startblok stands at the WEST end of the lane, on the deck
+## between the moved fence and the water.  `blok_x` is the block's centre,
+## `trap_voet` the foot of its stair, `duik_x` where the dive enters the
+## water at the 0 m mark.
+static func blok_x(bad: Dictionary) -> float:
+	return 14.0 if bad.is_empty() else float(bad["x0"]) - 4.0
+
+static func trap_voet(bad: Dictionary) -> float:
+	return blok_x(bad) - 8.0
+
+static func duik_x(bad: Dictionary) -> float:
+	return 20.5 if bad.is_empty() else float(bad["x0"]) + 2.5
+
+## The hops up the trappetje, as [x, hoogte] pairs: three steps of the big
+## `startblok` model (3, 6, 8) and the last hop onto the cushion at its front
+## edge (hoogte 9), so the dive starts at the edge and clears the block.
+static func trap_hoppen(bad: Dictionary) -> Array:
+	var voet := trap_voet(bad)
+	return [[voet + 1.0, 3.0], [voet + 3.0, 6.0], [voet + 5.0, 8.0],
+		[voet + 10.5, 9.0]]
+
 ## games-b.md §1.6: the number on the swimmer stays readable (~5 m/s) and a
 ## whole lane never takes longer than ~15 s.
 static func tempo_van(l: int) -> float:

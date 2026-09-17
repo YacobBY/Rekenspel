@@ -134,7 +134,7 @@ movable **dingen**: `balielamp` (receptie 15, 105, y 14) and `kar` (keuken 48, 6
 | kamer2 | `plant` @ 12,99 · `mand` @ 93,99 |
 | keuken | `kast` @ 33,6 · `zak` @ 66,18 · `kar` @ 48,66 (→ ding `kar`) · `plant` @ 108,93 |
 | tuin | `boom` @ 16,68 · `hok` @ 67,19 · `tobbe` @ 32,94 · `bal` @ 120,76 · `kist` @ 95,23 · `poort` @ 10,40 `ver` · plus generated fence and grass tufts (below) |
-| zwembad | `mat` @ 26,58 (the entry mat on the deck, INSIDE the fence — owner 2026-09-16: "de duikplek zit door een hek heen") · `plant` @ 136,80 · `poort` @ 10,66 `ver` · plus the generated fence and grass tufts |
+| zwembad | `plant` @ 136,80 · `poort` @ 4,66 `ver` · one big `startblok` @ 14,28 (owner 2026-09-17: "Maak het startblok groter en doe 1 ipv 3"; the old `mat` entry plank is gone — "haal de oude houten plank weg") · plus the generated fence (the back fence is dropped behind the water) and grass tufts |
 | wasserij | `kast` @ 28,6 · `tobbe` @ 80,74 |
 
 The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and two
@@ -142,11 +142,20 @@ The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and
 
 **Garden fence and tufts** (`bouwTuin`, deterministic, runs once at load):
 
-* `HEK_X = HEK_Z = 10`.
-* `hekz` posts at `x = 10`, `z = 10, 24, 38, … ≤ 130`, **skipping** `34 ≤ z ≤ 46` (the gate
+* `HEK_X = HEK_Z = 10` is the default fence line; each room carries its own
+  `hek_x`/`hek_z` (the garden keeps 10/10; the pool stands further off its
+  fence at 4/4 — owner 2026-09-17: "Doe het hek verder van beide kanten van
+  het zwembad", to make room for the startblokken).  Inside ⇔ `x > hek_x`
+  and `z > hek_z`.
+* `hekz` posts at `x = hek_x`, `z = hek_z, +14, … ≤ 130`, **skipping** `34 ≤ z ≤ 46` (the gate
   to the kitchen).
-* `hekx` posts at `z = 10`, `x = 24, 38, … ≤ 130`, **skipping** `38 ≤ x ≤ 50` (the opening
+* `hekx` posts at `z = hek_z`, `x = 24, 38, … ≤ 130`, **skipping** `38 ≤ x ≤ 50` (the opening
   to the pool).
+* The pool's own fence (`bouwZwembad`) uses the room's `hek_x`/`hek_z` (4/4)
+  and drops the back-fence posts that stand behind the water itself — the
+  `hekx` line skips every `x` in `[bad.x0, bad.x1]` (owner 2026-09-17:
+  "Haal het hek gedeelte dat op het zwembad zit weg", clarified to "only
+  behind the pool"); the posts beyond the pool's ends stay.
 * 30 grass tufts `pol0..pol4` from a seeded PRNG (`prng(90210)`, the same
   `a += 0x6D2B79F5` / `Math.imul` mulberry-style generator used for animals). Per iteration
   `i`: `u = round(r()*300 − 150)`, `w = 24 + round(r()*220)`, `px = (u+w)/2`,

@@ -238,10 +238,17 @@ zwembaan: z = (bad.z0 + bad.z1) / 2 = 28
 
 Kamer `zwembad`: 144 × 88 voxels, **buiten** (2026-09-14): geen wanden, vloer
 `gras`, `erf`, `loop: 1.5`; de deur naar de tuin zit in het zijhek
-(`x = 0`, z 60…72, poort op (10, 66)). Vast decor: `mat` (de instapvlonder,
-waar het 🏊-icoontje aan hangt) op (26, 58) — binnen het hek, op het dek
-vóór het water (owner, 2026-09-16: "de duikplek van het zwembad zit door een
-hek heen") — en `plant` op (136, 80). Dekplekken:
+(`x = 0`, z 60…72, poort op (4, 66)). Het hek staat op de eigen
+`hek_x = hek_z = 4` van de kamer — verder van het water dan het tuinhek, om
+ruimte te maken voor het startblok (owner, 2026-09-17: "Doe het hek verder
+van beide kanten van het zwembad") — en het **achterhek is weg achter het
+water zelf** (owner, 2026-09-17: "Haal het hek gedeelte dat op het zwembad
+zit weg", verduidelijkt tot "alleen achter het bad"). Vast decor: `plant` op
+(136, 80) en **één groot `startblok`** op (14, 28) op de baan (owner,
+2026-09-17: "startblokken ... met een trappetje zodat het dier langzaam
+omhoog kan springen" en "Maak het startblok groter en doe 1 ipv 3"). De oude
+instapvlonder `mat` is weg (owner, 2026-09-17: "haal de oude houten plank
+weg"); het 🏊-icoontje hangt nu op het startblok. Dekplekken:
 `dek.start = (12, 56)` en `dek.over = (132, 56)` — beide vóór het water.
 
 **Regel die hard is:** zet nooit een sta- of dwaalplek in het water. Alle
@@ -405,12 +412,20 @@ rood, geen ster minder, geen herhaling van de beurt.
   `x(p)`, dan meteen door; anders `naarWater`.
 * `naarWater`: is het dier niet in `zwembad`, dan `reis(id, 'zwembad',
   {x: dek.start.x, z: dek.start.z, na: 'wacht'})` en elke **220 ms** kijken of
-  hij er is, met een geduld van **25 000 ms**. Daarna naar het **westeinde van
-  het water**, `x = bad.x0 − 1 = 17`, `z = 28`, met `tempo 1.2` — daar begint
-  de baan bij de 0-streep, en `omHetWater` houdt de wandeling droog en binnen
-  het hek (owner, 2026-09-16: "de duikplek zit door een hek heen"; de oude
-  instap bij `x = max(4, bad.x0 − 9) = 9` viel buiten het zijhek). Dan
-  `snd.plons()` en `loopNaar(x(p), 28, {pose: 'zwem', tempo: 1.1})`.
+  hij er is, met een geduld van **25 000 ms**. Daarna naar de **trappenvoet
+  van het startblok** bij het westeinde van het water, `x = blok_x − 8 = 6`,
+  `z = 28`, met `tempo 1.2` — `omHetWater` houdt de wandeling droog en binnen
+  het hek. Dan **drie trage hopjes** het trappetje op (`pose: 'spring'`,
+  `tempo 0.85`, `land_hoogte` 3, 6, 8) en ten slotte een hop naar de
+  **voorkant van het blok** (`land_hoogte 9`), een **adem van 0,7 s**, en de
+  **duik** naar `x = bad.x0 + 2.5 = 20.5` met `tempo 1.6` en
+  `land_hoogte = −ZWEM_DIEP` (de hoogte-bewuste sprong: hij landt in het
+  water, niet op het blok; de duik begint aan de voorkant van het blok zodat
+  hij het blok zelf niet raakt).
+  Daar `snd.plons()` en `loopNaar(x(p), 28, {pose: 'zwem', tempo: 1.1})`.
+  De startblokken en het verplaatste hek zijn eigenaarwerk 2026-09-17:
+  "startblokken ... met een trappetje zodat het dier langzaam omhoog kan
+  springen" en "Doe het hek verder van beide kanten van het zwembad".
 * `zwem(n, na)`: `n` wordt geklemd op `0…L−p`. De punten zijn **één per meter**:
   `[[x(p+1), 28], [x(p+2), 28], …]`. Opties `{pose: 'zwem', tempo: tempoVan(L)}`.
   In `perStap(i)`: `p = p0 + i + 1`, het cijfer op het dier wordt bijgewerkt, en

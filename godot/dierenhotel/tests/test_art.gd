@@ -264,7 +264,7 @@ func test_elk_wereldmodel_bakt_op_elke_schaal() -> void:
 	var namen := ArtDecor.NAMEN.duplicate()
 	for n in ArtDecor.POL_AANTAL:
 		namen.append("pol%d" % n)
-	gelijk(namen.size(), 33, "33 decorstukken (art-sound-rules.md §8)")
+	gelijk(namen.size(), 34, "34 decorstukken (art-sound-rules.md §8)")
 	for naam in namen:
 		waar(Art.heeft_model(naam), "model %s bestaat" % naam)
 		waar(Art.is_wereldmodel(naam), "model %s is beschermd" % naam)

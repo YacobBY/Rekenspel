@@ -116,6 +116,9 @@ class Dier extends RefCounted:
 	var spring_t := 0
 	var spring_van := Vector2.ZERO
 	var spring_naar := Vector2.ZERO
+	var spring_h0 := 0.0           ## the height he springs FROM (the stair)
+	var spring_land := 0.0         ## the height he springs TO (NAN = same as h0)
+	var land_hoogte := NAN         ## the `land_hoogte` of the current order
 	var reis_doel := ""            ## the room a `reis` heads for; "" once he is in it
 	var reis_deuren := 0           ## doors on that journey
 	var reis_klaar := 0            ## doors already passed
@@ -852,6 +855,7 @@ func stappen(id: String, punten: Array, o: Dictionary = {}) -> bool:
 	d.beweeg_tempo = maxf(0.05, float(o.get("tempo", 1.0)))
 	d.per_stap = o.get("per_stap", o.get("perStap", Callable()))
 	d.eind_pose = o.get("na", "wacht")
+	d.land_hoogte = float(o.get("land_hoogte", NAN))
 	if rust():
 		for i in lijst.size():
 			if d.per_stap.is_valid():
@@ -1482,6 +1486,8 @@ func _spring_start(d: Dier) -> void:
 	d.spring_van = Vector2(d.x, d.z)
 	d.spring_naar = d.punten[0]
 	d.spring_t = 0
+	d.spring_h0 = d.hoogte
+	d.spring_land = d.land_hoogte if is_finite(d.land_hoogte) else d.hoogte
 
 func _spring(d: Dier) -> void:
 	if d.punten.is_empty():
@@ -1495,19 +1501,23 @@ func _spring(d: Dier) -> void:
 		d.x = plek.x
 		d.z = plek.y
 		var top: float = SPRING_HOOG.get(d.kind, 5.0)
-		d.hoogte = top * 4.0 * f * (1.0 - f)
+		d.hoogte = lerpf(d.spring_h0, d.spring_land, f) + top * 4.0 * f * (1.0 - f)
 		d.lift = -d.hoogte * Art.HG
 		d.pose = "loopA" if f < 0.25 else ("blijA" if f < 0.75 else "loopB")
 		var weg := d.spring_naar - d.spring_van
 		d.face = 1 if (weg.x - weg.y) >= 0.0 else -1
 		return
-	if d.spring_t <= lucht + SQUASH:
-		d.hoogte = 0.0
-		d.lift = 0.0
+	# a landing on solid ground squats; a dive into water (a negative landing)
+	# never touches the surface, so it skips the squat
+	if d.spring_land >= 0.0 and d.spring_t <= lucht + SQUASH:
+		d.hoogte = d.spring_land
+		d.lift = -d.hoogte * Art.HG
 		d.pose = "zit"
 		return
 	d.x = d.spring_naar.x
 	d.z = d.spring_naar.y
+	d.hoogte = d.spring_land
+	d.lift = -d.hoogte * Art.HG
 	d.punten.pop_front()
 	if d.per_stap.is_valid():
 		d.per_stap.call(d.stap_nr, d.spring_naar)
@@ -1520,7 +1530,11 @@ func _spring(d: Dier) -> void:
 ## Arrived at the last point of this leg.
 func _aangekomen(d: Dier) -> void:
 	d.v = 0.0
-	d.hoogte = 0.0 if d.beweeg_pose != "zwem" else -ZWEM_DIEP
+	# a dive lands in the water and stays there; a hop lands where it started
+	if d.spring_land < 0.0:
+		d.hoogte = d.spring_land
+	else:
+		d.hoogte = 0.0 if d.beweeg_pose != "zwem" else -ZWEM_DIEP
 	d.lift = -d.hoogte * Art.HG
 	if not d.route.is_empty():
 		_stap_door_deur(d)
