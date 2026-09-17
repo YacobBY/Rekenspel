@@ -21,8 +21,11 @@ on:
 permissions:
   contents: read
 
+# `github.workflow` is the CALLER's name when pages.yml reuses this workflow, so
+# the standalone push run and the run inside the pages workflow no longer share
+# one group — they used to cancel each other on every push to main.
 concurrency:
-  group: test-${{ github.ref }}
+  group: test-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
