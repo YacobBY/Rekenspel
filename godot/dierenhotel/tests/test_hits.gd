@@ -858,3 +858,98 @@ func test_knoppen_blijven_staan_als_er_iets_bijkomt() -> void:
 	gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0, "de bel en de ster overlappen niet")
 	_keur(Vector2(990, 637), "verdrongen")
 	_af()
+
+# ------------------------------------------------------------- de sleepbron
+
+## Elke zichtbare pil ligt in zijn eigen knop, op geen enkele andere knop, en de
+## strook waarin hij staat is bijgekocht — hij snoept niets van het tikvierkant
+## van het pictogram af.
+func _keur_bron(id: String, kader: Vector2, wat: String) -> void:
+	var b := Hits.spot(id).knoop as UiBron
+	var knop := b.get_global_rect()
+	var rij := b.get_node("Tellers") as Control
+	var gezien := 0
+	for kind in rij.get_children():
+		var pil := kind as Label
+		if pil == null or not pil.visible:
+			continue
+		gezien += 1
+		var r := pil.get_global_rect()
+		waar(r.size.x > 0.0 and r.size.y > 0.0,
+			"%s %s: de pil is echt getekend bij %s" % [wat, pil.name, str(kader)])
+		waar(knop.encloses(r), "%s %s (%s) ligt in de knop %s bij kader %s"
+			% [wat, pil.name, str(r), str(knop), str(kader)])
+		for ander_id in Hits.debug().keys():
+			if str(ander_id) == id:
+				continue
+			var ander := (Hits.spot(ander_id).knoop as Control).get_global_rect()
+			var snee := r.intersection(ander)
+			gelijk(maxf(0.0, snee.size.x) * maxf(0.0, snee.size.y), 0.0,
+				"%s %s ligt op %s bij kader %s" % [wat, pil.name, ander_id, str(kader)])
+	gelijk(gezien, 2, "%s: teller en handbadge staan er allebei bij %s" % [wat, str(kader)])
+	# de strook is er bíj gekocht, in de richting waarin de knop ruimte over had
+	var eigen := b.get_minimum_size()
+	var strook := rij.get_combined_minimum_size()
+	var tik := float(Ui.tap_maat())
+	if eigen.x > eigen.y:
+		waar(knop.size.x >= maxf(tik, eigen.x) + strook.x - 0.01,
+			"%s: de pillen staan naast de zin bij %s (knop %s, zin %d, pil %d)"
+				% [wat, str(kader), str(knop.size), int(eigen.x), int(strook.x)])
+	else:
+		waar(knop.size.y >= maxf(tik, eigen.y) + strook.y - 0.01,
+			"%s: de pillen staan onder het pictogram bij %s (knop %s, teken %d, pil %d)"
+				% [wat, str(kader), str(knop.size), int(eigen.y), int(strook.y)])
+
+## `V6` — de teller van een sleepbron hoort IN zijn eigen knop.
+##
+## De pillenrij hing met `PRESET_BOTTOM_WIDE` aan de ONDERRAND van de knop, en
+## een Control die kleiner is dan haar minimum groeit naar `grow_vertical` —
+## standaard END, naar beneden.  De pillen stonden daardoor buiten de knop, in
+## de band eronder: het getal van de voerkar landde op het bakje dat `Hits` daar
+## had neergezet.  Nu groeien ze naar binnen en koopt `UiBron.inhoud_maat()` de
+## strook waarin ze staan — onder een kaal pictogram (daar is de band toch al
+## twee hoog), naast een hele zin (daar is de band vol en de kolom niet).
+func test_de_teller_van_een_bron_blijft_in_zijn_knop() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	for kader in MATEN:
+		_op(kader)
+		Hits.maak({"id": "zak", "kind": "bron", "kamer": World.kamer_nu(),
+			"x": 24.0, "z": 20.0, "y": 14.0, "icoon": "🍪", "aantal": 40,
+			"hand": 2, "sleep": "vak", "prio": 10, "door": "test"})
+		Hits.maak({"id": "bak", "kind": "drop", "kamer": World.kamer_nu(),
+			"x": 96.0, "z": 96.0, "y": 14.0, "icoon": "🥣", "label": "Bakje",
+			"drop": "vak", "prio": 6, "door": "test"})
+		Hits.plaats()
+		# een Container zet zijn kinderen pas neer in de layoutstap van het frame
+		# ná de plaatsing; `World._process` draait `Hits.plaats()` er zelf bij
+		await boom.process_frame
+		_keur_bron("zak", kader, "pictogram")
+		# en dezelfde bron met een hele zin op de knop, zoals de voerkar en de
+		# was hem aankleden: dan verhuizen de pillen naar het eind van de regel
+		var b := Hits.spot("zak").knoop as UiBron
+		b.text = "🍪 pak 2"
+		b.add_theme_font_size_override("font_size", int(Ui.maten["klein"]))
+		Hits.plaats()
+		await boom.process_frame
+		_keur_bron("zak", kader, "zin")
+		_af()
+
+## De knop zelf blijft een tikdoel van minstens `tap`: de pillenrij komt eronder
+## bij, ze snoept er niets van af.
+func test_een_bron_blijft_een_vol_tikdoel() -> void:
+	for kader in MATEN:
+		_op(kader)
+		Hits.maak({"id": "zak", "kind": "bron", "kamer": World.kamer_nu(),
+			"x": 24.0, "z": 20.0, "y": 14.0, "icoon": "🍪", "aantal": 0,
+			"sleep": "vak", "prio": 10, "door": "test"})
+		Hits.plaats()
+		var b := Hits.spot("zak").knoop as UiBron
+		var r := b.get_global_rect()
+		waar(r.size.x >= float(Ui.tap_maat()) and r.size.y >= float(Ui.tap_maat()),
+			"een lege bron is nog een tikdoel bij %s (%s)" % [str(kader), str(r)])
+		# leeg is leeg: bij 0 staat er geen pil, dus er wordt ook geen band gekocht
+		var rij := b.get_node("Tellers") as Control
+		for kind in rij.get_children():
+			waar(not (kind as Control).visible, "bij 0 staat er geen pil")
+		_keur(kader, "lege bron %s" % str(kader))
+		_af()
