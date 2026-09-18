@@ -552,6 +552,279 @@ func test_vangvlak_dekt_knop_en_voorwerp() -> void:
 		gelijk(s.vangvlak.drop, "bak", "het vangvlak draagt dezelfde naam")
 	_af()
 
+# -------------------------------------------------- de sleep komt écht aan
+
+## Z1: een drop die op een KNOP landt werd stil geweigerd.  Godot geeft een drop
+## aan het Control onder de vinger en loopt dan de OUDERKETEN omhoog; de
+## vanglaag is een broer van de knoppenlaag, geen ouder, en hij sterft op de
+## knop (MOUSE_FILTER_STOP).  Een hotspot zónder voorwerpvlak (`sl_h*`,
+## `bd_rij*`, `mbvak_*`) heeft daardoor geen onbedekt vangvlak: dáár ís de knop
+## het vangvlak.  Deze drie proeven lopen de echte invoerlaag af.
+
+var _vp: SubViewport = null
+var _vanglaag: Control = null
+
+## Dezelfde twee lagen als de schil: de vanglaag eerst, de knoppenlaag
+## erbovenop (`scenes/main.tscn:78` en `:83`).  Als ze één Control zijn bewijst
+## de proef niets — dan ligt het vangvlak bóven de knop.
+func _op_sleep(kader := Vector2(1000, 648)) -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	_vp = SubViewport.new()
+	_vp.size = Vector2i(int(kader.x), int(kader.y))
+	_vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	_vp.gui_embed_subwindows = true
+	boom.root.add_child(_vp)
+	_vanglaag = Control.new()
+	_vanglaag.name = "Vanglaag"
+	_vanglaag.size = kader
+	_vanglaag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_vp.add_child(_vanglaag)
+	_laag = Control.new()
+	_laag.name = "Knoplaag"
+	_laag.size = kader
+	_laag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_vp.add_child(_laag)
+	Ui.registreer_lagen(_laag, _laag, null, _laag, _vanglaag)
+	World.meet(Rect2(Vector2.ZERO, kader))
+
+func _af_sleep() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	Hits.wis_alles()
+	Ui.registreer_lagen(null, null, null)
+	_laag = null
+	_vanglaag = null
+	if _vp != null:
+		_vp.queue_free()
+		_vp = null
+	await boom.process_frame
+
+## Eén sleep door de echte invoerlaag: indrukken, in stapjes bewegen, loslaten.
+## Woordelijk overgenomen uit `games/voerkar/test_voerkar.gd:719` — die bewijst
+## al sinds de port dat dit headless werkt; hij mikt alleen op het VOORWERP, en
+## dat is precies het geval dat toch al werkte.
+func _sleep(vp: SubViewport, van: Vector2, naar: Vector2) -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var vorig := van
+	_beweeg(vp, van, van, false)
+	await boom.process_frame
+	var mb := InputEventMouseButton.new()
+	mb.button_index = MOUSE_BUTTON_LEFT
+	mb.pressed = true
+	mb.position = van
+	mb.global_position = van
+	vp.push_input(mb)
+	await boom.process_frame
+	for i in range(1, 11):
+		var p := van + (naar - van) * (float(i) / 10.0)
+		_beweeg(vp, p, vorig, true)
+		vorig = p
+		await boom.process_frame
+	var los := InputEventMouseButton.new()
+	los.button_index = MOUSE_BUTTON_LEFT
+	los.pressed = false
+	los.position = naar
+	los.global_position = naar
+	vp.push_input(los)
+	for _f in 3:
+		await boom.process_frame
+
+func _beweeg(vp: SubViewport, p: Vector2, vorig: Vector2, knop: bool) -> void:
+	var mm := InputEventMouseMotion.new()
+	mm.position = p
+	mm.global_position = p
+	mm.relative = p - vorig
+	mm.button_mask = MOUSE_BUTTON_MASK_LEFT if knop else 0
+	vp.push_input(mm)
+
+## Een zak om uit te slepen en een bakje zonder voorwerpvlak om in te slepen.
+## `tel` telt de afleveringen, `heen` bewaart wat er aankwam.
+func _sleepveld(tel: Array, heen: Array, sleep := "koek") -> void:
+	Hits.maak({"id": "zak", "kind": "bron", "kamer": World.kamer_nu(),
+		"x": 18.0, "z": 18.0, "y": 14.0, "icoon": "🍪", "aantal": 3,
+		"sleep": sleep, "prio": 6, "door": "test"})
+	Hits.maak({"id": "bak", "kind": "drop", "kamer": World.kamer_nu(),
+		"x": 96.0, "z": 96.0, "y": 14.0, "icoon": "🥣", "label": "Bakje",
+		"drop": "koek", "data": {"slot": "a"}, "prio": 6, "door": "test",
+		"val": func(lading: Dictionary, data: Dictionary) -> void:
+			tel[0] += 1
+			heen[0] = {"lading": lading, "data": data}})
+	Hits.plaats()
+
+func _knop_midden(id: String) -> Vector2:
+	var s := Hits.spot(id)
+	return (s.knoop as Control).get_global_rect().get_center()
+
+## (a) Loslaten op het MIDDEN VAN DE KNOP van een drop-hotspot zonder
+## `obj`/`vlak` levert precies één keer af.  Dit is de bug van Z1.
+func test_sleep_op_het_midden_van_de_knop_komt_aan() -> void:
+	_op_sleep()
+	var tel := [0]
+	var heen: Array = [{}]
+	_sleepveld(tel, heen)
+	gelijk(Hits.debug()["bak"]["vlak"].size, Vector2.ZERO,
+		"het bakje heeft geen voorwerpvlak: de knop ÍS het vangvlak")
+	var doel := _knop_midden("bak")
+	waar(Hits.spot("bak").vangvlak.get_global_rect().has_point(doel),
+		"het vangvlak ligt onder het midden van de knop")
+	await _sleep(_vp, _knop_midden("zak"), doel)
+	gelijk(tel[0], 1, "één sleep op de knop = één aflevering")
+	gelijk(str((heen[0] as Dictionary).get("lading", {}).get("sleep", "")), "koek",
+		"de lading komt heel aan")
+	gelijk(str((heen[0] as Dictionary).get("data", {}).get("slot", "")), "a",
+		"en de data van de hotspot ook")
+	await _af_sleep()
+
+## (b) Een lading met een andere sleepnaam vuurt niets — de knop geeft door,
+## hij neemt niet zomaar alles aan.
+func test_sleep_met_een_andere_naam_vuurt_niets() -> void:
+	_op_sleep()
+	var tel := [0]
+	var heen: Array = [{}]
+	_sleepveld(tel, heen, "was")
+	waar(Hits.vang_onder(_knop_midden("bak"), {"sleep": "was"}) == null,
+		"het bakje wil geen was")
+	await _sleep(_vp, _knop_midden("zak"), _knop_midden("bak"))
+	gelijk(tel[0], 0, "een vuile sok belandt niet in het koekjesbakje")
+	waar(not Hits.spot("bak").vangvlak._warm, "en het bakje licht niet op")
+	await _af_sleep()
+
+## (c) Een vreemd Control bovenop het vangvlak schakelt óók door: een somkaart
+## die over het doel heen ligt is geen muur.
+func test_een_kaart_over_het_doel_schakelt_de_sleep_door() -> void:
+	_op_sleep()
+	var tel := [0]
+	var heen: Array = [{}]
+	_sleepveld(tel, heen)
+	var doel := _knop_midden("bak")
+	# De knoppenlaag houdt kaart en knop juist uit elkaar, dus leggen we haar er
+	# met de hand bovenop — zo ligt ze gegarandeerd over het doel.
+	var kaart := Ui.maak_knop("kaart", {"icoon": "🍪", "regel": "Hoeveel koekjes?",
+		"som": "2 + 2 =", "max": 2})
+	_laag.add_child(kaart)
+	kaart.size = Vector2(180, 96)
+	kaart.position = doel - kaart.size * 0.5
+	waar(kaart.get_global_rect().has_point(doel), "de kaart ligt over het doel")
+	await _sleep(_vp, _knop_midden("zak"), doel)
+	gelijk(tel[0], 1, "de sleep gaat dwars door de kaart heen naar het bakje")
+	await _af_sleep()
+
+## De gloed van `drop-hot` hoort bij de vinger: aan zolang de sleep boven het
+## doel hangt, uit zodra de sleep voorbij is — ook als het kind ergens anders
+## loslaat, want dan vraagt niemand het vangvlak nog iets.
+func test_de_gloed_gaat_uit_als_de_sleep_voorbij_is() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	_op_sleep()
+	var tel := [0]
+	var heen: Array = [{}]
+	_sleepveld(tel, heen)
+	var vang := Hits.spot("bak").vangvlak
+	var van := _knop_midden("zak")
+	var doel := _knop_midden("bak")
+	_beweeg(_vp, van, van, false)
+	await boom.process_frame
+	var mb := InputEventMouseButton.new()
+	mb.button_index = MOUSE_BUTTON_LEFT
+	mb.pressed = true
+	mb.position = van
+	mb.global_position = van
+	_vp.push_input(mb)
+	await boom.process_frame
+	_beweeg(_vp, doel, van, true)
+	await boom.process_frame
+	waar(Hits.sleept(), "er wordt gesleept")
+	waar(vang._warm, "het doel licht op onder de vinger")
+	Hits.plaats()
+	waar(vang._warm, "en blijft oplichten terwijl de knoppenlaag doorloopt")
+	# het kind laat in een lege hoek los
+	var hoek := Vector2(996, 644)
+	_beweeg(_vp, hoek, doel, true)
+	await boom.process_frame
+	var los := InputEventMouseButton.new()
+	los.button_index = MOUSE_BUTTON_LEFT
+	los.pressed = false
+	los.position = hoek
+	los.global_position = hoek
+	_vp.push_input(los)
+	for _f in 3:
+		await boom.process_frame
+	gelijk(tel[0], 0, "er is niets afgeleverd")
+	waar(not Hits.sleept(), "de sleep is voorbij")
+	Hits.plaats()
+	waar(not vang._warm, "en de gloed is weg")
+	await _af_sleep()
+
+## Het gloeiende haakje: `vang_onder` koelt elk ander vangvlak af, anders blijft
+## er een mint randje achter waar de vinger net was (`ui/vangvlak.gd` drop-hot).
+func test_alleen_het_doel_onder_de_vinger_gloeit() -> void:
+	_op(Vector2(1000, 648))
+	for i in 2:
+		Hits.maak({"id": "bak%d" % i, "kind": "drop", "kamer": World.kamer_nu(),
+			"x": 20.0 + i * 60.0, "z": 20.0 + i * 60.0, "y": 14.0,
+			"icoon": "🥣", "label": "Bak", "drop": "koek", "prio": 6, "door": "test"})
+	Hits.plaats()
+	var a := Hits.spot("bak0")
+	var b := Hits.spot("bak1")
+	Hits.vang_onder(a.vangvlak.get_global_rect().get_center(), {"sleep": "koek"})
+	waar(a.vangvlak._warm and not b.vangvlak._warm, "de eerste bak gloeit")
+	Hits.vang_onder(b.vangvlak.get_global_rect().get_center(), {"sleep": "koek"})
+	waar(b.vangvlak._warm and not a.vangvlak._warm, "en daarna alleen de tweede")
+	Hits.vang_onder(Vector2(-50, -50), {"sleep": "koek"})
+	waar(not a.vangvlak._warm and not b.vangvlak._warm, "naast alles gloeit niets")
+	_af()
+
+## Het kleinste vangvlak wint: dat is het doel waar het kind op mikt.
+func test_het_kleinste_vangvlak_wint() -> void:
+	_op(Vector2(1000, 648))
+	Hits.maak({"id": "groot", "kind": "drop", "kamer": World.kamer_nu(),
+		"x": 40.0, "z": 40.0, "y": 14.0, "icoon": "🛏", "label": "Rij",
+		"drop": "koek", "maat": Vector2(300, 120), "prio": 6, "door": "test"})
+	Hits.maak({"id": "klein", "kind": "drop", "kamer": World.kamer_nu(),
+		"x": 40.0, "z": 40.0, "y": 14.0, "icoon": "🥣", "label": "Bak",
+		"drop": "koek", "prio": 6, "door": "test"})
+	Hits.plaats()
+	# de twee overlappen niet uit zichzelf; leg het kleine doel op het grote
+	var g := Hits.spot("groot").vangvlak
+	var k := Hits.spot("klein").vangvlak
+	k.position = g.position + Vector2(10, 10)
+	var punt := k.get_global_rect().get_center()
+	waar(g.get_global_rect().has_point(punt), "beide vangvlakken liggen onder het punt")
+	gelijk(Hits.vang_onder(punt, {"sleep": "koek"}), k, "het kleinste doel wint")
+	_af()
+
+## `Hits.zet_drop` — Spot, vangvlak en knop in één keer.  De voerkar zette
+## `s.val` en `s.vangvlak.val` los van elkaar en vergat `data` elke keer.
+func test_zet_drop_houdt_spot_en_vangvlak_gelijk() -> void:
+	_op(Vector2(1000, 648))
+	var tel := [0, 0]
+	Hits.maak({"id": "bak", "kind": "drop", "kamer": World.kamer_nu(),
+		"x": 40.0, "z": 40.0, "y": 14.0, "icoon": "🥣", "label": "Bak",
+		"drop": "koek", "data": {"slot": "a"}, "door": "test",
+		"val": func(_l, _d) -> void: tel[0] += 1})
+	Hits.maak({"id": "deur", "kamer": World.kamer_nu(),
+		"x": 100.0, "z": 100.0, "y": 14.0, "icoon": "🚪", "label": "Gang", "door": "test"})
+	Hits.plaats()
+	waar(not Hits.zet_drop("bestaat_niet", "koek", Callable()), "een onbekend id geeft false")
+	var nieuw := func(_l: Dictionary, d: Dictionary) -> void: tel[1] += int(d.get("n", 0))
+	waar(Hits.zet_drop("bak", "kar", nieuw), "het bakje gaat over op de kar")
+	var s := Hits.spot("bak")
+	gelijk(s.drop, "kar", "de Spot draagt de nieuwe naam")
+	gelijk(s.vangvlak.drop, "kar", "het vangvlak ook")
+	gelijk(str(s.vangvlak.data.get("slot", "")), "a", "een lege data laat de oude staan")
+	s.vangvlak._drop_data(Vector2.ZERO, {"sleep": "kar"})
+	gelijk(tel[0], 0, "de oude afhandelaar hoort niets meer")
+	# een hotspot die nog geen drop had krijgt er een, op zijn eigen knoprechthoek
+	waar(Hits.zet_drop("deur", "kar", nieuw, {"n": 7}), "de deur wordt een sleepdoel")
+	var d := Hits.spot("deur")
+	waar(d.vangvlak != null, "de deur heeft nu een vangvlak")
+	gelijk(Rect2(d.vangvlak.position, d.vangvlak.size), Hits.debug()["deur"]["rect"],
+		"en het ligt op de knop")
+	d.vangvlak._drop_data(Vector2.ZERO, {"sleep": "kar"})
+	gelijk(tel[1], 7, "de nieuwe data komt mee")
+	# en weer weg
+	waar(Hits.zet_drop("deur", "", Callable()), "een lege naam haalt het doel weg")
+	waar(Hits.spot("deur").vangvlak == null, "het vangvlak is opgeruimd")
+	_af()
+
 # ------------------------------------------------------------- blijven staan
 
 ## Owner, 2026-09-14: opening the notice board reshuffled half the buttons.  An

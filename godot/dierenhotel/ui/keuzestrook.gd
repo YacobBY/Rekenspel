@@ -31,6 +31,21 @@ func bouw(keuzes: Array, kader_breed: float, mt: Dictionary, titel := "", kaart:
 		kort_gekozen = true
 		_vul(rij, keuzes, true, mt)
 
+# ------------------------------------------------------------------ slepen
+
+## The strip is glued under the card and catches the finger, so a drop that
+## lands on it dies there (Z1).  It hands the drop on to the catch area
+## underneath it, like every hotspot Control does.
+func _can_drop_data(at: Vector2, lading: Variant) -> bool:
+	return Hits.vang_onder(get_global_position() + at, lading) != null
+
+## In the TARGET's own coordinates, never the strip's `at`.
+func _drop_data(at: Vector2, lading: Variant) -> void:
+	var punt := get_global_position() + at
+	var v := Hits.vang_onder(punt, lading)
+	if v != null:
+		v._drop_data(punt - v.get_global_position(), lading)
+
 func _vul(rij: HBoxContainer, keuzes: Array, kort: bool, mt: Dictionary) -> void:
 	for keuze in keuzes:
 		var woord: String = str(keuze.get("kort", keuze.get("tekst", ""))) if kort \

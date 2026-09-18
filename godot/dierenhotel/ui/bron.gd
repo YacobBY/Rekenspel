@@ -79,3 +79,16 @@ func _get_drag_data(_at: Vector2) -> Variant:
 	lading["sleep"] = sleep_naam
 	lading["bron"] = name
 	return lading
+
+## A source is a Button too, so a drop that lands on it dies there (Z1) — and a
+## source often stands on the very thing it feeds.  Hand the drop on, same as
+## `ui/hotknop.gd`.
+func _can_drop_data(at: Vector2, lading: Variant) -> bool:
+	return Hits.vang_onder(get_global_position() + at, lading) != null
+
+## In the TARGET's own coordinates, never the source's `at`.
+func _drop_data(at: Vector2, lading: Variant) -> void:
+	var punt := get_global_position() + at
+	var v := Hits.vang_onder(punt, lading)
+	if v != null:
+		v._drop_data(punt - v.get_global_position(), lading)

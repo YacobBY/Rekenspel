@@ -61,3 +61,20 @@ func zet_label(icoon: String, label: String) -> void:
 	_icoon = icoon
 	_label = label
 	text = ("%s %s" % [icoon, label]).strip_edges()
+
+# ------------------------------------------------------------------ slepen
+
+## A hotspot button stands OVER its own catch area, and Godot stops a drop at
+## the first MOUSE_FILTER_STOP Control it meets — so a drop that landed on the
+## button, exactly where a child aims, was refused in silence (Z1).  The button
+## hands it on to the catch area under the finger itself: `Hits.vang_onder`
+## picks the smallest one and lights it up while the finger hovers.
+func _can_drop_data(at: Vector2, lading: Variant) -> bool:
+	return Hits.vang_onder(get_global_position() + at, lading) != null
+
+## In the TARGET's own coordinates, never the source's `at`.
+func _drop_data(at: Vector2, lading: Variant) -> void:
+	var punt := get_global_position() + at
+	var v := Hits.vang_onder(punt, lading)
+	if v != null:
+		v._drop_data(punt - v.get_global_position(), lading)

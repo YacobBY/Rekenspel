@@ -95,22 +95,33 @@ func _spel() -> Node:
 
 
 ## De sleutel op haakje `i` hangen — slepen of tikken, allebei de weg van een kind.
+##
+## Het slepen loopt door de KNOP, niet langs hem heen: een haakje heeft geen
+## voorwerpvlak, dus zijn vangvlak ís zijn knop, en een kind laat de sleutel
+## midden op dat plaatje los.  Rechtstreeks op `s.vangvlak` mikken dekte de bug
+## van Z1 af — dan raakte de drop wél aan terwijl hij in het spel stil sneuvelde
+## op de knop erboven.
 func _hang(i: int, slepen := true) -> void:
 	var s := Hits.spot("sl_h%d" % i)
 	if s == null:
 		fout("haakje %d staat er niet" % i)
 		return
-	if slepen and s.vangvlak != null:
-		var lading := {"sleep": "haak", "bron": "sl_key"}
-		waar(s.vangvlak._can_drop_data(Vector2.ZERO, lading),
-			"haakje %d neemt een sleutel aan" % i)
-		s.vangvlak._drop_data(Vector2.ZERO, lading)
-		return
-	var knop := s.knoop as BaseButton
+	var knop := s.knoop as Control
 	if knop == null:
 		fout("haakje %d is geen knop" % i)
 		return
-	knop.emit_signal("pressed")
+	if slepen and s.vangvlak != null:
+		Hits.plaats()          # anders heeft het vangvlak nog geen maat
+		var lading := {"sleep": "haak", "bron": "sl_key"}
+		var midden := knop.size * 0.5
+		waar(knop._can_drop_data(midden, lading),
+			"haakje %d neemt een sleutel aan" % i)
+		knop._drop_data(midden, lading)
+		return
+	if knop is BaseButton:
+		(knop as BaseButton).emit_signal("pressed")
+	else:
+		fout("haakje %d is geen knop" % i)
 
 
 ## Een haakje dat NIET van deze sleutel is, om de misser mee te maken.  Een

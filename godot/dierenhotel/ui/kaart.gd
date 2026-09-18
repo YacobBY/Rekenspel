@@ -186,6 +186,22 @@ func zet_af() -> void:
 	_af = true
 	add_theme_stylebox_override("panel", _papier())
 
+# ------------------------------------------------------------------ slepen
+
+## The card catches the finger (MOUSE_FILTER_STOP) and Godot stops a drop at the
+## first such Control, so a card lying over a bowl swallowed the biscuit (Z1).
+## It hands the drop on to the catch area underneath it, like every hotspot
+## Control does.
+func _can_drop_data(at: Vector2, lading: Variant) -> bool:
+	return Hits.vang_onder(get_global_position() + at, lading) != null
+
+## In the TARGET's own coordinates, never the card's `at`.
+func _drop_data(at: Vector2, lading: Variant) -> void:
+	var punt := get_global_position() + at
+	var v := Hits.vang_onder(punt, lading)
+	if v != null:
+		v._drop_data(punt - v.get_global_position(), lading)
+
 ## The ruled paper, drawn over the panel (CanvasItem calls `_draw` after the
 ## container painted its stylebox).
 func _draw() -> void:

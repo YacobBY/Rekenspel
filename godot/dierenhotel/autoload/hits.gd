@@ -167,6 +167,103 @@ func geef_terug(door: String) -> void:
 			s.eigen_aan = Callable()
 			s.geleend_door = ""
 
+# --------------------------------------------------------------- slepen
+
+## The catch area under a screen point, or `null`.
+##
+## Godot hands a drop to the Control under the finger and then walks its PARENT
+## chain, stopping at the first MOUSE_FILTER_STOP ancestor.  The catch areas
+## live in `Ui.vanglaag`, a SIBLING of `Ui.knoplaag`, so a drop that lands on a
+## button (every hotspot IS a button) never reached them and was refused in
+## silence — and a hotspot without an object rectangle has no uncovered catch
+## area at all, because there its catch area IS the button.  Every Control in
+## the hotspot layers therefore asks this and forwards the drop itself.
+##
+## The SMALLEST catch area under the point wins: it is the most specific target
+## a child can be aiming at.  Asking `_can_drop_data` is part of the answer, not
+## a side effect — that is what lights the target up while the finger hovers
+## (`ui/vangvlak.gd` `drop-hot`), so everything else is cooled down again in the
+## same pass; otherwise a hook keeps glowing after the finger has moved on.
+func vang_onder(punt: Vector2, lading: Variant) -> UiVangvlak:
+	var beste: UiVangvlak = null
+	var kleinste := INF
+	for id in _volgorde:
+		var s: Spot = _spots[id]
+		var v := s.vangvlak
+		if v == null or not is_instance_valid(v) or not v.is_inside_tree():
+			continue
+		if not v.is_visible_in_tree() or not s.zichtbaar:
+			continue
+		if not v.get_global_rect().has_point(punt):
+			continue
+		if not v._can_drop_data(punt - v.get_global_position(), lading):
+			continue
+		var opp := v.size.x * v.size.y
+		if opp < kleinste:
+			kleinste = opp
+			beste = v
+	_koel_vangvlakken(beste)
+	return beste
+
+## Is a drag running right now?  When it is not, no target may glow.
+func sleept() -> bool:
+	if Ui.knoplaag == null or not is_instance_valid(Ui.knoplaag) or not Ui.knoplaag.is_inside_tree():
+		return false
+	var vp := Ui.knoplaag.get_viewport()
+	return vp != null and vp.gui_is_dragging()
+
+## Every catch area but one back to cold.  An empty Dictionary carries no
+## `sleep`, so `_can_drop_data` says no and clears the glow — the catch area
+## keeps its own state, this only asks it the question again.
+func _koel_vangvlakken(behalve: UiVangvlak) -> void:
+	for id in _volgorde:
+		var s: Spot = _spots[id]
+		var v := s.vangvlak
+		if v == null or v == behalve or not is_instance_valid(v):
+			continue
+		v._can_drop_data(Vector2.ZERO, {})
+
+## Rewire what a hotspot accepts, in ONE call: Spot, catch area and the place
+## over the button stay in step.  Setting `s.val` and `s.vangvlak.val` by hand
+## (voerkar) is two half-truths; `data` was forgotten there every time.
+##
+## An empty `data` keeps the data the hotspot already had — a borrowed bowl
+## keeps knowing which room and slot it is.  An empty `drop` takes the catch
+## area away again.  Returns false when there is no such hotspot.
+func zet_drop(id: String, drop: String, val: Callable, data: Dictionary = {}) -> bool:
+	var s: Spot = _spots.get(id)
+	if s == null:
+		return false
+	s.drop = drop
+	s.val = val
+	if not data.is_empty():
+		s.data = data
+	if drop.is_empty():
+		if s.vangvlak != null and is_instance_valid(s.vangvlak):
+			s.vangvlak.queue_free()
+		s.vangvlak = null
+		return true
+	if (s.vangvlak == null or not is_instance_valid(s.vangvlak)) and Ui.vanglaag != null:
+		s.vangvlak = UiVangvlak.new()
+		s.vangvlak.name = "V" + id
+		Ui.vanglaag.add_child(s.vangvlak)
+	if s.vangvlak == null or not is_instance_valid(s.vangvlak):
+		return false
+	s.vangvlak.drop = s.drop
+	s.vangvlak.data = s.data
+	s.vangvlak.val = s.val
+	var rect := Rect2()
+	if _laatste.has(id):
+		rect = _laatste[id]["rect"]
+	elif is_instance_valid(s.knoop):
+		rect = Rect2(s.knoop.position, s.knoop.size)
+	# Before the first placement pass there is no rectangle to sit on yet; the
+	# next `plaats()` gives it one.  Merging an empty one would stretch the
+	# catch area from the frame's corner to the object.
+	if rect.size.x > 0.0 and rect.size.y > 0.0:
+		_zet_vangvlak(s, rect)
+	return true
+
 func wis_alles() -> void:
 	for id in _volgorde.duplicate():
 		weg(id)
@@ -200,6 +297,13 @@ func plaats() -> void:
 	var kader := World.kader_rect()
 	if kader.size.x <= 0.0:
 		return
+	# A drag that ended somewhere else leaves its last target glowing: once the
+	# finger is gone nothing asks the catch area anything again.  Since `S1` a
+	# hover over a BUTTON lights its target too, so that stray mint frame would
+	# now be easy to leave behind.  One sweep per frame while nothing is being
+	# dragged; a catch area only redraws when its state really changed.
+	if not sleept():
+		_koel_vangvlakken(null)
 	_bezet.clear()
 	_geplaatst.clear()
 	_vakken.clear()
