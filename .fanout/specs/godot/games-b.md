@@ -1041,13 +1041,29 @@ xOpRij(n, z0) = x(n) + (z0 − zSteen)         zodat (x − z) voor alle rijen g
 dierX(n)      = xOpRij(n, zDier)
 ```
 
-**Welke steen krijgt een cijfer?** Band 3: **elke** steen (0…10); een bordje van
-één teken is 5 voxels = 10 px op een steek van 7 voxels = 14 px. Band 4/5: alleen
-de **tientallen** (`n mod 10 == 0`); een bordje van twee tekens is 9 voxels =
-18 px op een steek van 3,5 voxel = 7 px. Hoogte van het bordje (`rij`): in band 3
-gaat alleen "10" een rij hoger (twee tekens); in band 4/5 wisselen de tientallen
-om en om (`floor(i/2) mod 2`). Een bordje dat buiten de zone zou vallen schuift
-met `dx` naar binnen (`bordDx`, met halve bordbreedte + 1 voxel rand).
+**Welke steen krijgt een cijfer?** (PLAN.md `N5`, 2026-09-18 — de tientallen van
+band 4/5 liepen in één witte band aan elkaar.) Band 3: **elke** steen (0…10); een
+bordje van één teken is 5 voxels = 10·g px op een steek van 7 voxels = 14·g px.
+Band 4/5: alleen elke **twintigste** (`i mod 4 == 0` → 0, 20, 40, 60, 80, 100);
+een bordje van twee tekens is 9 voxels = 18·g px, en op een steek van 3,5 voxel
+stond een bordje per tien maar 7·g px van het volgende. Vier stenen verderop is
+dat 14 voxels = 28·g px, en ook het breedste bordje van de lijn ("100", 13 voxels
+= 26·g px) heeft dan ruimte. De **dikke tellerstenen** blijven wél in vijven
+(band 3) of tienen (band 4/5) doortellen, ook waar de lijn niets meer uitschrijft.
+
+Hoogte van het bordje (`rij`): in band 3 gaat alleen "10" een rij hoger (twee
+tekens); in band 4/5 hangt **elk** bordje laag — de om-en-om-lift
+(`floor(i/2) mod 2`) is vervallen, want die maakte van één getallenlijn twee
+rijen getallen en het kind moest uitzoeken welk getal bij welke steen hoorde.
+
+Zijdelings (`bordDx`, met halve bordbreedte + 1 voxel rand): een bordje houdt
+**2 voxels daglicht** tot het bordje links ervan en blijft binnen de zone zolang
+dat zijn buurman niets kost. Het breedste getal van een lijn staat altijd op de
+**laatste** steen en de strook houdt drie voxels achter die steen op, dus juist
+het naar binnen trekken duwde "10" tegen "9" en "100" tegen "80". De tuin loopt
+door tot x = 130 en de bordjes zijn los decor zonder knop: een bordje hangt
+liever over het einde van de strook dan over het getal ernaast ("10" wijkt
+2 voxels naar rechts, "100" kan er 1 naar binnen).
 
 ### 3.4 De getallen per band
 
@@ -1136,9 +1152,16 @@ het de steen niet afdekt en het pad een pad blijft (geen hek). `groot` is waar b
 (naar +x): voor `j = 0,1,2` een `bx(−3 + 2j, 0, −2, 2, 3 + 3j, 5)` in `#D0A87A`,
 met een lichte bovenkant `#E2C094` en een donkere stootrand `#B98F62`. Het
 **doelgetal** zit in dit model (niet als losse chip — anders belanden het getal
-van de gast en dat van de trap op het einde op elkaar): het bordje staat boven de
-bovenste trede op `y = 10`, `zp = 0`, met een roze kapje (`#F5B0C2`) erboven op
-`y = 15` en `bx(x0 − 1, 16, 0, w + 2, 1, 1)`.
+van de gast en dat van de trap op het einde op elkaar). Het hangt aan een **mast**
+(PLAN.md `N5`, 2026-09-18): `bx(rond(dx), 0, 0, 1, TRAP_BORD, 1)` in `#B98F62`,
+waarvan de onderste helft binnen de treden staat en daar volledig wordt
+weggesneden. Het bordje staat op `TRAP_BORD = 18`, `zp = 0` — een volle rij
+(8 voxels) boven het hoogste bordje dat het pad zelf draagt — met een roze kapje
+(`#F5B0C2`) erboven op `y = 23` en de vlag `bx(x0 − 1, 24, 0, w + 2, 1, 1)`.
+Op het einde van een beurt staat de gast **op** de bovenste trede: gemeten vanaf
+zijn eigen voetpunt haalt een konijn 34 voxel-px en het bordje op `y = 10`
+verdween daar precies achter. Vanaf `TRAP_BORD` steekt de vlag bij elke
+voxelmaat en op alle vier de kaders boven de kop van elke soort uit.
 
 Het zetten van het decor: 11 of 21 stenen (`hk_steen0…`), overtollige stenen van
 een vorige band worden expliciet weggehaald (tot `STENEN_MAX = 21`), en één
@@ -1241,9 +1264,12 @@ fase terug naar `sprong` met `sprong = null`.
 dier **op** het trapje: één stap naar `{x: xOpRij(doel, zTop) + 1, z: zTop}` met
 `pose 'spring'`, `tempo 1.1` en `snd.hup()` bij de landing (grotere diepte dan het
 trapje zelf, dus het dier staat er bovenop). Daarna `pose('blij', 60)`,
-`snd.hoera()`, het wolkje `⭐ 'op de trap'` (klas `goed`, `hoog 52`, `prio 12`) en
-de cijferchip op `doel`. Na **4600 ms** wordt de bewaarde stand gewist en sluit
-het spel zichzelf.
+`snd.hoera()` en het wolkje `⭐ 'op de trap'` (klas `goed`, `hoog 52`, `prio 12`).
+In fase `af` tekent `tekenCijfers()` **geen cijferchip** meer (PLAN.md `N5`,
+2026-09-18): de gast staat dan op het trapje met het doelbord vlak achter zijn
+kop, dus die chip zette het doelgetal nog een keer boven het doelgetal. Het bord
+zegt het, de kaart zegt het en het sterwolkje zegt het. Na **4600 ms** wordt de
+bewaarde stand gewist en sluit het spel zichzelf.
 
 ### 3.9 Kindtekst, letterlijk en op volgorde
 
@@ -1272,8 +1298,8 @@ dan een hele zin.
 
 Cijfers in de wereld: het getal van de gast als grote chip boven zijn kop
 (`getalTag`, `y: 30`, `prio 10`, 48 px) — tijdens het hinkelen de sprongteller
-(1 … 2 … 3), daarna het getal van de steen; de getallen van de stenen en het
-doelgetal zitten **in de modellen**.
+(1 … 2 … 3), daarna het getal van de steen, en in fase `af` geen chip meer (§3.8);
+de getallen van de stenen en het doelgetal zitten **in de modellen**.
 
 ### 3.10 Stoppen en herstellen
 

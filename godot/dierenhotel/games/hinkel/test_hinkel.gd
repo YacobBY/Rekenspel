@@ -668,17 +668,16 @@ func test_geen_knop_dekt_zijn_voorwerp_in_vier_kaders() -> void:
 					"%s: %s laat de getallenlijn heel" % [str(maat), id])
 		await _shell_af(h)
 
-## The screen rectangle of every stone of the number line, right now.
+## The screen rectangle of every stone of the number line, right now — from the
+## same record the game hands to the world, plate and all.
 func _padvlak(node: Node) -> Array[Rect2]:
 	var uit: Array[Rect2] = []
 	var m: Dictionary = node.proef_pad_maat()
 	var band := int(node.proef_stand()["band"])
 	for i in int(m["stenen"]):
-		var x: float = float(m["eerste"]) + float(m["steek"]) * float(i)
-		var n: int = node.proef_steen_getal(i, band)
-		uit.append(World.vlak_van("hinkel_steen", x, float(m["zSteen"]), 0.0,
-			{"getal": n, "rij": node.proef_rij_van_steen(i, band), "dx": 0,
-				"groot": n >= 0 and n % (5 if band == 3 else 10) == 0}))
+		var st: Dictionary = node.proef_steen_plek(i, band)
+		uit.append(World.vlak_van("hinkel_steen", float(st["x"]), float(st["z"]),
+			0.0, st["params"]))
 	return uit
 
 ## The stones and the staircase are LOOSE DECOR and cost not one button, so the
@@ -729,14 +728,33 @@ func test_de_maatvoering_van_het_pad() -> void:
 	# the target always stands ON a stone, and never on the last one
 	gelijk(int(st["doel"]) % int(st["stap"]), 0, "het doel ligt op een steen")
 	waar(int(st["doel"]) < int(st["E"]), "en nooit op de laatste steen")
-	# band 4/5 numbers the tens, alternating in height; band 3 numbers them all
-	gelijk(node.proef_steen_getal(2, 4), 10, "steen 2 van band 4 draagt 10")
+	# band 4/5 writes out every TWENTIETH stone and keeps every plate low (a plate
+	# on every ten was 18 voxel-px wide on a pitch of 7 and smudged; lifting every
+	# other one only made two rows of numbers of it).  Band 3 numbers them all.
+	gelijk(node.proef_steen_getal(4, 4), 20, "steen 4 van band 4 draagt 20")
+	gelijk(node.proef_steen_getal(2, 4), -1, "steen 2 (10) draagt geen bordje meer")
 	gelijk(node.proef_steen_getal(3, 4), -1, "steen 3 draagt niets")
-	gelijk(node.proef_rij_van_steen(2, 4), 1, "en de tientallen wisselen van hoogte")
-	gelijk(node.proef_rij_van_steen(4, 4), 0, "om en om")
+	gelijk(node.proef_rij_van_steen(4, 4), 0, "elk bordje hangt laag")
+	gelijk(node.proef_rij_van_steen(8, 4), 0, "ook het volgende")
+	# ... while the big, darker tick stones keep counting in tens
+	gelijk(bool(node.proef_steen_plek(2, 4)["params"]["groot"]), true,
+		"steen 2 blijft een dikke tellersteen")
+	gelijk(bool(node.proef_steen_plek(3, 4)["params"]["groot"]), false,
+		"steen 3 is een gewone steen")
 	gelijk(node.proef_steen_getal(7, 3), 7, "in band 3 draagt elke steen zijn getal")
 	gelijk(node.proef_rij_van_steen(10, 3), 1, "alleen 10 gaat een rij hoger")
 	gelijk(node.proef_rij_van_steen(9, 3), 0, "de rest blijft laag")
+	# The plate of the last stone is the widest of its line and the strip stops
+	# three voxels behind that stone.  It gives way to its NEIGHBOUR, not to the
+	# strip: "10" (9 voxels wide on a pitch of 7) steps two voxels out of the
+	# strip, "100" (13 wide on a pitch of 14) has room to come one voxel back in.
+	gelijk(int(node.proef_steen_plek(10, 3)["params"]["dx"]), 2,
+		"het bordje 10 wijkt twee voxels naar rechts")
+	gelijk(int(node.proef_steen_plek(9, 3)["params"]["dx"]), 0,
+		"en 9 blijft precies boven zijn eigen steen staan")
+	gelijk(int(node.proef_steen_plek(20, 4)["params"]["dx"]), -1,
+		"in band 4 schuift 100 één voxel naar binnen")
+	gelijk(int(node.proef_steen_plek(16, 4)["params"]["dx"]), 0, "en 80 staat stil")
 	await _af()
 
 ## The two models are the game's own, namespaced with the game id, and they bake.
@@ -762,3 +780,228 @@ func test_eigen_modellen_bakken() -> void:
 			op_plaat += 1
 	gelijk(op_plaat, 7 * 5, "het bordje van één teken is 7 x 5 voxels dik één plaat")
 	await _af()
+
+# =========================================================== de getallenlijn
+
+## One number plate, exactly as Art bakes it.  The sign is the single slab at
+## z = -3 of `hinkel_steen` (`test_eigen_modellen_bakken` counts its 7 x 5
+## voxels), so baking those voxels on their own gives the picture that hangs
+## behind the stone — outline and all, because that outline is part of what the
+## child sees touch or not touch.
+func _bakplaat(st: Dictionary) -> Dictionary:
+	var deel: Array = []
+	for q in Art.model("hinkel_steen", st["params"]):
+		if int(q["z"]) != -3:
+			continue
+		deel.append(q)
+	if deel.is_empty():
+		return {}
+	var plaat = Art.bak(deel, int(World.schaal()["g"]))
+	if plaat == null:
+		return {}
+	var img: Image = plaat.tex.get_image()
+	var op := Vector2i((World.scherm_doel(float(st["x"]), float(st["z"]), 0.0)
+		+ Vector2(plaat.dx, plaat.dy)).round())
+	var inkt := img.get_used_rect()
+	return {"img": img, "op": op, "ink": Rect2i(op + inkt.position, inkt.size)}
+
+## The plate of stone `i` on the screen spot the world gives that stone, or `{}`
+## when the stone wears none.  `ink` is the rectangle of the plate's own pixels —
+## the baked image carries two transparent pixels of padding on every side, and
+## transparent padding is nothing the child can see.
+func _bordplaat(node: Node, i: int, band: int) -> Dictionary:
+	var st: Dictionary = node.proef_steen_plek(i, band)
+	if int(st["params"]["getal"]) < 0:
+		return {}
+	var heel := _bakplaat(st)
+	if heel.is_empty():
+		return {}
+	return {"n": int(st["params"]["getal"]), "rij": int(st["params"]["rij"]),
+		"heel": heel, "ink": heel["ink"]}
+
+## How many pixels do two baked plates really share?
+func _gedeelde_pixels(a: Dictionary, b: Dictionary) -> int:
+	var ia: Image = a["img"]
+	var ib: Image = b["img"]
+	var pa: Vector2i = a["op"]
+	var pb: Vector2i = b["op"]
+	var x0 := maxi(pa.x, pb.x)
+	var x1 := mini(pa.x + ia.get_width(), pb.x + ib.get_width())
+	var y0 := maxi(pa.y, pb.y)
+	var y1 := mini(pa.y + ia.get_height(), pb.y + ib.get_height())
+	var n := 0
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			if ia.get_pixel(x - pa.x, y - pa.y).a > 0.0 \
+					and ib.get_pixel(x - pb.x, y - pb.y).a > 0.0:
+				n += 1
+	return n
+
+## The line has to READ, in every band and on all four frames (the voxel size g
+## is 2, 3 or 4 there).  Band 3 writes out every stone — a plate of one character
+## is 5 voxels wide on a pitch of 7 — and band 4/5 every twentieth: 0 20 40 60 80
+## 100, four stones = 14 voxels = 28*g px apart against a plate of 18*g px
+## (26*g px for "100").
+##
+## Three demands, all measured on the plates Art really bakes and on the screen
+## spot the world gives their stone:
+##
+##  * the line writes out exactly that series of numbers;
+##  * in band 4/5 every plate hangs at the SAME height.  The tens used to go up
+##    and down in turn, which is what kept a plate of 18*g px standing on a pitch
+##    of 7*g px: two rows of numbers, and the child had to work out which number
+##    belonged to which stone;
+##  * NO TWO PLATES TOUCH — their pixel rectangles keep daylight between them and
+##    the two baked pictures do not share one opaque pixel.  The outline counts
+##    as part of a plate, so this is the strictest reading there is.  What made
+##    two numbers run together was always the LAST plate of the line, the widest
+##    one ("10", "100"), being pulled back inside the strip and into its
+##    neighbour; it now steps out of the strip instead (`_bord_dx`).
+func test_geen_twee_getalbordjes_overlappen() -> void:
+	for kader in KADERS:
+		_op(kader)
+		var node := await _speel(5, 1, 3)
+		if node == null:
+			await _af()
+			continue
+		for band in [3, 4, 5]:
+			var m: Dictionary = node.proef_pad_maat_van(band)
+			var borden: Array[Dictionary] = []
+			var getallen: Array = []
+			for i in int(m["stenen"]):
+				var bp := _bordplaat(node, i, band)
+				if bp.is_empty():
+					continue
+				borden.append(bp)
+				getallen.append(int(bp["n"]))
+			var wacht: Array = range(11) if band == 3 else [0, 20, 40, 60, 80, 100]
+			gelijk(str(getallen), str(wacht),
+				"%s band %d: de lijn schrijft %s" % [str(kader), band, str(wacht)])
+			if band != 3:
+				var rijen := {}
+				for bp in borden:
+					rijen[int(bp["rij"])] = true
+				gelijk(str(rijen.keys()), "[0]",
+					"%s band %d: elk bordje hangt op dezelfde hoogte" % [str(kader), band])
+			for a in borden.size():
+				for b in range(a + 1, borden.size()):
+					var na := int(borden[a]["n"])
+					var nb := int(borden[b]["n"])
+					var ra: Rect2i = borden[a]["ink"]
+					var rb: Rect2i = borden[b]["ink"]
+					# they miss each other as soon as ONE axis has daylight
+					var gat := maxi(
+						maxi(ra.position.x, rb.position.x) - mini(ra.end.x, rb.end.x),
+						maxi(ra.position.y, rb.position.y) - mini(ra.end.y, rb.end.y))
+					waar(gat >= 1, "%s band %d: %d en %d raken elkaar niet (%d px)"
+						% [str(kader), band, na, nb, gat])
+					gelijk(_gedeelde_pixels(borden[a]["heel"], borden[b]["heel"]), 0,
+						"%s band %d: %d en %d delen geen enkele pixel"
+							% [str(kader), band, na, nb])
+		await _af()
+
+## The lowest voxel of the ink colour — where the digits of a plate begin.
+func _laagste_inkt(voxels: Array, kl: Color) -> int:
+	var y := 1 << 20
+	for q in voxels:
+		if Color(q["k"]) == kl:
+			y = mini(y, int(q["y"]))
+	return y
+
+## The target has to be FINDABLE.  The guest ends his turn ON the little
+## staircase, so the number board and its pink flag sit on a mast that comes out
+## above him — above the tallest guest of the hotel (a rabbit, ears and all), on
+## all four frames.
+func test_het_trapje_is_zichtbaar() -> void:
+	# 1. the model: a mast out of the treads, the board a row (8 voxels) above the
+	#    highest plate the path itself carries, the flag over everything
+	_op()
+	var node := await _speel(5, 1, 3)
+	if node == null:
+		await _af()
+		return
+	var kt: Dictionary = node.get_script().get_script_constant_map()
+	var trap_vox: Array = Art.model("hinkel_trap", {"getal": 20, "dx": 0})
+	var pad_vox: Array = Art.model("hinkel_steen",
+		{"getal": 10, "rij": 1, "dx": 0, "groot": true})
+	gelijk(_laagste_inkt(trap_vox, kt["INKT"]), _laagste_inkt(pad_vox, kt["INKT"]) + 8,
+		"het doelgetal hangt een rij (8 voxels) boven een padbordje")
+	var top := -1
+	for q in trap_vox:
+		top = maxi(top, int(q["y"]))
+	gelijk(top, int(kt["TRAP_BORD"]) + 6, "de vlag is het hoogste van het trapje")
+	var roze := true
+	for q in trap_vox:
+		if int(q["y"]) == top and Color(q["k"]) != Color(kt["VLAG"]):
+			roze = false
+	waar(roze, "en de hele bovenste rij is roze")
+	var mast := 0
+	for q in trap_vox:
+		if int(q["x"]) == 0 and int(q["z"]) == 0 \
+				and int(q["y"]) >= 9 and int(q["y"]) < int(kt["TRAP_BORD"]) - 1:
+			mast += 1
+	gelijk(mast, int(kt["TRAP_BORD"]) - 10,
+		"de mast draagt het bord vanaf de bovenste trede")
+	await _af()
+	# 2. on screen: the flag stands above the guest on the staircase, whatever the
+	#    frame and whatever animal it is
+	for kader in KADERS:
+		_op(kader)
+		var n2 := await _speel(5, 1, 3)
+		if n2 == null:
+			await _af()
+			continue
+		var st: Dictionary = n2.proef_stand()
+		var m: Dictionary = n2.proef_pad_maat()
+		var t: Dictionary = n2.proef_trap_plek()
+		var trap := World.vlak_van("hinkel_trap", float(t["x"]), float(t["z"]), 0.0,
+			t["params"])
+		waar(trap.size.y > 0.0, "%s: het trapje bakt" % str(kader))
+		# where `_gelukt` sets the guest down: on the top tread, in front of the mast
+		var id := str(st["gast"])
+		var dx: float = n2.proef_x_op_rij(float(int(st["doel"])), float(m["zTop"])) + 1.0
+		World.zet(id, "tuin", dx, float(m["zTop"]))
+		var dier := World.vlak_van_dier(id)
+		waar(dier.size.y > 0.0 and trap.position.y + 2.0 <= dier.position.y,
+			"%s: de vlag steekt boven de gast uit (%.1f tegen %.1f)"
+				% [str(kader), trap.position.y, dier.position.y])
+		# ... and above every guest the hotel has, rabbit ears included
+		var sch := World.schaal()
+		var g := int(sch["g"])
+		var trap_top: float = World.scherm_doel(float(t["x"]), float(t["z"]), 0.0).y \
+			+ float(Art.plaat("hinkel_trap", g, t["params"]).dy)
+		var voet := World.scherm_doel(dx, float(m["zTop"]), 0.0).y
+		var anker := (Art.DIER_ANKER.x + Art.DIER_ANKER.y) * (Art.S / 2.0) * float(g)
+		for soort in ArtGasten.SOORTEN:
+			var pl = Art.dier(soort, "blij", g)
+			var kop := voet + float(pl.dy) - anker
+			waar(trap_top + float(g) <= kop,
+				"%s: ook boven een %s (%.1f tegen %.1f)"
+					% [str(kader), soort, trap_top, kop])
+		await _af()
+	# 3. and at the end of a real turn, when he dances on the staircase, nothing
+	#    of the game lands on the board: the number of the target is the board's
+	#    own, so the guest's counting chip makes way for it
+	for kader in KADERS:
+		_op(kader)
+		var n3 := await _speel(5, 1, 3)
+		if n3 == null:
+			await _af()
+			continue
+		_maak_af(n3)
+		Hits.plaats()
+		gelijk(str(n3.proef_stand()["fase"]), "af", "%s: de beurt is af" % str(kader))
+		waar(Hits.spot("hk_gast") == null,
+			"%s: de cijferchip maakt plaats voor het doelbord" % str(kader))
+		var t3: Dictionary = n3.proef_trap_plek()
+		var bord := World.vlak_van("hinkel_trap", float(t3["x"]), float(t3["z"]), 0.0,
+			t3["params"])
+		var dbg := Hits.debug()
+		for id in dbg.keys():
+			if not str(id).begins_with("hk_"):
+				continue
+			var r: Rect2 = dbg[id]["rect"]
+			var sn := r.intersection(bord)
+			gelijk(maxf(0.0, sn.size.x) * maxf(0.0, sn.size.y), 0.0,
+				"%s: %s laat het doelbord heel" % [str(kader), id])
+		await _af()

@@ -28,6 +28,16 @@ extends MiniGame
 
 const STENEN_MAX := 21          ## the most stones a band can have
 
+## The height of the target board on the little staircase, in voxels: a full row
+## (8) above the highest plate the path itself carries (`_trap_model`).
+const TRAP_BORD := 18
+
+## Voxels of daylight between two number plates (`_bord_dx`).  One voxel is `2*g`
+## px wide on screen and the outline eats `g / 2,6` px off either side, so at two
+## voxels even the smallest voxel size (g = 2) keeps two real pixels of white
+## between two numbers; at one voxel they would share a pixel column.
+const BORD_LOS := 2.0
+
 const WACHT_S := 0.5            ## how often we look whether the guest arrived
 const HERSTUUR := 24            ## every 24th look (~12 s) we send him again
 const VRIJ_S := 2.0             ## how often the strip is swept clear again
@@ -302,32 +312,52 @@ func _dier_x(n: float) -> float:
 	var band := int(_s.get("band", 3))
 	return _x_op_rij(n, float(_pad_maat_van(band)["zDier"]), band)
 
-## Which stone gets a number?  Band 3: EVERY stone (a one-character plate is
-## 5 voxels = 10 px on a pitch of 7 voxels = 14 px).  Band 4/5: only the tens (a
-## two-character plate is 9 voxels = 18 px on a pitch of 3,5 voxels = 7 px).
+## The number stone `i` stands for.  EVERY stone has one — it is the plate that
+## not every stone wears (`_steen_getal`), while the big, darker tick stones
+## count in fives and tens along the whole line.
+func _steen_waarde(i: int, band: int) -> int:
+	return i * int(Sommen.Hinkel.BAND[Sommen.Hinkel.band_of(band)]["stap"])
+
+## Which stone wears a number PLATE?  Band 3: every stone (a one-character plate
+## is 5 voxels = 10*g px on a pitch of 7 voxels = 14*g px, so they read).
+## Band 4/5: only every twentieth — 0, 20, 40, 60, 80, 100.  The stones lie
+## 3,5 voxels apart there, so a plate on every ten stood 7*g px apart while it is
+## itself 18*g px wide: the tens smudged into one white ribbon.  Every FOURTH
+## stone leaves 4 * 3,5 = 14 voxels = 28*g px between two plates against those
+## 18*g px, and the widest plate of all ("100", 26*g px) still has room.
 ## -1 means "no plate".
 func _steen_getal(i: int, band: int) -> int:
 	var b := Sommen.Hinkel.band_of(band)
-	var n := i * int(Sommen.Hinkel.BAND[b]["stap"])
+	var n := _steen_waarde(i, b)
 	if b == 3:
 		return n
-	return n if n % 10 == 0 else -1
+	return n if i % 4 == 0 else -1
 
 ## How high does the plate hang?  Two plates at the same height must stand clear
-## of each other: in band 3 only "10" is two characters wide and goes one row up,
-## in band 4/5 the tens alternate.
+## of each other: in band 3 only "10" is two characters wide and goes one row up.
+## Band 4/5 keeps every plate low — with one plate per twenty they no longer
+## touch, and a number line reads as a LINE: the old alternating lift made two
+## rows of numbers of it, and the child had to find out which number belonged to
+## which stone.
 func _rij_van_steen(i: int, band: int) -> int:
 	var b := Sommen.Hinkel.band_of(band)
 	var n := _steen_getal(i, b)
-	if n < 0:
+	if n < 0 or b != 3:
 		return 0
-	if b == 3:
-		return 1 if str(n).length() > 1 else 0
-	@warning_ignore("integer_division")
-	return (i / 2) % 2
+	return 1 if str(n).length() > 1 else 0
 
-## Keep a plate inside the zone (its one voxel of border counts).
-func _bord_dx(x: float, txt: String) -> int:
+## Where the plate hangs sideways, in voxels.  It keeps `BORD_LOS` voxels clear
+## of the plate on its LEFT (`links` is that plate's right edge) and it stays
+## inside the strip as long as that costs its neighbour nothing.
+##
+## The widest number of a line always stands on the LAST stone — "10" is 9 voxels
+## wide against a pitch of 7, "100" is 13 against a pitch of 14 — and the strip
+## ends three voxels behind that stone.  Pulling such a plate back inside the
+## strip is exactly what pushed it into its neighbour: "9" and "10", and "80" and
+## "100", ran together into one white ribbon.  The garden itself runs on to 130
+## and the plates are loose decor without a button, so a plate rather hangs over
+## the end of the strip than over the number beside it.
+func _bord_dx(x: float, txt: String, links := -INF) -> int:
 	var z := _zone()
 	var hw := float(_getal_breed(txt)) / 2.0 + 1.0
 	var dx := 0.0
@@ -335,7 +365,7 @@ func _bord_dx(x: float, txt: String) -> int:
 		dx = float(z["x0"]) - (x - hw)
 	if x + hw > float(z["x1"]):
 		dx = float(z["x1"]) - (x + hw)
-	return JsGetal.rond(dx)
+	return JsGetal.rond(maxf(dx, links + BORD_LOS - (x - hw)))
 
 # =================================================================== de modellen
 
@@ -384,9 +414,18 @@ func _steen_model(p: Dictionary) -> Array:
 	return v
 
 ## `hinkel_trap` — three treads climbing with the path (towards +x), each with a
-## light top and a dark riser.  The TARGET NUMBER sits in this model and not in
-## a loose chip: two chips (the guest's number and the staircase's) landed
-## exactly on top of each other at the end of a turn.
+## light top and a dark riser, and a MAST above them carrying the target number
+## and its pink flag.  The TARGET NUMBER sits in this model and not in a loose
+## chip: two chips (the guest's number and the staircase's) landed exactly on top
+## of each other at the end of a turn.
+##
+## The mast is what makes the target findable.  The board used to hang two voxels
+## over the top tread (y 9..15), and at the end of a turn the guest stands ON
+## that tread: measured from its own floor point a rabbit reaches 34 voxel-px and
+## it stands five voxel-px lower on screen, so it swallowed the number AND its
+## flag — the very thing the child is aiming at.  The board on `TRAP_BORD`
+## (y 17..23) and the flag on y 24 clear the tallest guest by four voxel-px at
+## every voxel size, and the pole underneath keeps it standing on its stone.
 func _trap_model(p: Dictionary) -> Array:
 	var v: Array = []
 	for j in 3:
@@ -400,35 +439,74 @@ func _trap_model(p: Dictionary) -> Array:
 		var dx := float(p.get("dx", 0))
 		var w := _getal_breed(txt)
 		var x0 := JsGetal.rond(dx - float(w - 1) / 2.0)
-		_bak_getal(v, txt, dx, 10, 0)
-		# a pink cap over the plate: this is the target of the turn
-		ArtVorm.verf(v, x0 - 1, x0 + w, 15, 15, 0, 0, VLAG)
-		ArtVorm.bx(v, x0 - 1, 16, 0, w + 2, 1, 1, VLAG)
+		# the mast: out of the treads up to just under the board.  Its lower half
+		# stands INSIDE the staircase, where every face of it is culled away.
+		ArtVorm.bx(v, JsGetal.rond(dx), 0, 0, 1, TRAP_BORD, 1, HOUT_D)
+		_bak_getal(v, txt, dx, TRAP_BORD, 0)
+		# a pink cap over the plate and the flag on top of the mast: this is the
+		# target of the turn
+		ArtVorm.verf(v, x0 - 1, x0 + w, TRAP_BORD + 5, TRAP_BORD + 5, 0, 0, VLAG)
+		ArtVorm.bx(v, x0 - 1, TRAP_BORD + 6, 0, w + 2, 1, 1, VLAG)
 	return v
 
 # =================================================================== het decor
 
+## How many stones lie between two plates: every stone carries one in band 3,
+## every fourth in band 4/5 (`_steen_getal`).
+func _borden_om(band: int) -> int:
+	return 1 if Sommen.Hinkel.band_of(band) == 3 else 4
+
+## The right edge of the plate of stone `i`, in voxels, `-INF` if there is no
+## such stone.  It reads the stone to ITS left in turn, so a plate that has to
+## make way hands that on down the line.
+func _bord_rechts(i: int, band: int) -> float:
+	if i < 0:
+		return -INF
+	var st := _steen_plek(i, band)
+	var n := int(st["params"]["getal"])
+	if n < 0:
+		return -INF
+	return float(st["x"]) + float(st["params"]["dx"]) \
+		+ float(_getal_breed(str(n))) / 2.0 + 1.0
+
+## Where stone `i` stands and what it carries — one record, so the world and the
+## test read exactly the same stone.
+func _steen_plek(i: int, band: int) -> Dictionary:
+	var m := _pad_maat_van(band)
+	var b := Sommen.Hinkel.band_of(band)
+	var x: float = float(m["eerste"]) + float(m["steek"]) * float(i)
+	var n := _steen_getal(i, b)
+	return {"x": x, "z": float(m["zSteen"]),
+		"params": {"getal": n, "rij": _rij_van_steen(i, b),
+			"dx": 0 if n < 0 else _bord_dx(x, str(n),
+				_bord_rechts(i - _borden_om(b), b)),
+			# the big, darker tick stones keep counting in fives and tens, also
+			# where the line only writes out every twentieth
+			"groot": _steen_waarde(i, b) % (5 if b == 3 else 10) == 0}}
+
+## And where the little staircase with the target number stands.
+func _trap_plek() -> Dictionary:
+	var m := _pad_maat()
+	var band := int(_s.get("band", 3))
+	var doel := int(_s.get("doel", 0))
+	var x := _x_op_rij(float(doel), float(m["zTrap"]), band)
+	return {"x": x, "z": float(m["zTrap"]),
+		"params": {"getal": doel, "dx": _bord_dx(x, str(doel))}}
+
 func _zet_decor() -> void:
 	var m := _pad_maat()
 	var band := int(_s["band"])
-	var groot := 5 if band == 3 else 10
 	for i in int(m["stenen"]):
-		var x: float = float(m["eerste"]) + float(m["steek"]) * float(i)
-		var n := _steen_getal(i, band)
+		var st := _steen_plek(i, band)
 		ctx.wereld.decor("tuin", {
 			"id": "hk_steen%d" % i, "model": "hinkel_steen",
-			"x": x, "z": float(m["zSteen"]),
-			"params": {"getal": n, "rij": _rij_van_steen(i, band),
-				"dx": 0 if n < 0 else _bord_dx(x, str(n)),
-				"groot": n >= 0 and n % groot == 0}})
+			"x": float(st["x"]), "z": float(st["z"]), "params": st["params"]})
 	# a band with fewer stones never leaves a few of the previous one standing
 	for i in range(int(m["stenen"]), STENEN_MAX):
 		ctx.wereld.decor_weg("tuin", "hk_steen%d" % i)
-	var doel := int(_s["doel"])
-	var xt := _x_op_rij(float(doel), float(m["zTrap"]), band)
+	var t := _trap_plek()
 	ctx.wereld.decor("tuin", {"id": "hk_trap", "model": "hinkel_trap",
-		"x": xt, "z": float(m["zTrap"]),
-		"params": {"getal": doel, "dx": _bord_dx(xt, str(doel))}})
+		"x": float(t["x"]), "z": float(t["z"]), "params": t["params"]})
 
 # =================================================================== de gast halen
 
@@ -718,6 +796,12 @@ func _teken_cijfers() -> void:
 	var g := _gast()
 	if g.is_empty():
 		return
+	# At the end he stands ON the staircase and the target board rises right
+	# behind his head: a chip there lands on the very number he was aiming at.
+	# The board says it (that is why `hinkel_trap` carries the number at all), the
+	# card says it and the star bubble says it — the chip has counted its hops.
+	if str(_s["fase"]) == "af":
+		return
 	if str(_s["fase"]) == "hop":
 		var t := int(_s["tel"])
 		_zet_gast_getal(t, "sprong %d" % t)
@@ -972,7 +1056,6 @@ func _gelukt() -> void:
 		"tekst": "op de trap", "klas": "goed", "hoog": 52.0, "prio": 12,
 		"x": d.x if d != null else 0.0, "z": d.z if d != null else 0.0,
 		"volg": _volg_dier(id, 52.0)})
-	_zet_gast_getal(doel, "op %d" % doel)
 
 func _sluit_straks() -> void:
 	if not await na(EIND_S):
@@ -1012,3 +1095,15 @@ func proef_rij_van_steen(i: int, band: int) -> int:
 
 func proef_zinnen() -> Dictionary:
 	return _zinnen()
+
+func proef_x_op_rij(n: float, z0: float) -> float:
+	return _x_op_rij(n, z0, int(_s.get("band", 3)))
+
+func proef_pad_maat_van(band: int) -> Dictionary:
+	return _pad_maat_van(band)
+
+func proef_steen_plek(i: int, band: int) -> Dictionary:
+	return _steen_plek(i, band)
+
+func proef_trap_plek() -> Dictionary:
+	return _trap_plek()
