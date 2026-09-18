@@ -291,8 +291,19 @@ func test_hele_ronde_sluit_zichzelf() -> void:
 
 # ------------------------------------------------------- 4. de hulpladder
 
+## Eén stap aan de wijzers draaien, maar nooit tot óp de wektijd: dan blijft de
+## volgende ✅ een misser.  Een uur verder kan toevallig het doel zijn, vandaar
+## de lus (hooguit één rondje van twaalf uur).
+func _draai_naast(spel: MiniGame, wat: String) -> void:
+	for i in 13:
+		waar(_tik("uur"), wat)
+		if not spel.goed():
+			return
+	fout("%s: de klok kwam niet naast de wektijd" % wat)
+
 ## Fout is nooit straffend: geen rood, geen buzzer, de wijzers blijven staan en
-## de spookwijzers komen al bij de TWEEDE misser (HOTEL.md §5, F5).
+## de spookwijzers komen al bij de TWEEDE misser (HOTEL.md §5, F5).  Een misser
+## telt pas na een echte poging, dus elke ✅ hieronder komt ná een draai (N2).
 func test_misser_en_hulpladder() -> void:
 	_op()
 	_gasten(2, 1, 3)
@@ -302,9 +313,10 @@ func test_misser_en_hulpladder() -> void:
 		_af()
 		return
 	var s: Dictionary = spel.stand()
+	waar(not spel.goed(), "de klok staat nog niet goed")
+	_draai_naast(spel, "eerst aan de wijzers draaien")
 	var u_voor := int(s["u"])
 	var m_voor := int(s["m"])
-	waar(not spel.goed(), "de klok staat nog niet goed")
 	waar(_tik("klaar"), "eerste misser")
 	gelijk(int(s["missers"]), 1, "één misser geteld")
 	gelijk(str(s["stap"]), "mis", "de kaart staat op mis")
@@ -316,8 +328,10 @@ func test_misser_en_hulpladder() -> void:
 		"⏰ De klok staat op %s" % Sommen.Wekker.tijd_woord(u_voor, m_voor),
 		"de kaart zegt wat de klok NU zegt")
 	waar(not spel.klok_params().has("spookU"), "nog geen spookwijzers")
+	_draai_naast(spel, "nog een keer draaien")
 	waar(_tik("klaar"), "tweede misser")
 	gelijk(int(s["missers"]), 2, "twee missers geteld")
+	gelijk(int(s["gekeurd"]), int(s["draaien"]), "de keuring staat op deze draai")
 	gelijk(_kaart_tekst("Kolom/Hulp"), "👻 de spookwijzers wijzen mee", "hulp, trede 2")
 	gelijk(int(spel.klok_params().get("spookU", 0)), int(s["doelU"]),
 		"de spookuurwijzer wijst de wektijd")
@@ -328,6 +342,76 @@ func test_misser_en_hulpladder() -> void:
 	waar(_tik("uur"), "verder draaien")
 	gelijk(str(s["stap"]), "zet", "de gewone zin is terug")
 	waar(spel.klok_params().has("spookU"), "de spookwijzers blijven wijzen")
+	_af()
+
+## N2 — twee keer ✅ tikken zonder aan de wijzers te draaien is geen poging: het
+## telt geen misser en verklapt dus ook de wijzerstand niet (R3).  Zo was het
+## rekenen te omzeilen: twee tikken en de wektijd stond bleek op de plaat.
+func test_klaar_zonder_draaien_telt_geen_misser() -> void:
+	_op()
+	_gasten(2, 1, 3)
+	waar(Games.start(ID), "het spel start")
+	var spel := _spel()
+	if spel == null:
+		_af()
+		return
+	var s: Dictionary = spel.stand()
+	var u_voor := int(s["u"])
+	var m_voor := int(s["m"])
+	waar(not spel.goed(), "de klok staat nog niet goed")
+	for keer in 2:
+		waar(_tik("klaar"), "✅ zonder te draaien (%d)" % (keer + 1))
+		gelijk(int(s["missers"]), 0, "tik %d telt geen misser" % (keer + 1))
+		gelijk(str(s["stap"]), "zet", "de zetkaart blijft staan")
+		gelijk(_kaart_tekst("Kolom/Hulp"), "💛 draai eerst aan de wijzers",
+			"de kaart zegt wat er wél te doen is")
+		waar(not spel.klok_params().has("spookU"), "geen spookuurwijzer")
+		waar(not spel.klok_params().has("spookM"), "geen spookminuutwijzer")
+	gelijk(int(s["u"]), u_voor, "de wijzers staan nog waar ze stonden (uur)")
+	gelijk(int(s["m"]), m_voor, "de wijzers staan nog waar ze stonden (minuut)")
+	gelijk(_kaart_tekst("Kolom/Rij/Som"),
+		"nu: " + Sommen.Wekker.tijd_woord(u_voor, m_voor),
+		"en de sombalk toont gewoon de klokstand")
+	gelijk(int(State.s["sterren"]), 0, "er valt geen ster")
+	# draaien is wél een poging: dán telt ✅ weer als misser
+	_draai_naast(spel, "aan de wijzers draaien")
+	waar(_tik("klaar"), "✅ na een echte draai")
+	gelijk(int(s["missers"]), 1, "nu telt de misser wel")
+	gelijk(_kaart_tekst("Kolom/Hulp"), "💛 draai nog wat verder", "hulp, trede 1")
+	_af()
+
+## N2 — de spookwijzers horen bij twee ECHTE pogingen: twee keer draaien én twee
+## keer naast de wektijd zitten.  Tikken tussendoor brengt ze niet dichterbij.
+func test_spookwijzers_pas_na_twee_echte_pogingen() -> void:
+	_op()
+	_gasten(2, 1, 3)
+	waar(Games.start(ID), "het spel start")
+	var spel := _spel()
+	if spel == null:
+		_af()
+		return
+	var s: Dictionary = spel.stand()
+	_draai_naast(spel, "de eerste draai")
+	waar(_tik("klaar"), "de eerste echte poging")
+	gelijk(int(s["missers"]), 1, "één misser")
+	waar(not spel.klok_params().has("spookU"), "nog geen spookwijzers")
+	# drie keer ✅ zonder nieuwe draai: geen van drieën is een tweede poging
+	for keer in 3:
+		waar(_tik("klaar"), "✅ zonder nieuwe draai (%d)" % (keer + 1))
+		gelijk(int(s["missers"]), 1, "nog steeds één misser")
+		gelijk(_kaart_tekst("Kolom/Hulp"), "💛 draai eerst aan de wijzers",
+			"de hulpregel vraagt om draaien")
+		waar(not spel.klok_params().has("spookU"), "en nog steeds geen spookwijzers")
+	# pas na een tweede echte poging wijzen ze mee
+	_draai_naast(spel, "de tweede draai")
+	waar(int(s["draaien"]) >= 2, "er is twee keer gedraaid")
+	waar(_tik("klaar"), "de tweede echte poging")
+	gelijk(int(s["missers"]), 2, "twee missers")
+	gelijk(int(spel.klok_params().get("spookU", 0)), int(s["doelU"]),
+		"nu wijst de spookuurwijzer de wektijd")
+	gelijk(int(spel.klok_params().get("spookM", -1)), int(s["doelM"]),
+		"en de spookminuutwijzer ook")
+	gelijk(int(State.s["sterren"]), 0, "en het kostte geen ster")
 	_af()
 
 ## De tijdsduurvraag van band 5: fout geeft de telladder, goed bouwt de kaart
@@ -361,8 +445,16 @@ func test_tijdsduurvraag() -> void:
 		range(0, int(s["duur"]) + 1).map(func(i: int) -> String:
 			return str(Sommen.Wekker.u12(int(s["u"]) + i)))))
 	gelijk(_kaart_tekst("Kolom/Hulp"), ladder, "de telladder telt uur voor uur mee")
+	# De zijdeur van N2: twee missers op de uurknoppen zijn geen twee pogingen
+	# aan de wijzers, dus de spookwijzers blijven weg — ook op de zetkaart.
+	waar(_tik("u%d" % fout_u), "en nog een keer naast")
+	gelijk(int(s["missers"]), 2, "twee missers")
+	waar(not spel.klok_params().has("spookU"),
+		"de tijdsduurvraag opent de spookwijzers niet")
 	waar(_tik("u%d" % int(s["doelU"])), "het goede uur")
 	gelijk(str(s["stap"]), "zet", "nu mag de klok gezet worden")
+	waar(not spel.klok_params().has("spookU"),
+		"en op de zetkaart staan ze er nog steeds niet")
 	waar(_knop("uur") != null and _knop("vijf") != null and _knop("klaar") != null,
 		"en de draaiknoppen van band 5 staan er")
 	_af()
@@ -473,11 +565,17 @@ func test_herstel_uit_ctx_data() -> void:
 			World.slaap(str(g["id"]), str(g["kamer"]), str(g["bed"]))
 	waar(Games.start(ID), "het spel start opnieuw")
 	var na_herlaad: Dictionary = _spel().stand()
-	for sleutel in ["dag", "N", "band", "idx", "doelU", "doelM", "u", "m", "missers"]:
+	for sleutel in ["dag", "N", "band", "idx", "doelU", "doelM", "u", "m", "missers",
+			"draaien", "gekeurd"]:
 		gelijk(int(na_herlaad[sleutel]), int(voor[sleutel]),
 			"%s overleeft het herlaad" % sleutel)
 	gelijk(str(na_herlaad["gast"]), str(voor["gast"]), "dezelfde gast")
 	gelijk(str(na_herlaad["stap"]), "mis", "en dezelfde stap")
+	# JSON maakt van elk getal een float; de tellers van N2 worden bij het lezen
+	# teruggezet, anders vergelijkt `klaar_tik` straks 1.0 met 1.
+	for sleutel in ["draaien", "gekeurd"]:
+		gelijk(typeof(na_herlaad[sleutel]), TYPE_INT,
+			"%s komt als heel getal terug" % sleutel)
 	_af()
 
 ## Een andere dag hoort een nieuwe beurt te geven, geen oude stand.
@@ -594,6 +692,11 @@ func test_kindtekst_letterlijk_en_binnen_het_budget() -> void:
 	# de vaste zinnen, letterlijk
 	var scr: GDScript = load("res://games/wekker/spel.gd")
 	var k: Dictionary = scr.get_script_constant_map()
+	# de hulpladder staat niet op een kaartregel, maar houdt hetzelfde budget
+	for h in ["T_HULP0", "T_HULP1", "T_HULP2"]:
+		var hulp := str(k[h])
+		waar(hulp.split(" ", false).size() <= 8 and hulp.length() <= 40,
+			'de hulpregel "%s" past in 8 woorden en 40 tekens' % hulp)
 	gelijk(k["T_NAAM"], "Wekkerdienst", "naam")
 	gelijk(k["T_LABEL"], "Wekker", "label")
 	gelijk(k["T_TAAK"], "Wekker zetten", "prikbord")
@@ -603,6 +706,7 @@ func test_kindtekst_letterlijk_en_binnen_het_budget() -> void:
 	gelijk(k["T_DUUR2"], "Hoe laat is hij wakker?", "tijdsduurvraag")
 	gelijk(k["T_STROOK"], "draai de klok", "strooktitel")
 	gelijk(k["T_STROOK_DUUR"], "hoe laat wordt hij wakker?", "strooktitel duur")
+	gelijk(k["T_HULP0"], "💛 draai eerst aan de wijzers", "hulp 0")
 	gelijk(k["T_HULP1"], "💛 draai nog wat verder", "hulp 1")
 	gelijk(k["T_HULP2"], "👻 de spookwijzers wijzen mee", "hulp 2")
 	gelijk(k["T_SLAAPT_NOG"], "slaapt nog", "bij de gast, slapend")

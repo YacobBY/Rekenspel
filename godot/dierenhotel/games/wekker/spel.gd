@@ -66,6 +66,7 @@ const T_ZET_MORGEN := "Zet de klok voor morgen"
 const T_DUUR2 := "Hoe laat is hij wakker?"
 const T_STROOK := "draai de klok"
 const T_STROOK_DUUR := "hoe laat wordt hij wakker?"
+const T_HULP0 := "💛 draai eerst aan de wijzers"
 const T_HULP1 := "💛 draai nog wat verder"
 const T_HULP2 := "👻 de spookwijzers wijzen mee"
 const T_SLAAPT_NOG := "slaapt nog"
@@ -309,6 +310,11 @@ func _nieuwe_beurt(n: int, band: int, dag: int, idx: int, gast: String,
 	b["gast"] = gast
 	b["slaapt"] = dutje
 	b["missers"] = 0
+	# `draaien` telt elke draai aan de wijzers, `gekeurd` de stand van die teller
+	# bij de vorige ✅.  Zijn ze gelijk, dan is er sinds de vorige keuring niets
+	# veranderd en is een tik op ✅ geen nieuwe poging (R3).
+	b["draaien"] = 0
+	b["gekeurd"] = 0
 	b["ster"] = 0
 	b["af"] = 0
 	b["hulp"] = ""
@@ -322,7 +328,7 @@ func _lees_stand(v) -> Dictionary:
 		return {}
 	var uit: Dictionary = {}
 	for k in ["dag", "N", "band", "idx", "doelU", "doelM", "u", "m", "duur",
-			"missers", "ster", "af"]:
+			"missers", "draaien", "gekeurd", "ster", "af"]:
 		uit[k] = int(float(v.get(k, 0)))
 	uit["stap"] = str(v.get("stap", "zet"))
 	uit["gast"] = str(v.get("gast", ""))
@@ -432,9 +438,14 @@ static func _klok_model(p: Dictionary) -> Array:
 func klok_params() -> Dictionary:
 	var p := {"uur": int(_s.get("u", 12)), "min": int(_s.get("m", 0))}
 	# Hulpladder: vanaf de TWEEDE misser wijzen bleke spookwijzers mee, zowel
-	# op de gewone zetkaart als op de kaart na een misser (HOTEL.md §5).
+	# op de gewone zetkaart als op de kaart na een misser (HOTEL.md §5).  Ze
+	# horen bij twee ECHTE pogingen: er moet ook twee keer aan de wijzers
+	# gedraaid zijn, anders verklapt tikken alleen al de wektijd (R3).  Dat
+	# sluit ook de zijdeur van de tijdsduurvraag, die missers optelt zonder dat
+	# er ooit een wijzer bewoog.
 	var stap := str(_s.get("stap", ""))
-	if int(_s.get("missers", 0)) >= 2 and (stap == "zet" or stap == "mis"):
+	if int(_s.get("missers", 0)) >= 2 and int(_s.get("draaien", 0)) >= 2 \
+			and (stap == "zet" or stap == "mis"):
 		p["spookU"] = int(_s.get("doelU", 12))
 		p["spookM"] = int(_s.get("doelM", 0))
 	return p
@@ -657,7 +668,9 @@ func _meld() -> void:
 		" idx=", int(_s.get("idx", 0)), " stap=", str(_s.get("stap", "")),
 		" u=", int(_s.get("u", 0)), " m=", int(_s.get("m", 0)),
 		" doelU=", int(_s.get("doelU", 0)), " doelM=", int(_s.get("doelM", 0)),
-		" missers=", int(_s.get("missers", 0)), " goed=", goed(),
+		" missers=", int(_s.get("missers", 0)),
+		" draaien=", int(_s.get("draaien", 0)),
+		" spook=", klok_params().has("spookU"), " goed=", goed(),
 		" af=", int(_s.get("af", 0)), " sterren=", int(State.s["sterren"]))
 	var st := Hits.spot("wk_som_keuzes")
 	if st != null and is_instance_valid(st.knoop):
@@ -685,6 +698,7 @@ func draai(stap_min: int) -> Dictionary:
 		Sommen.Wekker.in_min(int(_s["u"]), int(_s["m"])) + stap_min)
 	_s["u"] = int(t["u"])
 	_s["m"] = int(t["m"])
+	_s["draaien"] = int(_s.get("draaien", 0)) + 1
 	if str(_s.get("stap", "")) == "mis":
 		_s["stap"] = "zet"        # verder draaien: de gewone zin terug
 	# Elke draai geeft een zachte gong; `Snd.klok()` remt zichzelf af op
@@ -700,10 +714,23 @@ func goed() -> bool:
 
 ## ✅ Klaar.  Fout is nooit straffend: een zacht geluid en een hulpje, de
 ## wijzers blijven staan zodat je verder kunt draaien (F5).
+##
+## Een tik op ✅ telt alleen als poging wanneer er sinds de vorige keuring aan
+## de wijzers is gedraaid.  Anders was twee keer tikken zonder ook maar iets te
+## doen genoeg om de spookwijzers op de wektijd te zetten: het antwoord voor
+## niets (R3).  Zonder draai komt er dus geen misser bij, alleen een zacht
+## geluid en de regel die zegt wat er wél te doen is.
 func klaar_tik() -> Variant:
 	if not actief or _af_nu() or str(_s.get("stap", "")) == "duur":
 		return null
 	if not goed():
+		if int(_s.get("draaien", 0)) == int(_s.get("gekeurd", 0)):
+			_s["hulp"] = T_HULP0
+			ctx.snd.zacht()
+			teken(false, T_SLAAPT_NOG if bool(_s.get("slaapt", false)) else T_NOG_NIET)
+			_bewaar()
+			return false
+		_s["gekeurd"] = int(_s.get("draaien", 0))
 		_s["missers"] = int(_s.get("missers", 0)) + 1
 		_s["stap"] = "mis"
 		_s["hulp"] = T_HULP2 if int(_s["missers"]) >= 2 else T_HULP1
