@@ -1,6 +1,7 @@
 extends Proef
-## The eight rooms: sizes, boxes, the door graph, the floor rules, the derived
-## grids and the furniture API — world.md §1.
+## The rooms — eight today, `Rooms.lijst()` is what counts them: sizes, boxes,
+## the door graph, the floor rules, the derived grids and the furniture API —
+## world.md §1.
 ##
 ## Every number here is recomputed from the spec, never copied out of the
 ## implementation: the room boxes of §1.1, the door points of §1.2, the
@@ -11,11 +12,53 @@ extends Proef
 const ORDE := ["receptie", "gang", "kamer1", "kamer2", "keuken", "tuin",
 	"zwembad", "wasserij"]
 
+## The five floors `ArtVloer.kleur()` knows how to draw (`art/vloer.gd:18`);
+## any other word gives a room the plank floor by accident.
+const VLOEREN := ["hout", "tegel", "zacht", "loper", "gras"]
+## Eight wander places is the rule for a room a guest strolls through.  Two
+## rooms cannot have eight and never will: the corridor is 36 voxels deep and
+## the pool room keeps every walk out of the water (world.md §1.3/§1.5), so
+## their floor is the number they really have, measured.
+const PLEKKEN_MIN := {"gang": 4, "zwembad": 5}
+
 func test_acht_kamers_in_de_juiste_volgorde() -> void:
-	gelijk(Rooms.lijst().size(), 8, "acht kamers")
+	gelijk(Rooms.lijst().size(), ORDE.size(), "evenveel kamers als ORDE")
 	for i in ORDE.size():
 		gelijk(Rooms.lijst()[i], ORDE[i], "kamer %d" % i)
 	waar(not Rooms.bestaat("proefkamer"), "de proefkamer is weg")
+
+## The checklist a room has to pass — written for the room that does not exist
+## yet.  It counts nothing: it walks `Rooms.lijst()`, so a room added in a later
+## batch is held to it the moment it is there, and a room that arrives without
+## its cell on the map sheet, without a door, without a floor the world can draw
+## or without a model in the baker fails HERE and not in the browser.
+func test_elke_kamer_is_compleet() -> void:
+	for id in Rooms.lijst():
+		var r := Rooms.get_kamer(id)
+		waar(r != null, id + " bestaat")
+		if r == null:
+			continue
+		waar(not r.naam.strip_edges().is_empty(), id + " heeft een naam")
+		waar(not r.icoon.strip_edges().is_empty(), id + " heeft een pictogram")
+		waar(VLOEREN.has(r.vloer), "%s heeft een bekende vloer (%s)" % [id, r.vloer])
+		waar(UiPlattegrond.KAART.has(id), id + " heeft een vak op de plattegrond")
+		waar(r.deuren.size() >= 1, id + " heeft minstens één deur")
+		for dr in r.deuren:
+			var naar := String(dr["naar"])
+			waar(Rooms.bestaat(naar), "%s: de deur naar %s gaat ergens heen" % [id, naar])
+			waar(not Rooms.deur(id, naar).is_empty(),
+				"%s: de deur naar %s heeft een deurpunt" % [id, naar])
+		waar(Rooms.pad("receptie", id).size() > 0, "je loopt van de receptie naar " + id)
+		var nodig: int = PLEKKEN_MIN.get(id, 8)
+		waar(r.plekken.size() >= nodig,
+			"%s heeft %d loopplekken, minstens %d nodig" % [id, r.plekken.size(), nodig])
+		for stuk in r.decor:
+			waar(Art.heeft_model(String(stuk["n"])),
+				"%s: Art kent het decormodel %s" % [id, str(stuk["n"])])
+		for sid in r.slots:
+			var model := String(r.slots[sid].get("model", ""))
+			waar(model != "" and Art.heeft_model(model),
+				"%s: Art kent het slotmodel %s van %s" % [id, model, sid])
 
 func test_maten_en_vloeren() -> void:
 	var verwacht := {

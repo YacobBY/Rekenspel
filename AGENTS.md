@@ -32,8 +32,9 @@ procedures; this file contains the facts.
 A tablet maths game for Dutch children of 6–9 (groep 3–5): a voxel **animal
 hotel** in which every number lives in the world (biscuits in a bag, beds in a
 room, coins on a counter, hands on a clock). No quiz screens, no punishment, no
-reading required. Ten minigames, eight rooms, a day cycle with guests, wishes,
-check-in and a bill at checkout. Exported to the web (GitHub Pages, PWA).
+reading required. Ten minigames, the rooms as data (`Rooms.lijst()`, eight of
+them today), a day cycle with guests, wishes, check-in and a bill at checkout.
+Exported to the web (GitHub Pages, PWA).
 
 The design contract the code must keep serving (details: `ANALYSIS.md` §1,
 `HOTEL.md`):
@@ -130,7 +131,7 @@ ones a game or a feature normally needs.
 | autoload | owns | key API |
 |---|---|---|
 | `Art` | voxel models, baking to plates (`Plaat`), golden-image cache | `registreer_model(naam, fn)` (namespace with your game id), `model`, `plaat`, `bak`, `dier(kind, pose, g)` |
-| `Rooms` | the eight rooms as data (`Kamer`), doors, paths, furniture slots | `get_kamer(id)`, `plek(kamer, fx, fz)`, `deur`, `pad(van, naar)`, `om_het_water`, `meubel_zet/meubel_weg/meubels`, `slots/slot`, `vrij_vak` |
+| `Rooms` | the rooms as data (`Kamer`, `lijst()` counts them), doors, paths, furniture slots | `get_kamer(id)`, `plek(kamer, fx, fz)`, `deur`, `pad(van, naar)`, `om_het_water`, `meubel_zet/meubel_weg/meubels`, `slots/slot`, `vrij_vak` |
 | `Hits` | the hotspot layer: buttons/drop targets on world objects, band grid, 0 % overlap | `maak(o)`, `weg(id)`, `wis_eigenaar(door)`, `leen/geef_terug`, `spot(id)`, `dekking(id)`, `lijst()`; signal `hotspot_getikt` |
 | `World` | camera/room in view, guests (`Dier`), movement, decor, particles | `naar(kamer)`, `kamer_nu()`, `dier(id)`, `dieren(kamer)`, `await stappen(id, punten)`, `await ga(id, x, z)`, `reis(id, kamer)`, `slaap`, `pose`, `mood`, `decor(kamer, o)`, `decor_weg`, `zet_bak`, `spetter(kamer, x, z, n, kl)`, `scherm(x, z, y)`; signals `kamer_veranderd`, `getekend`, `reis_gestart` |
 | `Snd` | 18 procedural sounds + per-room ambience loops | `tik plop ja hoera bel deur kar munt ster plons au klok hup tover dag brief terug zacht`, `sfeer(kamer)`, `dempt()` |

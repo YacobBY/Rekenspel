@@ -7,7 +7,8 @@ extends ScrollContainer
 ##
 ## It has three shapes (architecture.md §4.5):
 ##   * a wrapping grid, the default: every chip visible, as many columns as fit;
-##   * a three-column rail beside the frame in the compact landscape shell;
+##   * a three-column rail beside the frame in the compact landscape shell, which
+##     scrolls up and down once the hotel has more rooms than it can show (R1);
 ##   * ONE SCROLLING ROW on a phone in portrait (I1 finding 4) — nine wrapped
 ##     chips cost 152 units of a 740 unit screen there, which pushed the world
 ##     frame down to 54 %.  The row keeps the whole chip (picture AND word,
@@ -30,6 +31,7 @@ const VULLING := 6            ## the chip's own padding, both sides
 var _chips: Dictionary = {}   ## kamer id -> Button ("" = the map chip)
 var _rail := false
 var _strook := false
+var _rolt := false            ## the rail ran out of height and scrolls (R1)
 var _maten: Dictionary = {}
 var _raster: GridContainer = null
 
@@ -47,12 +49,14 @@ func bouw(mt: Dictionary) -> void:
 	_zet_rollen(false)
 	vul()
 
-## The bar only scrolls in the phone row; everywhere else it is a plain grid
-## that reports its full size, so the shell can give it exactly that.
-func _zet_rollen(strook: bool) -> void:
+## The bar scrolls in the phone row, and in the rail when the hotel has grown
+## more rooms than the rail can show (`_meet_rail`); everywhere else it is a
+## plain grid that reports its full size, so the shell can give it exactly that.
+func _zet_rollen(strook: bool, rol_v := false) -> void:
 	horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER if strook \
 		else ScrollContainer.SCROLL_MODE_DISABLED
-	vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER if rol_v \
+		else ScrollContainer.SCROLL_MODE_DISABLED
 
 ## (Re)create the chips.  Called once at boot and again when `Rooms` changes.
 func vul() -> void:
@@ -142,28 +146,37 @@ func ververs() -> void:
 		b.set_pressed_no_signal(id != "" and id == World.kamer_nu())
 	_toon_huidige()
 
-## In the scrolling row the room you are in must be on screen — and only then is
+## In a scrolling bar the room you are in must be on screen — and only then is
 ## anything scrolled, so the bar never jumps back under the child's finger.
+## The row scrolls sideways, the overflowing rail up and down.
 func _toon_huidige() -> void:
-	if not _strook or size.x <= 0.0:
+	if (not _strook and not _rolt) or size.x <= 0.0:
 		return
 	var b: Button = _chips.get(World.kamer_nu())
 	if b == null or not is_instance_valid(b):
 		return
-	var links := b.position.x - scroll_horizontal
-	if links < 0.0 or links + b.size.x > size.x:
-		ensure_control_visible(b)
+	if _strook:
+		var links := b.position.x - scroll_horizontal
+		if links < 0.0 or links + b.size.x > size.x:
+			ensure_control_visible(b)
+	else:
+		var boven := b.position.y - scroll_vertical
+		if boven < 0.0 or boven + b.size.y > size.y:
+			ensure_control_visible(b)
 
 ## Lay the chips out for the space they got.  `rail` is the compact landscape
 ## shell: three fixed columns of 48 units beside the frame (§16.4), the word
 ## wrapping whole under the picture.  `hoogte` is what the rail may use: it
 ## keeps its width and shrinks its PICTURE (and, at the last step, its word to
-## the 12 px floor) until all nine chips fit — the word is never cut.
+## the 12 px floor) until the chips fit — the word is never cut, and a bar that
+## still does not fit scrolls rather than eat the world frame.
 ## `strook` is the phone row: every chip at its natural width, one line, scrolled.
 func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = false) -> void:
 	_rail = rail
 	_strook = strook and not rail
-	_zet_rollen(_strook)
+	if not rail:
+		_rail_rolt(false, 0.0)
+	_zet_rollen(_strook, _rolt)
 	for b in _chips.values():
 		var rij: BoxContainer = b.get_node_or_null("Rij")
 		if rij != null:
@@ -241,17 +254,38 @@ func _rij_breedte(breedtes: Array[float], kolommen_n: int) -> float:
 ## height is measured with `UiThema.wrap_hoogte` and written into the label's
 ## own minimum; a colour-emoji line is much taller than its font size (35 units
 ## at size 20), which is why the picture is the first thing to shrink.
+##
+## And when even the smallest step does not fit, the bar scrolls (R1).  The
+## hotel counts its own rooms, so this has to survive the room after the next:
+## at 740 x 360 the rail has 295 units, and eleven chips need 328 of them with
+## the picture at 14 and the word on the floor — a word of two lines is 48 units
+## and there is nothing left to take away without breaking HOTEL.md §9.  Growing
+## past the height it was given would push the world frame out of the shell, so
+## the rail keeps that height and scrolls instead, exactly as the phone row does.
 func _meet_rail(hoogte: float) -> void:
 	var rijen_n := int(ceil(_chips.size() / float(RAIL_KOLOMMEN)))
 	var trappen := [
 		[int(_maten["icoon_keuze"]), int(_maten["klein"])],
 		[18, maxi(UiThema.VLOER, int(_maten["klein"]) - 1)],
 		[16, UiThema.VLOER],
+		[14, UiThema.VLOER],
 	]
 	for trap in trappen:
 		var hoogst := _zet_rail(int(trap[0]), int(trap[1]))
 		if hoogte <= 0.0 or rijen_n * (hoogst + GAT) - GAT <= hoogte:
+			_rail_rolt(false, hoogte)
 			return
+	_rail_rolt(true, hoogte)
+
+## Scrolling rail on or off.  A `ScrollContainer` reports no minimum at all on
+## the axis it scrolls, so the height it may use has to become its minimum —
+## otherwise the bar collapses to nothing in the shell's rail column.
+func _rail_rolt(aan: bool, hoogte: float) -> void:
+	_rolt = aan and hoogte > 0.0
+	_zet_rollen(false, _rolt)
+	custom_minimum_size = Vector2(0.0, hoogte if _rolt else 0.0)
+	if _rolt:
+		_toon_huidige()
 
 ## One rail step: give every chip this picture and word size, and return the
 ## height the tallest chip then needs.

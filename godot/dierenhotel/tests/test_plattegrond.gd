@@ -6,7 +6,8 @@ extends Proef
 ## stretched into 530 unit columns and every word was drawn half a sheet to the
 ## right of its own cell, because a `Button` never sorts an anchored child.  So
 ## nothing here trusts the node tree: every assertion is on `get_global_rect()`
-## — of the eight buttons, and of the two labels inside each of them.
+## — of the button of every room `Rooms` has, and of the two labels inside each
+## of them.
 
 const FRAMES := [Vector2(1000, 648), Vector2(326, 402), Vector2(534, 289)]
 const RIJ_MIDDEN := ["receptie", "gang", "keuken", "tuin"]
@@ -57,8 +58,12 @@ func test_acht_kamers_op_hun_plek() -> void:
 		if blad == null:
 			_af()
 			continue
-		gelijk(UiPlattegrond.KAART.size(), 8, "de tabel heeft acht kamers")
-		for id in UiPlattegrond.KAART:
+		gelijk(UiPlattegrond.KAART.size(), Rooms.lijst().size(),
+			"de tabel heeft een vak per kamer van het hotel")
+		# every room of the hotel, not every row of the table: a room added
+		# without its cell has to fail here (R1)
+		for id in Rooms.lijst():
+			waar(UiPlattegrond.KAART.has(id), "%s staat in de tabel" % id)
 			var knop: Button = kaart.get_node_or_null("P" + id)
 			waar(knop != null, "%s heeft een cel bij %s" % [id, str(kader)])
 			if knop != null:
@@ -93,7 +98,7 @@ func test_cellen_passen_op_het_blad() -> void:
 		waar(kaart.size.x <= pr.size.x,
 			"en niet breder dan het vel bij %s (%.1f > %.1f)"
 				% [str(kader), kaart.size.x, pr.size.x])
-		for id in UiPlattegrond.KAART:
+		for id in Rooms.lijst():
 			var knop: Button = kaart.get_node_or_null("P" + id)
 			if knop == null:
 				continue
