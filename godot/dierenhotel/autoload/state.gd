@@ -416,6 +416,22 @@ func zet_gezien(sleutel: String) -> void:
 	s["gezien"][sleutel] = 1
 	bewaar()
 
+## One star per game per day (§3.8 `N1`).  The day on which `<spel>` last handed
+## a star out lives in that same `gezien` drawer under `ster_<spel>`, so the save
+## format stays v1: `gezien` already carried ints and round-trips like any other
+## key.  `_normaliseer` deliberately skips the drawer, so JSON gives the number
+## back as a float — the `int()` is what makes the comparison survive a reload.
+## Day 0 does not exist (`standaard()` starts at 1, `Hotel.morgen()` only counts
+## up); guarding it keeps a hand-edited 0 from reading as "already had one" for
+## every game at once.
+func ster_gehad(spel: String) -> bool:
+	var dag := int(s["dag"])
+	return dag > 0 and int(s["gezien"].get("ster_" + spel, 0)) == dag
+
+func zet_ster(spel: String) -> void:
+	s["gezien"]["ster_" + spel] = int(s["dag"])
+	bewaar()
+
 # ------------------------------------------------------------ bedden, gasten
 
 ## Every bed of the hotel, in a fixed order (world.md §5.3, `Rooms.slots`).

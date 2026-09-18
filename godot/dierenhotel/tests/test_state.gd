@@ -147,6 +147,69 @@ func test_niets_bewaren_voor_het_startscherm() -> void:
 	waar(not State.bewaar(), "bewaar() doet niets voor start_gekozen()")
 	waar(not State.lees(), "en er staat dus niets op de tablet")
 
+# ----------------------------------------------------------------- sterren
+
+## §3.8 `N1`: a game pays one star a day.  Playing it again the same day still
+## ticks its card, it just does not pay twice — and tomorrow it pays again.
+func test_een_spel_geeft_een_ster_per_dag() -> void:
+	_voor()
+	var ctx := SpelCtx.new("zwemles", {"naam": "Zwemles", "kamer": "zwembad"})
+	waar(not State.ster_gehad("zwemles"), "vandaag nog geen ster gehad")
+	ctx.taak_klaar("zwemles")
+	gelijk(int(State.s["sterren"]), 1, "meedoen levert één ster op")
+	waar(State.ster_gehad("zwemles"), "en vandaag staat gestempeld")
+	ctx.taak_klaar("zwemles")
+	gelijk(int(State.s["sterren"]), 1, "nog een keer spelen mag, maar betaalt niet")
+	# every game keeps its own stamp
+	var ander := SpelCtx.new("hinkel", {"naam": "Hinkel", "kamer": "tuin"})
+	ander.taak_klaar("hinkel")
+	gelijk(int(State.s["sterren"]), 2, "een ánder spel geeft wél zijn ster")
+	State.s["dag"] = int(State.s["dag"]) + 1
+	waar(not State.ster_gehad("zwemles"), "morgen telt de stempel van gisteren niet")
+	ctx.taak_klaar("zwemles")
+	gelijk(int(State.s["sterren"]), 3, "en morgen komt er weer één")
+	_wis_bestand()
+
+## `sterren: 0` vinkt het taakkaartje af zonder ster — en laat de dag vrij, zodat
+## een volgende beurt die er wél om vraagt hem gewoon krijgt.
+func test_sterren_nul_slaat_de_ster_over() -> void:
+	_voor()
+	var ctx := SpelCtx.new("voerkar", {"naam": "Voerkar", "kamer": "keuken"})
+	ctx.taak_klaar("voer", {"sterren": 0})
+	gelijk(int(State.s["sterren"]), 0, "nul sterren gevraagd, nul gekregen")
+	waar(not State.ster_gehad("voerkar"), "en de dag is niet gestempeld")
+	ctx.taak_klaar("voer", {"sterren": 1})
+	gelijk(int(State.s["sterren"]), 1, "de beurt daarna geeft er wel één")
+	_wis_bestand()
+
+## De stempel woont in het al bestaande laatje `gezien`: het document blijft
+## versie 1, en een opslag van vóór deze wijziging heeft er eenvoudig geen.
+func test_de_opslag_overleeft_de_sterdag() -> void:
+	_voor()
+	State.s["dag"] = 3
+	State.zet_ster("zwemles")
+	gelijk(State.s["gezien"]["ster_zwemles"], 3, "de dag staat in `gezien`")
+	waar(State.bewaar(), "bewaar()")
+	State.s = State.standaard()
+	waar(State.lees(), "lees()")
+	gelijk(int(State.s["dag"]), 3, "dag 3 komt terug")
+	waar(State.ster_gehad("zwemles"), "en de stempel overleeft de herlaad")
+	waar(not State.ster_gehad("hinkel"), "hij geldt alleen voor dat ene spel")
+	# the document on disk did not change shape: still v1, still the same drawer
+	var f := FileAccess.open("user://dierenhotel.json", FileAccess.READ)
+	var doc = JSON.parse_string(f.get_as_text())
+	f.close()
+	gelijk(int(doc["v"]), State.VERSIE, "de opslag is nog steeds v1")
+	waar((doc["s"]["gezien"] as Dictionary).has("ster_zwemles"),
+		"en de stempel ligt in het laatje `gezien`")
+	# a save written before this change simply has no stamp
+	f = FileAccess.open("user://dierenhotel.json", FileAccess.WRITE)
+	f.store_string('{"v": 1, "s": {"dag": 3, "gezien": {"uitleg_bed": 1}}}')
+	f.close()
+	waar(State.lees(), "een oude opslag zonder stempel leest gewoon")
+	waar(not State.ster_gehad("zwemles"), "en heeft vandaag nog geen ster gehad")
+	_wis_bestand()
+
 # ------------------------------------------------------------------ gasten
 
 func test_gastenpool_en_wachtlijst() -> void:

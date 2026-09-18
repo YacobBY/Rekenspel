@@ -32,8 +32,17 @@ func data() -> Dictionary:
 
 ## One star for taking part, the task card ticked on `naam` AND on the game id,
 ## and the save written.  Never for being right.
+##
+## At most ONE star per game per day (§3.8 `N1`): playing the same game again
+## still ticks its card and still feeds the adaptive signal, it just does not pay
+## a second star.  `o.sterren = 0` asks for the tick without any star at all —
+## the day is then not stamped either, so a later turn that does ask for a star
+## still gets one.
 func taak_klaar(taak_naam: String = "", o: Dictionary = {}) -> void:
-	Econ.sterren(o.get("sterren", 1), id)
+	var n := int(o.get("sterren", 1))
+	if n > 0 and not State.ster_gehad(id):
+		Econ.sterren(n, id)
+		State.zet_ster(id)
 	if taak_naam != "":
 		Hotel.taak_af(taak_naam)
 	Hotel.taak_af(id)
