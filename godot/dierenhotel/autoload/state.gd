@@ -12,15 +12,24 @@ extends Node
 ## Beyond the envelope this file owns the guest pool, the guest record and its
 ## repairs (world.md §4.3), the bed bookkeeping every other module asks about
 ## (`bed_vrij`, `max_gasten`, `gast_in_bed`), the food sum `dag_verbruik`, the
-## thank-you letters and the adaptive band.
+## petting supply of PLAN.md §3.4, the thank-you letters and the adaptive band.
 
 signal veranderd()
 signal band_veranderd(band: int)
+## PLAN.md §3.4 — a sum was answered somewhere in the hotel and every guest got
+## a pet back.  Fires only when somebody really gained one, so a hotel that is
+## already full stays quiet.
+signal aai_gevuld()
 
 const PAD := "user://dierenhotel.json"
 const PAD_TMP := "user://dierenhotel.json.tmp"
 const VERSIE := 1
 const SIGNAAL_MAX := 10
+## PLAN.md §3.4 — the petting supply of one guest.  Petting spends it, maths
+## fills it up again and the clock never touches it.  Three is the whole ladder
+## (3 → 2 → 1 → a nap); the child reads it off the button and the hearts, never
+## off a meter (HOTEL.md §2 forbids meters).
+const AAI_MAX := 3
 
 var s: Dictionary = {}
 var _start_keuze := false      ## nothing is saved until the start screen answered
@@ -47,7 +56,7 @@ static func mk_gast(id: String, naam: String, kind: String, soort: String,
 		"scoops": scoops, "act": act, "mins": mins,
 		"kamer": "", "bed": "", "waar": "receptie",
 		"nachten": 2, "geslapen": 0, "prijs": 1, "behoefte": "kamer",
-		"dagIn": 1, "accessoires": [],
+		"dagIn": 1, "accessoires": [], "aai": AAI_MAX,
 	}
 
 ## world.md §2.1 — the pool, taken in this order by the bell.
@@ -297,7 +306,8 @@ const RONDEN := ["ochtend", "vrij", "avond"]
 
 const INT_VELDEN := ["dag", "munten", "sterren", "band", "kunnen", "famIdx",
 	"meubelNr", "scoops", "levering", "snoeppot"]
-const GAST_INT := ["scoops", "mins", "nachten", "geslapen", "prijs", "dagIn", "betaald"]
+const GAST_INT := ["scoops", "mins", "nachten", "geslapen", "prijs", "dagIn", "betaald",
+	"aai"]
 const CHECKIN_INT := ["samen", "extra", "nieuw", "dagen", "voorraad", "stap",
 	"fouten1", "fouten2", "t0"]
 const REKENING_INT := ["nachten", "prijs", "totaal", "stap", "pogingen",
@@ -389,6 +399,11 @@ func _repareer_gast(d: Dictionary, g: Dictionary, in_hotel: bool) -> void:
 		g["scoops"] = 1
 	if not g.has("dagIn"):
 		g["dagIn"] = int(d["dag"])
+	# a save from before PLAN.md §3.4 gets three pets as a present, and a number
+	# that wandered off the ladder is clamped back onto it
+	if not g.has("aai") or g["aai"] == null:
+		g["aai"] = AAI_MAX
+	g["aai"] = clampi(int(g["aai"]), 0, AAI_MAX)
 
 ## world.md §4.3: an empty waiting list is refilled from the pool.
 func _vul_wachtlijst(d: Dictionary) -> void:
@@ -472,6 +487,52 @@ func gasten_in(kamer_id: String) -> Array:
 			uit.append(g)
 	return uit
 
+# ------------------------------------------------------------------- aaien
+##
+## PLAN.md §3.4.  The supply only goes DOWN by petting and only UP by maths; the
+## day cycle refills it and the clock never spends it.  A guest on the waiting
+## list has nothing to pet yet, so all four functions look at `s["gasten"]`.
+##
+## None of the four calls `bewaar()`: `tel()` runs on every single answer and
+## must not hit the disk each time.  The save follows at the next `bewaar()` of
+## the caller that did the real work (a finished task, the new day).
+
+## How many pets `id` has left, −1 when no guest of that name is in the hotel.
+func aai_van(id: String) -> int:
+	var g := gast_van(id)
+	if g.is_empty():
+		return -1
+	return clampi(int(g.get("aai", AAI_MAX)), 0, AAI_MAX)
+
+## Spend one pet.  Returns what is LEFT, so the caller knows whether the animal
+## drops off for its nap (0) and how many hearts to float up (the number before,
+## i.e. the answer + 1).  At zero it stays at zero — nothing is ever refused and
+## the number never goes negative.  −1 for an unknown guest, like `aai_van`.
+func aai_uit(id: String) -> int:
+	var g := gast_van(id)
+	if g.is_empty():
+		return -1
+	var over := maxi(0, clampi(int(g.get("aai", AAI_MAX)), 0, AAI_MAX) - 1)
+	g["aai"] = over
+	return over
+
+## Hand every guest in the hotel `n` pets back, never above `AAI_MAX`.  True when
+## at least one of them really gained something: that is what decides whether the
+## hearts rise, so a full hotel (and an empty one) stays quiet.
+func aai_bij(n := 1) -> bool:
+	var iets := false
+	for g in s["gasten"]:
+		var nu := clampi(int(g.get("aai", AAI_MAX)), 0, AAI_MAX)
+		var na := mini(nu + maxi(0, n), AAI_MAX)
+		g["aai"] = na
+		if na > nu:
+			iets = true
+	return iets
+
+## Everybody full again — a finished task, a new day.  Same answer as `aai_bij`.
+func aai_vol() -> bool:
+	return aai_bij(AAI_MAX)
+
 ## The next guest from the waiting list; an empty list is refilled from the
 ## pool with ids suffixed `_d<dag>`, a colliding id gets `_2`, `_3`, ...
 func pak_gast() -> Dictionary:
@@ -536,6 +597,10 @@ func tel(goed: bool, ms: int) -> void:
 	while sig.size() > SIGNAAL_MAX:
 		sig.pop_front()
 	_herbereken()
+	# PLAN.md §3.4: every sum the child answers hands every animal a pet back —
+	# ALSO a wrong one.  Joining in is what counts, not being right (R6).
+	if aai_bij(1):
+		aai_gevuld.emit()
 
 ## `herbereken()` — after every change of the guest count as well, because the
 ## band has a ceiling per N (world.md §3.9).
