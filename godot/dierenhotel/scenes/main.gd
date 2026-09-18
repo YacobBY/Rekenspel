@@ -31,6 +31,8 @@ const TELEFOON := 520          ## portrait under this width is the phone shell
 @onready var naamlaag: Control = $Scherm/Kolom/Middenrij/Kaderdoos/Kader/Naamlaag
 @onready var rail: VBoxContainer = $Scherm/Kolom/Middenrij/Rail
 @onready var kamerbalk: UiKamerbalk = $Scherm/Kolom/Kamerbalk
+var spelbalk: UiSpelbalk = null   ## takes the room bar's place while a game runs
+var _spel_titel: Dictionary = {}  ## {icoon, titel} of the running game, or empty
 @onready var voet: Label = $Scherm/Kolom/Voet
 @onready var toastlaag: Control = $Toastlaag
 @onready var bladlaag: Control = $Bladlaag
@@ -55,6 +57,14 @@ func _ready() -> void:
 		_tikken += 1
 		print("[probe] tik=", _tikken, " id=", id))
 	Ui.kaart_geopend.connect(_meld_kaart)
+	# The game bar (owner, 2026-09-18): the registry says a game started or
+	# stopped, the shell swaps the room bar for `⬅ Terug` and back.
+	spelbalk = UiSpelbalk.new()
+	spelbalk.visible = false
+	kolom.add_child(spelbalk)
+	kolom.move_child(spelbalk, kamerbalk.get_index() + 1)
+	Games.spel_gestart.connect(_spel_aan)
+	Games.spel_gestopt.connect(_spel_uit)
 
 	# The save owns the sound: every time `State.s` is replaced (a fresh game, a
 	# restored save) the mixer is told what the child chose last (V1 finding 2).
@@ -142,6 +152,31 @@ func _bouw_chroom() -> void:
 func _naar_kamer(id: String) -> void:
 	Hotel.naar_kamer(id)
 
+# ---------------------------------------------------------------- spelbalk
+
+## A game started: the room chips are not part of the sum and took the whole
+## row, so the row becomes the game bar — `⬅ Terug` first, always in the same
+## place, the game's name beside it.
+func _spel_aan(id: String) -> void:
+	var def := Games.definitie(id)
+	var hs: Dictionary = def.get("hotspot", {})
+	_spel_titel = {"icoon": str(hs.get("icoon", "")), "titel": str(def.get("naam", id))}
+	_bouw_spelbalk()
+	_pas_shell()
+
+func _spel_uit(_id: String) -> void:
+	_spel_titel = {}
+	_pas_shell()
+
+func _bouw_spelbalk() -> void:
+	if spelbalk == null or _spel_titel.is_empty():
+		return
+	spelbalk.bouw(str(_spel_titel["icoon"]), str(_spel_titel["titel"]), Ui.maten, Ui.tap_maat(),
+		Games.stop, _compact)
+
+func spel_balk_aan() -> bool:
+	return spelbalk != null and not _spel_titel.is_empty()
+
 ## A room was added or renamed: rebuild the chips and re-lay the shell, because
 ## the bar's own width decides how many columns it gets.
 func _nieuwe_kamers() -> void:
@@ -156,6 +191,7 @@ func _op_thema() -> void:
 	# The breakpoint moved: the chrome is cheap to rebuild and there is exactly
 	# one place that knows the new sizes.
 	_bouw_chroom()
+	_bouw_spelbalk()
 	_pas_shell()
 
 func _geluid() -> void:
@@ -288,7 +324,7 @@ func _pas_shell() -> void:
 func _kader_hoog(hoog: float, boven: int, onder: int, rail_aan: bool) -> float:
 	var vrij := hoog - boven - onder - chroom.get_combined_minimum_size().y
 	if not rail_aan:
-		vrij -= kamerbalk.get_combined_minimum_size().y
+		vrij -= (spelbalk if spel_balk_aan() else kamerbalk).get_combined_minimum_size().y
 	if voet.visible:
 		vrij -= voet.get_combined_minimum_size().y
 	return vrij - 8.0        # the column separations between the three rows
@@ -304,6 +340,21 @@ func _zet_balk(rail_aan: bool, breed: float, hoogte: float = 0.0, strook: bool =
 	rail.visible = rail_aan
 	kamerbalk.pas_aan(kamerbalk.rail_breedte() if rail_aan else breed, rail_aan, hoogte,
 		strook and not rail_aan)
+	# The game bar goes wherever the room bar goes and takes its exact
+	# footprint, so the frame keeps its size when a game starts or ends.
+	if spelbalk != null:
+		var spel := spel_balk_aan()
+		if spelbalk.get_parent() != doel:
+			spelbalk.reparent(doel, false)
+		if not rail_aan:
+			kolom.move_child(spelbalk, voet.get_index())
+		if spel and (spelbalk.get_child_count() == 0 or (spelbalk.get_child(0) is VBoxContainer) != rail_aan):
+			_bouw_spelbalk()
+		var voetafdruk := kamerbalk.get_combined_minimum_size()
+		spelbalk.neem_maat(Vector2(voetafdruk.x, 0.0) if rail_aan else Vector2(0.0, voetafdruk.y),
+			voetafdruk.x if rail_aan else breed)
+		spelbalk.visible = spel
+		kamerbalk.visible = not spel
 
 func _marge(l: int, t: int, r: int, b: int) -> void:
 	for paar in [["margin_left", l], ["margin_top", t], ["margin_right", r], ["margin_bottom", b]]:
@@ -442,6 +493,9 @@ func _meld_knoppen() -> void:
 		var s := Hits.spot(id)
 		if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
 			print("[probe] knop ", id, "=", s.knoop.get_global_rect())
+	# the game bar, when a game runs: one fixed place for `⬅ Terug`
+	if spel_balk_aan() and spelbalk.visible and spelbalk.terug_knop != null:
+		print("[probe] spelbalk=", spelbalk.get_global_rect(), " terug=", spelbalk.terug_knop.get_global_rect())
 	# the room bar, so a probe can tap a room or the map ("kaart") by name
 	if kamerbalk != null:
 		for id in kamerbalk.chips():

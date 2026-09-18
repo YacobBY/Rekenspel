@@ -333,8 +333,14 @@ func plaats() -> void:
 		s.laag = _laag_van(s)
 		s.zichtbaar = s.kamer == World.kamer_nu()
 		s.vlak_nu = Rect2() if s.geen_vlak else _vlak_van(s)
-		# While a game has priority the wish bubbles step aside (world.md §5.2).
-		if s.laag == Laag.WENS and _voorrang != "":
+		# While a game has priority the wish bubbles step aside (world.md §5.2),
+		# and so does every other button of the hotel: doors, bell, board, the
+		# entries of the other games — they are not part of the sum and they
+		# took half the frame (owner, 2026-09-18).  What the game BORROWED
+		# (`ctx.hotspots.pak`) is its own for the time being and stays; the
+		# fixed layer (name plates, number tags) is information, not a button.
+		if _voorrang != "" and s.laag in [Laag.WENS, Laag.HOTEL] \
+				and s.geleend_door != _voorrang:
 			s.zichtbaar = false
 		if s.zichtbaar:
 			lijstje.append(s)

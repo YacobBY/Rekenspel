@@ -81,3 +81,9 @@ const BRIEVEN_UITLEG_2 := "Laat een gast zijn nachten uitslapen en reken netjes 
 
 # ------------------------------------------------------------------ §7.10
 const SPEL_MIS := "💛 Probeer iets anders"
+
+# ------------------------------------------------------------- de spelbalk
+## The one button that leaves a running minigame, always in the same place
+## (bottom left of the frame) with the game's name beside it.
+const TERUG := "⬅ Terug"
+const TERUG_TITEL := "Terug naar het hotel"

@@ -130,6 +130,8 @@ func start(id: String) -> bool:
 		_actieve_kamer = World.kamer_nu()
 		Hotel.render()
 	hersteek()
+	# `spel_gestart` is what swaps the room bar for the game bar (`⬅ Terug`,
+	# scenes/main.gd): the shell owns the chrome, the registry only tells it.
 	spel_gestart.emit(id)
 	return true
 

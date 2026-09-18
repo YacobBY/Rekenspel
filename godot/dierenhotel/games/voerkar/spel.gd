@@ -883,9 +883,15 @@ func _leen_doelen() -> void:
 	if r == null:
 		return
 	for dr in r.deuren:
-		var s := Hits.spot("deur_%s_%s" % [World.kamer_nu(), str(dr.get("naar", ""))])
+		var id := "deur_%s_%s" % [World.kamer_nu(), str(dr.get("naar", ""))]
+		var s := Hits.spot(id)
 		if s == null:
 			continue
+		# Borrowed as well: only a borrowed hotel button stays on screen while a
+		# game runs, and a tap on the door now pushes the trolley through it —
+		# the same thing the drag does, for a finger that cannot drag yet.
+		if s.geleend_door != ctx.id:
+			ctx.hotspots.pak(id, _tik_deur)
 		s.val = _val_duw
 		if s.vangvlak != null and is_instance_valid(s.vangvlak):
 			s.vangvlak.val = _val_duw
@@ -894,6 +900,11 @@ func _tik_bak(s = null) -> void:
 	if s == null:
 		return
 	lever(str(s.data.get("kamer", "")), str(s.data.get("slot", "")))
+
+func _tik_deur(s = null) -> void:
+	if s == null:
+		return
+	duw_naar(str(s.data.get("naar", "")))
 
 func _val_lever(_lading: Dictionary, data: Dictionary) -> void:
 	lever(str(data.get("kamer", "")), str(data.get("slot", "")))

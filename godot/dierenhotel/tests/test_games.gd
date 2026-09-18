@@ -140,6 +140,70 @@ func test_levensloop_ruimt_alles_op() -> void:
 	_af()
 
 ## `ctx` stamps everything the game places, so "supersede = full stop" is free.
+## The game bar (owner, 2026-09-18): while a game runs the room chips leave and
+## `⬅ Terug` takes their row — the same place for every game, on every screen,
+## the frame keeps its size, and a tap on it ends the game.
+func test_de_spelbalk_neemt_de_rij_van_de_kamerbalk() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var bewaard := State.s.duplicate(true)
+	var scherm_voor = Ui.get("_scherm")
+	for maat in [Vector2i(1024, 768), Vector2i(360, 740), Vector2i(740, 360)]:
+		var vp := SubViewport.new()
+		vp.size = maat
+		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		boom.root.add_child(vp)
+		var shell = load("res://scenes/main.tscn").instantiate()
+		shell.set_meta("geen_start", true)
+		vp.add_child(shell)
+		State.nieuw_spel()
+		State.start_gekozen()
+		Hotel.start()
+		for _f in 3:
+			await boom.process_frame
+		var kb: Control = shell.kamerbalk
+		var kader: Control = shell.kader
+		waar(kb.visible, "%s: zonder spel staat de kamerbalk er" % str(maat))
+		var kader_voor := kader.get_global_rect()
+		var rij_voor := kb.get_global_rect()
+		waar(Games.start("_voorbeeld"), "%s: het voorbeeldspel start" % str(maat))
+		for _f in 2:
+			await boom.process_frame
+		var balk: UiSpelbalk = shell.spelbalk
+		waar(balk != null and balk.visible, "%s: de spelbalk staat er" % str(maat))
+		waar(not kb.visible, "%s: en de kamerchips zijn weg" % str(maat))
+		gelijk(kader.get_global_rect(), kader_voor, "%s: het kader is niet bewogen" % str(maat))
+		var plek := balk.get_global_rect()
+		gelijk(plek.position, rij_voor.position, "%s: de balk staat waar de kamerbalk stond" % str(maat))
+		gelijk(balk.terug_knop.text, UiTekst.TERUG, "%s: met de terugknop, woordelijk" % str(maat))
+		var knop := balk.terug_knop.get_global_rect()
+		waar(knop.size.x >= 48.0 and knop.size.y >= 48.0, "%s: de terugknop is een vol tikdoel" % str(maat))
+		waar(plek.encloses(knop), "%s: en staat binnen de balk" % str(maat))
+		waar(balk.titel_label.text.contains("Voorbeeld"), "%s: de naam van het spel staat erbij" % str(maat))
+		# a second game: the same place, to the pixel
+		waar(Games.start("wekker"), "%s: een tweede spel start" % str(maat))
+		for _f in 2:
+			await boom.process_frame
+		gelijk(Games.actief(), "wekker", "%s: en draait" % str(maat))
+		gelijk(shell.spelbalk.terug_knop.get_global_rect().position, knop.position,
+			"%s: de terugknop staat op dezelfde plek" % str(maat))
+		# the tap: the game ends, the chips come back, the frame did not move
+		shell.spelbalk.terug_knop.pressed.emit()
+		for _f in 2:
+			await boom.process_frame
+		gelijk(Games.actief(), "", "%s: na Terug draait er niets meer" % str(maat))
+		waar(not shell.spelbalk.visible, "%s: de spelbalk is weg" % str(maat))
+		waar(kb.visible, "%s: de kamerchips zijn terug" % str(maat))
+		gelijk(kader.get_global_rect(), kader_voor, "%s: en het kader staat nog steeds stil" % str(maat))
+		Games.stop()
+		Hits.wis_alles()
+		vp.queue_free()
+		await boom.process_frame
+	Ui.registreer_lagen(null, null, null)
+	Ui.vergeet_scherm()
+	if scherm_voor != null:
+		Ui.set("_scherm", scherm_voor)
+	State.s = bewaard
+
 func test_ctx_stempelt_de_eigenaar() -> void:
 	_op()
 	var ctx := SpelCtx.new("proefspel", {"naam": "Proef", "kamer": World.kamer_nu()})

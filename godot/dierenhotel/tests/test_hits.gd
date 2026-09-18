@@ -953,3 +953,42 @@ func test_een_bron_blijft_een_vol_tikdoel() -> void:
 			waar(not (kind as Control).visible, "bij 0 staat er geen pil")
 		_keur(kader, "lege bron %s" % str(kader))
 		_af()
+
+## While a game has priority, every button of the HOTEL leaves the frame (doors,
+## bell, board, the other games' entries): they are not part of the sum and they
+## took half the screen (owner, 2026-09-18).  What the game borrowed stays, and
+## so does the fixed layer — a name plate and a number tag are information.
+func test_hotelknoppen_wijken_voor_een_spel() -> void:
+	_op(Vector2(1000, 648))
+	var nu := World.kamer_nu()
+	Hits.maak({"id": "h_deur", "kamer": nu, "x": 10.0, "z": 10.0, "y": 9.0,
+		"label": "Gang", "door": "hotel", "klas": "hotdeur"})
+	Hits.maak({"id": "h_bel", "kamer": nu, "x": 30.0, "z": 10.0, "y": 9.0,
+		"label": "Bel", "door": "hotel", "klas": "hotbel vrij"})
+	Hits.maak({"id": "h_wens", "kind": "wolk", "kamer": nu, "x": 20.0, "z": 30.0, "y": 20.0,
+		"label": "🍪 eten", "door": "hotel", "klas": "hotwolk hotwens"})
+	Hits.maak({"id": "h_tag", "kind": "tag", "kamer": nu, "x": 12.0, "z": 30.0, "y": 8.0,
+		"getal": 3, "op": "rand", "door": "hotel"})
+	Hits.maak({"id": "spel_ander", "kamer": nu, "x": 40.0, "z": 30.0, "y": 12.0,
+		"label": "Zwembad", "door": "registry", "klas": "hotgame"})
+	Hits.maak({"id": "s_knop", "kamer": nu, "x": 24.0, "z": 20.0, "y": 12.0,
+		"label": "Klaar", "door": "spel"})
+	Hits.plaats()
+	for id in ["h_deur", "h_bel", "h_wens", "h_tag", "spel_ander", "s_knop"]:
+		waar(Hits.spot(id).knoop.visible, "zonder spel staat %s er gewoon" % id)
+	# the game takes over and borrows the door
+	Hits.voorrang("spel")
+	waar(Hits.leen("h_deur", "spel", func(_s) -> void: pass), "de deur is te lenen")
+	Hits.plaats()
+	for id in ["h_bel", "h_wens", "spel_ander"]:
+		waar(not Hits.spot(id).knoop.visible, "tijdens het spel is %s weg" % id)
+		waar(not Hits.debug().has(id), "en %s telt niet mee in de plaatsing" % id)
+	for id in ["h_deur", "h_tag", "s_knop"]:
+		waar(Hits.spot(id).knoop.visible, "tijdens het spel blijft %s staan" % id)
+	# the game ends: everything comes back
+	Hits.geef_terug("spel")
+	Hits.voorrang("")
+	Hits.plaats()
+	for id in ["h_deur", "h_bel", "h_wens", "h_tag", "spel_ander", "s_knop"]:
+		waar(Hits.spot(id).knoop.visible, "na het spel staat %s er weer" % id)
+	_af()
