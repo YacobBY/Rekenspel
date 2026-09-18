@@ -13,6 +13,9 @@ const STROOK := "kr_som_keuzes"
 const BANK := "kr_geld"
 const KLAAR := "kr_ok"
 
+## The top of the counter, in voxels around its anchor (`modellen.gd:54-58`).
+const BLAD := {"x0": -11.0, "x1": 11.0, "z0": -8.0, "z1": 8.0}
+
 ## The world frames of the four ticket viewports (1024×768, 768×1024, 360×740,
 ## 740×360), measured on the real shell by `test_ui.gd`.
 const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740),
@@ -117,6 +120,38 @@ func _tel_in(getal: int) -> void:
 func _stand() -> Dictionary:
 	var d: Dictionary = State.spel_data(SPEL).get("stand", {})
 	return d if typeof(d) == TYPE_DICTIONARY else {}
+
+## The layout of the stall, straight from the game file: `plekken_van()` is
+## pure and static, so a test may ask it where things go without a turn running
+## and without touching anything private.
+func _plekken(n: int) -> Dictionary:
+	var spel: GDScript = load("res://games/kraam/spel.gd")
+	return spel.plekken_van(Rooms.get_kamer(KAMER).zones["kraam"], n)
+
+## The stall's own models; `start()` registers them, a layout test does it here.
+func _modellen_aan() -> void:
+	var tabel: Dictionary = load("res://games/kraam/modellen.gd").tabel()
+	for naam in tabel:
+		if not Art.heeft_model(naam):
+			Art.registreer_model(naam, tabel[naam])
+
+## The model of good `i`, named as `Sommen.Kraam.WAREN` names it plus the game
+## id in front (architecture.md §13).
+func _waar_model(i: int) -> String:
+	return "kraam_" + str(Sommen.Kraam.WAREN[i]["model"]).trim_prefix("kr_")
+
+## The voxel footprint of a model, from its own builder: {x0, x1, z0, z1}.
+func _voetafdruk(model: String) -> Dictionary:
+	var vox: Array = Art.model(model)
+	if vox.is_empty():
+		return {}
+	var uit := {"x0": INF, "x1": -INF, "z0": INF, "z1": -INF}
+	for v in vox:
+		uit["x0"] = minf(uit["x0"], float(v["x"]))
+		uit["x1"] = maxf(uit["x1"], float(v["x"]))
+		uit["z0"] = minf(uit["z0"], float(v["z"]))
+		uit["z1"] = maxf(uit["z1"], float(v["z"]))
+	return uit
 
 func _kaart_tekst(deel: String) -> String:
 	var k := _knoop(KAART)
@@ -357,6 +392,120 @@ func test_hulpladder_bij_het_leggen() -> void:
 	gelijk(_stand().get("stap", ""), "leg", "de beurt loopt gewoon door")
 	_af()
 
+## N7: as soon as something lies on the counter the second line counts the rest
+## down.  Until then it is the instruction, and while a coin too many is sliding
+## back it is the instruction again — never a rest of zero or less.
+func test_de_restregel_telt_af() -> void:
+	_op()
+	_wereld(1, 3)
+	Games.start(SPEL)
+	var o := Sommen.Kraam.opzet(1, 3, 2)
+	var doel := int(o["doel"])
+	waar(doel >= 4, "er valt genoeg af te tellen (€%d)" % doel)
+	gelijk(_kaart_tekst("Kolom/Regel2"), "Leg de munten op de toonbank",
+		"een lege toonbank vraagt om munten")
+	_tik("kr_m1")
+	_tik(BANK)
+	gelijk(_kaart_tekst("Kolom/Regel2"), "Nog %s erbij" % Sommen.Kraam.euro(doel - 1),
+		"na de eerste munt staat er hoeveel er nog bij moet")
+	_tik("kr_m2")
+	_tik(BANK)
+	gelijk(_kaart_tekst("Kolom/Regel2"), "Nog %s erbij" % Sommen.Kraam.euro(doel - 3),
+		"en hij telt verder af")
+	# one coin too many: it lies there for a moment, and the card says no
+	# "Nog €−1 erbij" in that half second
+	_tik("kr_m2")
+	_tik(BANK)
+	gelijk(_kaart_tekst("Kolom/Regel2"), "Leg de munten op de toonbank",
+		"te veel telt niet af")
+	await _wacht(0.9)
+	gelijk(_kaart_tekst("Kolom/Regel2"), "Nog %s erbij" % Sommen.Kraam.euro(doel - 3),
+		"na het terugschuiven telt hij weer af")
+	_tik("kr_m1")
+	_tik(BANK)
+	gelijk(_stand().get("stap", ""), "af", "en bij het doel is de beurt af")
+	gelijk(_kaart_tekst("Kolom/Regel2"), "", "de slotkaart heeft geen tweede regel")
+	_af()
+
+# ------------------------------------------------- de waren staan op het blad
+
+## N7: every good really stands ON the top, for two, three and four goods and on
+## four frames.
+##
+## The task asks for "de gebakken rechthoek van elke waar volledig binnen die
+## van `kr_toonbank`".  In the HEIGHT that cannot hold: a good is up to twelve
+## voxels tall and stands ON a table of thirteen, so its plate always reaches
+## above the table's own plate — the corner case the task means (a good on the
+## corner of the top) is a WIDTH case.  Measured here, therefore: the footprint
+## inside the top in voxels (the rule itself), the plate inside the counter's
+## plate in the width, and the FOOT of the good on the table top.
+func test_elke_waar_staat_op_het_blad() -> void:
+	_modellen_aan()
+	var hoog: float = load("res://games/kraam/spel.gd").WAREN_HOOG
+	for kader in KADERS:
+		_op(kader)
+		World.naar(KAMER)
+		for n in [2, 3, 4]:
+			var p := _plekken(n)
+			var bank: Dictionary = p["bank"]
+			var blad := World.vlak_van("kraam_bank", float(bank["x"]), float(bank["z"]), 0.0)
+			waar(blad.size.x > 0.0 and blad.size.y > 0.0,
+				"%s: de toonbank is gebakken" % str(kader))
+			for i in n:
+				var w: Dictionary = p["waren"][i]
+				var model := _waar_model(i)
+				var vox := _voetafdruk(model)
+				waar(not vox.is_empty(), "%s heeft voxels" % model)
+				if vox.is_empty() or blad.size.x <= 0.0:
+					continue
+				var dx := float(w["x"]) - float(bank["x"])
+				var dz := float(w["z"]) - float(bank["z"])
+				waar(dx + float(vox["x0"]) >= BLAD["x0"] and dx + float(vox["x1"]) <= BLAD["x1"]
+					and dz + float(vox["z0"]) >= BLAD["z0"] and dz + float(vox["z1"]) <= BLAD["z1"],
+					"%s %d waren: %s staat met x %.0f..%.0f en z %.0f..%.0f binnen het blad"
+						% [str(kader), n, model, dx + float(vox["x0"]), dx + float(vox["x1"]),
+							dz + float(vox["z0"]), dz + float(vox["z1"])])
+				var r := World.vlak_van(model, float(w["x"]), float(w["z"]), hoog)
+				waar(r.position.x >= blad.position.x - 0.01 and r.end.x <= blad.end.x + 0.01,
+					"%s %d waren: %s staat in de breedte op het blad (%s over %s)"
+						% [str(kader), n, model, str(r), str(blad)])
+				waar(r.end.y <= blad.end.y + 0.01 and r.end.y >= blad.position.y - 0.01,
+					"%s %d waren: %s staat met zijn voet op het blad (%s over %s)"
+						% [str(kader), n, model, str(r), str(blad)])
+		_af()
+
+## N7: the guest is the customer AT the counter — the same screen column (x − z)
+## and nearer the viewer (bigger x + z) — instead of a bystander 53 voxels away
+## on the grass.  In `rust_modus` a walk is a teleport, so where he stands after
+## the start is exactly where the game sent him.
+func test_de_gast_staat_voor_de_toonbank() -> void:
+	_op()
+	var rust_was := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	var gasten := _wereld(1, 3)
+	waar(Games.start(SPEL), "het spel start")
+	var bank := World.decor_plek("kr_toonbank", KAMER)
+	waar(not bank.is_empty(), "de toonbank staat in de tuin")
+	var d = World.dier(str(gasten[0]["id"]))
+	waar(d != null and d.kamer == KAMER, "de gast staat in de tuin")
+	if d != null and not bank.is_empty():
+		var bx := float(bank["x"])
+		var bz := float(bank["z"])
+		waar(absf((d.x - d.z) - (bx - bz)) <= 6.0,
+			"dezelfde schermkolom als de toonbank (gast %.0f,%.0f, bank %.0f,%.0f)"
+				% [d.x, d.z, bx, bz])
+		waar(d.x + d.z > bx + bz, "en naar de kijker toe (%.0f > %.0f)"
+			% [d.x + d.z, bx + bz])
+		var zone: Dictionary = Rooms.get_kamer(KAMER).zones["kraam"]
+		waar(d.x >= float(zone["x0"]) and d.x <= float(zone["x1"])
+			and d.z >= float(zone["z0"]) and d.z <= float(zone["z1"]),
+			"binnen de kraamzone (%.0f, %.0f)" % [d.x, d.z])
+		var bal := World.mik("bal", KAMER)
+		waar(Vector2(d.x, d.z).distance_to(Vector2(float(bal["x"]), float(bal["z"]))) >= 8.0,
+			"en uit de buurt van de bal")
+	Ui.zet_rust_modus(rust_was)
+	_af()
+
 # ----------------------------------------------------------------- de munten
 
 ## §5.8: an overpaid coin lies on the counter for a moment and slides back; it
@@ -562,7 +711,7 @@ func test_hele_euros_onder_twintig() -> void:
 func test_kindtekst_letterlijk() -> void:
 	var bron := FileAccess.get_file_as_string("res://games/kraam/spel.gd")
 	waar(not bron.is_empty(), "spel.gd is te lezen")
-	for zin in ["nog geen gasten", "Leg de munten op de toonbank",
+	for zin in ["nog geen gasten", "Leg de munten op de toonbank", "Nog %s erbij",
 			"Hoeveel euro samen?", "Hoeveel krijgt hij terug?",
 			"Leg het wisselgeld neer", "Veel plezier ermee!", "klaar met tellen",
 			"in je hand", "tik een getal", "zoveel is het", "dit moet er nog bij",
@@ -581,6 +730,9 @@ func test_kindtekst_letterlijk() -> void:
 			var k: Array = []
 			for id in o["keus"]:
 				k.append(_waar(o, str(id)))
+			# the rest line, with every amount this band can still be short of
+			for rest in range(1, int(o["doel"]) + 1):
+				zinnen.append("Nog %s erbij" % Sommen.Kraam.euro(rest))
 			if band <= 3:
 				zinnen.append("%s wil %s %s van %s" % [naam, k[0]["lid"], k[0]["naam"],
 					Sommen.Kraam.euro(int(k[0]["prijs"]))])
@@ -623,10 +775,11 @@ func _shell_op(maat: Vector2i) -> Dictionary:
 	# `Hotel.herstel_wereld()` puts a guest with a bed back IN that bed, so the
 	# stall would first have to fetch him through four doors.  The picture this
 	# test measures is the one the child sees once he has arrived: standing in
-	# front of the counter (§5.4).
+	# front of the counter (§5.4) — on the spot the game itself walks him to.
 	var g0: Dictionary = State.s["gasten"][0]
 	g0["waar"] = KAMER
-	World.zet(str(g0["id"]), KAMER, 100.0, 94.0)
+	var plek: Dictionary = _plekken(3)["gast"]
+	World.zet(str(g0["id"]), KAMER, float(plek["x"]), float(plek["z"]))
 	World.naar(KAMER)
 	for _f in 4:
 		await boom.process_frame

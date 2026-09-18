@@ -79,12 +79,22 @@ const WAREN_HOOG := 13.0
 const GELD_HOOG := 13.0
 const AF_HOOG := 14.0
 const ZEG_PX := 66.0
+## How far a good may stand from the middle of the top, in voxels: the top is
+## x −11..+11 and z −8..+8 (`modellen.gd:54-58`) and a good is nine voxels wide
+## and deep, so 7 and 4 are the edges — ±6 in x keeps a voxel to spare, ±4 in z
+## is the edge itself (`plekken_van`).
+const WAAR_X := 6.0
+const WAAR_Z := 4.0
+## The guest stands this many voxels in front of the counter, on both axes: the
+## same screen column, sixteen voxels nearer the viewer (`plekken_van`).
+const GAST_VOOR := 8.0
 
 ## Child text, verbatim (games-b.md §5.11).
 const T_LABEL := "Kraam"
 const T_LEEG := "nog geen gasten"
 const T_TAAK := "Souvenir"
 const T_LEG_MUNTEN := "Leg de munten op de toonbank"
+const T_NOG := "Nog %s erbij"
 const T_SAMEN := "Hoeveel euro samen?"
 const T_TERUG_VRAAG := "Hoeveel krijgt hij terug?"
 const T_WISSEL_NEER := "Leg het wisselgeld neer"
@@ -350,31 +360,57 @@ static func _pt(x: float, z: float) -> Dictionary:
 	return {"x": clampf(x, 6.0, 124.0), "z": clampf(z, 6.0, 124.0)}
 
 func _plekken(n: int) -> Dictionary:
-	var z := _zone()
-	var xm := int(roundf((int(z["x0"]) + int(z["x1"])) / 2.0))     # 115
-	var kraam_z := int(z["z0"]) + 4                               # 40: panel z 36..42
-	var bank_z := int(z["z1"]) - 12                               # 56: top z 48..64
-	# The goods must stand side by side ON SCREEN; horizontally that is the
-	# isometric direction (x − z), so they lie on one depth line x + z = bankD.
-	var bank_d := xm + bank_z                                     # 171
+	return plekken_van(_zone(), n)
+
+## Where everything of the stall stands, from the zone alone.  Pure and static,
+## so the layout can be measured without a turn running.
+##
+## THE GOODS STAND ON THE TOP.  The top is 23 × 17 voxels (x −11..+11 and
+## z −8..+8 around the counter, `modellen.gd:54-58`) and a good is nine voxels
+## wide and deep, so its anchor may stray at most 7 voxels in x and 4 in z.  The
+## old spread of ±8 along one depth line (x + z constant) put the outer two
+## exactly on the corners of the top, with half of each hanging in the air.
+##
+## They spread ±6 in x now, and the z ramps from the front edge of the top to
+## the back one.  A good's screen column is x − z, so that ramp SPREADS them
+## (±6 in x plus ±4 in z reads as ±10 across the screen) where the old depth
+## line only used the x — and no two of them stand at the same depth any more.
+##
+## Four goods do not fit on one line — four times nine voxels is 36 on a top of
+## 23 — so they stand in two shallow rows of two: a left pair and a right pair,
+## one of each in front and one behind.  On screen that reads as a diamond, the
+## way four things on a square table really look.  The odd ones take the front
+## row, which puts the tallest of the four (the bag) in the middle of it, right
+## where the guest stands — and a tall thing still reads above his head.
+static func plekken_van(zone: Dictionary, n: int) -> Dictionary:
+	var xm := int(roundf((int(zone["x0"]) + int(zone["x1"])) / 2.0))  # 115
+	var kraam_z := int(zone["z0"]) + 4                                # 40: panel z 36..42
+	var bank_z := int(zone["z1"]) - 12                                # 56: top z 48..64
 	var waren: Array = []
 	for i in n:
 		var f := 0.5 if n == 1 else float(i) / float(n - 1)
-		var wx := int(roundf((xm - 8) + 16.0 * f))
-		# The tags hang alternately 26 and 2 voxels above the top: all the goods
-		# stand at the same depth, so without that difference they would touch.
-		waren.append({"x": wx, "z": bank_d - wx, "tag_y": 26.0 if i % 2 == 1 else 2.0})
+		var wx := roundf(float(xm) - WAAR_X + 2.0 * WAAR_X * f)
+		var wz := roundf(float(bank_z) + WAAR_Z - 2.0 * WAAR_Z * f)
+		if n >= 4:
+			wx = float(xm) + (-WAAR_X if i < 2 else WAAR_X)
+			wz = float(bank_z) + (WAAR_Z if i % 2 == 1 else -WAAR_Z)
+		# The tags hang alternately 26 and 2 voxels above the top: two goods in
+		# one screen column would otherwise hang their tags on each other.
+		waren.append({"x": int(wx), "z": int(wz), "tag_y": 26.0 if i % 2 == 1 else 2.0})
+	var bank := _pt(xm, bank_z)
 	return {
-		"zone": z, "xm": xm, "bank_d": bank_d,
+		"zone": zone, "xm": xm,
 		"kraam": _pt(xm, kraam_z),
-		"bank": _pt(xm, bank_z),
+		"bank": bank,
 		"waren": waren,
 		# the money comes to the front of the top: bigger x + z than the goods,
 		# so on screen it lies in front of them
-		"geld": _pt(xm, int(z["z1"]) - 4),
-		# the guest stands IN FRONT of the stall, nearer the viewer than the
-		# table and left of the ball, 26 voxels before the zone's front edge
-		"gast": _pt(int(z["x0"]) - 4, int(z["z1"]) + 26),
+		"geld": _pt(xm, int(zone["z1"]) - 4),
+		# The guest stands AT the counter: the same screen column as the table
+		# (equal x − z) and `GAST_VOOR` voxels towards the viewer on both axes,
+		# so he is the customer in front of it instead of a bystander 53 voxels
+		# away on the grass.  Inside the stall zone, well behind the ball.
+		"gast": _pt(float(bank["x"]) + GAST_VOOR, float(bank["z"]) + GAST_VOOR),
 	}
 
 # ------------------------------------------------------------------ wereld
@@ -461,18 +497,33 @@ func _zinnen() -> Array:
 	var band := int(O["band"])
 	if band <= 3:
 		return ["%s wil %s %s van %s" % [naam, str(k[0]["lid"]), str(k[0]["naam"]),
-			Sommen.Kraam.euro(int(k[0]["prijs"]))], T_LEG_MUNTEN]
+			Sommen.Kraam.euro(int(k[0]["prijs"]))], _leg_regel(T_LEG_MUNTEN)]
 	if band == 4:
 		if _stap() == "som":
 			return ["%s %s en %s %s" % [_hoofd(str(k[0]["naam"])),
 				Sommen.Kraam.euro(int(k[0]["prijs"])), str(k[1]["naam"]),
 				Sommen.Kraam.euro(int(k[1]["prijs"]))], T_SAMEN]
-		return ["Samen kost het %s" % Sommen.Kraam.euro(int(O["kosten"])), T_LEG_MUNTEN]
+		return ["Samen kost het %s" % Sommen.Kraam.euro(int(O["kosten"])),
+			_leg_regel(T_LEG_MUNTEN)]
 	if _stap() == "som":
 		return ["%s gaf %s, het kost %s" % [naam, Sommen.Kraam.euro(int(O["betaald"])),
 			Sommen.Kraam.euro(int(O["kosten"]))], T_TERUG_VRAAG]
 	return ["%s krijgt %s terug" % [naam, Sommen.Kraam.euro(int(O["wissel"]))],
-		T_WISSEL_NEER]
+		_leg_regel(T_WISSEL_NEER)]
+
+## The second line while the coins are going down.  As long as the counter is
+## empty it says what to do; from the first coin on it counts the rest down, so
+## the card stops reading "€11 €0" with nothing to tell the child how far he
+## still has to go.  Too much (a coin on its way back) keeps the instruction —
+## the bubble beside it already says how much comes back.
+func _leg_regel(standaard: String) -> String:
+	if _stap() != "leg" or O.is_empty():
+		return standaard
+	var ligt := _op_bank()
+	var rest := int(O["doel"]) - ligt
+	if ligt <= 0 or rest <= 0:
+		return standaard
+	return T_NOG % Sommen.Kraam.euro(rest)
 
 ## The sum line: at the question the sum itself, at the paying the target
 ## amount.  The answer box beside it is filled by the card with what lies on the
