@@ -62,6 +62,84 @@ func _gasten(n: int, dag := 1, kunnen := 3) -> Array:
 func _spel():
 	return Games._knoop
 
+## The four words on the strip under the question card.
+func _keuzes() -> Array:
+	var uit: Array = []
+	var s := Hits.spot("tb_vraag_keuzes")
+	if s == null or not is_instance_valid(s.knoop):
+		return uit
+	var rij := s.knoop.get_node_or_null("Rij")
+	if rij == null:
+		return uit
+	for k in rij.get_children():
+		uit.append(str((k as Button).text))
+	return uit
+
+## Tap the number `n` on that strip, exactly as a finger does (there is no
+## keypad: one tap on one of at most four buttons, HOTEL.md §9).
+func _tik_keuze(n: int) -> bool:
+	var s := Hits.spot("tb_vraag_keuzes")
+	if s == null or not is_instance_valid(s.knoop):
+		return false
+	var rij := s.knoop.get_node_or_null("Rij")
+	if rij == null:
+		return false
+	var k := rij.get_node_or_null("Kn%d" % n) as BaseButton
+	if k == null:
+		return false
+	k.emit_signal("pressed")
+	return true
+
+## The right answer of the opening question: the whole double, one tub-full
+## otherwise.
+func _juist(s: Dictionary) -> int:
+	return int(s["T"]) if str(s["soort"]) == "dubbel" else int(s["per"])
+
+## How many guests really own a bed — the recipe counts those (`_gasten()` of
+## the game), while `State.band()` counts every guest in the hotel.
+func _met_bed() -> int:
+	var n := 0
+	for g in State.s["gasten"]:
+		if not str(g.get("bed", "")).is_empty():
+			n += 1
+	return n
+
+## The first day on which the frozen core serves this `soort`.
+func _dag_met(soort: String, n: int, band: int) -> int:
+	for dag in range(1, 20):
+		if str(Sommen.Tobbe.recept(n, band, dag)["soort"]) == soort:
+			return dag
+	return 0
+
+## Which guest count and which `kunnen` put `State.band()` on 3, 4 and 5.
+const OPZET := [
+	{"band": 3, "kunnen": 2, "gasten": 3},
+	{"band": 4, "kunnen": 3, "gasten": 5},
+	{"band": 5, "kunnen": 4, "gasten": 7},
+]
+
+## Lay the table for one band and one soort, and start the game.
+func _begin(opzet: Dictionary, soort: String):
+	_op()
+	_gasten(int(opzet["gasten"]), 1, int(opzet["kunnen"]))
+	var band := State.band()
+	gelijk(band, int(opzet["band"]), "band %d bij %d gasten" % [int(opzet["band"]), int(opzet["gasten"])])
+	var dag := _dag_met(soort, _met_bed(), band)
+	waar(dag > 0, "band %d kent de soort %s" % [band, soort])
+	if dag <= 0:
+		return null
+	State.s["dag"] = dag
+	World.zet_dag(dag)
+	if not Games.start(ID):
+		fout("het spel start niet (band %d, %s)" % [band, soort])
+		return null
+	var spel = _spel()
+	if spel == null:
+		fout("geen spelknoop (band %d, %s)" % [band, soort])
+		return null
+	gelijk(str(spel._s["soort"]), soort, "de soort van dag %d op band %d" % [dag, band])
+	return spel
+
 # ------------------------------------------------------------ 1. aanmelding
 
 func test_aanmelding_en_definitie() -> void:
@@ -118,7 +196,10 @@ func test_eerlijk_verdelen_slaagt() -> void:
 		# the recipe of this day is a question card, not the filling step
 		_af()
 		return
-	gelijk(str(s["stap"]), "vullen", "eerst vullen")
+	# N4: elke ronde begint met de som, ook `eerlijk` — daarna pas het sjouwen
+	gelijk(str(s["stap"]), "vraag", "eerst de som")
+	waar(_tik_keuze(int(s["per"])), "de helft aantikken")
+	gelijk(str(spel._s["stap"]), "vullen", "daarna mag er geschept worden")
 	for i in int(s["M"]):
 		s["tob"][i] = int(s["per"])
 	s["rek"] = 0
@@ -144,6 +225,7 @@ func test_misser_helpt_en_straft_nooit() -> void:
 		_af()
 		return
 	var sterren := int(State.s["sterren"])
+	waar(_tik_keuze(int(s["per"])), "eerst de som goed beantwoorden")
 	spel._check()                                  # nothing moved yet: the rack is full
 	gelijk(int(spel._s["missers"]), 1, "één misser geteld")
 	gelijk(str(spel._s["stap"]), "vullen", "de beurt loopt door")
@@ -163,6 +245,7 @@ func test_beurt_overleeft_een_herlaad() -> void:
 		return
 	var voor: Dictionary = spel.stand()
 	if str(voor["soort"]) == "eerlijk":
+		waar(_tik_keuze(int(voor["per"])), "de openingssom beantwoorden")
 		spel._s["tob"][0] = 1
 		spel._s["rek"] = int(spel._s["rek"]) - 1
 		spel._bewaar()
@@ -173,6 +256,7 @@ func test_beurt_overleeft_een_herlaad() -> void:
 	gelijk(int(na["M"]), int(voor["M"]), "dezelfde M")
 	if str(voor["soort"]) == "eerlijk":
 		gelijk(int(na["tob"][0]), 1, "het schepje in tobbe 1 is er nog")
+		gelijk(str(na["stap"]), "vullen", "en de beantwoorde som komt niet terug")
 	_af()
 
 func test_stop_laat_de_wereld_schoon_achter() -> void:
@@ -190,6 +274,61 @@ func test_stop_laat_de_wereld_schoon_achter() -> void:
 		waar(not str(id).begins_with("tb_"), "geen knop van tobbe meer: %s" % str(id))
 	_af()
 
+# ------------------------------------------ 4b. de som staat voorop (N4)
+
+## R1/R3: elke soort — ook `eerlijk`, de enige die band 3 ooit ziet — opent met
+## een somkaart en een strook van vier, en er is geen ✓ om eromheen te lopen.
+func test_elke_soort_begint_met_een_vraag() -> void:
+	for opzet in OPZET:
+		for soort in Sommen.Tobbe.soorten(int(opzet["band"])):
+			var spel = _begin(opzet, str(soort))
+			if spel == null:
+				_af()
+				continue
+			var wat := "band %d, %s" % [int(opzet["band"]), str(soort)]
+			gelijk(str(spel._s["stap"]), "vraag", "%s: de som staat er het eerst" % wat)
+			waar(Hits.spot("tb_vraag") != null, "%s: er hangt een somkaart" % wat)
+			gelijk(_keuzes().size(), 4, "%s: vier knoppen op de strook" % wat)
+			var goed := _juist(spel._s)
+			var staat_er := false
+			for woord in _keuzes():
+				if str(woord).ends_with(" %d" % goed):
+					staat_er = true
+			waar(staat_er, "%s: het goede getal %d staat op de strook" % [wat, goed])
+			waar(Hits.spot("tb_klaar") == null, "%s: nog geen ✓ om de som over te slaan" % wat)
+			waar(Hits.spot("tb_kraan") == null, "%s: nog geen kraantje" % wat)
+			_af()
+
+## Het goede antwoord OPENT het verdelen, het doet het niet voor: bij `half`
+## staat al het sop nog in tobbe 1, bij `eerlijk` en `dubbel` nog op het rek.
+func test_een_goed_antwoord_verdeelt_niet_zelf() -> void:
+	for opzet in OPZET:
+		for soort in Sommen.Tobbe.soorten(int(opzet["band"])):
+			var spel = _begin(opzet, str(soort))
+			if spel == null:
+				_af()
+				continue
+			var s: Dictionary = spel._s
+			var wat := "band %d, %s" % [int(opzet["band"]), str(soort)]
+			var t := int(s["T"])
+			var sterren := int(State.s["sterren"])
+			var leeg: Array = []
+			for i in int(s["M"]):
+				leeg.append(0)
+			waar(_tik_keuze(_juist(s)), "%s: het goede getal is aan te tikken" % wat)
+			gelijk(str(spel._s["stap"]), "vullen", "%s: daarna mag er geschept worden" % wat)
+			if str(soort) == "half":
+				var vol: Array = leeg.duplicate()
+				vol[0] = t
+				gelijk(str(spel._s["tob"]), str(vol), "%s: al het sop staat nog in tobbe 1" % wat)
+				gelijk(int(spel._s["rek"]), 0, "%s: het rek blijft leeg" % wat)
+			else:
+				gelijk(str(spel._s["tob"]), str(leeg), "%s: de tobbes staan nog leeg" % wat)
+				gelijk(int(spel._s["rek"]), t, "%s: al het sop ligt op het rek" % wat)
+			gelijk(int(spel._s["kan"]), 0, "%s: het kannetje is nog leeg" % wat)
+			gelijk(int(State.s["sterren"]), sterren, "%s: een antwoord alleen geeft geen ster" % wat)
+			_af()
+
 # --------------------------------------------------------------- 5. teksten
 
 ## Every §6.6 literal is in the source, verbatim.
@@ -204,10 +343,33 @@ func test_alle_teksten_staan_er_woordelijk() -> void:
 			"opnieuw beginnen", "morgen dubbel", "Hoeveel samen?", "in twee helften",
 			"Hoeveel in elke helft?", "rek is leeg", "blijft over", "is oneven",
 			"eerst sop erin", "te vol", "nog op het rek", "even hoog", "hoort hierin",
+			"%d schepjes, %d tobbes", "Hoeveel in elke tobbe?", "de som van het sop",
 			"erbij", "ieder evenveel", "zoveel hoort erin", "zoveel blijft over",
 			"wil in bad", "zit vol", "lekker warm", "mag in de tobbe",
 			"mogen in de tobbe", "blinkend schoon"]:
 		waar(bron.contains(zin), "letterlijk in de bron: %s" % zin)
+
+## De openingszin van `eerlijk` past bij ELK recept dat de bevroren kern kan
+## maken (HOTEL.md §9: <= 8 woorden en <= 40 tekens), en elk teken zit in het
+## lettertype (PLAN.md R10).
+func test_de_sopvraag_past_in_de_regels() -> void:
+	var gezien := 0
+	for band in [3, 4, 5]:
+		for n in range(1, 11):
+			for dag in range(1, 8):
+				var r := Sommen.Tobbe.recept(n, band, dag)
+				if str(r["soort"]) != "eerlijk":
+					continue
+				gezien += 1
+				var zin := "%d schepjes, %d tobbes" % [int(r["T"]), int(r["M"])]
+				waar(Ui.keur_regel("tb_vraag", zin), "de regel past: %s" % zin)
+				waar(Ui.mist_tekens(zin).is_empty(), "alle tekens bestaan: %s" % zin)
+				var som := ("helft van %d =" % int(r["T"])) if int(r["M"]) == 2 \
+					else ("%d : %d =" % [int(r["T"]), int(r["M"])])
+				waar(Ui.mist_tekens(som).is_empty(), "alle tekens bestaan: %s" % som)
+	waar(gezien > 20, "er zijn genoeg eerlijke recepten nagekeken (%d)" % gezien)
+	waar(Ui.keur_regel("tb_vraag2", "Hoeveel in elke tobbe?"), "de tweede regel past")
+	waar(Ui.mist_tekens("🧴 Hoeveel in elke tobbe?").is_empty(), "pictogram en zin bestaan")
 
 # --------------------------------------------------------------- 6. dekking
 
@@ -258,6 +420,10 @@ func test_dekking_in_vier_kaders() -> void:
 		var kader: Vector2 = h["kader"]
 		gelijk(Games.actief(), ID, "het spel draait bij %s" % str(maat))
 		var dbg := Hits.debug()
+		# N4: de beurt opent met de som, dus kaart EN strook horen op elk kader
+		# echt geplaatst te zijn — niet weggevallen omdat er geen ruimte was
+		waar(dbg.has("tb_vraag") and dbg.has("tb_vraag_keuzes"),
+			"%s: de somkaart en de antwoordstrook staan op het scherm" % str(maat))
 		var eigen := 0
 		var ids: Array = dbg.keys()
 		for id in ids:

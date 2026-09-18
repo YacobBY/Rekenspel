@@ -99,7 +99,11 @@ func _nieuwe_stand(n: int, band: int, dag: int) -> Dictionary:
 		"dag": dag, "N": n, "band": int(r["band"]), "soort": soort,
 		"n0": int(r["n0"]), "perDier": int(r["perDier"]), "basis": int(r["basis"]),
 		"T": t, "M": m, "per": int(r["per"]), "rest": int(r["rest"]),
-		"stap": "vullen" if soort == "eerlijk" else "vraag",
+		# Elke ronde begint met rekenen (PLAN.md R1/R3, taak N4): ook `eerlijk`.
+		# Het sop blijft daarbij staan waar het staat — op het rek bij `eerlijk`,
+		# in de eerste tobbe bij `half` — want het antwoord opent de handeling,
+		# het voert haar niet uit.
+		"stap": "vraag",
 		"rek": t if soort == "eerlijk" else (int(r["basis"]) if soort == "dubbel" else 0),
 		"tob": tobbes, "kan": 0, "inbad": inbad, "hand": 1,
 		"missers": 0, "lijn": 0, "hulp": 0, "wens": 0, "ster": 0,
@@ -601,7 +605,7 @@ func _ico(g: Dictionary) -> String:
 	return str(DIER_ICO.get(str(g.get("soort", "")), "🐾"))
 
 # =====================================================================
-#  8. DE VRAAGSTAP — het enige moment met een cijferpad
+#  8. DE VRAAGSTAP — waar elke ronde begint
 # =====================================================================
 
 func _teken_vraag() -> void:
@@ -609,6 +613,7 @@ func _teken_vraag() -> void:
 	var rij := _rij_punt()
 	var basis := int(_s["basis"])
 	var t := int(_s["T"])
+	var m := int(_s["M"])
 	var per := int(_s["per"])
 	var rest := int(_s["rest"])
 	if str(_s["soort"]) == "dubbel":
@@ -622,7 +627,7 @@ func _teken_vraag() -> void:
 			"icoon": "🧴", "regel": "Morgen twee keer %d" % basis,
 			"regel2": "Hoeveel samen?", "titel": "de dubbele som",
 			"on_ok": func(n, k) -> void: _antwoord(n, int(_s["T"]), k)})
-	else:
+	elif str(_s["soort"]) == "half":
 		ctx.ui.wolk({"id": "tb_recept", "kamer": KAMER, "x": rij["x"], "z": rij["z"],
 			"hoog": 26.0, "icoon": "🚰", "getal": t,
 			"tekst": "in twee helften", "prio": 9})
@@ -637,6 +642,18 @@ func _teken_vraag() -> void:
 				else ("De helft van %s" % _mv(t, "schepje", "schepjes")),
 			"regel2": "Hoeveel in elke helft?", "titel": "de helft van het sop",
 			"on_ok": func(n, k) -> void: _antwoord(n, int(_s["per"]), k)})
+	else:
+		# `eerlijk` — de deelsom staat er vóór het eerste schepje.  Twee tobbes
+		# krijgen "de helft van T" (groep 3 kent het deelteken nog niet, zie
+		# IDEAS.md), drie tobbes het echte deelteken; drie tobbes komt alleen op
+		# band 5 voor (`Sommen.Tobbe.recept`: M = 3 vanaf band 5).
+		_kaart = ctx.ui.somkaart(rij,
+			("helft van %d =" % t) if m == 2 else ("%d : %d =" % [t, m]), {
+			"id": "tb_vraag", "kamer": KAMER, "hoog": 34.0, "max": 2,
+			"goed": per, "liever": [t, per + 1, rest],
+			"icoon": "🧴", "regel": "%d schepjes, %d tobbes" % [t, m],
+			"regel2": "Hoeveel in elke tobbe?", "titel": "de som van het sop",
+			"on_ok": func(n, k) -> void: _antwoord(n, int(_s["per"]), k)})
 	_teken_zeg()
 
 func _antwoord(n, goed: int, k) -> void:
@@ -647,21 +664,21 @@ func _antwoord(n, goed: int, k) -> void:
 		_s["lijn"] = 1
 		ctx.snd.zacht()
 		k.zet("")
+		# samen doortellen: net zoveel sprongen als er tobbes zijn
+		var staart := (" … en %d over." % int(_s["rest"])) if int(_s["rest"]) > 0 else "."
 		k.hulp(_tel_mee(int(_s["basis"]), 2) if str(_s["soort"]) == "dubbel"
-			else _tel_mee(goed, 2, " … en %d over." % int(_s["rest"]) if int(_s["rest"]) > 0 else "."))
+			else _tel_mee(goed, int(_s["M"]), staart))
 		_bewaar()
 		return
 	k.zet(str(int(n)))
 	k.klaar()
 	ctx.snd.ja()
+	# Het goede antwoord OPENT het verdelen, het doet het niet voor (taak N4):
+	# bij `dubbel` ligt er vanaf nu twee keer zoveel op het rek, bij `eerlijk`
+	# staat alles nog op het rek en bij `half` staat alles nog in de eerste
+	# tobbe — halveren doet het kind zelf met 🚰 of door over te gieten.
 	if str(_s["soort"]) == "dubbel":
 		_s["rek"] = int(_s["T"])
-	else:
-		_s["tob"][0] = int(_s["per"])
-		_s["tob"][1] = int(_s["per"])
-		_s["kan"] = int(_s["rest"])
-		if int(_s["rest"]) > 0:
-			_zeg({"icoon": "🫗", "getal": int(_s["rest"]), "tekst": "blijft over", "klas": ""})
 	_s["stap"] = "vullen"
 	_s["lijn"] = 1
 	_bewaar()
