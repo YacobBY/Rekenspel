@@ -258,6 +258,9 @@ func test_de_zinnen_staan_er_woordelijk() -> void:
 	gelijk(ZwembadBeurt.som_start(43), "nog 43 m", "kaart 1, sombalk")
 	gelijk(ZwembadBeurt.regel_verder("Muis", 30), "Muis is bij 30 meter", "kaart n, regel 1")
 	gelijk(ZwembadBeurt.regel2_verder(), "Nog hoeveel meter?", "kaart n, regel 2")
+	gelijk(ZwembadBeurt.regel_bots_terug(), "Te ver, hij tikt de rand",
+		"kaart n na een bots")
+	gelijk(ZwembadBeurt.BOTS_KAART_ICOON, "🙃", "en haar pictogram")
 	gelijk(ZwembadBeurt.som_verder(43, 30), "43 − 30 =", "kaart n, sombalk")
 	gelijk(ZwembadBeurt.som_af(43, 30, 13, true), "43 − 30 = 13", "eindsombalk")
 	gelijk(ZwembadBeurt.som_af(43, 0, 43, false), "43 m ✓", "eindsombalk zonder etappe")
@@ -278,6 +281,7 @@ func test_de_zinnen_staan_er_woordelijk() -> void:
 			var m := int(baan["M"])
 			for zin in [ZwembadBeurt.regel_start(l), ZwembadBeurt.regel2_start(m),
 					ZwembadBeurt.regel_verder(naam, m), ZwembadBeurt.regel2_verder(),
+					ZwembadBeurt.regel_bots_terug(),
 					ZwembadBeurt.eind_regel2_precies(naam, l),
 					ZwembadBeurt.eind_regel_bots(naam), ZwembadBeurt.eind_regel2_bots(l),
 					ZwembadBeurt.hulp_regel(1, m), ZwembadBeurt.hulp_regel(2, m),
@@ -288,7 +292,8 @@ func test_de_zinnen_staan_er_woordelijk() -> void:
 	# every character is in the bundled font subset
 	for zin in [ZwembadBeurt.GEEN_GAST, ZwembadBeurt.TOAST_PRECIES,
 			ZwembadBeurt.TOAST_BOTS, ZwembadBeurt.ICOON, ZwembadBeurt.PRECIES_ICOON,
-			ZwembadBeurt.BOTS_ICOON, ZwembadBeurt.som_verder(43, 30),
+			ZwembadBeurt.BOTS_ICOON, ZwembadBeurt.BOTS_KAART_ICOON,
+			ZwembadBeurt.regel_bots_terug(), ZwembadBeurt.som_verder(43, 30),
 			ZwembadBeurt.som_af(43, 0, 43, false), ZwembadBeurt.hulp_regel(1, 30)]:
 		gelijk(str(Ui.mist_tekens(zin)), "[]", 'geen ontbrekend teken in "%s"' % zin)
 
@@ -311,6 +316,9 @@ func test_normaliseren_en_geldigheid() -> void:
 		"zonder baan niet")
 	var af := ZwembadBeurt.normaliseer({"L": 14, "p": 14, "klaar": "precies"}, 3)
 	waar(not ZwembadBeurt.geldig(af, true), "een afgelopen beurt wordt niet hervat")
+	var wand := ZwembadBeurt.normaliseer({"L": 14, "p": 14}, 3)
+	waar(not ZwembadBeurt.geldig(wand, true),
+		"en een beurt die tegen de wand geparkeerd staat evenmin: die is niet te beantwoorden")
 
 # ------------------------------------------------- de kaart en haar marges
 
@@ -497,11 +505,15 @@ func test_derde_misser_zet_een_spookstreep() -> void:
 		waar(true, "de baan was te kort voor drie missers")
 	await _af()
 
-## Too far: a soft bump, a 💛 Au! and never a cross — and the star still comes,
-## because it belongs to reaching the other side (§1.5, §1.7).
-func test_te_ver_botst_zacht_en_geeft_toch_een_ster() -> void:
+## PLAN N3 (open question V1): too far is a soft bump, a 💛 Au! and never a
+## cross — and since this task never the end of the turn either.  He swims the
+## rest, taps the wall, swims back to his own metre and the SAME question comes
+## back, so one tap on a number that is too big no longer buys the other side
+## (R3).  This is the test that replaced `test_te_ver_botst_zacht_en_geeft_toch
+## _een_ster`, which asserted exactly the behaviour N3 removes.
+func test_een_te_ver_antwoord_eindigt_de_beurt_niet() -> void:
 	_op()
-	_gasten(4)
+	var gasten := _gasten(4)
 	var sterren_voor := int(State.s["sterren"])
 	waar(Games.start(ID), "het spel start")
 	waar(await _wacht(_kaart_staat), "de vraagkaart staat er")
@@ -513,21 +525,115 @@ func test_te_ver_botst_zacht_en_geeft_toch_een_ster() -> void:
 	var ver := _ver_antwoord()
 	waar(ver > 0, "er staat een te verre knop op de strook (%d)" % ver)
 	var p_voor := int(_beurt()["p"])
+	var missers_voor := int(_beurt()["misser"])
 	waar(_druk(ver), "de te verre knop is aan te tikken")
-	waar(await _wacht(func() -> bool: return not _klaar().is_empty(), 6000),
-		"de beurt loopt af met een bots")
-	gelijk(_klaar(), "bots", "hij botste zacht tegen de wand")
-	gelijk(int(_beurt()["p"]), l, "en ligt aan de overkant")
-	gelijk(int(_beurt()["laatste_rest"]), l - p_voor, "de laatste rest klopt")
+	waar(await _wacht(_kaart_staat, 8000), "de vraag komt terug na de bots")
+	gelijk(_klaar(), "", "de beurt is NIET afgelopen")
+	gelijk(int(_beurt()["p"]), p_voor, "hij ligt weer op meter %d" % p_voor)
+	gelijk(int(_beurt()["misser"]), missers_voor + 1, "de misser telt voor de hulptrap")
+	gelijk(int(State.s["sterren"]), sterren_voor, "en er viel geen ster")
 	var kaart := _kaart_knoop()
-	waar(kaart != null, "er staat een eindkaart")
+	waar(kaart != null, "er staat weer een somkaart")
 	if kaart != null:
 		gelijk(kaart.regel_label.text,
-			"💛 " + ZwembadBeurt.eind_regel_bots(str(State.s["gasten"][0]["naam"])),
-			"eindkaart na een bots")
-		gelijk(kaart.regel2_label.text, ZwembadBeurt.eind_regel2_bots(l - p_voor),
-			"en wat er nog lag")
-	gelijk(int(State.s["sterren"]), sterren_voor + 1, "de ster hoort bij het meedoen")
+			ZwembadBeurt.BOTS_KAART_ICOON + " " + ZwembadBeurt.regel_bots_terug(),
+			"en die vertelt waarom hij terug is")
+		gelijk(kaart.regel2_label.text, ZwembadBeurt.regel2_verder(), "met dezelfde vraag")
+		gelijk(kaart.som_label.text, ZwembadBeurt.som_verder(l, p_voor), "en dezelfde som")
+		waar(not kaart.regel_label.text.contains("✗"), "geen kruis op de kaart")
+	var rij := Hits.spot(STROOK).knoop.get_node_or_null("Rij")
+	gelijk(rij.get_child_count(), 4, "met vier keuzeknoppen")
+	# de zwemmer ligt écht terug op zijn meter, niet tegen de wand
+	var d = World.dier(str(gasten[0]["id"]))
+	var doel := ZwembadBeurt.baan_x(Rooms.get_kamer(ID).bad, l, p_voor)
+	waar(absf(d.x - doel) <= 3.0,
+		"en hij zwom terug naar meter %d (x=%.1f, doel %.1f)" % [p_voor, d.x, doel])
+	waar(m > 0, "de baan is er nog")
+	await _af()
+
+## De kaart die ná een bots terugkomt is een gewone kaart: ze past in het kader
+## en staat niet `krap`.  Deze proef loopt in OPGEWEKTE beweging (rust uit),
+## want alleen dan komt het einde van de terugzwemtocht uit de wereldtik zelf —
+## en een kaart die in díe fase gebouwd wordt, wordt opgemeten vóórdat haar
+## hulpregel een breedte heeft (een Label met autowrap meldt de hoogte die bij
+## zijn HUIDIGE breedte hoort, en `Hits` zet die hoogte daarna vast in
+## `custom_minimum_size`).  Zonder de tel tussen de bots en de vraag werd de
+## kaart daardoor een strook van kaderhoogte.
+func test_de_kaart_na_een_bots_past_in_het_kader() -> void:
+	_op()
+	_gasten(1)
+	Ui.zet_rust_modus(false)
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_kaart_staat, 20000), "de vraagkaart staat er")
+	waar(_druk(_juist_nu()), "eerst de eerlijke slag")
+	waar(await _wacht(_kaart_staat, 20000), "de tweede kaart staat er")
+	var ver := _ver_antwoord()
+	waar(ver > 0, "er staat een te verre knop op de strook (%d)" % ver)
+	waar(_druk(ver), "de te verre knop is aan te tikken")
+	waar(await _wacht(_kaart_staat, 25000), "de vraag komt terug na de bots")
+	await _frames(3)
+	Ui.zet_rust_modus(true)
+	var a: Dictionary = Hits.debug().get(KAART, {})
+	waar(not a.is_empty(), "de kaart is geplaatst")
+	if not a.is_empty():
+		var r: Rect2 = a["rect"]
+		waar(not bool(a["krap"]), "ze vond een echte plek (%s)" % str(r))
+		waar(r.size.y <= 260.0, "ze is een kaart, geen strook (%s)" % str(r))
+		waar(r.position.y >= 0.0 and r.end.y <= 637.0 + 0.01,
+			"en ze staat heel in het kader (%s)" % str(r))
+	var kaart := _kaart_knoop()
+	if kaart != null:
+		waar(kaart.hulp_label.visible, "met de eerste hulptrede erop")
+	await _af()
+
+## En het sluitstuk van R3: de ster valt alleen bij `precies`.  Dezelfde beurt,
+## eerst een bots (geen ster, geen vinkje) en daarna het goede antwoord.
+func test_de_ster_valt_alleen_bij_precies() -> void:
+	_op()
+	_gasten(4)
+	var sterren_voor := int(State.s["sterren"])
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_kaart_staat), "de vraagkaart staat er")
+	waar(_druk(_juist_nu()), "eerst een eerlijke etappe")
+	waar(await _wacht(_kaart_staat), "de tweede kaart staat er")
+	var ver := _ver_antwoord()
+	waar(ver > 0, "er staat een te verre knop op de strook (%d)" % ver)
+	waar(_druk(ver), "en die wordt getikt")
+	waar(await _wacht(_kaart_staat, 8000), "de vraag komt terug")
+	gelijk(int(State.s["sterren"]), sterren_voor, "een bots levert geen ster op")
+	gelijk(_klaar(), "", "en vinkt de beurt niet af")
+	gelijk(Games.actief(), ID, "het spel draait gewoon door")
+	# nu het goede antwoord: dan pas de ster
+	waar(_druk(_juist_nu()), "nu het goede antwoord")
+	waar(await _wacht(func() -> bool: return not _klaar().is_empty(), 8000),
+		"de beurt loopt af")
+	gelijk(_klaar(), "precies", "en wel precies aan de overkant")
+	gelijk(int(State.s["sterren"]), sterren_voor + 1, "nu valt de ster")
+	await _af()
+
+## R1 (PLAN N3 stap 1): binnen een tik staat de som er.  De reis, het trapje en
+## de duik zijn voortaan de belóning van het eerste antwoord, niet de wachtkamer
+## ervoor — de zwemmer mag zelfs nog in een andere kamer staan.
+func test_de_vraag_staat_er_voor_de_duik() -> void:
+	_op()
+	var gasten := _gasten(4)
+	gasten[2]["behoefte"] = "zwemmen"      # de wensende gast staat in de receptie
+	gasten[2]["blij"] = false
+	waar(Games.start(ID), "het spel start")
+	waar(_kaart_staat(), "de keuzestrook staat er meteen, zonder één frame te wachten")
+	gelijk(str(_beurt()["gast"]), str(gasten[2]["id"]), "de wensende gast zwemt")
+	gelijk(int(_beurt()["p"]), 0, "en hij ligt nog op meter 0")
+	var rij := Hits.spot(STROOK).knoop.get_node_or_null("Rij")
+	waar(rij != null and rij.get_child_count() == 4, "de kaart draagt vier keuzes")
+	var kaart := _kaart_knoop()
+	waar(kaart != null, "het is een echte somkaart")
+	if kaart != null:
+		gelijk(kaart.regel_label.text,
+			"🏊 " + ZwembadBeurt.regel_start(int(_beurt()["L"])), "met de baan erop")
+	var d = World.dier(str(gasten[2]["id"]))
+	waar(d != null and d.kamer != ID, "en de zwemmer is nog niet eens in het zwembad")
+	await _frames(2)
+	waar(_kaart_staat(), "ook na de eerste plaatsing staat de vraag er")
 	await _af()
 
 ## De twee klimaxmomenten spatten: de wand en de overkant (pijler 4).  Met de
@@ -537,6 +643,8 @@ func test_te_ver_botst_zacht_en_geeft_toch_een_ster() -> void:
 ## precies één plonsdruppel (elke 5 m), zodat een piek van 6 druppels alleen
 ## van de klimax zelf kan komen.  De return zegt óf er tijdens het polled een
 ## sterkleurig deeltje rondhing: dat hoort alleen bij de precieze overkant.
+## Sinds N3 eindigt een te verre slag de beurt niet meer: dan is de klimaks
+## voorbij zodra de vraag terugkomt, en de precieze overkant sluit hem wél af.
 func _klimax_spat(soort_ver: bool) -> bool:
 	_op()
 	_gasten(1)
@@ -556,7 +664,9 @@ func _klimax_spat(soort_ver: bool) -> bool:
 	var boom := Engine.get_main_loop() as SceneTree
 	var t0 := Time.get_ticks_msec()
 	waar(_druk(laatste), "de laatste knop is aan te tikken")
-	while Time.get_ticks_msec() - t0 < 25000 and _klaar().is_empty():
+	var af := func() -> bool:
+		return _kaart_staat() if soort_ver else not _klaar().is_empty()
+	while Time.get_ticks_msec() - t0 < 25000 and not af.call():
 		await boom.process_frame
 		piek = maxi(piek, World.deeltjes().size())
 		for q in World.deeltjes():
@@ -564,9 +674,13 @@ func _klimax_spat(soort_ver: bool) -> bool:
 				sprankel = true
 	piek = maxi(piek, World.deeltjes().size())
 	Ui.zet_rust_modus(true)
-	gelijk(_klaar(), "bots" if soort_ver else "precies", "de beurt eindigt als verwacht")
+	if soort_ver:
+		gelijk(_klaar(), "", "een bots laat de beurt doorlopen")
+		waar(_kaart_staat(), "en de vraag staat er weer")
+	else:
+		gelijk(_klaar(), "precies", "de beurt eindigt aan de overkant")
 	waar(piek - voor >= 6,
-		"'%s' spoot over (piek %d, voor %d)" % [_klaar(), piek, voor])
+		"'%s' spoot over (piek %d, voor %d)" % ["bots" if soort_ver else _klaar(), piek, voor])
 	await _af()
 	return sprankel
 
@@ -625,19 +739,27 @@ func test_herstel_uit_ctx_data() -> void:
 	# stop() never leaves anybody afloat (§1.12)
 	var d = World.dier(str(gasten[0]["id"]))
 	waar(d.z > float(Rooms.get_kamer(ID).bad["z1"]), "niemand blijft in het water liggen")
-	# start again: the saved turn is picked up where it was
+	# start again: the saved turn is picked up where it was.  Sinds N3 komt de
+	# vraag eerst: hij staat nog dróóg op het dek en gaat pas met het eerste
+	# antwoord terug het water in, op zijn eigen meter (PLAN N3 stap 1).
 	waar(Games.start(ID), "het spel start opnieuw")
 	waar(await _wacht(_kaart_staat), "en de vraagkaart is terug")
 	gelijk(int(_beurt()["p"]), p, "op dezelfde meter")
 	gelijk(int(_beurt()["L"]), l, "met dezelfde baan")
-	d = World.dier(str(gasten[0]["id"]))
-	var doel := ZwembadBeurt.baan_x(Rooms.get_kamer(ID).bad, l, p)
-	waar(absf(d.x - doel) <= 3.0,
-		"en de zwemmer ligt weer op meter %d (x=%.1f, doel %.1f)" % [p, d.x, doel])
-	gelijk(d.hoogte, -World.ZWEM_DIEP, "in het water, niet erop")
 	var kaart := _kaart_knoop()
 	if kaart != null:
 		gelijk(kaart.som_label.text, ZwembadBeurt.som_verder(l, p), "en de som klopt nog")
+	d = World.dier(str(gasten[0]["id"]))
+	waar(d.z > float(Rooms.get_kamer(ID).bad["z1"]), "hij wacht nog droog op het dek")
+	gelijk(d.hoogte, 0.0, "op de vloer, niet in het water")
+	# het antwoord legt hem terug op de bewaarde meter en zwemt vandaar verder
+	waar(_druk(_juist_nu()), "het antwoord op de hervatte vraag")
+	waar(await _wacht(func() -> bool: return not _klaar().is_empty() or _kaart_staat(), 8000),
+		"en het spel gaat verder")
+	gelijk(int(_beurt()["laatste_p"]), p,
+		"hij zwom verder vanaf meter %d, niet vanaf nul" % p)
+	gelijk(int(_beurt()["p"]), l, "en kwam aan de overkant")
+	gelijk(_klaar(), "precies", "precies, want het was het goede antwoord")
 	await _af()
 
 ## No guest at all: one sentence, and the game does not open.

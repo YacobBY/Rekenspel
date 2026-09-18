@@ -49,6 +49,7 @@ var _decor_ids: Array[String] = []
 var _label_ids: Array[String] = []
 var _kant := ""
 var _hulp_licht := false        ## rung 1: the markers ahead glow with the card
+var _na_bots := false           ## the next card is the one after a bump (N3)
 
 # --------------------------------------------------------------- aanmelding
 
@@ -149,13 +150,13 @@ func _gast_kies() -> Dictionary:
 		return {"id": str(gasten[0]["id"]), "wens": false}
 	return {}
 
-## Into the water, then the first question.
+## The question first, the water after it (PLAN N3 step 1, R1): within a second
+## of the tap on the pool there is a card with an answer strip, and the journey,
+## the little stair and the dive are what the first ANSWER buys.  `_kies()` puts
+## him in the water itself, so nothing here waits for a walk — the guest may
+## still be in another room, which `_zet_gasttag` and `_vrij_vak` both allow.
 func _begin() -> void:
 	_zet_gasttag()
-	if not await _zorg_in_water():
-		return
-	if not actief:
-		return
 	_vraag()
 
 # --------------------------------------------------------------- de vraag
@@ -178,13 +179,22 @@ func _vraag() -> void:
 			"kies": func(_id) -> void: _kies(v),
 		})
 	var eerste := p == 0
+	# the card straight after a bump says WHY the question is back (N3): the wall
+	# stopped him, he swam back, and this is the same question once more
+	var terug := _na_bots
+	_na_bots = false
+	var regel := ZwembadBeurt.regel_start(l) if eerste \
+		else ZwembadBeurt.regel_verder(_naam(), p)
+	if terug:
+		regel = ZwembadBeurt.regel_bots_terug()
 	_kaart = ctx.ui.somkaart(_mik_start(),
 		ZwembadBeurt.som_start(l) if eerste else ZwembadBeurt.som_verder(l, p), {
 			"id": KAART_ID, "kamer": KAMER, "hoog": 0.0,
-			"icoon": ZwembadBeurt.KAART_ICOON, "pad": false, "vlak": _vrij_vak(),
-			"regel": ZwembadBeurt.regel_start(l) if eerste
-				else ZwembadBeurt.regel_verder(_naam(), p),
-			"regel2": ZwembadBeurt.regel2_start(m) if eerste
+			"icoon": ZwembadBeurt.BOTS_KAART_ICOON if terug
+				else ZwembadBeurt.KAART_ICOON,
+			"pad": false, "vlak": _vrij_vak(),
+			"regel": regel,
+			"regel2": ZwembadBeurt.regel2_start(m) if eerste and not terug
 				else ZwembadBeurt.regel2_verder(),
 			"keuze_titel": ZwembadBeurt.HULP_TITEL, "keuzes": keuzes,
 		})
@@ -243,7 +253,7 @@ func _kies(n: int) -> void:
 			_vraag()
 		return
 	if soort == "ver":
-		await _bots()
+		await _bots_en_terug(p)
 		return
 	if int(_b["p"]) >= l:
 		ctx.snd.ja()
@@ -384,6 +394,7 @@ func _zwem(n: int) -> bool:
 # ------------------------------------------------------------- de twee einden
 
 ## The soft bump against the wall — a 💛, never a cross and never a fright.
+## Since N3 it is not an ending either: it is only the plons (PLAN §3.8).
 func _bots() -> void:
 	ctx.snd.au()
 	_spat(6)                   # the bump throws a splash over the wall
@@ -391,7 +402,46 @@ func _bots() -> void:
 	if not await na(BOTS_S):
 		return
 	ctx.ui.wolk_weg(WOLK_ID)
-	await _afronden("bots")
+
+## Too far (PLAN N3, open question V1): he swims the rest, taps the wall, swims
+## back to the metre he came from and the SAME question returns — never
+## `_afronden`.  That is what makes the sum unavoidable (R3): one tap on a
+## number that is too big no longer buys the other side, and the third rung of
+## the help ladder is finally reachable.  `p_voor` is his metre before the
+## stroke; `_b["p"]` is `L` while he lies against the wall.
+func _bots_en_terug(p_voor: int) -> void:
+	await _bots()
+	if not actief:
+		return
+	# the SAVE goes back before he does: a reload in the middle of the swim back
+	# must never find him parked against the wall, where the rest is 0 and no
+	# button on the strip could answer the question (§1.12)
+	_b["p"] = p_voor
+	_bewaar()
+	var bad := _bad()
+	var terug: bool = await ctx.wereld.loop_naar(_gast,
+		ZwembadBeurt.baan_x(bad, int(_b["L"]), float(p_voor)),
+		ZwembadBeurt.baan_z(bad), {"pose": "zwem", "tempo": 1.1, "na": "zwem"})
+	if not actief or not str(_b.get("klaar", "")).is_empty():
+		return
+	# he is back on his own metre: the number on his back and the markers say so
+	# again, whether the swim back finished or another order took him over
+	_zet_gasttag()
+	_strepen_ververs()
+	print("[probe] zwembad=bots terug=", terug, " p=", p_voor,
+		" misser=", _b["misser"])
+	_na_bots = true
+	# One breath before the question returns — and never straight out of the
+	# movement callback.  A card built in World's own frame phase is measured by
+	# `Hits` before its help line has been given a width, an autowrap Label then
+	# reports the height that belongs to the width it HAS (one character per
+	# line), and `Hits` locks that height into `custom_minimum_size` for good: the
+	# card became a paper strip of the full frame height.  `na()` resolves in the
+	# timer phase, exactly where every other card of this game is made.
+	if not await na(_leestijd(WOLK_S)):
+		return
+	if str(_b.get("klaar", "")).is_empty():
+		_vraag()
 
 ## games-b.md §1.7, in this order.
 func _afronden(soort: String) -> void:
@@ -402,8 +452,10 @@ func _afronden(soort: String) -> void:
 	if bool(_b.get("wens", false)):
 		ctx.wereld.behoefte_klaar(_gast, "zwemmen")
 	ctx.state.tel(int(_b["misser"]) == 0, Time.get_ticks_msec() - _t0)
-	# the star belongs to REACHING the other side, not to guessing well: it is
-	# handed out after a bump too (HOTEL.md §3, architecture.md §1.1 F5)
+	# the star belongs to the lane that was really swum: since N3 this point is
+	# only reached by answering exactly (PLAN §3.8, open question V1 — it used to
+	# be handed out after a bump too, `architecture.md §1.1 F5`, which let one tap
+	# on a number that was too big finish twelve of the thirteen band-3 lanes)
 	ctx.taak_klaar("zwemles")
 	_eindkaart(soort)
 	ctx.ui.toast(ZwembadBeurt.TOAST_PRECIES if soort == "precies"
@@ -421,14 +473,17 @@ func _afronden(soort: String) -> void:
 	ctx.hotspots.weg(GAST_TAG)
 	_sluit_straks()
 
+## The end card aims at the DECK he is about to climb onto instead of at the
+## swimmer still lying in the water (PLAN N3 step 6): by the time the child has
+## read it he is out, and a card that hugged his old spot would have to move.
 func _eindkaart(soort: String) -> void:
 	_kaart_weg()
 	var l := int(_b["L"])
 	var precies := soort == "precies"
-	_kaart = ctx.ui.somkaart(_mik_start(), ZwembadBeurt.som_af(l, int(_b["laatste_p"]),
+	_kaart = ctx.ui.somkaart(_mik_dek(), ZwembadBeurt.som_af(l, int(_b["laatste_p"]),
 			int(_b["laatste_rest"]), int(_b["leg"]) > 0), {
 		"id": KAART_ID, "kamer": KAMER, "hoog": 0.0, "pad": false,
-		"vlak": _vrij_vak(),
+		"vlak": _dek_vak(),
 		"icoon": ZwembadBeurt.PRECIES_ICOON if precies else ZwembadBeurt.BOTS_ICOON,
 		"regel": ZwembadBeurt.EIND_PRECIES if precies
 			else ZwembadBeurt.eind_regel_bots(_naam()),
@@ -446,7 +501,7 @@ func _uit_het_water() -> bool:
 	if d == null:
 		return false
 	var bad := _bad()
-	var dek := _dek("over" if int(_b["p"]) * 2 >= int(_b["L"]) else "start")
+	var dek := _dek_nu()
 	if d.kamer == KAMER and _in_bad(d):
 		var rand_x := clampf(d.x, float(bad["x0"]), float(bad["x1"]))
 		if not await ctx.wereld.loop_naar(_gast, rand_x, float(bad["z1"]) - 1.0,
@@ -576,7 +631,9 @@ func _kaart_volg() -> Dictionary:
 	var kader: Rect2 = ctx.wereld.kader_rect()
 	if kader.size.x <= 1.0 or kader.size.y <= 1.0:
 		return {}
-	var vrij := _vrij_vak()
+	# while the turn runs the card keeps off the swimmer; once it is finished the
+	# card belongs to the deck, so it stops chasing him out of the water (N3)
+	var vrij := _dek_vak() if not str(_b.get("klaar", "")).is_empty() else _vrij_vak()
 	var plek := ZwembadKaartplek.kies(kader.size, _maat_van(KAART_ID),
 		_maat_van(STROOK_ID), vrij, _vlag_vak())
 	_kant = str(plek["kant"])
@@ -602,11 +659,10 @@ func _vrij_vak() -> Rect2:
 	if d != null and d.kamer == KAMER:
 		r = ctx.wereld.vlak_van_dier(_gast)
 	if r.size.x <= 0.0 or r.size.y <= 0.0:
-		# still in another room: reckon with the entry side of the lane (§1.10)
+		# still in another room — which since N3 is the normal state of the FIRST
+		# card: reckon with the entry side of the lane (§1.10)
 		var bad := _bad()
-		var punt: Vector2 = ctx.wereld.mik_punt(float(bad.get("x0", 18)),
-			ZwembadBeurt.baan_z(bad), 0.0)
-		r = Rect2(punt - Vector2(24.0, 44.0), Vector2(48.0, 48.0))
+		r = _vak_op(float(bad.get("x0", 18)), ZwembadBeurt.baan_z(bad))
 	var boven := 0.0
 	var breed := r.size.x
 	for id in [GAST_TAG, "naam_" + _gast]:
@@ -620,6 +676,24 @@ func _vrij_vak() -> Rect2:
 	var mid := r.position.x + r.size.x * 0.5
 	return Rect2(Vector2(mid - breed * 0.5 - zij, r.position.y - boven),
 		Vector2(breed + zij * 2.0, r.size.y + boven))
+
+## A guest-sized patch of screen around a floor point: what a card keeps off
+## when the guest himself is not there to be measured.
+func _vak_op(x: float, z: float) -> Rect2:
+	var punt: Vector2 = ctx.wereld.mik_punt(x, z, 0.0)
+	return Rect2(punt - Vector2(24.0, 44.0), Vector2(48.0, 48.0))
+
+## Where he leaves the water, and the box he will stand in there.
+func _mik_dek() -> Dictionary:
+	var dek := _dek_nu()
+	return {"x": dek.x, "z": dek.y}
+
+func _dek_vak() -> Rect2:
+	var dek := _dek_nu()
+	return _vak_op(dek.x, dek.y)
+
+func _dek_nu() -> Vector2:
+	return _dek("over" if int(_b.get("p", 0)) * 2 >= int(_b.get("L", 1)) else "start")
 
 ## The box of the flag and the `<L> m` that hangs on it.
 func _vlag_vak() -> Rect2:
@@ -683,7 +757,7 @@ func _nood_uit() -> void:
 	var d = ctx.wereld.dier(_gast)
 	if d == null or d.kamer != KAMER or not _in_bad(d):
 		return
-	var dek := _dek("over" if int(_b.get("p", 0)) * 2 >= int(_b.get("L", 1)) else "start")
+	var dek := _dek_nu()
 	ctx.wereld.zet(_gast, KAMER, dek.x, dek.y)
 
 # ------------------------------------------------------------------ hulpjes

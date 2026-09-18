@@ -96,8 +96,14 @@ static func normaliseer(b: Dictionary, band_nu: int) -> Dictionary:
 	return uit
 
 ## A turn may be resumed when the numbers are numbers, the lane is real, the
-## swimmer is somewhere on it, the turn is not finished and the guest is still
-## in the hotel.
+## swimmer is somewhere on it BEFORE the far wall, the turn is not finished and
+## the guest is still in the hotel.
+##
+## `p == L` without `klaar` is the one state that cannot be answered: the rest
+## is 0, so every button on the strip is "too far" and since N3 a bump brings
+## the same question back — a turn parked against the wall would never end.  It
+## can only be reached by a crash in the one frame between the last stroke and
+## `_afronden`, and the gentle way out is a fresh lane.
 static func geldig(b: Dictionary, gast_bestaat: bool) -> bool:
 	if b.is_empty():
 		return false
@@ -107,7 +113,7 @@ static func geldig(b: Dictionary, gast_bestaat: bool) -> bool:
 			return false
 	var l := int(b["L"])
 	var p := int(b["p"])
-	if l <= 0 or p < 0 or p > l:
+	if l <= 0 or p < 0 or p >= l:
 		return false
 	if not str(b.get("klaar", "")).is_empty():
 		return false
@@ -121,6 +127,7 @@ const TOAST_PRECIES := "🏊 Precies aan de overkant! ⭐"
 const TOAST_BOTS := "🏊 Aan de overkant! ⭐"
 const EIND_PRECIES := "Precies aan de overkant!"
 const KAART_ICOON := "🏊"
+const BOTS_KAART_ICOON := "🙃"
 const PRECIES_ICOON := "✅"
 const BOTS_ICOON := "💛"
 const LABEL := "Zwemles"
@@ -162,6 +169,12 @@ static func regel_verder(naam: String, p: int) -> String:
 
 static func regel2_verder() -> String:
 	return "Nog hoeveel meter?"
+
+## Card n straight after a bump (PLAN N3, V1): the wall is not a finish line,
+## so the SAME question comes back with `regel2_verder()` under it and the
+## pictogram is a wry 🙃 instead of the swimmer.  6 words, 24 characters.
+static func regel_bots_terug() -> String:
+	return "Te ver, hij tikt de rand"
 
 ## The real minus sign U+2212, never a hyphen (architecture.md §1.1 F3).
 static func som_verder(l: int, p: int) -> String:
