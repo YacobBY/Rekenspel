@@ -101,6 +101,71 @@ static func basis_van(breedte: float) -> int:
 static func tap_van(scherm_kort: float) -> int:
 	return HOT_KRAP if scherm_kort < 360.0 else HOT
 
+# ------------------------------------------------------------- de rekenbalk
+
+## The maths bar of PLAN.md §3.1: the strip under the world that always carries
+## the sentence, the sum and the four answer buttons.  This is the measuring
+## tape only — the node (`ui/rekenbalk.gd`), the anchor `"balk"` and the
+## hysteresis on a resize are later tasks; nothing here keeps state.
+##
+## The argument is the WORLD FRAME in units (`World.kader_rect().size`), never
+## the screen: the chrome and the room bar have taken their share long before
+## the frame exists, and the bar is measured inside what is left.
+##
+## `hoog` stacks the sentence over the sum over one row of four buttons.  `laag`
+## is for a frame that is short in the tall direction: sentence and sum on the
+## left in `BALK_LAAG_LINKS` of the width, the button row in the rest.  A frame
+## that is short AND narrow (296x314) has no room for two blocks beside each
+## other, so it stays `hoog` and pays with its height instead.
+const BALK_LAAG_LINKS := 0.48
+
+static func balk_vorm(kader: Vector2) -> String:
+	return "laag" if kader.y < 440.0 and kader.x >= 470.0 else "hoog"
+
+## The table of PLAN.md §3.1: five rungs by frame size, then one clamp on the
+## height.  Keys: `vorm`, `hoog` (the bar itself), `zin`, `som`, `knop` and `nu`
+## (text sizes, every one of them over the 12 px floor of HOTEL.md §9),
+## `knop_hoog` and `knop_breed` (one answer button, never under `HOT`).
+##
+## These are deliberately far over the 14 px the global `klein` clamp allows
+## (`maten()` above): that clamp feeds twenty-eight little chrome labels, while
+## the bar is the one place where the child actually reads the sum.
+##
+## The button width is cut so four buttons and their three 8 unit gaps fit in
+## the frame minus a 12 unit margin (`hoog`), or in the right-hand block
+## (`laag`, where the left block is `BALK_LAAG_LINKS` of the width — that is why
+## `laag` starts at 470 units: any narrower and the two blocks would overlap).
+## Both hold on every frame the shell hands out.  Under 228 units of width the
+## 48 unit tap floor wins over the fit, and `World.KADER_MIN` never lets a frame
+## get that small; under 212 units of height the ceiling wins over the 72 of the
+## clamp, for the same reason.
+static func balk_maten(kader: Vector2) -> Dictionary:
+	var x := kader.x
+	var m := {}
+	if kader.y >= 440.0:
+		if x >= 900.0:                     ## A — tablet and desktop
+			m = {"hoog": 160, "zin": 22, "som": 34, "knop": 24, "nu": 21,
+				"knop_hoog": 64, "knop_breed": clampf((x - 54.0) / 4.0, 56.0, 150.0)}
+		elif x >= 520.0:                   ## B — tablet upright
+			m = {"hoog": 152, "zin": 21, "som": 32, "knop": 23, "nu": 20,
+				"knop_hoog": 60, "knop_breed": clampf((x - 54.0) / 4.0, 56.0, 140.0)}
+		else:                              ## C — phone upright
+			m = {"hoog": 160, "zin": 20, "som": 30, "knop": 22, "nu": 19,
+				"knop_hoog": 60, "knop_breed": clampf((x - 48.0) / 4.0, 48.0, 120.0)}
+	elif x >= 470.0:                       ## D — phone on its side, the only `laag`
+		m = {"hoog": 96, "zin": 18, "som": 26, "knop": 20, "nu": 18,
+			"knop_hoog": 60,
+			"knop_breed": clampf((x * BALK_LAAG_LINKS - 18.0) / 4.0, 48.0, 96.0)}
+	else:                                  ## E — short and narrow
+		m = {"hoog": 132, "zin": 17, "som": 24, "knop": 19, "nu": 17,
+			"knop_hoog": 52, "knop_breed": clampf((x - 42.0) / 4.0, 48.0, 96.0)}
+	m["vorm"] = balk_vorm(kader)
+	# the world keeps two thirds: the bar never grows past a third of the frame
+	m["hoog"] = clampi(int(m["hoog"]), 72, int(kader.y * 0.34))
+	# down, never up — the fit of the four buttons has to survive the rounding
+	m["knop_breed"] = floori(float(m["knop_breed"]))
+	return m
+
 ## The height an autowrapping Label really needs at this width.
 ##
 ## `Label.get_minimum_size()` reports ONE line for an autowrapping label — it
