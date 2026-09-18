@@ -569,9 +569,11 @@ func decor_versie() -> int:
 ## a game can push them around without touching the room itself.
 
 var _dingen: Dictionary = {}       ## id -> {id, model, kamer, x, z, hoog}
+var _dingen_thuis: Dictionary = {} ## id -> the same record as it stood at boot
 
 func _bouw_dingen() -> void:
 	_dingen.clear()
+	_dingen_thuis.clear()
 	for kid in Rooms.lijst():
 		var r := Rooms.get_kamer(kid)
 		for i in range(r.decor.size() - 1, -1, -1):
@@ -583,11 +585,30 @@ func _bouw_dingen() -> void:
 			_dingen[id] = {"id": id, "model": stuk["n"], "kamer": kid,
 				"x": float(stuk["x"]), "z": float(stuk["z"]),
 				"hoog": float(stuk.get("y", 0.0))}
+			_dingen_thuis[id] = _dingen[id].duplicate()
 			r.decor.remove_at(i)
 		Rooms.bouw_af(r)
 
 func ding(id: String) -> Dictionary:
 	return _dingen.get(id, {}).duplicate()
+
+## Where a thing stood when the world was built: the trolley in the kitchen at
+## (48, 66), the desk lamp on the reception counter.  A game that pushes a thing
+## through the hotel needs this to bring it back, because its entry button hangs
+## on the thing itself (`Games._plek_van`) and would otherwise be unreachable in
+## the room the thing belongs to.
+func ding_thuis(id: String) -> Dictionary:
+	return _dingen_thuis.get(id, {}).duplicate()
+
+## Put a thing back: its home room, its home tile and the model it started with
+## (`lampaan` -> `lamp`).  Redraws through `zet_ding`; the camera stays where it
+## is, so a game may call this while the child is looking at another room.
+func ding_thuis_zet(id: String) -> Dictionary:
+	var thuis: Dictionary = _dingen_thuis.get(id, {})
+	if thuis.is_empty():
+		return {}
+	return zet_ding(id, {"kamer": thuis["kamer"], "x": thuis["x"],
+		"z": thuis["z"], "hoog": thuis["hoog"], "model": thuis["model"]})
 
 func dingen(kamer_id: String = "") -> Array:
 	var uit: Array = []

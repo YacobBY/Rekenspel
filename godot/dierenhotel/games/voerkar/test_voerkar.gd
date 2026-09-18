@@ -415,6 +415,63 @@ func _hele_beurt(band: int, n: int, dag: int) -> void:
 func ctx_band() -> int:
 	return State.band()
 
+# --------------------------------------------------------- de kar komt thuis
+
+## De ingang van dit spel hangt op de kar zelf (`Games._plek_van`), dus een kar
+## die na het rondje in kamer2 blijft staan maakt de voerkar onbereikbaar tot de
+## pagina herlaadt.  Na de ronde staat hij weer op zijn eigen plek in de keuken,
+## zónder dat de camera meegaat — en zou hij toch elders stilstaan, dan valt de
+## knop terug op zijn thuisplek.
+func test_kar_staat_na_de_ronde_weer_in_de_keuken() -> void:
+	_op()
+	var boom := Engine.get_main_loop() as SceneTree
+	var spel := _start(3, 3, 1, 3)
+	waar(spel != null, "het spel draait")
+	if spel == null:
+		_af()
+		return
+	var thuis := World.ding_thuis("kar")
+	gelijk(str(thuis.get("kamer", "")), "keuken", "de kar hoort in de keuken")
+	_verdeel_goed(spel, spel.deelnemers())
+	_tik("vk_klaar")
+	var ronden := 0
+	while not spel.open_kamers().is_empty() and ronden < 8:
+		ronden += 1
+		var q: Dictionary = spel.open_kamers()[0]
+		spel.duw_naar(str(q["kamer"]))
+		Hits.plaats()
+		waar(spel.lever(str(q["kamer"]), str(q["slot"])),
+			"afleveren in %s lukt" % str(q["kamer"]))
+		Hits.plaats()
+	waar(ronden >= 1, "de kar heeft de keuken verlaten")
+	var laatste := World.kamer_nu()
+	waar(laatste != "keuken", "en het kind kijkt naar de kamer van het laatste bakje")
+	_tik("vk_af")
+	await boom.process_frame
+	gelijk(Games.actief(), "", "het spel sluit zichzelf")
+	gelijk(World.kamer_nu(), laatste, "de camera blijft waar het kind keek")
+	var kar := World.ding("kar")
+	gelijk(str(kar.get("kamer", "")), "keuken", "maar de kar staat weer in de keuken")
+	gelijk(float(kar.get("x", 0.0)), float(thuis.get("x", 0.0)), "op zijn eigen plek")
+	gelijk(float(kar.get("z", 0.0)), float(thuis.get("z", 0.0)), "in beide richtingen")
+	gelijk(str(kar.get("model", "")), str(thuis.get("model", "")), "met zijn eigen model")
+	# en daarmee hangt de ingang er morgen weer
+	World.naar("keuken")
+	Games.hersteek()
+	Hits.plaats()
+	var knop := _knop("spel_voerkar")
+	waar(knop != null and knop.visible, "de 🛒-knop hangt weer zichtbaar in de keuken")
+	# blijft de kar toch ergens anders staan, dan valt de knop terug op zijn thuisplek
+	World.zet_ding("kar", {"kamer": "kamer2", "x": 20.0, "z": 30.0})
+	Games.hersteek()
+	Hits.plaats()
+	var terug := _knop("spel_voerkar")
+	waar(terug != null and terug.visible, "ook met de kar in kamer2 blijft het spel bereikbaar")
+	var s := Hits.spot("spel_voerkar")
+	waar(s != null and is_equal_approx(s.x, float(thuis.get("x", 0.0))),
+		"en dan hangt hij op de thuisplek van de kar")
+	_af()
+
 # ------------------------------------------------------- de misserweg
 
 ## Nooit straffend: een misser kost niets, zet niets terug en geeft geen ster —

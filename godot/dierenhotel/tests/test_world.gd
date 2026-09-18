@@ -448,6 +448,37 @@ func test_los_decor_kent_zijn_eigenaar() -> void:
 	gelijk(World.decor_lijst("tuin").size(), 0, "de eigenaar ruimt alles op")
 	gelijk(World.decor_lijst("receptie").size(), 0, "ook in de receptie")
 
+# ------------------------------------------------------------------ de dingen
+
+## world.md §1.3 — de kar en de balielamp worden bij het opstarten uit het decor
+## van hun kamer getild.  Hun thuisplek blijft bewaard: de ingang van een spel
+## hangt op zijn ding (`Games._plek_van`), dus een kar die in een andere kamer
+## blijft staan zou het voerkarspel onbereikbaar maken.
+func test_een_ding_kent_zijn_thuisplek() -> void:
+	var thuis := World.ding_thuis("kar")
+	waar(not thuis.is_empty(), "de kar heeft een thuisplek")
+	gelijk(str(thuis.get("kamer", "")), "keuken", "de kar hoort in de keuken")
+	gelijk(float(thuis.get("x", 0.0)), 48.0, "op x 48")
+	gelijk(float(thuis.get("z", 0.0)), 66.0, "en op z 66")
+	var model := str(World.ding("kar").get("model", ""))
+	gelijk(str(thuis.get("model", "")), model, "met het model waarmee hij begon")
+	gelijk(str(World.ding_thuis("balielamp").get("kamer", "")), "receptie",
+		"de balielamp hoort in de receptie")
+	waar(World.ding_thuis("bestaat-niet").is_empty(), "een onbekend ding heeft geen thuis")
+	waar(World.ding_thuis_zet("bestaat-niet").is_empty(), "en is ook niet thuis te zetten")
+	# een spel duwt de kar het hotel door en zet hem daarna terug
+	World.zet_ding("kar", {"kamer": "kamer2", "x": 20.0, "z": 30.0, "model": "lamp"})
+	gelijk(str(World.ding("kar").get("kamer", "")), "kamer2", "de kar staat in kamer2")
+	gelijk(str(World.ding_thuis("kar").get("kamer", "")), "keuken",
+		"en de thuisplek verhuist niet mee")
+	var terug := World.ding_thuis_zet("kar")
+	gelijk(str(terug.get("kamer", "")), "keuken", "ding_thuis_zet geeft de nieuwe stand terug")
+	var nu := World.ding("kar")
+	gelijk(str(nu.get("kamer", "")), "keuken", "de kar staat weer in de keuken")
+	gelijk(float(nu.get("x", 0.0)), 48.0, "op zijn eigen plek")
+	gelijk(float(nu.get("z", 0.0)), 66.0, "in beide richtingen")
+	gelijk(str(nu.get("model", "")), model, "en met zijn eigen model")
+
 # ----------------------------------------------------------------- camera
 
 ## world.md §1.9 — the floor is never cut; `g` stays a whole number 2..4.

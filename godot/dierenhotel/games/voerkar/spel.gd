@@ -155,6 +155,9 @@ func _geen_gasten() -> void:
 	ctx.ui.wolk_weg("vk_leeg")
 	ctx.sluit()
 
+## De kar rijdt het hotel door, maar hij hoort in de keuken: zonder deze regel
+## blijft hij staan waar de beurt ophield en verdwijnt de 🛒-knop uit de keuken
+## (games-a.md §7.6).  De camera blijft waar hij is; alleen de kar gaat naar huis.
 func stop() -> void:
 	if _af_kader.is_valid():
 		_af_kader.call()
@@ -164,6 +167,7 @@ func stop() -> void:
 	if ctx != null:
 		ctx.hotspots.laat()
 		_bewaar_kar()
+		ctx.wereld.ding_thuis_zet("kar")
 		ctx.wereld.vuil()
 
 ## Zolang het rondje loopt zijn de bakjes en de deuren van het hotel even van de
@@ -1006,6 +1010,9 @@ func _sluit_straks() -> void:
 		return
 	_klaar_met_rondje()
 
+## Het rondje is uit: de stand gaat weg en de kar rijdt terug naar de keuken —
+## zonder de camera mee te nemen, want het kind kijkt nog naar de kamer waar het
+## laatste bakje net vol ging.
 func _klaar_met_rondje(_s = null) -> void:
 	if ctx == null:
 		return
@@ -1014,4 +1021,5 @@ func _klaar_met_rondje(_s = null) -> void:
 	K = {}
 	State.bewaar()
 	ctx.ui.wolk_weg("vk_af")
+	ctx.wereld.ding_thuis_zet("kar")
 	ctx.sluit()

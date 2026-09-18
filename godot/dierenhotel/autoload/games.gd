@@ -213,10 +213,18 @@ func hersteek() -> void:
 ## The object an entry button hangs on: a loose thing first (the trolley, the
 ## desk lamp), then whatever `World.mik` finds (slots, fixed decor, the running
 ## game's own loose decor).
+##
+## A thing that is standing in ANOTHER room falls back to its home tile, as long
+## as home is this room: the trolley left in kamer2 must never take the kitchen's
+## 🛒 button with it, or the game becomes unreachable until the page is reloaded.
 func _plek_van(kamer_id: String, obj: String) -> Dictionary:
 	if obj.is_empty():
 		return {}
 	var ding := World.ding(obj)
-	if not ding.is_empty() and str(ding.get("kamer", kamer_id)) == kamer_id:
-		return ding
+	if not ding.is_empty():
+		if str(ding.get("kamer", kamer_id)) == kamer_id:
+			return ding
+		var thuis := World.ding_thuis(obj)
+		if not thuis.is_empty() and str(thuis.get("kamer", "")) == kamer_id:
+			return thuis
 	return World.mik(obj, kamer_id)
