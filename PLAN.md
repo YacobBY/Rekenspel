@@ -61,7 +61,12 @@ niets gaat op slot. Een fout antwoord kost niets en levert een hulptrede op.
 Een ster is voor meedoen, nooit voor goed zijn (`Econ.sterren`, `econ.gd:27`).
 
 **R7 — Zacht en rustig.** Aaien kost energie en rekenen vult haar aan; er loopt
-niets leeg door de klok en er is geen meter en geen verdrietig dier.
+niets leeg door de klok en er is geen meter en geen blijvend verdrietig dier.
+*Uitzondering, eigenaar 2026-09-20 (`S5`):* na een fout antwoord is het dier van
+de beurt **even** sip (≤ 2 s, pose `sip`, dan weer gewoon) en gaat de
+antwoordstrook ~1,2 s op slot voordat dezelfde vraag terugkomt. Dat kost niets
+(geen ster, geen munt, geen slot, geen nieuwe beurt) en is er om willekeurig
+drukken te ontmoedigen, niet om te straffen.
 
 **R8 — De bevroren kern blijft bevroren.** `core/sommen.gd` (1620 regels) blijft
 byte-identiek; `tests/test_sommen_kruis.gd` houdt 51 vingerafdrukken over 23 042
@@ -855,7 +860,7 @@ spel staat het doel hier; de stappen staan bij de taak.
 
 ## 4. Takenlijst
 
-**58 taken in 9 batches.** Binnen een batch mogen alle taken **tegelijk** in
+**59 taken in 9 batches.** Binnen een batch mogen alle taken **tegelijk** in
 aparte worktrees draaien: hun bestandsverzamelingen zijn disjunct (per batch
 nagelopen, zie de tabellen). Batches draaien in volgorde. Elke taak is in één
 zitting te doen (≤ ±400 gewijzigde regels), headless te bewijzen en los te
@@ -983,7 +988,7 @@ vier spellen beginnen voortaan met rekenen.*
 *Doel: kaart en strook dokken onderin; de keukenvloer wordt leeg; vier spellen
 krijgen hun echte eerste vraag; de Speelzaal bestaat.*
 
-**Bestandssets** — `B3`: `autoload/hits.gd`, `autoload/ui.gd`, `ui/rekenbalk.gd`, `tests/test_hits.gd` · `V2`: `games/voerkar/spel.gd`, `games/voerkar/test_voerkar.gd` · `V5`: `autoload/world.gd`, `scenes/main.gd`, `tests/test_world.gd` · `N8`: `games/was/spel.gd`, `games/was/soorten.gd`, `games/was/test_was.gd` · `N9`: `games/bedden/spel.gd`, `games/bedden/test_bedden.gd` · `K1`: `games/sleutels/spel.gd`, `games/sleutels/test_sleutels.gd` · `K3`: `games/wekker/spel.gd`, `games/wekker/test_wekker.gd` · `R2`: `autoload/rooms.gd`, `ui/plattegrond.gd`, `autoload/snd.gd`, `art/decor_speelzaal.gd` *(nieuw)*, `art/decor.gd`, `tests/test_rooms.gd`, `tests/test_sfeer.gd`, `tests/test_plattegrond.gd`, `tests/test_art.gd`, `HOTEL.md`, `tools/kiek.js`. *Geen overlap.*
+**Bestandssets** — `S5`: `autoload/ui.gd`, `ui/keuzestrook.gd`, `ui/teksten.gd`, `tests/test_ui.gd`, `PLAN.md`, `HOTEL.md`, `.fanout/specs/godot/games-b.md` (vóór `B3`, deelt `autoload/ui.gd` — daarom in volgorde) · `B3`: `autoload/hits.gd`, `autoload/ui.gd`, `ui/rekenbalk.gd`, `tests/test_hits.gd` · `V2`: `games/voerkar/spel.gd`, `games/voerkar/test_voerkar.gd` · `V5`: `autoload/world.gd`, `scenes/main.gd`, `tests/test_world.gd` · `N8`: `games/was/spel.gd`, `games/was/soorten.gd`, `games/was/test_was.gd` · `N9`: `games/bedden/spel.gd`, `games/bedden/test_bedden.gd` · `K1`: `games/sleutels/spel.gd`, `games/sleutels/test_sleutels.gd` · `K3`: `games/wekker/spel.gd`, `games/wekker/test_wekker.gd` · `R2`: `autoload/rooms.gd`, `ui/plattegrond.gd`, `autoload/snd.gd`, `art/decor_speelzaal.gd` *(nieuw)*, `art/decor.gd`, `tests/test_rooms.gd`, `tests/test_sfeer.gd`, `tests/test_plattegrond.gd`, `tests/test_art.gd`, `HOTEL.md`, `tools/kiek.js`. *Geen overlap.*
 
 #### `B3` — Anker "balk": de kaart en de strook dokken onderin 🔎
 - [ ] omvang **M** · model **opus** · hangt af van: `B2`
@@ -1026,6 +1031,12 @@ krijgen hun echte eerste vraag; de Speelzaal bestaat.*
 - **acceptatie** `DH_TEST_FILTER=test_rooms`, `=test_art`, `=test_sfeer`, `=test_plattegrond`, `=test_ui`, `=test_kamerbalk` alle 0 fout; `test_elke_kamer_is_compleet` (uit `R1`) slaagt voor de nieuwe kamer, die ≥ 19 dwaalplekken houdt en geen plek binnen 18 voxels van decor heeft. Beeld: `node tools/kiek.js --kamer speelzaal --band 4 --uit /tmp/r2` en dezelfde met `--viewport 360x740@3:telefoon`: klimrek, ballenbak, kussenhoek en de mat in beeld, niets door een wand; `--kamer receptie --uit /tmp/r2r` toont twee deurknoppen en een onaangeroerde balie.
 
 ---
+
+#### `S5` — Een misser: het dier is even sip en de vraag komt passend terug 🔎 ⚠️
+- [ ] omvang **M** · model **opus** · hangt af van: `B2` · **eigenaarswens 2026-09-20, doen vóór `B3`** · begin met `git diff tests/test_ui.gd`
+- **waarom** De eigenaar ziet kinderen willekeurig op de vier knoppen drukken tot het goed is. Een fout antwoord moet daarom *iets* doen dat je ziet en dat even duurt, zonder de regel R6 te breken: het dier van de beurt is even sip en je moet dezelfde vraag na een korte pauze echt opnieuw beantwoorden.
+- **stappen** 1) `Ui.somkaart` krijgt een optie `"dier"` (id van het dier van de beurt). Ontbreekt hij en is `obj` een dier-id (`World.dier(obj) != null`), dan is dat het dier; anders is er geen dier en geldt alleen de pauze. 2) Centraal in `Ui._getal_keuzes` (`ui.gd:726-741`), vóór `roep(k.on_ok, ...)`: is `n != goed`, dan `Ui.misser(kaart, dier)`. Die doet drie dingen: (a) `World.pose(dier, "sip", SIP_TIKKEN)` met `SIP_TIKKEN = 22` (≈ 1,5 s bij `World.TIK` = 1/15 s; de pose `sip`/`zitsip` bestaat al, `world.gd:1407`); (b) een wolkje aan het dier via `Ui.wolk` met `😢 Nog een keer` (3 woorden, 14 tekens, constante in `ui/teksten.gd`) dat met de pauze meegaat; (c) de strook van de kaart gaat `MIS_PAUZE = 1.2` s op slot: `UiKeuzestrook.slot(true)` zet elke knop `disabled` en `modulate` lichter, een tik doet dan niets en maakt geen geluid; daarna `slot(false)`, het antwoordvak leeg (`k.zet("")`), en **dezelfde vier keuzes in dezelfde volgorde** (het zaad, `ui.gd:727`; de regel "een misser laat dezelfde keuzes staan" uit K1/V3/M2/M4 blijft). 3) `on_ok` wordt gewoon aangeroepen, zodat het spel zijn eigen `missers`, `Snd.zacht()` en hulptrede doet zoals nu; de hulpladder (games-b.md §0.5: 1e/2e hulpregel, 3e spookvormen) verandert niet. 4) `Ui.misser(kaart, dier)` is ook publiek voor de sleepspellen (was, bedden, kraam, sleutels-hang): die roepen hem in hun bestaande mis-pad aan **in hun eigen volgende taak** (N9, K1, N10…), niet in deze — bestandsset. 5) Rustmodus (`World.rust()`): de pose staat meteen en zonder wiebel, de pauze blijft (die is het punt). 6) `stop()` van een spel of `Hits.weg` van de kaart tijdens de pauze: geen dangling timer — de pauze hangt aan de kaart (`await na(...)` op de kaart-wrapper met `is_instance_valid`-check), het wolkje gaat mee weg. 7) R6/R7 in §1 zijn al bijgeschreven; werk in dezelfde commit games-b.md §0.6 bij (één zin: "geen herhaling van een beurt als straf; wél dezelfde vraag opnieuw na een sip-pauze van ~1,2 s") en HOTEL.md §9 (één regel bij de feedbackregel).
+- **acceptatie** `DH_TEST_FILTER=test_ui tools/test.sh` groen met minstens: `test_een_misser_maakt_het_dier_even_sip` (na een fout getal is `World.dier(id).pose` `sip` en na `SIP_TIKKEN` tikken niet meer); `test_de_strook_gaat_even_op_slot` (binnen 1,2 s doet een tweede tik niets: `on_ok` één keer aangeroepen, geen tweede `Snd`-aanroep; daarna wél); `test_dezelfde_keuzes_komen_terug` (dezelfde vier getallen in dezelfde volgorde, antwoordvak leeg); `test_een_misser_kost_niets` (`Econ.sterren`/munten gelijk, `missers` +1, geen slot op het spel); `test_zonder_dier_alleen_de_pauze`; `test_sluiten_tijdens_de_pauze_lekt_niets` (`Hits.weg` midden in de pauze: geen wolkje, geen fout in het log). `DH_TEST_FILTER=games` groen zonder wijziging in de spellen (het gedrag zit centraal). Volle suite `0 fout`. Beeld: `--kamer receptie --band 3 --tik spel_sleutels` en dan een fout getal tikken (kiek `--tik` op de verkeerde knop-id, `--wacht 600`): het dier sip met het wolkje, de knoppen lichter. Op tablet én telefoon.
 
 ### Batch 4 — Grote letters in de balk; de reworks ronde 2
 
@@ -1426,8 +1437,9 @@ regel blijft zoals hij is; de balk geeft de knoppen zoveel extra breedte dat het
 - 2026-09-20 00:10 — **B2 + sleutelsregel geaccepteerd en gepusht** (`a85504d`, `530e5da`). De lead heeft de volle suite onafhankelijk gedraaid op een schone werkboom van die stand: 471 goed, 0 fout; `core/sommen.gd` byte-gelijk; CI zie `gh run list --branch main`. De skills in `.dsh/skills/` zijn vernieuwd (`dh-plan`, `dh-gdscript` nieuw; `dh-tests`, `dh-commit` herschreven) en staan nu in de repo. **Opdracht voor het lokale model (lead namens de eigenaar, 2026-09-20) — dit is de geldende to-do, in deze volgorde:**
   1. **N8 afmaken** (staat in uitvoering in `games/was/spel.gd`). Acceptatie letterlijk uit §4: de drie nieuwe tests (`test_het_spel_begint_met_een_vraag`, `test_de_tussensom_komt_halverwege`, de teksttest over de nieuwe zinnen) in `games/was/test_was.gd`, elke nieuwe zin als `const` en woordelijk in de test, hulpladder per §4 stap 3, `DH_TEST_FILTER=was` groen én de volle suite `0 fout`. Beeld: `--kamer wasserij --band 4 --tik spel_was --wacht 1000 --uit /tmp/n8` op tablet en telefoon. Dan `[x]`, §7-regel, batchtabel (3 — 1/8), één commit met alleen de N8-bestanden + PLAN.md. **Niet pushen**: de lead controleert en pusht.
   2. **B2-nazorg, klein, vóór B3** (bestanden: `autoload/ui.gd`, `tests/test_balk.gd`). `Ui._process` meet nu elk frame de gedokte kaart via `kaart_mat()`; die meting zet de hulpregel onzichtbaar/zichtbaar en wist `custom_minimum_size`, dus elk frame een herindeling van de kaart zolang er een som open staat. Maak het gebeurtenisgestuurd: `_balk_herstel()` alleen bij `somkaart`, `on_weg`, `Kaart.hulp()`, `Kaart.zet_som/regel` en `kader_veranderd`; in `_process` niets meer meten. Test: `test_balk` blijft groen én een test dat `kaart_mat` niet wordt aangeroepen zolang er niets verandert (teller in `Ui`, of `Hits.debug()`-rects identiek over 10 frames). Meld in de commitboodschap dat `Hits._maat_van` elke kaart met hulpregel raakt (niet alleen de gedokte) — dat blijft zo, maar het hoort genoemd.
-  3. **Batch 3 in deze volgorde:** `B3` (grotendeels al in B2 gebouwd: anker `"balk"`, `balk_plek`, `_blijf_staan`; nog open uit B3: spots met anker `"balk"` tellen niet mee tegen `MAX_PER_KAMER`, de testnamen/eisen uit de B3-acceptatie, en de bewijsregel dat wekker en hinkel ongewijzigd groen zijn; **geen** driehoek/ringetje, dat is B5) → `V5` → `V2` → `N9` → `K1` → `K3` → `R2`. Per taak: `dh-plan` laden, bestandsset is het contract, één commit, niet pushen.
-  4. **Regels die nu strikt gelden:** (a) de commitboodschap noemt de **volle** suite (`471 goed, 0 fout`), niet alleen het filter — `530e5da` noemde alleen `15 goed`; (b) rood = geen commit, ook niet met "bekende restpunten"; (c) `.uid` van elk nieuw `.gd` mee; (d) alleen de bestanden van de taak, `git add` per pad; (e) getallen en zinnen uit het plan zijn besluiten — afwijken = eerst vragen of in de boodschap benoemen; (f) `ui/spelbalk.gd` blijft, `core/sommen.gd` blijft byte-gelijk, balkplafond 0.34.
+  3. **`S5` — eigenaarswens 2026-09-20 (nieuw in §4, batch 3):** na een fout antwoord is het dier van de beurt even sip, de strook gaat ~1,2 s op slot en dezelfde vraag komt terug. Centraal in `Ui`, de spellen blijven ongewijzigd. Dit is een bewuste uitzondering op R7 (al bijgeschreven in §1); R6 blijft: het kost niets.
+  4. **Batch 3 in deze volgorde:** `B3` (grotendeels al in B2 gebouwd: anker `"balk"`, `balk_plek`, `_blijf_staan`; nog open uit B3: spots met anker `"balk"` tellen niet mee tegen `MAX_PER_KAMER`, de testnamen/eisen uit de B3-acceptatie, en de bewijsregel dat wekker en hinkel ongewijzigd groen zijn; **geen** driehoek/ringetje, dat is B5) → `V5` → `V2` → `N9` → `K1` → `K3` → `R2`. Per taak: `dh-plan` laden, bestandsset is het contract, één commit, niet pushen.
+  5. **Regels die nu strikt gelden:** (a) de commitboodschap noemt de **volle** suite (`471 goed, 0 fout`), niet alleen het filter — `530e5da` noemde alleen `15 goed`; (b) rood = geen commit, ook niet met "bekende restpunten"; (c) `.uid` van elk nieuw `.gd` mee; (d) alleen de bestanden van de taak, `git add` per pad; (e) getallen en zinnen uit het plan zijn besluiten — afwijken = eerst vragen of in de boodschap benoemen; (f) `ui/spelbalk.gd` blijft, `core/sommen.gd` blijft byte-gelijk, balkplafond 0.34.
 
 Vink aan wat gemerged is op `main`. Zet erachter wie het deed en op welke datum.
 
@@ -1435,7 +1447,7 @@ Vink aan wat gemerged is op `main`. Zet erachter wie het deed en op welke datum.
 |---|---|---|
 | **1 — Fundament** | `S1` `B1` `R1` `V1` `N1` `N2` | 6 / 6 |
 | **2 — De balk staat** | `B2` `D1` `N3` `N4` `N5` `N6` `N7` `V6` | 8 / 8 |
-| **3 — Het balkanker** | `B3` `V2` `V5` `N8` `N9` `K1` `K3` `R2` | 0 / 8 |
+| **3 — Het balkanker** | `S5` `B3` `V2` `V5` `N8` `N9` `K1` `K3` `R2` | 0 / 9 |
 | **4 — Grote letters** | `B4` `V3` `N10` `N12` `N13` `K2` `R3` | 0 / 7 |
 | **5 — De balk af, de lus** | `B5` `V4` `N11` `N14` `K4` `L1` `R4` `S2` | 0 / 8 |
 | **6 — De Nu-chip** | `B6` `B8` `K5` `R5` `M1` | 0 / 5 |
