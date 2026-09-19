@@ -28,6 +28,8 @@ const KINDTEKST := [
 	"Elk blokje is 2 stuks",
 	"Welke stapel is het hoogst?", "kies een stapel",
 	"Hoeveel meer %s dan %s?", "Hoeveel stuks samen?", "Hoeveel %s zijn het?",
+	"Hoeveel stuks liggen er?", "Hoeveel blokjes worden dat?",
+	"Hoeveel liggen er nog?",
 	"tel de blokjes", "kijk naar de hoogste stapel",
 	"Alles gesorteerd!", "klaar",
 	"blokje", "blokjes", "krat met %s: %d %s",
@@ -83,13 +85,14 @@ func _licht_af() -> void:
 ## in `ctx.data()`, which are in memory — and a test that rewrote the save would
 ## hand the next suite its own day (measured: `test_ui.gd` read day 5 instead of
 ## the day it had just written).
-func _wereld(band: int, dag := 1) -> void:
+func _wereld(band: int, dag := 1, gasten := -1) -> void:
 	State.nieuw_spel()
 	var opzet: Array = BAND_OPZET[band]
+	var aantal := gasten if gasten > 0 else int(opzet[0])
 	var pool := State.gasten_pool()
 	var bedden := State.alle_bedden()
 	var uit: Array = []
-	for i in int(opzet[0]):
+	for i in aantal:
 		var g: Dictionary = pool[i % pool.size()]
 		g["id"] = "%s%d" % [str(g["id"]), i]
 		if i < bedden.size():
@@ -103,7 +106,7 @@ func _wereld(band: int, dag := 1) -> void:
 	State.s["dag"] = dag
 	State.s["taken"] = []
 	gelijk(State.band(), band, "de opzet geeft band %d" % band)
-	gelijk(State.n_gasten(), int(opzet[0]), "en %d gasten" % int(opzet[0]))
+	gelijk(State.n_gasten(), aantal, "en %d gasten" % aantal)
 
 func _spel() -> Node:
 	return Games._knoop if "_knoop" in Games else null
@@ -121,13 +124,22 @@ func _tik(id: String) -> bool:
 	(s.knoop as BaseButton).emit_signal("pressed")
 	return true
 
-## One tap on the pile, one on a crate — exactly what a child does.
+## One tap on the pile, one on a crate — exactly what a child does.  The
+## opening question and the one halfway through are answered on the way,
+## because a child answers them and then simply keeps sorting (N8).
 func _sorteer_alles() -> int:
 	var veilig := 0
 	while veilig < 240:
 		veilig += 1
 		var st := _stand()
-		if st.is_empty() or str(st.get("stap", "")) != "sorteren":
+		if st.is_empty():
+			break
+		var stap := str(st.get("stap", ""))
+		if stap == "vraag0" or stap == "vraagT":
+			if not _antwoord_goed():
+				break
+			continue
+		if stap != "sorteren":
 			break
 		var rij: Array = st["rij"]
 		var i := int(st["i"])
@@ -199,9 +211,20 @@ func _antwoord_goed() -> bool:
 		return false
 	var juist: int = s.juist()
 	var st := _stand()
+	var stap := str(st.get("stap", ""))
+	# The two pile questions are numbers in every band; only the crate
+	# question of group 3 is a choice of kinds.
+	if stap == "vraag0" or stap == "vraagT":
+		return _toets(juist)
 	if int(st.get("band", 3)) == 3:
 		return _kies(str(WasSoorten.soort(juist)["id"]))
 	return _toets(juist)
+
+## The opening question stands between the child and the pile: get past it.
+func _door_de_opening() -> bool:
+	if str(_stand().get("stap", "")) != "vraag0":
+		return true
+	return _antwoord_goed()
 
 # ------------------------------------------------------------- aanmelding
 
@@ -272,15 +295,23 @@ func test_beurt_per_band() -> void:
 		var st := _stand()
 		var per := int(st["per"])
 		gelijk(per, 2 if band == 5 else 1, "per tik bij band %d" % band)
-		# the pile says how much is left and how much you pick up
+		# the pile says how much is left, and it is not yours to touch yet
 		var bron := Ui.bron_van("ws_berg")
-		waar(bron != null, "de berg is een sleepbron (band %d)" % band)
+		waar(bron != null, "de berg hangt er bij de opening (band %d)" % band)
 		if bron != null:
-			gelijk(bron.text, "🧺 %d nog te sorteren" % int(st["T"]),
-				"de berg telt in stuks (band %d)" % band)
-			var greep := bron.get_node_or_null("Tellers/Greep") as Label
-			waar(greep != null and greep.text == "pak %d" % per,
-				"de handgreep zegt 'pak %d'" % per)
+			gelijk(bron.text, "🧹 %d" % int(st["T"]),
+				"tijdens de opening doet het cijfer op de berg het alleen (band %d)" % band)
+			gelijk(int(bron.aantal), 0, "en is nog niet sleepbaar (band %d)" % band)
+		gelijk(str(st["stap"]), "vraag0", "het spel begint met de opening (band %d)" % band)
+		waar(_tik("ws_berg"), "de berg staat er")
+		waar(int(_stand()["hand"]) < 0, "maar er komt niets in de hand (band %d)" % band)
+		# the opening question, answered, and the crates are the child's
+		waar(_antwoord_goed(), "opening beantwoord (band %d)" % band)
+		await _spoel(1.0)
+		gelijk(str(_stand()["stap"]), "sorteren",
+			"en dan pas mag er gesorteerd worden (band %d)" % band)
+		gelijk(Ui.bron_van("ws_berg").text, "🧹 %d nog te sorteren" % int(st["T"]),
+			"tijdens het sorteren heeft de berg zijn woorden terug (band %d)" % band)
 		# one piece in the hand, and the hand says so in words
 		waar(_tik("ws_berg"), "tik op de berg")
 		var hand := int(_stand()["hand"])
@@ -320,6 +351,88 @@ func test_beurt_per_band() -> void:
 		waar(Hits.spot("ws_vraag_keuzes") != null, "met een knop eronder")
 		waar(_kies("ok"), "en die knop sluit het spel")
 		gelijk(Games.actief(), "", "het spel is gesloten (band %d)" % band)
+	_licht_af()
+
+## N8: the turn opens with a question about the pile, before a single piece
+## moves.  Four buttons under the card, and the pile may be looked at but not
+## emptied — `aantal: 0` is what makes a source undraggable.
+func test_het_spel_begint_met_een_vraag() -> void:
+	_licht_op()
+	for band in BANDEN:
+		_wereld(band)
+		waar(Games.start(ID), "start band %d" % band)
+		var st := _stand()
+		gelijk(str(st["stap"]), "vraag0", "band %d begint met de opening" % band)
+		var goed := int(int(st["T"]) / 2) if band == 5 else int(st["T"])
+		gelijk(int(_spel().juist()), goed, "band %d vraagt om %d" % [band, goed])
+		var strook := Hits.spot("ws_vraag_keuzes")
+		waar(strook != null, "er hangt een keuzestrook onder de kaart (band %d)" % band)
+		if strook != null:
+			gelijk(strook.knoop.get_node("Rij").get_child_count(), 4,
+				"vier keuzes bij band %d" % band)
+			waar(strook.knoop.get_node_or_null("Rij/Kn%d" % goed) != null,
+				"en het goede getal staat ertussen (band %d)" % band)
+		var berg := Ui.bron_van("ws_berg")
+		waar(berg != null, "de berg is te zien bij de vraag (band %d)" % band)
+		if berg != null:
+			gelijk(int(berg.aantal), 0, "maar hij is niet sleepbaar (band %d)" % band)
+		waar(_tik("ws_berg"), "de berg staat er (band %d)" % band)
+		waar(int(_stand()["hand"]) < 0, "en er komt niets in de hand (band %d)" % band)
+		Games.stop()
+	_licht_af()
+
+## N8: halfway through a pile that is worth halving, the same question comes
+## back.  A pile of three pieces is not worth halving, so group 3 with T = 3
+## never hears it.
+func test_de_tussensom_komt_halverwege() -> void:
+	_licht_op()
+	# band 4 with N = 5 gives T = 20: halverwege komt de vraag
+	_wereld(4)
+	waar(Games.start(ID), "band 4 start")
+	gelijk(int(_stand()["T"]), 20, "de opzet geeft T = 20")
+	waar(_door_de_opening(), "de opening is beantwoord")
+	var gesorteerd := 0
+	var veilig := 0
+	while veilig < 60:
+		veilig += 1
+		var st := _stand()
+		if str(st["stap"]) != "sorteren":
+			break
+		var rij: Array = st["rij"]
+		if int(st["i"]) >= rij.size():
+			break
+		_tik("ws_berg")
+		_tik("ws_k%d" % int(rij[int(st["i"])]))
+		gesorteerd += 1
+	gelijk(gesorteerd, 10, "de helft van de 20 stuks is weg")
+	gelijk(str(_stand()["stap"]), "vraagT", "en dan komt de tussensom")
+	gelijk(int(_stand()["tussen"]), 1, "de vlag staat, dus maar één keer")
+	gelijk(_kaart_tekst("regel"), "📊 Hoeveel liggen er nog?", "de vraag zelf")
+	gelijk(int(_spel().juist()), 10, "om precies de helft")
+	waar(_antwoord_goed(), "die is te beantwoorden")
+	await _spoel(1.0)
+	gelijk(str(_stand()["stap"]), "sorteren", "en dan wordt er weer gesorteerd")
+	Games.stop()
+	# band 3 with one guest gives T = 3: te klein om te halveren
+	_wereld(3, 1, 1)
+	waar(Games.start(ID), "band 3 met één gast start")
+	gelijk(int(_stand()["T"]), 3, "de opzet geeft T = 3")
+	waar(_door_de_opening(), "ook hier eerst de opening")
+	var veilig2 := 0
+	while veilig2 < 40:
+		veilig2 += 1
+		var st := _stand()
+		if str(st["stap"]) != "sorteren":
+			break
+		var rij: Array = st["rij"]
+		if int(st["i"]) >= rij.size():
+			break
+		_tik("ws_berg")
+		_tik("ws_k%d" % int(rij[int(st["i"])]))
+	waar(str(_stand()["stap"]) != "vraagT",
+		"bij T = 3 komt er geen tussensom (stap %s)" % str(_stand()["stap"]))
+	gelijk(int(_stand().get("tussen", 0)), 0, "en de vlag blijft uit")
+	Games.stop()
 	_licht_af()
 
 ## The wording of every question, per band, verbatim (games-b.md §4.8, §4.10).
@@ -380,6 +493,8 @@ func test_legenda_bij_band_5() -> void:
 	_licht_op()
 	_wereld(5)
 	Games.start(ID)
+	waar(_door_de_opening(), "eerst de opening, dan het sorteren")
+	await _spoel(1.0)
 	var w := Hits.spot("ws_legenda")
 	waar(w != null, "het legendawolkje staat er tijdens het sorteren")
 	if w != null:
@@ -485,6 +600,7 @@ func test_mis_sorteren_is_niet_straffend() -> void:
 	_licht_op()
 	_wereld(4)
 	Games.start(ID)
+	waar(_door_de_opening(), "eerst de opening, dan de berg")
 	var voor := _stand()
 	var berg_voor := int(voor["i"])
 	# an empty hand on a crate: nothing moves
@@ -518,6 +634,7 @@ func test_slepen_van_de_berg_naar_de_krat() -> void:
 	_licht_op()
 	_wereld(3)
 	Games.start(ID)
+	waar(_door_de_opening(), "eerst de opening, dan mag er gesleept worden")
 	Hits.plaats()
 	var bron := Ui.bron_van("ws_berg")
 	waar(bron != null and bron.sleep_naam == "krat", "de berg draagt de sleepnaam 'krat'")
@@ -569,6 +686,8 @@ func test_herstel_uit_ctx_data() -> void:
 	_licht_op()
 	_wereld(4)
 	Games.start(ID)
+	waar(_door_de_opening(), "eerst de opening")
+	gelijk(str(_stand()["stap"]), "sorteren", "en dan de berg")
 	# sort three pieces and stop halfway
 	for _q in 3:
 		var st := _stand()
@@ -690,7 +809,8 @@ func test_kindtekst_staat_letterlijk_in_de_bron() -> void:
 	waar(bron.contains("%d − %d ="), "de sombalk gebruikt het echte minteken U+2212")
 	waar(bron.contains(" … "), "de teller gebruikt het beletselteken U+2026")
 	# and the font really carries every character of them
-	for zin in KINDTEKST + HAND_EEN + HAND_TWEE + GREEP + ["🧦", "🧣", "🧺", "🧸", "📊", "📦", "✅", "👍"]:
+	for zin in KINDTEKST + HAND_EEN + HAND_TWEE + GREEP \
+			+ ["🧦", "🧣", "🧺", "🧸", "🧹", "📊", "📦", "✅", "👍"]:
 		gelijk(str(Ui.mist_tekens(str(zin))), "[]",
 			'elk teken van "%s" zit in het lettertype' % str(zin))
 
@@ -698,7 +818,9 @@ func test_kindtekst_staat_letterlijk_in_de_bron() -> void:
 ## characters), for every combination of kinds the generator can produce.
 func test_elke_kaartzin_past_in_f4() -> void:
 	var zinnen: Array[String] = ["Welke stapel is het hoogst?", "Hoeveel stuks samen?",
-		"Alles gesorteerd!", "📦 Elk blokje is 2 stuks"]
+		"Alles gesorteerd!", "📦 Elk blokje is 2 stuks",
+		"Hoeveel stuks liggen er?", "Hoeveel blokjes worden dat?",
+		"Hoeveel liggen er nog?"]
 	for a in WasSoorten.LIJST:
 		zinnen.append("Hoeveel %s zijn het?" % str(a["naam"]))
 		for b in WasSoorten.LIJST:
@@ -974,7 +1096,9 @@ func test_dekking_is_nul_in_vier_kaders() -> void:
 				_sorteer_alles()
 				await _spoel(0.4)
 			else:
-				await _spoel(0.2)
+				# the opening question comes first; this phase is the sorting
+				waar(_door_de_opening(), "%s sorteren: de opening is beantwoord" % str(maat))
+				await _spoel(1.0)
 			var dbg := Hits.debug()
 			var kader := World.kader_rect().size
 			var knoppen := 0
