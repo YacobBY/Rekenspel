@@ -27,6 +27,9 @@ const TELEFOON := 520          ## portrait under this width is the phone shell
 @onready var kader: Control = $Scherm/Kolom/Middenrij/Kaderdoos/Kader
 @onready var beeld: TextureRect = $Scherm/Kolom/Middenrij/Kaderdoos/Kader/Beeld
 @onready var vanglaag: Control = $Scherm/Kolom/Middenrij/Kaderdoos/Kader/Vanglaag
+## The paper of the maths bar (PLAN.md §3.1), between the catch areas and the
+## buttons: it paints over the world and catches nothing.
+@onready var balklaag: UiRekenbalk = $Scherm/Kolom/Middenrij/Kaderdoos/Kader/Balklaag
 @onready var knoplaag: Control = $Scherm/Kolom/Middenrij/Kaderdoos/Kader/Knoplaag
 @onready var naamlaag: Control = $Scherm/Kolom/Middenrij/Kaderdoos/Kader/Naamlaag
 @onready var rail: VBoxContainer = $Scherm/Kolom/Middenrij/Rail
@@ -45,7 +48,7 @@ var _compact := false
 var _telefoon := false
 
 func _ready() -> void:
-	Ui.registreer_lagen(knoplaag, naamlaag, toastlaag, bladlaag, vanglaag)
+	Ui.registreer_lagen(knoplaag, naamlaag, toastlaag, bladlaag, vanglaag, balklaag)
 	Ui.registreer_wortels([scherm, toastlaag, bladlaag])
 	World.registreer_viewport(wereld_vp, kamer_scene)
 	beeld.texture = wereld_vp.get_texture()
@@ -426,7 +429,10 @@ func _meld_kaart(id: String) -> void:
 	var s := Hits.spot(id)
 	if s == null or not is_instance_valid(s.knoop):
 		return
-	print("[probe] kaart ", id, "=", (s.knoop as Control).get_global_rect())
+	var kn := (s.knoop as Control)
+	print("[probe] kaart ", id, "=", kn.get_global_rect(),
+		" balk=", Ui.balk_rect(), " baas=", Ui.balk_kaart(),
+		" op=", str(Hits.debug().get(id, {}).get("op", "?")))
 
 ## One machine-readable line per fact, for the browser probe and the tests.
 func _meld_later() -> void:

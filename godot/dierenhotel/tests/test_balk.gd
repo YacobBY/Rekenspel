@@ -201,3 +201,269 @@ func test_een_leeg_kader_krijgt_geen_balk() -> void:
 	gelijk(m["hoog"], 0, "nul hoogte, dus geen balk")
 	gelijk(m["vorm"], "hoog", "en de vorm is er wel")
 	waar(int(m["knop_breed"]) >= UiThema.HOT, "de knopmaat blijft een tikdoel")
+
+# =========================================================== de dock (B2)
+#
+# The tests above measured the bar on paper.  These test the one thing that
+# makes it real: the bar takes room from the world ONLY while a card stands
+# in it, and gives every unit back the moment the card lets go.
+#
+# The owner's rule of 2026-09-19 is the spine of all of them — "de balk mag
+# alleen ruimte kosten als er echt een kaart in staat".  Everything the bar
+# is not told by a card it does not take, and nothing that happened before a
+# card opened may be undone by one.
+
+var _laag: Control = null
+var _papier: UiRekenbalk = null
+
+func _op(kader: Vector2) -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	_laag = Control.new()
+	_laag.size = kader
+	boom.root.add_child(_laag)
+	_papier = UiRekenbalk.new()
+	_papier.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_laag.add_child(_papier)
+	Ui.registreer_lagen(_laag, _laag, _laag, _laag, _laag, _papier)
+	World.meet(Rect2(Vector2.ZERO, kader))
+
+func _af() -> void:
+	Hits.wis_alles()
+	Ui.registreer_lagen(null, null, null)
+	if _papier != null:
+		_papier.queue_free()
+		_papier = null
+	if _laag != null:
+		_laag.queue_free()
+		_laag = null
+
+## A real som card with a strip of four answers under it.  The wrapper is
+## handed back so a test can do what a game does — `kaart.hulp(...)` — and
+## not reach into the node behind it.
+func _kaart(id: String, prio: int = 14) -> Ui.Kaart:
+	return Ui.somkaart({"x": 20.0, "z": 20.0}, "3 + 2 =", {
+		"id": id, "regel": "Hondje telt 3 + 2", "goed": 5, "prio": prio,
+		"door": "test"})
+
+## The overlap of two rectangles in pixels; 0 means they do not touch.
+func _px(a: Rect2, b: Rect2) -> float:
+	var s := a.intersection(b)
+	return maxf(0.0, s.size.x) * maxf(0.0, s.size.y)
+
+## Nothing is open: the bar costs nothing, claims no rectangle, and the world
+## is fitted into the whole frame exactly as it was before the bar existed.
+func test_zonder_kaart_kost_de_balk_niets() -> void:
+	for kader in KADERS:
+		_op(kader)
+		var wat := "leeg %s" % str(kader)
+		gelijk(Ui.balk_kost(), 0.0, "%s: de kost is nul" % wat)
+		waar(not Ui.balk_aan(), "%s: de balk staat uit" % wat)
+		gelijk(Ui.balk_rect(), Rect2(), "%s: geen papier" % wat)
+		gelijk(World.balk_hoog(), 0.0, "%s: de wereld geeft niets" % wat)
+		gelijk(Ui.balk_kaart(), "", "%s: geen eigenaar" % wat)
+		waar(World.schaal()["k"] > 0.0, "%s: er wordt wél getekend" % wat)
+		_af()
+
+## A card with a strip docks, the paper closes on the bottom edge of the
+## frame, both parts stand inside it, and the world scales DOWN to make room.
+func test_de_kaart_neemt_de_balk_en_de_wereld_wijk() -> void:
+	for kader in KADERS:
+		_op(kader)
+		var zonder := float(World.schaal()["k"])
+		_kaart("k1")
+		Hits.plaats()
+		var wat := "kaart %s" % str(kader)
+		var kost := Ui.balk_kost()
+		var dak := Ui.balk_dak()
+		waar(kost <= dak + 0.001, "%s: kost %.1f blijft onder dak %.1f" % [wat, kost, dak])
+		if kost <= 0.0:
+			# The frame is too short for this card; it floats, as it always did.
+			gelijk(World.balk_hoog(), 0.0, "%s: de wereld merkt van niets" % wat)
+			_af()
+			continue
+		gelijk(World.balk_hoog(), kost, "%s: de wereld geeft precies af" % wat)
+		waar(float(World.schaal()["k"]) <= zonder + 0.0001,
+			"%s: de wereld wordt niet groter" % wat)
+		var b := Ui.balk_rect()
+		gelijk(b.position.x, 0.0, "%s: papier begint links" % wat)
+		gelijk(b.size.x, kader.x, "%s: papier is zo breed als het kader" % wat)
+		gelijk(b.end.y, kader.y, "%s: papier sluit op de onderkant" % wat)
+		var dbg := Hits.debug()
+		waar(dbg.has("k1") and dbg.has("k1_keuzes"), "%s: beide staan geplaatst" % wat)
+		var rc: Rect2 = dbg["k1"]["rect"]
+		var rs: Rect2 = dbg["k1_keuzes"]["rect"]
+		waar(b.encloses(rc), "%s: de kaart staat op het papier" % wat)
+		waar(b.encloses(rs), "%s: de strook staat op het papier" % wat)
+		waar(rc.size.x > 0.0 and rs.size.x > 0.0, "%s: beide zijn echt" % wat)
+		if Ui.balk_vorm() == "hoog":
+			waar(rc.end.y <= rs.position.y + 0.01,
+				"%s: de kaart staat BOVEN de strook" % wat)
+		_af()
+
+## The line the reverted attempt of 2026-09-19 got wrong: a card that closes
+## must give EVERY unit back, and the world must land on the exact scale it
+## had before the card ever opened.
+func test_de_balk_geeft_zijn_ruimte_weer_vrij() -> void:
+	for kader in KADERS:
+		_op(kader)
+		var zonder := float(World.schaal()["k"])
+		_kaart("k1")
+		Hits.plaats()
+		var kost := Ui.balk_kost()
+		Hits.weg("k1")
+		var wat := "sluiten %s" % str(kader)
+		gelijk(Ui.balk_kost(), 0.0, "%s: de kost gaat naar nul" % wat)
+		waar(not Ui.balk_aan(), "%s: de balk staat uit" % wat)
+		gelijk(Ui.balk_kaart(), "", "%s: de eigenaar is weg" % wat)
+		gelijk(float(World.schaal()["k"]), zonder,
+			"%.1f: de wereld staat op de maat van vóór de kaart" % kost)
+		_af()
+
+## The paper is walled off before anything chooses a place, so no ordinary
+## hotspot may end up standing on it.
+func test_geen_enige_knop_staat_op_het_papier() -> void:
+	for kader in KADERS:
+		_op(kader)
+		_kaart("k1")
+		var vlak := Rect2(kader * 0.5 - Vector2(47, 37), Vector2(94, 74))
+		Hits.maak({"id": "w1", "kamer": World.kamer_nu(), "x": 24.0, "z": 20.0,
+			"y": 12.0, "label": "Loop", "vlak": vlak, "door": "test"})
+		Hits.plaats()
+		var wat := "muur %s" % str(kader)
+		var b := Ui.balk_rect()
+		var r: Rect2 = Hits.debug()["w1"]["rect"]
+		gelijk(_px(r, b), 0.0, "%s: %s staat niet op het papier" % [wat, str(r)])
+		waar(not Hits.debug()["w1"]["krap"], "%s: de knop vond een plek" % wat)
+		_af()
+
+## A help line makes the card taller and the bar grows with it — never past
+## a third of the frame, never below its own rung, and never smaller than it
+## was without the line.  Where the frame is too short to hold the taller
+## card the bar lets go instead of clipping: the card floats, whole.
+func test_de_hulplijn_groeit_de_balk_mee() -> void:
+	for kader in KADERS:
+		_op(kader)
+		var kaart := _kaart("k1")
+		var zonder := Ui.balk_kost()
+		var wat := "hulp %s" % str(kader)
+		gelijk(Ui.balk_kandidaat(), "k1", "%s: de kaart is de kandidaat" % wat)
+		kaart.hulp("Kijk: 3 en 2 samen zijn 5, tel de boterhammen na")
+		var met := Ui.balk_bepaal()
+		waar(met <= Ui.balk_dak() + 0.001, "%s: nog steeds onder het dak" % wat)
+		waar(met >= zonder or met == 0.0,
+			"%s: %.1f wordt niet kleiner door een extra regel" % [wat, zonder])
+		if met > 0.0:
+			waar(met >= Ui.balk_hoog() - 0.001, "%s: nooit onder de rung" % wat)
+			waar(Ui.balk_kaart() == "k1", "%s: de balk houdt zijn kaart" % wat)
+			Hits.plaats()
+			var r: Rect2 = Hits.debug()["k1"]["rect"]
+			waar(Ui.balk_rect().encloses(r), "%s: %s staat op het papier" % [wat, str(r)])
+			waar(r.size.y >= zonder, "%s: de kaart is echt gegroeid (%s)" % [wat, str(r.size.y)])
+		else:
+			waar(Ui.balk_kaart() == "", "%s: de balk laat netjes los" % wat)
+		_af()
+
+## The card never grows into a tower.  A `Label` under `AUTOWRAP_WORD_SMART`
+## reports its minimum at the width it last had, so a help line that arrives
+## before the card's first frame used to answer 631 units for one short
+## sentence and `Hits` pinned that into `custom_minimum_size` for good.  The
+## height of a card with a help line is now measured by the theme at the
+## width the card is drawn at, so it stays a card on every frame the shell
+## hands out — with the bar under it or without.
+func test_de_hulplijn_wordt_geen_toren() -> void:
+	for kader in KADERS:
+		_op(kader)
+		var kaart := _kaart("k1")
+		kaart.hulp("Tel de ballen: 3 en nog 2")
+		Hits.plaats()
+		var wat := "toren %s" % str(kader)
+		var r: Rect2 = Hits.debug()["k1"]["rect"]
+		waar(r.size.y <= 260.0, "%s: %s is een kaart, geen strook" % [wat, str(r)])
+		waar(r.position.y >= 0.0 and r.end.y <= kader.y + 0.01,
+			"%s: %s staat heel in het kader" % [wat, str(r)])
+		waar(not Hits.debug()["k1"]["krap"], "%s: en ze vond een echte plek" % wat)
+		_af()
+
+## Two cards open: the bar belongs to the one with the highest `prio`, and it
+## moves the moment a more urgent one arrives.  `balk_kandidaat()` is the
+## choice itself and holds on every frame; `balk_kaart()` is who actually
+## stands on the paper, which on a frame too short to dock nobody does.
+func test_de_balk_volgt_de_hoogste_prio() -> void:
+	for kader in KADERS:
+		_op(kader)
+		var wat := "prio %s" % str(kader)
+		_kaart("rustig", 10)
+		gelijk(Ui.balk_kandidaat(), "rustig", "%s: de enige is de kandidaat" % wat)
+		_kaart("dringend", 20)
+		gelijk(Ui.balk_kandidaat(), "dringend", "%s: de drukste wint" % wat)
+		if Ui.balk_aan():
+			gelijk(Ui.balk_kaart(), "dringend", "%s: en staat op het papier" % wat)
+		Hits.weg("dringend")
+		gelijk(Ui.balk_kandidaat(), "rustig", "%s: de overgeblevene erft" % wat)
+		if Ui.balk_aan():
+			gelijk(Ui.balk_kaart(), "rustig", "%s: en erft het papier" % wat)
+		Hits.weg("rustig")
+		gelijk(Ui.balk_kandidaat(), "", "%s: met niets is er geen kandidaat" % wat)
+		gelijk(Ui.balk_kaart(), "", "%s: en geen eigenaar" % wat)
+		_af()
+
+## The honest limit, written down so nobody has to rediscover it: on the two
+## short frames the paper cannot hold a card WITH a help line, so the card
+## floats over the world exactly as it did before the bar was built.  It must
+## still be placed, in the frame, and not `krap`.
+func test_kort_kader_laat_de_kaart_drijven() -> void:
+	for kader in [Vector2(558, 289), Vector2(676, 320), Vector2(296, 314)]:
+		_op(kader)
+		var kaart := _kaart("k1")
+		kaart.hulp("Tel de ballen: 3 en nog 2")
+		Hits.plaats()
+		var wat := "drijven %s" % str(kader)
+		waar(Ui.balk_kost() <= Ui.balk_dak() + 0.001, "%s: onder het dak" % wat)
+		var dbg := Hits.debug()
+		waar(dbg.has("k1"), "%s: de kaart staat" % wat)
+		var r: Rect2 = dbg["k1"]["rect"]
+		waar(r.position.x >= 0.0 and r.position.y >= 0.0
+			and r.end.x <= kader.x + 0.01 and r.end.y <= kader.y + 0.01,
+			"%s: %s binnen het kader" % [wat, str(r)])
+		waar(not dbg["k1"]["krap"], "%s: niet krap" % wat)
+		_af()
+
+## `World.zet_balk` is the door for everything that is not a card: it
+## rescales, it emits, and it does nothing at all when nothing changed.
+func test_zet_balk_om_gerescaleerd_te_worden() -> void:
+	_op(Vector2(1000, 648))
+	var zonder := float(World.schaal()["k"])
+	var keren := [0]
+	var op := func(_k, _s) -> void: keren[0] += 1
+	World.kader_veranderd.connect(op)
+	World.zet_balk(120.0)
+	gelijk(World.balk_hoog(), 120.0, "de hoogte staat er")
+	waar(float(World.schaal()["k"]) <= zonder, "de wereld wordt niet groter")
+	gelijk(keren[0], 1, "het kader is één keer gemeld")
+	World.zet_balk(120.0)
+	gelijk(keren[0], 1, "dezelfde hoogte meldt niets opnieuw")
+	World.zet_balk(0.0)
+	gelijk(World.balk_hoog(), 0.0, "terug naar niets")
+	gelijk(float(World.schaal()["k"]), zonder, "en terug naar de oude maat")
+	gelijk(keren[0], 2, "het teruggeven wordt wél gemeld")
+	World.kader_veranderd.disconnect(op)
+	_af()
+
+## The bar is only worth building if the world really moves out of the way.
+## On a frame that is bound by its WIDTH the height budget is not the tight
+## one and nothing needs to shrink — that is fine, and honest — but across
+## the ten frames the strip has to bite somewhere, or the whole task is a
+## no-op dressed up as a feature.
+func test_de_balk_druwt_de_wereld_werkelijk_kleiner() -> void:
+	var ergens := 0
+	for kader in KADERS:
+		_op(kader)
+		var zonder := float(World.schaal()["k"])
+		World.zet_balk(minf(120.0, floorf(kader.y * 0.34)))
+		var met := float(World.schaal()["k"])
+		waar(met <= zonder + 0.0001,
+			"%s: de wereld wordt nooit groter door een balk" % str(kader))
+		if met < zonder - 0.0001:
+			ergens += 1
+		_af()
+	waar(ergens >= 3, "op minstens drie van de tien kaders geeft de wereld echt mee (%d)" % ergens)

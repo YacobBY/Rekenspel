@@ -34,6 +34,13 @@ var _vakken: Array[Rect2] = []     ## object boxes in view; a button avoids all 
 var _mijd_balie_nu := false        ## while placing a hotel element: the desk is a box too
 var _kaart_vrij: Array[Rect2] = [] ## boxes a fixed card may not cover either (the desk)
 var _laatste: Dictionary = {}   ## id -> {rect, vlak, dekking, op, laag, prio, krap, gestapeld}
+## The maths bar of PLAN.md §3.1 as a wall.  The paper is walled off before
+## anything chooses a place, so no band, no button and no loose card may end up
+## inside it.  It is deliberately NOT in `_geplaatst`: the card and the strip
+## that are docked in the bar are placed BY the bar and pass straight through
+## the collision check, and their own rectangles must not make the paper look
+## occupied to themselves.
+var _balk_muur: Array[Rect2] = []
 
 class Spot extends RefCounted:
 	var id: String
@@ -307,6 +314,18 @@ func plaats() -> void:
 	_bezet.clear()
 	_geplaatst.clear()
 	_vakken.clear()
+	# The maths bar is walled off before anything chooses a place: the paper is
+	# off limits to every band and every button (PLAN.md §3.1).  Its cells go
+	# into `_bezet` so the band grid never hands one out, and the rectangle
+	# itself into `_balk_muur` so the free-form checks see it too.  Empty for
+	# the whole time no card is docked, which is most of the game.
+	_balk_muur.clear()
+	if Ui.balk_aan():
+		var balk := Ui.balk_rect()
+		if balk.size.x > 0.0 and balk.size.y > 0.0:
+			_balk_muur.append(balk)
+			for cel in _cellen_van(balk, kader):
+				_bezet[cel] = true
 	# The counter is the one piece of world a card may not hide: the bell, the
 	# till, the book and the lamp all stand on it (V1 finding 4).
 	_kaart_vrij.clear()
@@ -423,7 +442,10 @@ func _blijf_staan(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2) -> Diction
 	if l.is_empty() or not l.has("mik"):
 		return {}
 	var op := str(l["op"])
-	if op in ["voet", "midden", "kleef", "rand", "aan"] or bool(l["krap"]):
+	# `balk` is in this list because its place is the bar, and the bar moves:
+	# a card that kept last frame's rectangle would keep standing where the
+	# paper used to be after the paper shrank or went away.
+	if op in ["voet", "midden", "kleef", "rand", "aan", "balk"] or bool(l["krap"]):
 		return {}
 	var r: Rect2 = l["rect"]
 	if not r.size.is_equal_approx(maat) or (l["mik"] as Vector2).distance_to(mik) > BLIJF_MIK:
@@ -524,6 +546,22 @@ func _bruikbaar(stuk: Variant) -> bool:
 ## A tap target is at least 48 x 48; a number tag and a name plate keep their
 ## natural size — neither is clickable, so neither is a fingertip.
 func _maat_van(s: Spot) -> Vector2:
+	# A sum card whose help line is showing is measured by `Ui.kaart_mat()`,
+	# not by the Control.  The Control answers with the height its help line
+	# needs at whatever width it last happened to be laid out at, and the
+	# caller below pins that answer into `custom_minimum_size` for good: a
+	# card whose help line arrived before its first frame answers 631 units
+	# for one short sentence and becomes a strip of frame height.  The
+	# zwembad test `test_de_kaart_na_een_bots_past_in_het_kader` walks into
+	# exactly that trap and papers over it with a delay between the hit and
+	# the question; measuring the line at the width the card is drawn at is
+	# the fix, and it is also what lets the maths bar of §3.1 size itself to
+	# a card it has never laid out.
+	if s.kind == "kaart" and s.knoop is UiSomkaart \
+			and s.knoop.hulp_label != null and s.knoop.hulp_label.visible:
+		var eerlijk := Ui.kaart_mat(s.knoop)
+		if eerlijk.x > 0.0 and eerlijk.y > 0.0:
+			return eerlijk
 	# A Control that carries a Container inside a NON-Container says how big its
 	# content is (`UiWolk` is a Button with a row in it); everything else answers
 	# with its combined minimum, which for a Container is the same thing.
@@ -557,6 +595,15 @@ func _diepte(s: Spot) -> float:
 func _op_van(s: Spot) -> String:
 	if s.op == "voet":
 		return "voet"
+	# The maths bar owns the card it has docked, and the answer strip that
+	# hangs on it (PLAN.md §3.1).  This is asked BEFORE `kleef_aan` because
+	# the strip of a docked card glues onto that card and has to follow it
+	# onto the paper instead of hunting for a band under it.
+	if Ui.balk_aan() and Ui.balk_kaart() != "":
+		if s.kind == "kaart" and s.id == Ui.balk_kaart():
+			return "balk"
+		if s.kind == "keuzes" and s.kleef_aan == Ui.balk_kaart():
+			return "balk"
 	if s.op == "aan":
 		return "aan" if s.vlak_nu.size.y > 0.0 else "boven"
 	if s.kleef_aan != "":
@@ -589,6 +636,19 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 	var vlak := s.vlak_nu
 	var top := vlak.position.y if vlak.size.y > 0.0 else mik.y - s.y * World.px_per_hoogte()
 	var voet := vlak.end.y if vlak.size.y > 0.0 else mik.y
+	if op == "balk":
+		# The maths bar of PLAN.md §3.1: the card and its strip stand ON the
+		# paper, which `Ui` measured and `plaats()` already walled off from
+		# the rest of the frame.  No band and no object box applies here — the
+		# bar is the one place that may sit where the world used to be,
+		# because the world was moved out of it first.
+		var balk_plek: Rect2 = Ui.balk_plek(s.kind, maat)
+		if balk_plek.size.x > 0.0:
+			_reserveer(balk_plek, kader)
+			return {"rect": balk_plek, "op": op, "krap": false, "gestapeld": false}
+		# The bar let go between the wall going up and this element asking; the
+		# card falls back on where it would have gone anyway.
+		op = "midden" if (s.kind == "kaart" or s.kind == "wolk") else "onder"
 	if op == "voet":
 		# The keypad band: docked to the bottom of the world frame, inside the
 		# KADER_ONDER strip the camera already keeps free (architecture.md §4.4).
@@ -781,9 +841,14 @@ func _bezet_voor(r: Rect2, eigen: Rect2, mijd_balie := false) -> bool:
 	var snij := r.intersection(eigen)
 	return snij.size.x > 0.001 and snij.size.y > 0.001
 
-## Does this rectangle touch anything already handed out in this pass?
+## Does this rectangle touch anything already handed out in this pass, or the
+## paper of the maths bar?
 func _botst(r: Rect2) -> bool:
 	for g in _geplaatst:
+		var snij := r.intersection(g)
+		if snij.size.x > 0.001 and snij.size.y > 0.001:
+			return true
+	for g in _balk_muur:
 		var snij := r.intersection(g)
 		if snij.size.x > 0.001 and snij.size.y > 0.001:
 			return true

@@ -195,7 +195,11 @@ func test_kaart_staat_nooit_op_haar_eigen_voorwerp() -> void:
 		kaart.weg()
 		_af()
 
-## The choice strip is glued under its card, never on it, at every frame size.
+## The choice strip hangs on its card and never on top of it, at every frame
+## size.  Which anchor that is depends on whether the maths bar of §3.1 took
+## the card: on the bar the strip follows it there (`op: "balk"`), off the
+## bar it kleefs under the card as it always did.  Either way the strip is
+## beside or below, never over — which is what this test is really about.
 func test_keuzestrook_kleeft_onder_de_kaart() -> void:
 	for kader in MATEN:
 		_op(kader)
@@ -212,7 +216,14 @@ func test_keuzestrook_kleeft_onder_de_kaart() -> void:
 		var dbg := Hits.debug()
 		waar(dbg.has("kk_keuzes"), "de strook staat er bij %s" % str(kader))
 		if dbg.has("kk_keuzes"):
-			gelijk(dbg["kk_keuzes"]["op"], "kleef", "de strook kleeft, %s" % str(kader))
+			var verwacht := "balk" if Ui.balk_aan() else "kleef"
+			gelijk(dbg["kk_keuzes"]["op"], verwacht,
+				"de strook hangt aan haar kaart, %s" % str(kader))
+			var kr: Rect2 = dbg["kk"]["rect"]
+			var sr: Rect2 = dbg["kk_keuzes"]["rect"]
+			gelijk(maxf(0.0, kr.intersection(sr).size.x)
+				* maxf(0.0, kr.intersection(sr).size.y), 0.0,
+				"en staat niet op de kaart, %s" % str(kader))
 		_keur(kader, "strook %s" % str(kader))
 		kaart.weg()
 		_af()

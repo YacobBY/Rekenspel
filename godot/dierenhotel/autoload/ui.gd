@@ -30,6 +30,7 @@ var naamlaag: Control = null     ## name plates
 var toastlaag: Control = null
 var bladlaag: Control = null     ## modal sheets
 var vanglaag: Control = null     ## drop catch areas, UNDER the buttons
+var balklaag: UiRekenbalk = null ## the maths bar of PLAN.md §3.1, UNDER the buttons
 
 var thema: Theme = null
 var maten: Dictionary = {}
@@ -54,13 +55,20 @@ func _ready() -> void:
 	World.kader_veranderd.connect(_op_kader_veranderd)
 
 ## Registered by `scenes/main.tscn` at boot.
+##
+## `balk_l` is the sixth and optional layer: the paper of the maths bar.  It is
+## optional because the thirteen test files that register their own plain
+## `Control` do not build one — and they do not need to, because every number
+## in §3.1 is derived from the frame, not from this node.
 func registreer_lagen(knop: Control, naam: Control, toast_l: Control,
-		blad_l: Control = null, vang_l: Control = null) -> void:
+		blad_l: Control = null, vang_l: Control = null,
+		balk_l: UiRekenbalk = null) -> void:
 	knoplaag = knop
 	naamlaag = naam
 	toastlaag = toast_l
 	bladlaag = blad_l
 	vanglaag = vang_l
+	balklaag = balk_l
 
 ## Which layer a hotspot Control belongs in.  Everything is a button over the
 ## world; a name plate is the exception — it lives UNDER the buttons so a finger
@@ -69,6 +77,270 @@ func laag_voor(kind: String) -> Control:
 	if kind == "naam" and naamlaag != null and is_instance_valid(naamlaag):
 		return naamlaag
 	return knoplaag
+
+# --------------------------------------------------------------- rekenbalk
+#
+# PLAN.md §3.1 — the maths bar as a card dock.  Everything in this section is
+# a PURE function of the frame and of the card that is docked, and of nothing
+# else.  That is the property the whole design turns on: `World.zet_balk()`
+# changes the SCALE of the world, so if the height of the bar were measured
+# from what the world looks like after that rescale, the two would chase each
+# other forever.  The reverted attempt of 2026-09-19 (`0ba9e63`) did exactly
+# that and grew the bar to 48 % of the frame.
+#
+# The owner's rule of 2026-09-19: the bar may only cost the world space while
+# a card really stands in it.  With nothing docked `balk_kost()` is 0 and the
+# world is fitted into the whole frame, exactly as it was before the bar was
+# invented — which is why every existing test still sees the old numbers.
+#
+# The card does not "ask" to be docked and the bar does not reach for it.  The
+# dock is decided here, from the priority the card already carries, and `Hits`
+# only ever asks two questions: is the bar on (`balk_aan`), and where does my
+# kind belong on it (`balk_plek`).
+
+## §3.1: the bar never takes more than a third of the frame.  The owner keeps
+## two thirds of the screen for the hotel, whatever is standing in the bar.
+const BALK_DAK := 0.34
+## Air between the edge of the paper and whatever stands on it.  Two units,
+## not four, because the difference decides whether a card that grew a worked
+## example still fits under the third-of-the-frame ceiling on a tablet: at 4
+## the stack is 220 in a 990x637 frame whose cap is 216 and the bar lets go
+## exactly when the child needs it most; at 2 it is 216 and it docks.
+const BALK_LUCHT := 2.0
+## Air between the card and the answer strip under it.
+const BALK_GAT := 8.0
+## How many bands of the hit grid the room must keep above the bar.  The bar
+## is not the only thing that wants the bottom of the frame: every game hangs
+## its own buttons there, and a button is 52 units tall (`Hits.RIJ`, the 48
+## px tap target plus its air) and does not shrink when the world does.
+## Five is the least a room needs to lay its rows out without them climbing
+## over each other — measured, not guessed: at 740x360 a 122 unit bar leaves
+## 238 units, four and a half bands, and the bed rows overlap by 2500 px and
+## come home `krap`.  The 0.34 ceiling of §3.1 alone lets that bar in; this
+## one does not.
+const WERELD_BANDEN := 5
+
+var _balk_kaart := ""     ## id of the card that owns the bar right now, "" = none
+var _balk_kost := 0.0     ## what the bar costs the world; cached, see _balk_herstel
+var _balk_stil := 0       ## > 0: cards are swapping, do not rescale mid-swap
+
+## The design height of the bar for the frame as it stands: the table of
+## §3.1, already clamped to `BALK_DAK` by `UiThema.balk_maten()`.  This is
+## what the bar WANTS; `balk_kost()` is what it actually takes.
+func balk_hoog() -> float:
+	var k := World.kader_rect()
+	if k.size.x < 1.0 or k.size.y < 1.0:
+		return 0.0
+	return float(UiThema.balk_maten(k.size)["hoog"])
+
+## `hoog` stacks the card over its strip; `laag` puts them side by side in a
+## frame that is short in the tall direction (§3.1).
+func balk_vorm() -> String:
+	var k := World.kader_rect()
+	if k.size.x < 1.0 or k.size.y < 1.0:
+		return "hoog"
+	return str(UiThema.balk_maten(k.size)["vorm"])
+
+## The most the bar may ever take of this frame.
+func balk_dak() -> float:
+	return floorf(World.kader_rect().size.y * BALK_DAK)
+
+## The most the bar may take AND leave the room able to place its own
+## buttons.  The real ceiling: `balk_dak()` protects the child's view of the
+## hotel, this protects the hotel's own tap targets.  On a short landscape
+## frame the two disagree, and this one wins — the bar lets go.
+func balk_ruimte() -> float:
+	return maxf(0.0, World.kader_rect().size.y - float(WERELD_BANDEN * Hits.RIJ))
+
+## The card that owns the bar: the open card with the highest `prio`, newest
+## first among equals.  `""` while nothing is docked.
+func balk_kaart() -> String:
+	return _balk_kaart
+
+## The Control that draws the docked card.  `_kaarten` holds the `Kaart`
+## wrapper, not the node — the node lives on the spot, which is also the only
+## place that knows whether it is still alive.
+func balk_kaart_node() -> UiSomkaart:
+	if _balk_kaart == "":
+		return null
+	var s = Hits.spot(_balk_kaart)
+	if s == null or not is_instance_valid(s.knoop):
+		return null
+	return s.knoop as UiSomkaart
+
+## The answer strip that hangs on the docked card, or `null`.
+##
+## `Hits.Spot` is an inner class of the `Hits` script and `Hits` is reached by
+## its autoload name, not by a `class_name`, so the spot is held untyped here.
+func balk_strook_node() -> Control:
+	if _balk_kaart == "":
+		return null
+	var s = Hits.spot(_balk_kaart + "_keuzes")
+	if s == null:
+		return null
+	var knoop = s.knoop
+	return (knoop as Control) if knoop != null and is_instance_valid(knoop) else null
+
+## The real minimum size of a card, help line included.
+##
+## A `Label` under `AUTOWRAP_WORD_SMART` reports its LONGEST WORD as its
+## minimum width, so an unwrapped help line inflates the card's own minimum
+## into a tower of one word per line — 551 units for a card that draws 114.
+## The theme's `wrap_hoogte()` is the honest measure, at the width the card
+## is actually drawn.
+func kaart_mat(k: UiSomkaart) -> Vector2:
+	# `Hits` writes the size it placed a card at back into
+	# `custom_minimum_size` (hits.gd:418), so a card that was once measured
+	# while its help line was laid out at a narrow width carries that number
+	# forever.  Clear the pin for the measure or the card can never shrink
+	# again, and the second question of the zwembad turn is 40 units taller
+	# than the first for no reason at all.
+	var pin := k.custom_minimum_size
+	k.custom_minimum_size = Vector2.ZERO
+	var hulp := k.hulp_label
+	var was := hulp != null and hulp.visible
+	if hulp != null:
+		hulp.visible = false
+	var m := k.get_combined_minimum_size()
+	if hulp != null:
+		hulp.visible = was
+		if was:
+			m.y += UiThema.wrap_hoogte(hulp, maxf(60.0, m.x - 24.0)) + 4.0
+	k.custom_minimum_size = pin
+	return m
+
+func _strook_mat() -> Vector2:
+	var s := balk_strook_node()
+	return s.get_combined_minimum_size() if s != null else Vector2.ZERO
+
+## What the docked card and its strip need, in frame units, in the form the
+## frame asks for.  `INF` when there is nothing to dock.
+func balk_nodig() -> float:
+	var k := balk_kaart_node()
+	if k == null:
+		return INF
+	var km := kaart_mat(k)
+	var sm := _strook_mat()
+	if sm.y <= 0.0:
+		return km.y + 2.0 * BALK_LUCHT
+	if balk_vorm() == "laag":
+		return maxf(km.y, sm.y) + 2.0 * BALK_LUCHT
+	return km.y + BALK_GAT + sm.y + 2.0 * BALK_LUCHT
+
+## The width the same stack needs.
+func balk_breed_nodig() -> float:
+	var k := balk_kaart_node()
+	if k == null:
+		return 0.0
+	var km := kaart_mat(k)
+	var sm := _strook_mat()
+	if sm.y <= 0.0:
+		return km.x + 2.0 * BALK_LUCHT
+	if balk_vorm() == "laag":
+		return km.x + sm.x + 3.0 * BALK_LUCHT
+	return maxf(km.x, sm.x) + 2.0 * BALK_LUCHT
+
+## What the bar costs the world RIGHT NOW: 0 while nothing is docked, and 0
+## when the frame has no room for the card that would dock.  Never more than
+## `balk_dak()`, and never less than the design height of the rung when it is
+## on.  Cached; `_balk_herstel()` is what recomputes it.
+func balk_kost() -> float:
+	return _balk_kost
+
+func balk_aan() -> bool:
+	return _balk_kost > 0.0
+
+## The paper itself.  Empty while the bar is off.
+func balk_rect() -> Rect2:
+	var k := World.kader_rect()
+	if _balk_kost <= 0.0 or k.size.x < 1.0:
+		return Rect2()
+	return Rect2(Vector2(k.position.x, k.end.y - _balk_kost), Vector2(k.size.x, _balk_kost))
+
+## Where a thing of `kind` ("kaart" | "keuzes") of size `maat` stands on the
+## paper.  Everything is anchored to the BOTTOM edge of the bar and grows
+## upward, so the strip of answer buttons is always the closest thing to the
+## finger.  An empty Rect2 means "this does not belong in the bar".
+func balk_plek(kind: String, maat: Vector2) -> Rect2:
+	var b := balk_rect()
+	if b.size.x < 1.0 or maat.x < 1.0 or maat.y < 1.0:
+		return Rect2()
+	var bodem := b.end.y - BALK_LUCHT
+	if balk_vorm() == "laag":
+		if kind == "kaart":
+			return Rect2(Vector2(b.position.x + BALK_LUCHT, bodem - maat.y), maat)
+		return Rect2(Vector2(b.end.x - BALK_LUCHT - maat.x, bodem - maat.y), maat)
+	var strook := _strook_mat()
+	if kind == "keuzes":
+		return Rect2(Vector2(b.position.x + (b.size.x - maat.x) * 0.5,
+			bodem - maat.y), maat)
+	var verhang := (strook.y + BALK_GAT) if strook.y > 0.0 else 0.0
+	return Rect2(Vector2(b.position.x + (b.size.x - maat.x) * 0.5,
+		bodem - verhang - maat.y), maat)
+
+## Decide again which card owns the bar and what it costs the frame.  This
+## COMPUTES and caches; it does not tell the world.  `World.meet()` calls it
+## between taking the new frame and fitting the room into it, because the fit
+## has to know what the bar takes before the scale is taken — asking
+## afterwards would mean two `kader_veranderd` per resize, the first one
+## carrying a scale that is already wrong.
+func balk_bepaal() -> float:
+	# The owner is written down FIRST: `balk_nodig()` asks the card and the
+	# strip what they measure, and both of them look up `_balk_kaart` to find
+	# the strip.  Deciding after measuring would measure nothing.
+	_balk_kaart = balk_kandidaat()
+	var kost := 0.0
+	if _balk_kaart != "":
+		var nodig := balk_nodig()
+		# Both ceilings apply, whichever is lower.  `balk_dak()` is the
+		# owner's rule of a third; `balk_ruimte()` is the room's own claim.
+		var plafond := minf(balk_dak(), balk_ruimte())
+		var bodem := minf(balk_hoog(), plafond)
+		if nodig <= plafond and balk_breed_nodig() \
+				<= World.kader_rect().size.x - 2.0 * BALK_LUCHT:
+			kost = clampf(nodig, bodem, plafond)
+	if kost <= 0.0:
+		_balk_kaart = ""
+	_balk_kost = maxf(0.0, kost)
+	return _balk_kost
+
+## The once-a-frame version: compute, and hand the result to the world.
+## Cheap — `World.zet_balk()` returns straight away when the height is the
+## same, which is the case in all but a handful of frames.
+func _balk_herstel() -> void:
+	if _balk_stil > 0:
+		return
+	World.zet_balk(balk_bepaal())
+
+## The open card with the highest `prio`, newest first among equals.  A card
+## that is no longer in `_kaarten` (closed, or never opened through `Ui`) is
+## not a candidate and is dropped from the list, so the bar can never be held
+## up by a ghost.
+func balk_kandidaat() -> String:
+	var beste := ""
+	var beste_prio := -2147483648
+	var weg: Array[String] = []
+	for i in range(_balk_volgorde.size() - 1, -1, -1):
+		var id: String = _balk_volgorde[i]
+		var k = _kaarten.get(id)
+		if k == null or not is_instance_valid(k):
+			weg.append(id)
+			continue
+		var s = Hits.spot(id)
+		if s == null:
+			weg.append(id)
+			continue
+		var prio := int(s.prio)
+		if prio >= beste_prio:
+			beste_prio = prio
+			beste = id
+	for id in weg:
+		_balk_volgorde.erase(id)
+	return beste
+
+## Opened through `somkaart`, in opening order; the newest of equal priority
+## wins, so `balk_kandidaat()` walks this backwards.
+var _balk_volgorde: Array[String] = []
 
 # ------------------------------------------------------------------- thema
 
@@ -255,6 +527,12 @@ func toast_band() -> Rect2:
 	return Rect2(Vector2.ZERO, toastlaag.size if toastlaag != null else Vector2.ZERO)
 
 func _process(delta: float) -> void:
+	# The bar follows what is docked in it, once a frame.  A card whose
+	# sentence is replaced mid-turn, whose help line appears, or whose strip
+	# changes size never tells the bar about it — and a stale height means the
+	# paper and the world disagree.  `World.zet_balk()` no-ops when nothing
+	# changed, so this net costs one minimum-size query per frame.
+	_balk_herstel()
 	if _toast_tijd > 0.0:
 		_toast_tijd -= delta
 		if _toast_tijd <= 0.0 and _toast != null and is_instance_valid(_toast):
@@ -400,20 +678,33 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 		"icoon": o.get("icoon", ""), "regel": o.get("regel", ""),
 		"regel2": o.get("regel2", ""), "som": som,
 		"max": kaart.max_cijfers, "keuzes": keuzes, "vak": vak,
-		"on_weg": func(_s) -> void: _kaarten.erase(id),
+		"on_weg": func(_s) -> void:
+			_kaarten.erase(id)
+			# The bar lets go of the card the moment it goes, and the world
+			# takes back what it gave.  This is the line whose absence made
+			# `0ba9e63` fail: a card that closed left the bar grown forever.
+			_balk_herstel(),
 	}
 	if o.has("volg"):
 		spot["volg"] = o["volg"]
 	# `Hits.maak` first: a spot with the same id is removed and its `on_weg`
 	# erases that id — only then may the new card be remembered (I2, hinkel).
+	# `_balk_stil` keeps that removal from dropping the bar to zero and back up
+	# again inside one call: the world is told once, at the end.
+	_balk_stil += 1
 	Hits.maak(spot)
 	_kaarten[id] = kaart
+	if not _balk_volgorde.has(id):
+		_balk_volgorde.append(id)
+	_balk_stil -= 1
+	_balk_herstel()
 	kaart_geopend.emit(id)
 	keur_regel(id, o.get("regel", ""))
 	if not str(o.get("regel2", "")).is_empty():
 		keur_regel(id + " (regel2)", o.get("regel2", ""))
 	if not keuzes.is_empty():
 		kaart.strook_id = id + "_keuzes"
+		_balk_stil += 1
 		Hits.maak({
 			"id": kaart.strook_id, "kind": "keuzes", "kamer": kaart.kamer,
 			"x": plek.get("x", 0.0), "z": plek.get("z", 0.0), "y": o.get("hoog", 22.0),
@@ -421,6 +712,8 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 			"kleef_aan": id, "keuzes": keuzes, "kaart": kaart,
 			"titel": o.get("keuze_titel", "kies er een"),
 		})
+		_balk_stil -= 1
+		_balk_herstel()
 	return kaart
 
 ## At most this many buttons on one strip (owner, 2026-09-14).
@@ -528,9 +821,18 @@ class Kaart extends RefCounted:
 
 	func hulp(tekst: String) -> void:
 		var k := _knoop()
-		if k != null and k.hulp_label != null:
-			k.hulp_label.text = tekst
-			k.hulp_label.visible = not tekst.is_empty()
+		if k == null or k.hulp_label == null:
+			return
+		# The help line is the one thing that changes the height of a card
+		# after it opened, so it is the one thing the bar of §3.1 has to
+		# follow.  It never reads this label's own minimum: an autowrap
+		# Label reports the height at whatever width it last had, and a
+		# card whose help line arrived before its first frame answers 631
+		# units for "Tel de ballen: 3 en nog 2".  `Ui.kaart_mat()` asks
+		# the theme instead, at the width the card is really drawn at.
+		k.hulp_label.text = tekst
+		k.hulp_label.visible = not tekst.is_empty()
+		Ui._balk_herstel()
 
 	func getal() -> Variant:
 		if _getikt.is_empty() or not _getikt.is_valid_int():
