@@ -215,20 +215,14 @@ staan, alleen de balk krijgt eigen grote maten):
 
 | rung | kader in units | vorm | H | zin | som | knop | nu | knophoogte | knopbreedte |
 |---|---|---|---|---|---|---|---|---|---|
-| A | x ≥ 900, y ≥ 440 (990×637, 1170×669) | hoog | 188 | 22 | 34 | 24 | 21 | 64 | `clamp((x−54)/4, 56, 150)` |
-| B | 520 ≤ x < 900, y ≥ 440 (734×788) | hoog | 178 | 21 | 32 | 23 | 20 | 60 | `clamp((x−54)/4, 56, 140)` |
-| C | x < 520, y ≥ 440 (326×558) | hoog | 172 | 20 | 30 | 22 | 19 | 60 | `clamp((x−48)/4, 48, 120)` |
-| D | y < 440, x ≥ 470 (558×289, 676×320) | laag | 104 | 18 | 26 | 20 | 18 | 60 | `clamp((x*0.48−18)/4, 48, 96)` |
-| E | y < 440, x < 470 (296×314) | hoog | 150 | 17 | 24 | 19 | 17 | 52 | `clamp((x−42)/4, 48, 96)` |
+| A | x ≥ 900, y ≥ 440 (990×637, 1170×669) | hoog | 160 | 22 | 34 | 24 | 21 | 64 | `clamp((x−54)/4, 56, 150)` |
+| B | 520 ≤ x < 900, y ≥ 440 (734×788) | hoog | 152 | 21 | 32 | 23 | 20 | 60 | `clamp((x−54)/4, 56, 140)` |
+| C | x < 520, y ≥ 440 (326×558) | hoog | 160 | 20 | 30 | 22 | 19 | 60 | `clamp((x−48)/4, 48, 120)` |
+| D | y < 440, x ≥ 470 (558×289, 676×320) | laag | 96 | 18 | 26 | 20 | 18 | 60 | `clamp((x*0.48−18)/4, 48, 96)` |
+| E | y < 440, x < 470 (296×314) | hoog | 132 | 17 | 24 | 19 | 17 | 52 | `clamp((x−42)/4, 48, 96)` |
 
-Daarna `H = clampi(H, 72, int(kader.y * 0.48))`. Het plafond ging van 0.34
-naar 0.48 bij het bijstellen van `B4`: een somkaart met zin + som is bij rung A
-al ≈ 103 units hoog en de antwoordstrook eronder 64, samen 175 — bij 0.34
-(181 op 648) paste dat net niet met de vulling erbij, dus de strook werd
-omhoog geklemd en ging over de kaart heen liggen. `regel2` vervalt in de balk
-(`ui/kaart.gd`), zodat de kaart één regel zin + de som blijft. De tien kaders
-die de suite echt draait staan in `tests/test_ui.gd:8-12` en
-`tests/test_hits.gd:9-17`
+Daarna `H = clampi(H, 72, int(kader.y * 0.34))`. De tien kaders die de suite
+echt draait staan in `tests/test_ui.gd:8-12` en `tests/test_hits.gd:9-17`
 (990×637, 734×788, 1170×669, 326×558, 558×289, 1000×648, 768×1024, 360×740,
 296×314, 676×320) — de maattest loopt ze alle tien.
 
@@ -1424,6 +1418,7 @@ regel blijft zoals hij is; de balk geeft de knoppen zoveel extra breedte dat het
 
 - 2026-09-18 01:30Z — batch 1 (S1 B1 R1 V1 N1 N2) gebouwd door Opus-max-agents in worktrees, blind gecontroleerd, samengevoegd; suite 422/0; commits a121365 fad9b05 c7717bc d764cbc e0c3483 e3f398c. Batch 2 gestart.
 - 2026-09-18 (avond) — **buiten de batches, op verzoek van de eigenaar** (commit "spelbalk"): (a) zodra een spel voorrang heeft verbergt `Hits.plaats()` elke hotelknop in het kader (deuren, bel, prikbord, ingangen van andere spellen, wensen) behalve wat het spel geleend heeft; naamplaatjes en getalplaatjes blijven. (b) Nieuwe `ui/spelbalk.gd`: zolang een spel loopt neemt `⬅ Terug` + spelnaam de rij van de kamerbalk over (zelfde voetafdruk, kader beweegt niet; in de compacte shell de rail), altijd op dezelfde plek; Terug = `Games.stop()`. Een balk ín het kader is geprobeerd en verworpen: op 740×360 en 360×740 vocht hij met de kaarten van hinkel, sleutels, meubels en voerkar om dezelfde hoek. (c) De voerkar leent nu ook de deuren (`pak`), tik = kar erdoor duwen. (d) ⬅ (U+2B05) in de emoji-subset. **Gevolg voor B2/B3/B6**: de "Nu"-knop en de terugweg hoeven niet meer in de balklaag; B2 alleen nog als kaartdok. Eigenaar wil eerst testen vóór batch 3.
+- 2026-09-19 — **teruggedraaid op `main`**: commit 0ba9e63 ("Rekenbalk: dynamische balk + muntstrip-fix", lokaal model Qwen3.8, B2/B3/B4 ineens) is met een revert van `main` gehaald en staat ongewijzigd op de tak `qwen/rekenbalk-b2-b3-b4`. Reden: gepusht met 5 rode tests (bedden ×2, sleutels K1, was N8, balk), CI en Pages rood. Vier daarvan komen door één ding: een permanente balk tot 48 % van de kaderhoogte laat op lage kaders geen banden over voor de spelknoppen — dezelfde was/sleutels-regressies waarop B2 eerder is afgekeurd. De vijfde is een echte bug: `Ui._balk_kaart_rect` wordt bij het sluiten van een kaart nooit gewist (alleen overschreven in `balk_meld`), dus de balk blijft gegroeid en het nieuwe laatste-redmiddel in `Hits._kies_plek` zet knoppen óp het papier. **Opdracht voor het lokale model (eigenaar, 2026-09-19): bouw alleen wat nog open staat, taak voor taak volgens §4 en §5.1, op `main` zoals hij nu is.** Klaar en gemerged: batch 1 (6/6) en batch 2 zonder B2 (7/8). Open, in deze volgorde: eerst B2 als kaartdok samen met N8 en de sleutels-opstellingsregel (zie de regel hieronder), daarna batch 3. Regels die hierbij gelden: (1) de spelbalk uit `ui/spelbalk.gd` blijft; de "Nu"-chip en de terugweg horen niet meer in het kader (zie de regel van 2026-09-18 avond), dus B2/B3/B6 zijn kleiner dan §3.1 beschrijft; (2) het balkplafond blijft 0.34 uit §3.1 tenzij de eigenaar anders zegt, en de balk mag pas ruimte kosten als er echt een kaart in staat; (3) `tools/test.sh` moet 0 fout geven vóór een commit, en nooit pushen met rode tests; (4) één taak per commit, alleen de bestanden van die taak; (5) `core/sommen.gd` blijft byte-gelijk. De tak `qwen/rekenbalk-b2-b3-b4` mag als bron dienen (de Keuzeknop-muntstrip-fix en de wens-tik `Hotel.tik_wens` zijn bruikbaar), maar niet als geheel terug.
 - 2026-09-18 04:05Z — batch 2: D1 N3 N4 N5 N6 N7 V6 gebouwd, blind gecontroleerd, samengevoegd; suite 461/0. **B2 (balklaag) NIET samengevoegd**: de tweede controle faalde op twee kadergebonden regressies buiten zijn bestandsset (test_was kratplaatjes op 740×360, test_sleutels opstelling op 1024×768); het werk staat in worktree `.claude/worktrees/wf_d8939a2e-e84-1` (tak worktree-wf_d8939a2e-e84-1, basis 2fa48de) met 437/2 in die worktree. Volgende sessie: B2 hervatten samen met N8 (was-indeling) en de sleutels-opstellingsregel; daarna batch 3.
 
 Vink aan wat gemerged is op `main`. Zet erachter wie het deed en op welke datum.

@@ -27,7 +27,6 @@ const TELEFOON := 520          ## portrait under this width is the phone shell
 @onready var kader: Control = $Scherm/Kolom/Middenrij/Kaderdoos/Kader
 @onready var beeld: TextureRect = $Scherm/Kolom/Middenrij/Kaderdoos/Kader/Beeld
 @onready var vanglaag: Control = $Scherm/Kolom/Middenrij/Kaderdoos/Kader/Vanglaag
-@onready var balklaag: UiRekenbalk = $Scherm/Kolom/Middenrij/Kaderdoos/Kader/Balklaag
 @onready var knoplaag: Control = $Scherm/Kolom/Middenrij/Kaderdoos/Kader/Knoplaag
 @onready var naamlaag: Control = $Scherm/Kolom/Middenrij/Kaderdoos/Kader/Naamlaag
 @onready var rail: VBoxContainer = $Scherm/Kolom/Middenrij/Rail
@@ -46,7 +45,7 @@ var _compact := false
 var _telefoon := false
 
 func _ready() -> void:
-	Ui.registreer_lagen(knoplaag, naamlaag, toastlaag, bladlaag, vanglaag, balklaag)
+	Ui.registreer_lagen(knoplaag, naamlaag, toastlaag, bladlaag, vanglaag)
 	Ui.registreer_wortels([scherm, toastlaag, bladlaag])
 	World.registreer_viewport(wereld_vp, kamer_scene)
 	beeld.texture = wereld_vp.get_texture()

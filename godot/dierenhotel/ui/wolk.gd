@@ -35,10 +35,6 @@ func bouw(o: Dictionary, mt: Dictionary, smal: bool) -> void:
 		kleur = UiThema.WOLK_GOED
 	elif soort.contains("hulp"):
 		kleur = UiThema.WOLK_HULP
-	elif soort.contains("hint"):
-		# a wish the child can go and fill right now: the same warm attention
-		# colour as an active button, so it stands out from a plain bubble
-		kleur = UiThema.ZON
 	text = ""
 	clip_text = false
 	focus_mode = Control.FOCUS_ALL

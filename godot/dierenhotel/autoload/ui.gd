@@ -30,7 +30,6 @@ var naamlaag: Control = null     ## name plates
 var toastlaag: Control = null
 var bladlaag: Control = null     ## modal sheets
 var vanglaag: Control = null     ## drop catch areas, UNDER the buttons
-var balklaag: UiRekenbalk = null ## the maths bar, between the catch areas and the buttons
 
 var thema: Theme = null
 var maten: Dictionary = {}
@@ -54,19 +53,14 @@ func _ready() -> void:
 		_rust = bool(uit) if uit != null else false
 	World.kader_veranderd.connect(_op_kader_veranderd)
 
-## Registered by `scenes/main.tscn` at boot.  The maths bar is the sixth and
-## last parameter ON PURPOSE: thirteen test files hand in at most five layers,
-## over eighteen call sites, and not one of them has to change, because the bar is a rectangle derived from the frame
-## and this node only paints it (PLAN.md §3.1).
+## Registered by `scenes/main.tscn` at boot.
 func registreer_lagen(knop: Control, naam: Control, toast_l: Control,
-		blad_l: Control = null, vang_l: Control = null,
-		balk_l: UiRekenbalk = null) -> void:
+		blad_l: Control = null, vang_l: Control = null) -> void:
 	knoplaag = knop
 	naamlaag = naam
 	toastlaag = toast_l
 	bladlaag = blad_l
 	vanglaag = vang_l
-	balklaag = balk_l
 
 ## Which layer a hotspot Control belongs in.  Everything is a button over the
 ## world; a name plate is the exception — it lives UNDER the buttons so a finger
@@ -122,11 +116,6 @@ func scherm_maat() -> Vector2:
 
 func _op_kader_veranderd(rect: Rect2, _schaal: Dictionary) -> void:
 	_herzie_maten(rect)
-	# The world is fitted ABOVE the bar, so it has to be told how much the bar
-	# takes.  `World.meet()` already asks for it before it computes the scale;
-	# this is what carries a height that changed WITHOUT the frame changing
-	# (the hysteresis of `B5`), and it is a no-op when nothing moved.
-	World.zet_balk(balk_hoog())
 
 ## world.md §6.5 / art-sound-rules.md §16.9, evaluated in units on the shell:
 ##   * the base font drops below a 520 unit FRAME — that is reading size, and
@@ -157,136 +146,6 @@ func tap_maat() -> int:
 func smal() -> bool:
 	return World.kader_rect().size.x < 360.0
 
-# -------------------------------------------------------------- de rekenbalk
-
-## The strip under the world that carries the sentence, the sum and the four
-## answer buttons (PLAN.md §3.1).  Three readers, and all three are PURE
-## FUNCTIONS OF THE WORLD FRAME — `Ui.balklaag` may be null and the answers do
-## not change.  That is what lets the thirteen test files that register five
-## layers, and every suite that only calls `World.meet()`, live in the same world
-## as the real one.
-##
-## The measurements themselves live in `UiThema.balk_maten` (task `B1`), which
-## is where a rung is retuned.
-func balk_aan() -> bool:
-	return balk_hoog() > 0.0
-
-func balk_hoog() -> float:
-	var kader := World.kader_rect()
-	if kader.size.x < 1.0 or kader.size.y < 1.0:
-		return 0.0
-	var m := UiThema.balk_maten(kader.size)
-	var h := float(m["hoog"])
-	# The bar grows to hold the card that is docked in it together with its
-	# answer strip, so the strip never clamps up over the card (`B4`).  In
-	# `hoog` the strip hangs under the card (card + gap + strip); in `laag`
-	# they stand side by side and the card alone sets the height.  The strip's
-	# foot stays at the frame bottom either way, so the buttons never move
-	# when the card changes height — the whole point of the bar.  The table
-	# value is the floor and 48 % of the frame the ceiling.
-	if _balk_kaart_rect.size.y > 0.0:
-		if UiThema.balk_vorm(kader.size) == "laag":
-			h = maxf(h, _balk_kaart_rect.size.y + 8.0)
-		else:
-			h = maxf(h, _balk_kaart_rect.size.y + float(m["knop_hoog"]) + 16.0)
-	return minf(h, kader.size.y * 0.48)
-
-## In frame coordinates (the same ones `Hits` places in): against the bottom
-## edge, over the full width.  Empty while there is no frame.
-func balk_rect() -> Rect2:
-	var kader := World.kader_rect()
-	var h := balk_hoog()
-	if h <= 0.0:
-		return Rect2()
-	return Rect2(Vector2(0.0, kader.size.y - h), Vector2(kader.size.x, h))
-
-## `hoog` stacks sentence over sum over one row of buttons; `laag` puts the
-## card left and the strip right (`UiThema.balk_vorm`, PLAN.md §3.1).
-func balk_vorm() -> String:
-	var kader := World.kader_rect()
-	if kader.size.x < 1.0 or kader.size.y < 1.0:
-		return "hoog"
-	return UiThema.balk_vorm(kader.size)
-
-## The ONE card that docks in the bar: the last-opened card that still exists
-## and has the highest prio of all that exist (`B3`).  A second card keeps the
-## old `midden` behaviour; the bar never holds two sums.  `_kaart_volgorde`
-## counts opens so a tie in prio breaks toward the newest card.
-var _kaart_prio: Dictionary = {}
-var _kaart_volgorde: Dictionary = {}
-var _kaart_teller: int = 0
-var _balk_kaart_rect := Rect2()
-
-func balk_kaart() -> String:
-	var beste := ""
-	var bp := -1
-	var bv := -1
-	for id in _kaarten.keys():
-		var p := int(_kaart_prio.get(id, 14))
-		var v := int(_kaart_volgorde.get(id, 0))
-		if p > bp or (p == bp and v > bv):
-			beste = str(id)
-			bp = p
-			bv = v
-	return beste
-
-## Where a card or a strip of answers sits inside the bar (`B3`).  Pure
-## function of the bar rectangle, the shape and the size asked for — the
-## strip reads the card's docked rectangle, which `Hits` fills the moment the
-## card is placed (prio 14 > 13, so the card always lands first).
-func balk_plek(kind: String, maat: Vector2) -> Rect2:
-	var kader := World.kader_rect()
-	if kader.size.x < 1.0 or kader.size.y < 1.0:
-		return Rect2()
-	var laag := balk_vorm() == "laag"
-	# The card lands first (prio 14 > 13), so it has to size the paper it
-	# stands on from its OWN height.  In `hoog` the answer strip hangs under
-	# it and both have to fit on the paper; asking for `balk_rect()` here
-	# would use the height of the PREVIOUS card and leave the strip clamped
-	# up over this one.  In `laag` they stand side by side, so the card alone
-	# sets the height.
-	if kind == "kaart":
-		var m := UiThema.balk_maten(kader.size)
-		var nodig := maat.y + 8.0
-		if not laag:
-			nodig = maat.y + float(m["knop_hoog"]) + 16.0
-		var h := minf(maxf(float(m["hoog"]), nodig), kader.size.y * 0.48)
-		var b := Rect2(Vector2(0.0, kader.size.y - h), Vector2(kader.size.x, h))
-		if laag:
-			# Bottom-aligned on the paper: a long sentence that wraps makes the
-			# card taller than the short bar, and centring it would push its
-			# foot below the frame.  It grows upward instead.
-			var ky := b.end.y - maat.y - 4.0
-			if ky < 0.0:
-				ky = 0.0
-			return Rect2(Vector2(b.position.x + 4.0, ky), maat)
-		return Rect2(Vector2((b.size.x - maat.x) * 0.5, b.position.y + 8.0), maat)
-	# the answer strip: the paper was already grown by the card above it
-	var b := balk_rect()
-	if b.size.x < 1.0 or b.size.y < 1.0:
-		return Rect2()
-	if laag:
-		return Rect2(Vector2(b.end.x - 12.0 - maat.x,
-			b.position.y + (b.size.y - maat.y) * 0.5), maat)
-	var y := b.position.y + 8.0
-	if _balk_kaart_rect.size.y > 0.0:
-		y = _balk_kaart_rect.end.y + 8.0
-	# never hang below the paper
-	y = minf(y, b.end.y - maat.y)
-	return Rect2(Vector2(b.position.x + (b.size.x - maat.x) * 0.5, y), maat)
-
-## Called by `Hits` after a balk-anchored spot is placed: remembers the card's
-## rectangle for the strip and mirrors it into the painted layer when there is
-## one.  A non-card placement clears it, so a closed card frees the bar.
-func balk_meld(kind: String, rect: Rect2) -> void:
-	if kind == "kaart":
-		_balk_kaart_rect = rect
-	else:
-		_balk_kaart_rect = Rect2()
-	if balklaag != null:
-		balklaag.zet_kaart(rect if kind == "kaart" else Rect2())
-
-
 # ---------------------------------------------------------------- knoppen
 
 ## The button factory used by `Hits`.
@@ -300,8 +159,7 @@ func maak_knop(kind: String, o: Dictionary) -> Control:
 		"keuzes":
 			var s := UiKeuzes.new()
 			s.bouw(o.get("keuzes", []), World.kader_rect().size.x, maten,
-				str(o.get("titel", "")), o.get("kaart", null),
-				bool(o.get("in_balk", false)))
+				str(o.get("titel", "")), o.get("kaart", null))
 			return s
 		"tag":
 			var t := UiGetalTag.new()
@@ -533,26 +391,16 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 		push_warning('somkaart "%s" heeft %d keuzes; hooguit %d' % [id, keuzes.size(), MAX_KEUZES])
 		keuzes = keuzes.slice(0, MAX_KEUZES)
 	var plek: Dictionary = _mik_van(obj, o)
-	# Is THIS card the one that docks in the bar?  It is the newest and its
-	# prio decides: it docks unless an already-open card outranks it (`B3`/`B4`).
-	var kaart_prio := int(o.get("prio", 14))
-	var in_balk := Ui.balk_aan()
-	if in_balk:
-		for cid in _kaarten.keys():
-			if int(_kaart_prio.get(cid, 14)) > kaart_prio:
-				in_balk = false
-				break
 	var spot := {
 		"id": id, "kind": "kaart", "kamer": kaart.kamer,
 		"vlak": o.get("vlak", _vlak_van(plek, kaart.kamer)),
 		"x": plek.get("x", 0.0), "z": plek.get("z", 0.0), "y": o.get("hoog", 22.0),
-		"op": "midden", "vast": true, "prio": kaart_prio,
+		"op": "midden", "vast": true, "prio": o.get("prio", 14),
 		"door": kaart.door, "titel": o.get("titel", ""),
 		"icoon": o.get("icoon", ""), "regel": o.get("regel", ""),
 		"regel2": o.get("regel2", ""), "som": som,
 		"max": kaart.max_cijfers, "keuzes": keuzes, "vak": vak,
-		"in_balk": in_balk,
-		"on_weg": func(_s) -> void: _kaart_weg(id),
+		"on_weg": func(_s) -> void: _kaarten.erase(id),
 	}
 	if o.has("volg"):
 		spot["volg"] = o["volg"]
@@ -560,9 +408,6 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 	# erases that id — only then may the new card be remembered (I2, hinkel).
 	Hits.maak(spot)
 	_kaarten[id] = kaart
-	_kaart_prio[id] = int(spot["prio"])
-	_kaart_teller += 1
-	_kaart_volgorde[id] = _kaart_teller
 	kaart_geopend.emit(id)
 	keur_regel(id, o.get("regel", ""))
 	if not str(o.get("regel2", "")).is_empty():
@@ -574,17 +419,9 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 			"x": plek.get("x", 0.0), "z": plek.get("z", 0.0), "y": o.get("hoog", 22.0),
 			"vast": true, "prio": 13, "door": kaart.door,
 			"kleef_aan": id, "keuzes": keuzes, "kaart": kaart,
-			"in_balk": in_balk,
 			"titel": o.get("keuze_titel", "kies er een"),
 		})
 	return kaart
-
-## A card went away: forget its prio and its place in the open-order, so the
-## bar's choice (`balk_kaart`) moves on to the next card that is still there.
-func _kaart_weg(id: String) -> void:
-	_kaarten.erase(id)
-	_kaart_prio.erase(id)
-	_kaart_volgorde.erase(id)
 
 ## At most this many buttons on one strip (owner, 2026-09-14).
 const MAX_KEUZES := 4
@@ -680,8 +517,8 @@ class Kaart extends RefCounted:
 
 	func som(tekst: String) -> void:
 		var k := _knoop()
-		if k != null:
-			k.zet_som(tekst)
+		if k != null and k.som_label != null:
+			k.som_label.text = tekst
 
 	func zet(tekst: String) -> void:
 		_getikt = tekst

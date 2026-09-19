@@ -33,8 +33,6 @@ var _geplaatst: Array[Rect2] = []  ## the rectangles already handed out this pas
 var _vakken: Array[Rect2] = []     ## object boxes in view; a button avoids all of them
 var _mijd_balie_nu := false        ## while placing a hotel element: the desk is a box too
 var _kaart_vrij: Array[Rect2] = [] ## boxes a fixed card may not cover either (the desk)
-var _balk_vlak := Rect2()          ## the maths bar: handed out first, so it is a wall (§3.1)
-var _balk_bezet: Dictionary = {}   ## the cells the bar covers, kept apart so the last resort can open them
 var _laatste: Dictionary = {}   ## id -> {rect, vlak, dekking, op, laag, prio, krap, gestapeld}
 
 class Spot extends RefCounted:
@@ -312,36 +310,6 @@ func plaats() -> void:
 	# The counter is the one piece of world a card may not hide: the bell, the
 	# till, the book and the lamp all stand on it (V1 finding 4).
 	_kaart_vrij.clear()
-	# The maths bar owns the bottom strip of the frame (PLAN.md §3.1) and it is
-	# handed out BEFORE any hotspot: into `_kaart_vrij` and into every grid cell
-	# it touches, and `_botst` treats it as a placed rectangle.  From there on
-	# nothing lands on the paper — not a button, not a tag, not a card — and the
-	# coverage invariant of `tests/test_hits.gd::_keur` stays trivially true.
-	# It costs zero hotspots, which matters: `MAX_PER_KAMER` is 16 and the
-	# kitchen already sits against that ceiling.
-	#
-	# It is `_botst` plus its own cell map, and not `_geplaatst` + `_kaart_vrij`
-	# (which is what §3.1 writes), because the wall needs exactly two doors and
-	# an entry in `_geplaatst` has none:
-	#
-	#   * the answer strip glued under a sum card BELONGS on the paper — that is
-	#     what the bar is for, and `B3` docks card and strip there for good;
-	#   * and a LAST RESORT, for everything: when nothing over the world is free
-	#     any more, empty paper beats a real thing underneath.  Between this task
-	#     and `B3` the bar takes a third of a landscape phone while the card that
-	#     belongs in it still floats over the room, and on that frame the wash
-	#     game, the beds, the feeding cart and the alarm clock run out of places.
-	#     A button on the bowl is a bug; a button on blank paper is a task that
-	#     is not finished yet.
-	#
-	# The rule the wall really keeps, and what `test_balk.gd` measures on a full
-	# reception and a full kitchen: nothing lands on the paper while there is
-	# any clean place over the world.
-	_balk_vlak = Ui.balk_rect()
-	_balk_bezet.clear()
-	if _balk_vlak.size.x > 0.0 and _balk_vlak.size.y > 0.0:
-		for cel in _cellen_van(_balk_vlak, kader):
-			_balk_bezet[cel] = true
 	var balie := World.vlak_van_balie()
 	if balie.size.x > 0.0 and balie.size.y > 0.0:
 		_kaart_vrij.append(balie)
@@ -402,16 +370,9 @@ func plaats() -> void:
 		if av != bv:
 			return av
 		return _diepte(a) > _diepte(b))
-	# cull: at most 16 per room, lowest layer and priority go first.  What
-	# docks in the maths bar does not count against the ceiling (`B3`): the
-	# paper is not the room, and the kitchen sits right against 16.
-	var geteld := 0
-	for s in lijstje:
-		if _op_van(s) == "balk":
-			continue
-		geteld += 1
-		if geteld > MAX_PER_KAMER:
-			s.zichtbaar = false
+	for i in lijstje.size():
+		if i >= MAX_PER_KAMER:
+			lijstje[i].zichtbaar = false
 	# every object still in view is a box that a button must stay off
 	for s in lijstje:
 		if s.zichtbaar and s.vlak_nu.size.x > 0.0 and s.vlak_nu.size.y > 0.0:
@@ -447,10 +408,6 @@ func plaats() -> void:
 			"dekking": _dekking(rect, s.vlak_nu),
 		}
 		_zet_vangvlak(s, rect)
-	# The bar may have grown to hold the card that just docked in it: tell the
-	# world so it re-fits above the new height (`B4`).  `zet_balk` is a no-op
-	# when the height did not change, so this costs nothing on a stable frame.
-	World.zet_balk(Ui.balk_hoog())
 
 ## Stay put (owner, 2026-09-14: opening the board reshuffled half the buttons).
 ## A band-placed element keeps last frame's rectangle when its aim point has
@@ -466,7 +423,7 @@ func _blijf_staan(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2) -> Diction
 	if l.is_empty() or not l.has("mik"):
 		return {}
 	var op := str(l["op"])
-	if op in ["voet", "midden", "kleef", "balk", "rand", "aan"] or bool(l["krap"]):
+	if op in ["voet", "midden", "kleef", "rand", "aan"] or bool(l["krap"]):
 		return {}
 	var r: Rect2 = l["rect"]
 	if not r.size.is_equal_approx(maat) or (l["mik"] as Vector2).distance_to(mik) > BLIJF_MIK:
@@ -602,16 +559,6 @@ func _op_van(s: Spot) -> String:
 		return "voet"
 	if s.op == "aan":
 		return "aan" if s.vlak_nu.size.y > 0.0 else "boven"
-	# The sum card that owns the bar and the strip glued under it dock in the
-	# paper (`B3`, PLAN.md §3.1) — tested BEFORE the glue, because the glue is
-	# what used to hang the strip under a floating card and that is exactly the
-	# placement the bar replaces.  Only the ONE bar card docks; a second card
-	# keeps its old anchor.
-	if Ui.balk_aan():
-		if s.kind == "kaart" and Ui.balk_kaart() == s.id:
-			return "balk"
-		if s.kind == "keuzes" and Ui.balk_kaart() == s.kleef_aan:
-			return "balk"
 	if s.kleef_aan != "":
 		return "kleef"
 	if s.op != "auto":
@@ -651,17 +598,6 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 			kader.size.y - RAND - maat.y), maat), kader)
 		_reserveer(r, kader)
 		return {"rect": r, "op": op, "krap": false, "gestapeld": false}
-	if op == "balk":
-		# The sum card and its answer strip dock in the paper (`B3`).  The
-		# place comes from `Ui.balk_plek`, which knows the shape of the bar;
-		# the card lands first (prio 14 > 13) and tells the bar where it is,
-		# so the strip hangs under it in `hoog` and beside it in `laag`.
-		var r := Ui.balk_plek(s.kind, maat)
-		if r.size.x <= 0.0:
-			r = _klem(Rect2(mik - maat * 0.5, maat), kader)
-		_reserveer(r, kader)
-		Ui.balk_meld(s.kind, r)
-		return {"rect": r, "op": "balk", "krap": false, "gestapeld": false}
 	if op == "midden":
 		return _plaats_midden(mik, maat, kader, s.vlak_nu, s.kind == "kaart" or s.kind == "wolk")
 	if op == "aan":
@@ -677,23 +613,6 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 			kandidaten.append(Rect2(Vector2(x0, mik.y - maat.y * 0.5), maat))
 		kandidaten.append(Rect2(Vector2(x0, voet + GAT), maat))
 		kandidaten.append(Rect2(Vector2(x0, top - GAT - maat.y), maat))
-		# ... and BESIDE it when neither band has room.  The maths bar took a
-		# third of a short frame (PLAN.md §3.1), so a thing against the back
-		# wall often has no band above it any more (off the frame) and none
-		# below it (the next thing in the room): standing next to the board is
-		# still standing AT the board, while the band grid would put the card a
-		# room's width away beside something else.  The emptier side first.
-		if vlak.size.y > 0.0:
-			var y_naast := clampf(vlak.get_center().y - maat.y * 0.5, KRAP,
-				maxf(KRAP, kader.size.y - maat.y - KRAP))
-			var rechts := Rect2(Vector2(vlak.end.x + GAT, y_naast), maat)
-			var links := Rect2(Vector2(vlak.position.x - GAT - maat.x, y_naast), maat)
-			if vlak.get_center().x <= kader.size.x * 0.5:
-				kandidaten.append(rechts)
-				kandidaten.append(links)
-			else:
-				kandidaten.append(links)
-				kandidaten.append(rechts)
 		for i in kandidaten.size():
 			var r := _klem(kandidaten[i], kader)
 			var eigen_mag := groot and i == 0
@@ -711,44 +630,23 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 		if not aan.is_empty():
 			var kr: Rect2 = aan["rect"]
 			var mx := kr.position.x + kr.size.x * 0.5 - maat.x * 0.5
-			# Under the card, else above it — each only when it touches nothing
-			# placed AND no object box.  A strip of four numbers is as wide as a
-			# keypad row; simply hung under the card it covered the price tags
-			# (kraam, 740×360) and the till (meubels).
-			#
-			# The third candidate, the dock at the foot of the frame, is GONE
-			# (PLAN.md §3.1): it claimed exactly the rectangle the maths bar now
-			# owns, so the card's strip and the paper would have fought over the
-			# same place.  `B3` gives the strip the anchor `"balk"` instead.
-			#
-			# These two DO reach onto the paper (`_botst(r, true)`), and they are
-			# the only two placements in the whole file that may.  The strip of
-			# four answers under its own sum is what the bar is FOR; the bar took
-			# a third of a short frame, so directly-under-the-card is regularly
-			# paper now, and a strip three bands away is not the answer to the
-			# sum the child is reading.  `B3` docks card AND strip in the bar and
-			# this door closes again.
+			# Under the card, else above it, else docked at the foot of the frame
+			# (the KADER_ONDER strip the camera keeps free under the room) — each
+			# only when it touches nothing placed AND no object box.  A strip of
+			# four numbers is as wide as a keypad row; simply hung under the card
+			# it covered the price tags (kraam, 740×360) and the till (meubels).
 			var kandidaten: Array[Rect2] = [
 				_klem(Rect2(Vector2(mx, kr.end.y + KLEEF), maat), kader),
 				_klem(Rect2(Vector2(mx, kr.position.y - KLEEF - maat.y), maat), kader),
+				_klem(Rect2(Vector2(kader.size.x * 0.5 - maat.x * 0.5,
+					kader.size.y - RAND - maat.y), maat), kader),
 			]
 			for i in kandidaten.size():
 				var r := kandidaten[i]
-				if not _botst(r, true) and _vak_kosten(r) <= 0.0:
+				if not _botst(r) and _vak_kosten(r) <= 0.0:
 					_reserveer(r, kader)
-					return {"rect": r, "op": "kleef", "krap": false, "gestapeld": false}
-			# ... and when neither fits: IN the bar, centred on the paper, in
-			# the column of its own card.  This is the old third candidate (the
-			# dock at the foot of the frame) moved up onto the strip that now
-			# covers that foot — the place `B3` gives it for good, under the
-			# name it will keep.  Without it a landscape phone has nowhere at
-			# all for four answer buttons (kraam and was on 740x360).
-			if _balk_vlak.size.y >= maat.y:
-				var dok := _klem(Rect2(Vector2(mx, _balk_vlak.position.y
-					+ (_balk_vlak.size.y - maat.y) * 0.5), maat), kader)
-				if not _botst(dok, true) and _vak_kosten(dok) <= 0.0:
-					_reserveer(dok, kader)
-					return {"rect": dok, "op": "balk", "krap": false, "gestapeld": false}
+					return {"rect": r, "op": "voet" if i == 2 else "kleef", "krap": false,
+						"gestapeld": i == 2}
 			# nothing clean next to the card: the band grid below decides, with
 			# the same rules as any button (no reserved cell, no object box)
 			op = "onder"
@@ -763,21 +661,7 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 		var in_vlak := minf(maat.y, vlak.size.y * TAG_IN) if s.kind != "naam" else -2.0
 		var y := top - maat.y + in_vlak
 		var r := _klem(Rect2(Vector2(mik.x - maat.x * 0.5, y), maat), kader)
-		# The dodge may not undo the rule this anchor exists for: after stepping
-		# away the tag still covers at most `TAG_IN` of its own thing.  The band
-		# it hands `_wijk_omhoog` is the object MINUS the sliver it is allowed to
-		# cover, so the natural place is still free and the step DOWN — onto the
-		# middle of its own ware — is not (kraam, price tag `kr_p3`: the world
-		# lost a quarter of its size to the bar, the four tags started to collide
-		# and the loser stepped a band down onto its own toy).
-		var mag := vlak
-		if in_vlak > 0.0 and vlak.size.y > in_vlak:
-			mag = Rect2(vlak.position + Vector2(0.0, in_vlak),
-				vlak.size - Vector2(0.0, in_vlak))
-		var weg_r := _wijk_omhoog(r, kader, mag)
-		if _bezet_voor(weg_r, mag, false, true):
-			weg_r = _wijk_omhoog(r, kader)   # no dodge keeps the promise: the old one
-		r = weg_r
+		r = _wijk_omhoog(r, kader)
 		var krap_rand := _botst(r)
 		_reserveer(r, kader)
 		return {"rect": r, "op": op, "krap": krap_rand, "gestapeld": false}
@@ -786,86 +670,41 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 	# pass 1a: the bands directly above and below the object, and in them the
 	# cell block NEAREST to the object — a free cell at the other end of the
 	# top band is not "above the bell", it is beside the door (I1 finding 2).
-	#
-	# Twice: first only the blocks that really are BESIDE the object (no further
-	# sideways than the object is wide, plus a column), then the rest of those
-	# two bands.  A block outside that reach is beside whatever else stands
-	# there, so the second round says `gestapeld` out loud instead of claiming a
-	# place it does not have.  Reach and rounds cost nothing that used to be
-	# found: the same cells are still reached, only the label changes.
 	var beste := Rect2()
 	var beste_kosten := INF
 	var beste_kant := ""
 	var beste_dichtst := false
-	var beste_naast := false
-	for naast_alleen in [true, false]:
-		for i in volgorde.size():
-			var kant: String = volgorde[i]["kant"]
-			if kant.is_empty():
-				continue
-			var rij: int = volgorde[i]["rij"]
-			var kand := _zoek_cel(rij, mik.x, maat, kolommen, rijen, false,
-				_band_y(rij, maat, kant, top, voet))
-			if kand["rect"].size.x <= 0.0:
-				continue
-			# Distance to the object, plus a hair per step down the preference
-			# list so the asked side still wins a tie.  Sideways counts DOUBLE:
-			# a button one band further up or down is still under its own thing,
-			# while a button at the right height but a hand's width to the side
-			# reads as belonging to whatever it landed next to (I1 finding 2).
-			# The maths bar is what made this choice load-bearing — the band
-			# beside an object is often full now, and the runner-up used to be
-			# the far end of that same band, at the other end of the room.
-			var weg: Vector2 = kand["rect"].get_center() - doel
-			if naast_alleen and absf(weg.x) > _naast_max(vlak, maat):
-				continue
-			var afstand := Vector2(weg.x * 2.0, weg.y).length() + i * 0.01
-			if afstand < beste_kosten:
-				beste = kand["rect"]
-				beste_kosten = afstand
-				beste_kant = kant
-				beste_dichtst = bool(volgorde[i]["dichtst"])
-				beste_naast = naast_alleen
-		if beste_kosten < INF:
-			break
+	for i in volgorde.size():
+		var kant: String = volgorde[i]["kant"]
+		if kant.is_empty():
+			continue
+		var rij: int = volgorde[i]["rij"]
+		var kand := _zoek_cel(rij, mik.x, maat, kolommen, rijen, false,
+			_band_y(rij, maat, kant, top, voet))
+		if kand["rect"].size.x <= 0.0:
+			continue
+		# distance to the object, plus a hair per step down the preference list
+		# so the asked side still wins a tie
+		var afstand: float = (kand["rect"].get_center() - doel).length() + i * 0.01
+		if afstand < beste_kosten:
+			beste = kand["rect"]
+			beste_kosten = afstand
+			beste_kant = kant
+			beste_dichtst = bool(volgorde[i]["dichtst"])
 	if beste_kosten < INF:
 		_reserveer(beste, kader)
 		# `gestapeld` = the band DIRECTLY above or below the object had no free
-		# block left for me, so I am one band further out (or a room's width to
-		# the side); that is the "unless the band is full" of architecture.md
-		# §4.3, said out loud instead of silently drifting.
+		# block left for me, so I am one band further out; that is the "unless
+		# the band is full" of architecture.md §4.3, said out loud instead of
+		# silently drifting.
 		return {"rect": beste, "op": beste_kant, "krap": false,
-			"gestapeld": not (beste_dichtst and beste_naast)}
+			"gestapeld": not beste_dichtst}
 	# pass 1b: the stacking round — every remaining band from the top down
 	for k in volgorde:
 		if not str(k["kant"]).is_empty():
 			continue
 		var rij: int = k["rij"]
 		var kand := _zoek_cel(rij, mik.x, maat, kolommen, rijen, false, _band_y(rij, maat, "", top, voet))
-		if kand["rect"].size.x > 0.0:
-			_reserveer(kand["rect"], kader)
-			return {"rect": kand["rect"], "op": _werd(op, rij, top, maat), "krap": false,
-				"gestapeld": true}
-	# A bubble and a card are the two things that may stand over the world, so
-	# when the grid has no clean cell left for one of them the aim point beats
-	# the least-bad cell at the other end of the room: `_plaats_midden` puts it
-	# where it belongs and lifts it clear, with the paper as its last clean
-	# place (the guest's hint bubble on a landscape phone, `sl_tag`).  It says
-	# `gestapeld`, because that is what happened: both bands were full.
-	if s.kind == "wolk" or s.kind == "kaart":
-		# `mijd_vakken`: this one came off the band grid, where covering nothing
-		# is the rule, so it keeps that rule as long as there is any place that
-		# honours it.
-		var vrij_uit := _plaats_midden(mik, maat, kader, s.vlak_nu, true, true)
-		vrij_uit["gestapeld"] = true
-		return vrij_uit
-	# pass 1c: the paper.  Nothing over the world is clean any more, and an
-	# empty strip of paper beats a real thing underneath — `B3` fills the bar
-	# and this pass dries up on its own.
-	for k in volgorde:
-		var rij: int = k["rij"]
-		var kand := _zoek_cel(rij, mik.x, maat, kolommen, rijen, false,
-			_band_y(rij, maat, str(k["kant"]), top, voet), true)
 		if kand["rect"].size.x > 0.0:
 			_reserveer(kand["rect"], kader)
 			return {"rect": kand["rect"], "op": _werd(op, rij, top, maat), "krap": false,
@@ -893,118 +732,45 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 
 ## On the aim point, clamped into the frame, lifted clear of anything already
 ## placed and of its own object.
-func _plaats_midden(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2,
-		mijd_balie := true, mijd_vakken := false) -> Dictionary:
+func _plaats_midden(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2, mijd_balie := true) -> Dictionary:
 	# A fixed card or cloud gives way to the counter as well (V1 finding 4); a
 	# game's own plates that HANG on the desk (the key board's hooks) do not, or
 	# the row would be torn apart band by band (I2, sleutels).
-	var r := _wijk_omhoog(_klem(Rect2(mik - maat * 0.5, maat), kader), kader, eigen,
-		mijd_balie, mijd_vakken)
-	# Empty paper is not something to overlap: it is the place `B3` gives the
-	# card.  What makes a placement `krap` is a real thing under it.
-	var krap := _botst(r, true)
+	var r := _wijk_omhoog(_klem(Rect2(mik - maat * 0.5, maat), kader), kader, eigen, mijd_balie)
+	var krap := _botst(r)
 	_reserveer(r, kader)
 	return {"rect": r, "op": "midden", "krap": krap, "gestapeld": false}
 
-## A fixed card or bubble lifts itself off whatever is already on screen (its
-## own keypad, in practice), in whole bands, upwards first and then downwards.
-## The test is a real rectangle overlap, not a shared grid cell: the choice
-## strip is glued 5 units under its card ON PURPOSE and must not be pushed away
-## for it.
-##
-## Rounds, each dropping the softest rule it has left:
-##   * `mijd_vakken` (a bubble that came off the band grid): cover no object —
-##     that is the rule the grid placed it under, so it keeps it while it can;
-##   * everything else — the bar is a wall like every other placed rectangle;
-##   * the same ladder with the PAPER of the maths bar allowed — the last resort
-##     before anything real gets covered.  `B3` docks the card and its answers
-##     in the bar; until then the bar takes a third of a landscape phone while
-##     that card still floats over the room, and there the wash game, the beds
-##     and the feeding cart run out of places;
-##   * the one rule that never goes: two placed elements do not overlap.  That
-##     one is checked separately and reported as `krap`.
-func _wijk_omhoog(r: Rect2, kader: Rect2, eigen := Rect2(), mijd_balie := false,
-		mijd_vakken := false) -> Rect2:
-	# [laatste, the paper is allowed, the world is not]
-	var rondes: Array[Array] = []
-	if mijd_vakken:
-		rondes.append([false, false, true])
-		rondes.append([false, true, true])
-	rondes.append([false, false, false])
-	rondes.append([false, true, false])
-	rondes.append([true, true, false])
-	for ronde: Array in rondes:
-		var uit := _wijk_ronde(r, kader, eigen, mijd_balie, bool(ronde[0]), bool(ronde[1]),
-			bool(ronde[2]))
-		if uit.size.x > 0.0:
-			return uit
-	return r
-
-## One round of the ladder.  An empty rectangle means "nothing free this round".
-func _wijk_ronde(r: Rect2, kader: Rect2, eigen: Rect2, mijd_balie: bool,
-		laatste: bool, balk_mag: bool, mijd_vakken := false) -> Rect2:
-	var vrij := func(x: Rect2) -> bool:
-		if mijd_vakken and _vak_kosten(x, eigen) > 0.0:
-			return false
-		return not _botst(x, balk_mag) if laatste \
-			else not _bezet_voor(x, eigen, mijd_balie, balk_mag)
-	if not laatste and vrij.call(r):
+## A fixed card lifts itself off whatever is already on screen (its own keypad,
+## in practice), in whole bands, upwards first and then downwards.  The test is
+## a real rectangle overlap, not a shared grid cell: the choice strip is glued
+## 5 units under its card ON PURPOSE and must not be pushed away for it.
+func _wijk_omhoog(r: Rect2, kader: Rect2, eigen := Rect2(), mijd_balie := false) -> Rect2:
+	if not _bezet_voor(r, eigen, mijd_balie):
 		return r
 	for stap in range(1, maxi(2, int(kader.size.y / RIJ)) + 1):
 		var op_r := Rect2(Vector2(r.position.x, r.position.y - stap * RIJ), r.size)
-		if op_r.position.y >= KRAP and vrij.call(op_r):
+		if op_r.position.y >= KRAP and not _bezet_voor(op_r, eigen, mijd_balie):
 			return op_r
 		var neer := Rect2(Vector2(r.position.x, r.position.y + stap * RIJ), r.size)
-		if neer.end.y <= kader.size.y - KRAP and vrij.call(neer):
+		if neer.end.y <= kader.size.y - KRAP and not _bezet_voor(neer, eigen, mijd_balie):
 			return neer
-	# The steps above are whole 52 unit bands, and since the maths bar took the
-	# bottom of the frame the space between two things is regularly narrower
-	# than one band: at 1024x768 the check-in card had 101 free units over the
-	# counter and the ladder stepped straight past them, and the guest's hint
-	# bubble missed a free strip by 1.6 units.  So before this round gives up:
-	# every FLUSH position — against the top edge of the frame, against the top
-	# of the paper, and tight above or under anything already placed — nearest
-	# to where the element wanted to be first.
-	var vloer := _balk_vlak.position.y if _balk_vlak.size.y > 0.0 else kader.size.y - KRAP
-	var ys: Array[float] = [float(KRAP), vloer - r.size.y, kader.size.y - KRAP - r.size.y]
-	for g in _geplaatst:
-		ys.append(g.position.y - r.size.y)
-		ys.append(g.end.y)
-	ys.sort_custom(func(a: float, b: float) -> bool:
-		return absf(a - r.position.y) < absf(b - r.position.y))
-	for y in ys:
-		var vlak_r := Rect2(Vector2(r.position.x, y), r.size)
-		if _binnen(vlak_r, kader) and vrij.call(vlak_r):
-			return vlak_r
-	# And, for the element that is really boxed in, the same flush positions
-	# SIDEWAYS as well: a hint bubble on a landscape phone has a free strip
-	# beside the card, never under it.  Only reached when the whole column is
-	# taken, so it costs nothing on a frame that has room.
-	var xs: Array[float] = [float(KRAP), kader.size.x - KRAP - r.size.x]
-	for g in _geplaatst:
-		xs.append(g.position.x - r.size.x)
-		xs.append(g.end.x)
-	var paren: Array[Vector2] = []
-	for x in xs:
-		for y in ys:
-			paren.append(Vector2(x, y))
-	paren.sort_custom(func(a: Vector2, b: Vector2) -> bool:
-		return a.distance_squared_to(r.position) < b.distance_squared_to(r.position))
-	for hoek in paren:
-		var vlak_r := Rect2(hoek, r.size)
-		if _binnen(vlak_r, kader) and vrij.call(vlak_r):
-			return vlak_r
-	return Rect2()
-
-## Does this rectangle sit inside the hard frame edge, all four sides?
-func _binnen(r: Rect2, kader: Rect2) -> bool:
-	return r.position.x >= KRAP and r.position.y >= KRAP \
-		and r.end.x <= kader.size.x - KRAP and r.end.y <= kader.size.y - KRAP
+	# Nowhere free: keep the aim point, but never at the cost of the invariant
+	# that two placed elements do not overlap — that one is checked separately
+	# and reported as `krap`.
+	for stap in range(1, maxi(2, int(kader.size.y / RIJ)) + 1):
+		var op_r := Rect2(Vector2(r.position.x, r.position.y - stap * RIJ), r.size)
+		if op_r.position.y >= KRAP and not _botst(op_r):
+			return op_r
+		var neer := Rect2(Vector2(r.position.x, r.position.y + stap * RIJ), r.size)
+		if neer.end.y <= kader.size.y - KRAP and not _botst(neer):
+			return neer
+	return r
 
 ## A fixed card may stand over the world, but never over the object it belongs
 ## to: the sum hangs ABOVE the bowl, the guest stays whole (HOTEL.md §9).
-func _bezet_voor(r: Rect2, eigen: Rect2, mijd_balie := false, balk_mag := false) -> bool:
-	if _botst(r, balk_mag):
+func _bezet_voor(r: Rect2, eigen: Rect2, mijd_balie := false) -> bool:
+	if _botst(r):
 		return true
 	for vrij in (_kaart_vrij if mijd_balie else [] as Array[Rect2]):
 		var s2 := r.intersection(vrij)
@@ -1015,28 +781,13 @@ func _bezet_voor(r: Rect2, eigen: Rect2, mijd_balie := false, balk_mag := false)
 	var snij := r.intersection(eigen)
 	return snij.size.x > 0.001 and snij.size.y > 0.001
 
-## Does this rectangle touch anything already handed out in this pass?  The
-## paper of the maths bar is one of those things: `plaats()` hands it out before
-## the first hotspot, so it behaves exactly as if it were entry zero of
-## `_geplaatst` (PLAN.md §3.1).  `balk_mag` is the door through that wall: the
-## answer strip glued under its sum card, and the last resort of every other
-## placement — nothing takes the paper while a clean place over the world is
-## left, and everything takes it before it covers something real.
-func _botst(r: Rect2, balk_mag := false) -> bool:
-	if not balk_mag and _raakt_balk(r):
-		return true
+## Does this rectangle touch anything already handed out in this pass?
+func _botst(r: Rect2) -> bool:
 	for g in _geplaatst:
 		var snij := r.intersection(g)
 		if snij.size.x > 0.001 and snij.size.y > 0.001:
 			return true
 	return false
-
-## Does this rectangle reach onto the paper of the maths bar?
-func _raakt_balk(r: Rect2) -> bool:
-	if _balk_vlak.size.x <= 0.0 or _balk_vlak.size.y <= 0.0:
-		return false
-	var snij := r.intersection(_balk_vlak)
-	return snij.size.x > 0.001 and snij.size.y > 0.001
 
 func _cellen_van(r: Rect2, kader: Rect2) -> Array[String]:
 	var rijen := maxi(1, int((kader.size.y - 2 * RAND) / RIJ))
@@ -1091,13 +842,6 @@ func _bandvolgorde(op: String, top: float, voet: float, maat: Vector2, rijen: in
 			uit.append({"rij": r, "kant": "", "dichtst": false})
 	return uit
 
-## How far sideways a cell block may sit and still count as "beside the object":
-## the object's own width plus one column.  It is the rule
-## `tests/test_hits.gd::test_receptie_knoppen_staan_bij_hun_voorwerp` measures,
-## written down where the choice is made.
-func _naast_max(vlak: Rect2, maat: Vector2) -> float:
-	return (vlak.size.x if vlak.size.x > 0.0 else maat.x) + float(KOL)
-
 ## Where the top edge of an element lands inside its band block: against the
 ## object when the band is the one above or below it, centred otherwise.
 func _band_y(rij: int, maat: Vector2, kant: String, top: float, voet: float) -> float:
@@ -1116,7 +860,7 @@ func _rij_hoog(maat: Vector2) -> int:
 ## Nearest free column block in this band, searched outward from the aim point.
 ## Returns {rect, kosten}; an empty rect means "nothing free here".
 func _zoek_cel(rij: int, wens_x: float, maat: Vector2, kolommen: int, rijen: int,
-		sta_vak_toe: bool, y: float, balk_mag := false) -> Dictionary:
+		sta_vak_toe: bool, y: float) -> Dictionary:
 	var breed := maxi(1, ceili(maat.x / float(KOL)))
 	var hoog := _rij_hoog(maat)
 	if rij < 0 or rij + hoog > rijen or breed > kolommen:
@@ -1129,7 +873,7 @@ func _zoek_cel(rij: int, wens_x: float, maat: Vector2, kolommen: int, rijen: int
 			var k: int = start + stap * int(teken)
 			if k < 0 or k + breed > kolommen:
 				continue
-			if not _cellen_vrij(rij, k, breed, hoog, balk_mag):
+			if not _cellen_vrij(rij, k, breed, hoog):
 				continue
 			var r := _cel(rij, k, maat, y)
 			var kosten := _vak_kosten(r)
@@ -1140,13 +884,10 @@ func _zoek_cel(rij: int, wens_x: float, maat: Vector2, kolommen: int, rijen: int
 				beste_kosten = kosten
 	return {"rect": beste, "kosten": beste_kosten}
 
-func _cellen_vrij(rij: int, kol: int, breed: int, hoog: int, balk_mag := false) -> bool:
+func _cellen_vrij(rij: int, kol: int, breed: int, hoog: int) -> bool:
 	for i in breed:
 		for j in hoog:
-			var cel := "%d|%d" % [rij + j, kol + i]
-			if _bezet.has(cel):
-				return false
-			if not balk_mag and _balk_bezet.has(cel):
+			if _bezet.has("%d|%d" % [rij + j, kol + i]):
 				return false
 	return true
 
