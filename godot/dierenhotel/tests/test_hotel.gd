@@ -301,6 +301,17 @@ func test_wens_af() -> void:
 	waar(not Hotel.wens_af(str(gasten[0]["id"]), "kamer"), "'kamer' -> false")
 	waar(not Hotel.wens_af("bestaat-niet", "eten"), "onbekende gast -> false")
 
+## The wish bubble knows which game fills each wish, so a tap can walk the
+## child straight there (owner: after the bed the next step was unclear).
+func test_wens_spel_wijst_naar_het_juwe_spel() -> void:
+	gelijk(Hotel.wens_spel("eten"), "voerkar", "eten vult de voerkar")
+	gelijk(Hotel.wens_spel("bad"), "tobbe", "bad vult de tobbe")
+	gelijk(Hotel.wens_spel("zwemmen"), "zwembad", "zwemmen vult het zwembad")
+	gelijk(Hotel.wens_spel("souvenir"), "kraam", "souvenir vult de kraam")
+	gelijk(Hotel.wens_spel("spelen"), "", "spelen heeft geen vast spel")
+	gelijk(Hotel.wens_spel("kamer"), "", "een bed is geen spel")
+	gelijk(Hotel.wens_spel("onzin"), "", "onbekende behoefte geeft niets")
+
 func test_behoefte_klaar() -> void:
 	_voor()
 	var g: Dictionary = State.gasten_pool()[0]

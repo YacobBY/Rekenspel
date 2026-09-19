@@ -144,24 +144,27 @@ static func balk_maten(kader: Vector2) -> Dictionary:
 	var m := {}
 	if kader.y >= 440.0:
 		if x >= 900.0:                     ## A — tablet and desktop
-			m = {"hoog": 160, "zin": 22, "som": 34, "knop": 24, "nu": 21,
+			m = {"hoog": 188, "zin": 22, "som": 34, "knop": 24, "nu": 21,
 				"knop_hoog": 64, "knop_breed": clampf((x - 54.0) / 4.0, 56.0, 150.0)}
 		elif x >= 520.0:                   ## B — tablet upright
-			m = {"hoog": 152, "zin": 21, "som": 32, "knop": 23, "nu": 20,
+			m = {"hoog": 178, "zin": 21, "som": 32, "knop": 23, "nu": 20,
 				"knop_hoog": 60, "knop_breed": clampf((x - 54.0) / 4.0, 56.0, 140.0)}
 		else:                              ## C — phone upright
-			m = {"hoog": 160, "zin": 20, "som": 30, "knop": 22, "nu": 19,
+			m = {"hoog": 172, "zin": 20, "som": 30, "knop": 22, "nu": 19,
 				"knop_hoog": 60, "knop_breed": clampf((x - 48.0) / 4.0, 48.0, 120.0)}
 	elif x >= 470.0:                       ## D — phone on its side, the only `laag`
-		m = {"hoog": 96, "zin": 18, "som": 26, "knop": 20, "nu": 18,
+		m = {"hoog": 104, "zin": 18, "som": 26, "knop": 20, "nu": 18,
 			"knop_hoog": 60,
 			"knop_breed": clampf((x * BALK_LAAG_LINKS - 18.0) / 4.0, 48.0, 96.0)}
 	else:                                  ## E — short and narrow
-		m = {"hoog": 132, "zin": 17, "som": 24, "knop": 19, "nu": 17,
+		m = {"hoog": 150, "zin": 17, "som": 24, "knop": 19, "nu": 17,
 			"knop_hoog": 52, "knop_breed": clampf((x - 42.0) / 4.0, 48.0, 96.0)}
 	m["vorm"] = balk_vorm(kader)
-	# the world keeps two thirds: the bar never grows past a third of the frame
-	m["hoog"] = clampi(int(m["hoog"]), 72, int(kader.y * 0.34))
+	# The bar is sized to hold its own stack — sentence over sum over buttons —
+	# with the real line height of the theme's font (about 1.9x the size).  The
+	# old third-of-the-frame cap could not hold that stack on a short frame, so
+	# the cap is where the content still fits: the world keeps what is left.
+	m["hoog"] = clampi(int(m["hoog"]), 72, int(kader.y * 0.48))
 	# down, never up — the fit of the four buttons has to survive the rounding
 	m["knop_breed"] = floori(float(m["knop_breed"]))
 	return m

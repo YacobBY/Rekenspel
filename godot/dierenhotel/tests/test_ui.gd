@@ -107,6 +107,27 @@ func _meet_letters(k: Node, te_klein: Array[String]) -> void:
 	for kind in k.get_children():
 		_meet_letters(kind, te_klein)
 
+## A wish the child can go and fill right now is drawn in the warm attention
+## colour (ZON), so it stands out from a plain passing bubble (owner: after
+## the bed the next step was unclear).
+func test_hint_wolk_kleurt_als_actieve_knop() -> void:
+	_op(Vector2(1024, 768))
+	Ui.wolk({"id": "hint1", "door": "test", "kamer": World.kamer_nu(), "x": 20.0,
+		"z": 20.0, "icoon": "🍪", "tekst": "eten", "klas": "hotwens hint"})
+	Ui.wolk({"id": "plain1", "door": "test", "kamer": World.kamer_nu(), "x": 60.0,
+		"z": 60.0, "icoon": "💤", "tekst": "iets", "klas": "gewoon"})
+	Hits.plaats()
+	var h := Hits.spot("hint1")
+	var p := Hits.spot("plain1")
+	waar(h != null and h.knoop is UiWolk, "de hint-wolk is er")
+	waar(p != null and p.knoop is UiWolk, "de gewone wolk is er")
+	if h != null and p != null:
+		gelijk((h.knoop as UiWolk).get_theme_stylebox("normal").bg_color, UiThema.ZON,
+			"een hint-wolk is ZON")
+		gelijk((p.knoop as UiWolk).get_theme_stylebox("normal").bg_color, UiThema.WOLK,
+			"een gewone wolk blijft WOLK")
+	_af()
+
 ## Every child-facing string of the shell must have a glyph in the bundled
 ## subset (architecture.md §7.5); a missing one renders as tofu on the web.
 func test_alle_schermteksten_hebben_een_glyph() -> void:

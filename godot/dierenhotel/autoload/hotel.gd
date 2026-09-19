@@ -36,6 +36,14 @@ const HOTEL_WENS := {"kamer": 1, "eten": 1, "spelen": 1}
 ## A wave-2 wish that is bound to one fixed game.
 const WENS_SPEL := {"bad": "tobbe"}
 const NIEUWE_WENS := ["zwemmen", "souvenir"]
+## Which game fills which wish, spelled out for the tap on a wish bubble.
+## `voerkar` carries no `wens` field of its own (the hotel owns its card), so
+## the link lives here; the other three match their game's `wens` field.
+const WENSSPEL := {"eten": "voerkar", "bad": "tobbe", "zwemmen": "zwembad",
+	"souvenir": "kraam"}
+
+func wens_spel(behoefte: String) -> String:
+	return str(WENSSPEL.get(behoefte, ""))
 
 const RONDE_NAAM := {"ochtend": "☀️ Ochtendronde", "avond": "🌙 Avondronde",
 	"vrij": "🐾 Vrij spelen"}
@@ -255,6 +263,19 @@ func plek_van_behoefte(g: Dictionary) -> Dictionary:
 				return p
 		return _tuin_plek(106, 58)
 	return {}
+
+## Tapping a wish bubble: go and fill it.  The wish names the game that does
+## the job (WENSSPEL); when that game is not unlocked yet the bubble just says
+## out loud what the animal wants, so a tap never lands on nothing.
+func tik_wens(gast_id: String, behoefte: String) -> void:
+	var sid := wens_spel(behoefte)
+	if not sid.is_empty() and _speelbaar(sid):
+		doe_taak({"kamer": str(Games.definitie(sid).get("kamer", "")), "actie": "game:" + sid})
+		return
+	var g := gast_bij_id(gast_id)
+	var bh: Dictionary = State.BEHOEFTE.get(behoefte, {})
+	Ui.toast("%s %s. %s" % [g.get("naam", "De gast"), bh.get("tekst", "wil wat"),
+		bh.get("icoon", "🐾")], "kind")
 
 ## The start of the deck, just before the waterline.  The pool comes from
 ## another ticket; until it exists the animal simply waits in the garden.
@@ -1323,8 +1344,8 @@ func _wens_wolken(nu: String) -> void:
 		var zin: String = "%s %s" % [g["naam"], bh["tekst"]]
 		Ui.wolk({"id": "wens_" + id, "door": EIGENAAR, "kamer": nu, "hoog": hoog,
 			"icoon": bh["icoon"], "tekst": wens_woord(b), "titel": zin,
-			"klas": "hotwens", "prio": 6, "volg": _volg_dier(id, hoog),
-			"tik": func(): Ui.toast("%s. %s" % [zin, bh["icoon"]], "kind")})
+			"klas": "hotwens hint", "prio": 6, "volg": _volg_dier(id, hoog),
+			"tik": func(): tik_wens(id, b)})
 
 # ---------------------------------------------------------------- bakjes
 

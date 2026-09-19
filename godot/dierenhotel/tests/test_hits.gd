@@ -143,7 +143,7 @@ func test_twee_knoppen_delen_geen_plek() -> void:
 ## The strip of four numbers glues under its card (or above it when there is no
 ## room below), stays inside the frame and every button is a real tap target —
 ## on every frame size, the low landscape phone included.
-func test_antwoordstrook_kleeft_aan_de_kaart() -> void:
+func test_antwoordstrook_staat_in_de_balk() -> void:
 	for kader in MATEN + KADERS:
 		_op(kader)
 		var kaart := Ui.somkaart({"x": 24.0, "z": 20.0}, "3 + 2 =", {
@@ -157,13 +157,19 @@ func test_antwoordstrook_kleeft_aan_de_kaart() -> void:
 		if dbg.has("pk_keuzes"):
 			var st: Rect2 = dbg["pk_keuzes"]["rect"]
 			var kr: Rect2 = dbg["pk"]["rect"]
+			var balk := Ui.balk_rect()
 			print("[maat] strook bij %s staat %s" % [str(kader), dbg["pk_keuzes"]["op"]])
-			waar(st.position.x >= 0.0 and st.end.x <= kader.x + 0.01
-				and st.position.y >= 0.0 and st.end.y <= kader.y + 0.01,
-				"de strook past in het kader %s (%s)" % [str(kader), str(st)])
-			var afstand := minf(absf(st.position.y - kr.end.y), absf(kr.position.y - st.end.y))
-			waar(afstand <= Hits.KLEEF + 0.01 or dbg["pk_keuzes"]["op"] != "kleef",
-				"een gekleefde strook zit tegen de kaart aan, kader %s (%.1f)" % [str(kader), afstand])
+			gelijk(dbg["pk_keuzes"]["op"], "balk", "de strook zit in de balk, %s" % str(kader))
+			gelijk(dbg["pk"]["op"], "balk", "de kaart zit in de balk, %s" % str(kader))
+			waar(balk.encloses(st), "de strook past in de balk %s (%s)" % [str(kader), str(st)])
+			waar(balk.encloses(kr), "de kaart past in de balk %s (%s)" % [str(kader), str(kr)])
+			# the sentence sits above the buttons in `hoog`, beside them in `laag`
+			if Ui.balk_vorm() == "hoog":
+				waar(st.position.y >= kr.end.y - 0.01,
+					"de knoppen staan onder de kaart, %s" % str(kader))
+			else:
+				waar(st.position.x >= kr.end.x - 0.01,
+					"de knoppen staan naast de kaart, %s" % str(kader))
 			var knoop := Hits.spot("pk_keuzes").knoop
 			gelijk(knoop.get_node("Rij").get_child_count(), 4, "vier knoppen, %s" % str(kader))
 			for k in knoop.get_node("Rij").get_children():
@@ -195,8 +201,9 @@ func test_kaart_staat_nooit_op_haar_eigen_voorwerp() -> void:
 		kaart.weg()
 		_af()
 
-## The choice strip is glued under its card, never on it, at every frame size.
-func test_keuzestrook_kleeft_onder_de_kaart() -> void:
+## B3: the choice strip no longer glues itself under a floating card — it docks
+## in the rekenbalk, under the sum in `hoog`, beside it in `laag`.
+func test_strook_staat_onder_de_som_in_de_balk() -> void:
 	for kader in MATEN:
 		_op(kader)
 		var niets := func(_k) -> void: pass
@@ -212,7 +219,12 @@ func test_keuzestrook_kleeft_onder_de_kaart() -> void:
 		var dbg := Hits.debug()
 		waar(dbg.has("kk_keuzes"), "de strook staat er bij %s" % str(kader))
 		if dbg.has("kk_keuzes"):
-			gelijk(dbg["kk_keuzes"]["op"], "kleef", "de strook kleeft, %s" % str(kader))
+			gelijk(dbg["kk_keuzes"]["op"], "balk", "de strook zit in de balk, %s" % str(kader))
+			var balk := Ui.balk_rect()
+			waar(balk.encloses(dbg["kk_keuzes"]["rect"]),
+				"de strook past in de balk %s (%s)" % [str(kader), str(dbg["kk_keuzes"]["rect"])])
+			waar(balk.encloses(dbg["kk"]["rect"]),
+				"de kaart past in de balk %s (%s)" % [str(kader), str(dbg["kk"]["rect"])])
 		_keur(kader, "strook %s" % str(kader))
 		kaart.weg()
 		_af()

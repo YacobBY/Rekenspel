@@ -43,6 +43,7 @@ const DRIJF_PLONS := 30     ## a floating swimmer splashes every 30th tick
 
 var _kamer_nu: String = ""
 var _kader := Rect2()
+var _balk := 0.0                   ## units of the frame the maths bar takes (§3.1)
 var _schaal := {"g": 3, "dicht": 2.0, "k": 1.5, "q": 1.5,
 		"pxPerVoxelX": 3.0, "pxPerVoxelY": 1.5, "pxPerHoogte": 3.0, "kamer": ""}
 var _cam := Vector2.ZERO           ## camera origin in canvas px, while sliding
@@ -233,19 +234,48 @@ func meet(rect: Rect2) -> void:
 		return
 	var oud := _kader
 	_kader = rect
+	# The maths bar is measured on the frame (PLAN.md §3.1) and the world is
+	# fitted ABOVE it, so its height has to be known BEFORE the scale is taken.
+	# Asking for it afterwards would mean two `kader_veranderd` per resize, the
+	# first one carrying a scale that is already wrong.
+	_balk = maxf(0.0, Ui.balk_hoog())
+	_herbouw()
+	if oud != _kader:
+		kader_veranderd.emit(_kader, _schaal)
+
+## Scale, canvas and camera again for the frame as it stands right now.
+func _herbouw() -> void:
 	_bereken_schaal()
 	if _viewport != null:
 		var canvas := Vector2i(
-			maxi(1, JsGetal.rond(rect.size.x * _schaal["dicht"])),
-			maxi(1, JsGetal.rond(rect.size.y * _schaal["dicht"])))
+			maxi(1, JsGetal.rond(_kader.size.x * _schaal["dicht"])),
+			maxi(1, JsGetal.rond(_kader.size.y * _schaal["dicht"])))
 		if _viewport.size != canvas:
 			_viewport.size = canvas
 	_cam_doel = cam_doel(Rooms.get_kamer(_kamer_nu))
 	if _reis >= 1.0:
 		_cam = _cam_doel
 	_vuil = true
-	if oud != _kader:
-		kader_veranderd.emit(_kader, _schaal)
+
+## PLAN.md §3.1 — the units at the bottom of the frame the maths bar takes.  The
+## world gives way: the room is re-fitted in what is left and the camera drops
+## the floor above the strip, so the bar covers zero world.
+##
+## `Ui` is the one that measures it (`Ui.balk_hoog()`), and `meet()` asks before
+## every fit; this setter is for a height that changes WITHOUT the frame
+## changing — the shape hysteresis of `B5`.
+func zet_balk(h: float) -> void:
+	var nieuw := maxf(0.0, h)
+	if is_equal_approx(nieuw, _balk):
+		return
+	_balk = nieuw
+	if _kader.size.x < 1.0 or _kader.size.y < 1.0:
+		return
+	_herbouw()
+	kader_veranderd.emit(_kader, _schaal)
+
+func balk_hoog() -> float:
+	return _balk
 
 func kader_rect() -> Rect2:
 	return _kader
@@ -280,8 +310,10 @@ func _bereken_schaal() -> void:
 		var box := Rooms.kader(r)
 		box_w = float(box[1] - box[0])
 		nodig_h = nodig_hoog(r)
+	# The maths bar is off the top of the height budget before anything is
+	# fitted: the room is drawn in the frame MINUS the strip (PLAN.md §3.1).
 	var q := minf((maxf(240.0, _kader.size.x) - 4.0) / box_w,
-			maxf(120.0, _kader.size.y - 4.0) / nodig_h)
+			maxf(120.0, _kader.size.y - 4.0 - _balk) / nodig_h)
 	q = maxf(q, 0.01)
 	var ng := clampi(JsGetal.rond(q * d), 2, 4)
 	if float(ng) / d < q * 0.9:
@@ -309,8 +341,21 @@ func cam_doel(r: Rooms.Kamer) -> Vector2:
 	var h := float(_viewport.size.y)
 	var cx := w / 2.0 - float(box[0] + box[1]) / 2.0 * g
 	var over := h - float(box[3] - box[2]) * g
-	var onder := minf(KADER_ONDER * dicht, maxf(0.0, over))
-	var cy := (over - onder) / 2.0 - float(box[2]) * g if over >= 0.0 else h - 4.0 - float(box[3]) * g
+	# The strip of the maths bar is part of what the camera keeps free under the
+	# room, so the room ends ABOVE the paper in both branches (PLAN.md §3.1).
+	var onder := minf((KADER_ONDER + _balk) * dicht, maxf(0.0, over))
+	# The lowest the box may ever hang: its bottom edge against the top of the
+	# bar, with the same four pixels of air the old bottom edge had.
+	var laagst := h - 4.0 - _balk * dicht - float(box[3]) * g
+	var cy := laagst
+	if over >= 0.0:
+		# It does fit: centre it in what is left, minus the strip the camera
+		# keeps free underneath.  But `over` is measured on the WHOLE box while
+		# the fit above only had to make `nodig_hoog` fit (bare wall may be cut),
+		# so the air under the room can be far less than the bar is tall — and
+		# then centring would drop the floor straight into the paper.  The lowest
+		# the box may hang is the same edge the other branch uses.
+		cy = minf((over - onder) / 2.0 - float(box[2]) * g, laagst)
 	return Vector2(cx, cy)
 
 func cam() -> Vector2:

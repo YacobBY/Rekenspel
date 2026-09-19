@@ -215,14 +215,20 @@ staan, alleen de balk krijgt eigen grote maten):
 
 | rung | kader in units | vorm | H | zin | som | knop | nu | knophoogte | knopbreedte |
 |---|---|---|---|---|---|---|---|---|---|
-| A | x ≥ 900, y ≥ 440 (990×637, 1170×669) | hoog | 160 | 22 | 34 | 24 | 21 | 64 | `clamp((x−54)/4, 56, 150)` |
-| B | 520 ≤ x < 900, y ≥ 440 (734×788) | hoog | 152 | 21 | 32 | 23 | 20 | 60 | `clamp((x−54)/4, 56, 140)` |
-| C | x < 520, y ≥ 440 (326×558) | hoog | 160 | 20 | 30 | 22 | 19 | 60 | `clamp((x−48)/4, 48, 120)` |
-| D | y < 440, x ≥ 470 (558×289, 676×320) | laag | 96 | 18 | 26 | 20 | 18 | 60 | `clamp((x*0.48−18)/4, 48, 96)` |
-| E | y < 440, x < 470 (296×314) | hoog | 132 | 17 | 24 | 19 | 17 | 52 | `clamp((x−42)/4, 48, 96)` |
+| A | x ≥ 900, y ≥ 440 (990×637, 1170×669) | hoog | 188 | 22 | 34 | 24 | 21 | 64 | `clamp((x−54)/4, 56, 150)` |
+| B | 520 ≤ x < 900, y ≥ 440 (734×788) | hoog | 178 | 21 | 32 | 23 | 20 | 60 | `clamp((x−54)/4, 56, 140)` |
+| C | x < 520, y ≥ 440 (326×558) | hoog | 172 | 20 | 30 | 22 | 19 | 60 | `clamp((x−48)/4, 48, 120)` |
+| D | y < 440, x ≥ 470 (558×289, 676×320) | laag | 104 | 18 | 26 | 20 | 18 | 60 | `clamp((x*0.48−18)/4, 48, 96)` |
+| E | y < 440, x < 470 (296×314) | hoog | 150 | 17 | 24 | 19 | 17 | 52 | `clamp((x−42)/4, 48, 96)` |
 
-Daarna `H = clampi(H, 72, int(kader.y * 0.34))`. De tien kaders die de suite
-echt draait staan in `tests/test_ui.gd:8-12` en `tests/test_hits.gd:9-17`
+Daarna `H = clampi(H, 72, int(kader.y * 0.48))`. Het plafond ging van 0.34
+naar 0.48 bij het bijstellen van `B4`: een somkaart met zin + som is bij rung A
+al ≈ 103 units hoog en de antwoordstrook eronder 64, samen 175 — bij 0.34
+(181 op 648) paste dat net niet met de vulling erbij, dus de strook werd
+omhoog geklemd en ging over de kaart heen liggen. `regel2` vervalt in de balk
+(`ui/kaart.gd`), zodat de kaart één regel zin + de som blijft. De tien kaders
+die de suite echt draait staan in `tests/test_ui.gd:8-12` en
+`tests/test_hits.gd:9-17`
 (990×637, 734×788, 1170×669, 326×558, 558×289, 1000×648, 768×1024, 360×740,
 296×314, 676×320) — de maattest loopt ze alle tien.
 
