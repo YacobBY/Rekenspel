@@ -2,14 +2,17 @@
 
 Project knowledge for the coding agent. Read this instead of scanning the tree:
 it names every file that matters, the commands, the contracts and the traps.
-Written 2026-09-16 against `main` (suite: 393 tests, 0 failures, ≈ 95 s).
+Written 2026-09-16 against `main`; skills refreshed 2026-09-19 (suite: 470 tests, 0 failures, ≈ 205 s).
 
 ## 0. Tool rules and skills (read first)
 
 Skills live in `.dsh/skills/` and load with the `skill` tool: `dh-tools` (which
-tool for what — load it first on every task), `dh-tests`, `dh-minigame`,
-`dh-screenshot`, `dh-export`, `dh-spec`, `dh-commit`. They contain the
-procedures; this file contains the facts.
+tool for what — load it first on every task), `dh-plan` (a task from PLAN.md:
+which one, what "done" means — load it on every plan task), `dh-gdscript`
+(the traps, before editing any `.gd`), `dh-tests`, `dh-minigame`,
+`dh-screenshot`, `dh-export`, `dh-spec`, `dh-commit` (the gate: green suite,
+files by path, PLAN.md bookkeeping). They contain the procedures; this file
+contains the facts.
 
 - `read`/`grep`/`glob`/`edit`/`write` for files (an `edit` needs a `read` of that
   file first); `bash` with `workdir` for commands (fresh shell per call);
