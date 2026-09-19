@@ -31,6 +31,7 @@ extends MiniGame
 
 const TAAK := "sleutels"
 const DROP := "haak"              ## de naam die een gesleepte sleutel draagt
+const KAART := "sl_kaart"         ## id van de vraagkaart, ook in de test
 
 const WACHT_LEEG := 1.9           ## geen gasten: het spel sluit zichzelf
 const WACHT_AF := 2.6             ## het 💤-wolkje van de weglopende gast
@@ -347,6 +348,17 @@ func _band_in_voxels() -> float:
 
 # -------------------------------------------------------------- de opstelling
 
+## De laagste rand die de rij mag halen: de onderkant van het frame, of de
+## bovenkant van de rekenbalk als die er staat (§3.1, B2).  Wat onder de
+## balk ligt is al aan de balk gegeven; een rij die tot `kader.size.y` door
+## zakkt landt op het papier van de kaart en wordt door `Hits` weer omhoog
+## geworpen, en dan weet het spel niet meer waar het aan toe is.
+func _bodem(kader: Rect2) -> float:
+	var balk: float = ctx.wereld.balk_hoog()
+	if balk <= 0.0 or not Ui.balk_aan():
+		return kader.end.y
+	return maxf(RAND + KNOP, kader.end.y - balk)
+
 ## De vier opstellingen van games-a.md §4.4, gekozen uit de KADERMAAT en de
 ## gemeten Controlmaten in plaats van uit een DOM-meting ná een tekenbeurt:
 ##
@@ -363,6 +375,11 @@ func _band_in_voxels() -> float:
 ## kader-units, precies zoals de knoppenlaag:
 ##   scherm-x = px0 + (x − z)·2k     scherm-y = py0 + (x + z − 2y)·k
 ## `_hoogte_voor()` is de omgekeerde weg (het `hoogteVoor` van de HTML).
+##
+## Staat de vraagkaart in de rekenbalk (`in_balk`), dan is de vraag "past de
+## kaart boven of naast de rij" niet meer aan de orde: de kaart ligt
+## onderaan het frame bij de vinger van het kind.  De rij houdt dan haar
+## eigen plek en `werk`/`bodem` houden haar boven het papier van de balk.
 func _opbouw(b: Dictionary) -> Dictionary:
 	var kader: Rect2 = ctx.wereld.kader_rect()
 	var k: float = float(ctx.wereld.schaal().get("k", 1.0))
@@ -379,8 +396,18 @@ func _opbouw(b: Dictionary) -> Dictionary:
 	var rij_py_nat := _py_van(_hoog(0.6))
 	if bord_vlak.size.y > 0.0:
 		rij_py_nat = bord_vlak.position.y - GAT - KNOP * 0.5
+	var bodem := _bodem(kader)
+	var in_balk: bool = Ui.balk_aan() and Ui.balk_kaart() == KAART
+	# `werk` is het kader zoals de PLAATSING het mag gebruiken: dezelfde
+	# breedte, maar de onderkant ligt op de bovenrand van de balk.  De
+	# moduskeuze hieronder gebruikt het echte kader — `kort` gaat over de
+	# schil, niet over de balk — maar elk rect dat hieronder ontstaat moet
+	# boven de balk blijven, anders zet `Hits` het alsnog weg en weet het
+	# spel niet meer waar het aan toe is.
+	var werk := Rect2(kader.position, Vector2(kader.size.x,
+		maxf(1.0, bodem - kader.position.y)))
 	rij_py_nat = clampf(rij_py_nat, RAND + KNOP * 0.5,
-		maxf(RAND + KNOP * 0.5, kader.size.y - RAND - KNOP * 0.5))
+		maxf(RAND + KNOP * 0.5, bodem - RAND - KNOP * 0.5))
 	# de kaart hoort bij de rij en staat er normaal gesproken boven
 	var kaart_py_nat := rij_py_nat - KNOP * 0.5 - GAT - kaart_maat.y * 0.5
 	# `kort` is het lage-kaderbreekpunt van architecture.md §4.5 (`height < 450`,
@@ -400,8 +427,8 @@ func _opbouw(b: Dictionary) -> Dictionary:
 			kaart_py = maxf(kaart_py_nat, RAND + kaart_maat.y * 0.5)
 		"naast":
 			# de kaart uiterst links op halve hoogte, de rij rechts ernaast
-			kaart_py = clampf(kader.size.y * 0.5, RAND + kaart_maat.y * 0.5,
-				maxf(RAND + kaart_maat.y * 0.5, kader.size.y - RAND - kaart_maat.y * 0.5))
+			kaart_py = clampf(werk.size.y * 0.5, RAND + kaart_maat.y * 0.5,
+				maxf(RAND + kaart_maat.y * 0.5, werk.size.y - RAND - kaart_maat.y * 0.5))
 			var kaart_px := clampf(_px_van({"x": float(_bord_plek.get("x", 0.0)),
 				"z": float(_bord_plek.get("z", 0.0)), "y": 0.0}),
 				2.0 + kaart_maat.x * 0.5,
@@ -411,37 +438,43 @@ func _opbouw(b: Dictionary) -> Dictionary:
 			kaart_py = RAND + kaart_maat.y * 0.5
 	# ze mag over de wereld staan, maar niet over het bord waar ze aan hangt
 	# (`Hits._wijk_omhoog` doet dat ook, maar dan weet de rij het niet)
-	kaart_py = _wijk_kaart(kaart_py, kaart_maat, bord_vlak, kader)
-	var kaart_r := _kaart_rect(kaart_py, kaart_maat, kader)
+	kaart_py = _wijk_kaart(kaart_py, kaart_maat, bord_vlak, werk)
 
 	# 2. de breedte: kleinere stappen, dan pas een tweede regel
-	dx = _pas_dx(dx, dx_min, n, kader, k, links_min)
-	var per_regel := _per_regel(dx, n, kader, k, links_min)
+	dx = _pas_dx(dx, dx_min, n, werk, k, links_min)
+	var per_regel := _per_regel(dx, n, werk, k, links_min)
 	@warning_ignore("integer_division")
 	var regels := (n + per_regel - 1) / per_regel
 	var hoog := KNOP + float(regels - 1) * float(Hits.RIJ)
 	# ... en dan schuift de rij langs de wand tot ze binnen haar ruimte valt
-	var schuif := _pas_schuif(dx, 0.0, per_regel, kader, k, links_min)
+	var schuif := _pas_schuif(dx, 0.0, per_regel, werk, k, links_min)
 
 	# 3. de hoogte van de rij, ten opzichte van de kaart zoals die er nu staat
 	var rij_py := rij_py_nat
+	# Staat de kaart in de rekenbalk, dan is `kaart_r` hier fiction: de kaart
+	# ligt onderaan het frame bij de vinger van het kind, niet boven de rij.
+	# De rij hoeft dan niet meer voor haar op te offeren en houdt haar eigen
+	# plek boven het bord.
+	var kaart_r := _kaart_rect(kaart_py, kaart_maat, werk)
+	if in_balk:
+		kaart_r = Rect2()
 	match modus:
 		"stapel":
 			rij_py = maxf(rij_py_nat, kaart_r.end.y + GAT + KNOP * 0.5)
 		"krap":
 			# de rij gaat vóór en zakt zo laag als het kader toelaat; ligt de
 			# kaart daar al, dan gaat de rij er juist bovenop staan
-			rij_py = kader.size.y - RAND - hoog + KNOP * 0.5
+			rij_py = bodem - RAND - hoog + KNOP * 0.5
 			if rij_py - KNOP * 0.5 < kaart_r.end.y + GAT:
 				rij_py = kaart_r.position.y - GAT - hoog + KNOP * 0.5
 	rij_py = clampf(rij_py, RAND + KNOP * 0.5,
-		maxf(RAND + KNOP * 0.5, kader.size.y - RAND - hoog + KNOP * 0.5))
+		maxf(RAND + KNOP * 0.5, bodem - RAND - hoog + KNOP * 0.5))
 	# en ze mag op geen enkel meubelstuk en niet op de kaart staan
-	rij_py = _wijk_van_voorwerpen(rij_py, dx, schuif, kader, kaart_py, kaart_maat,
+	rij_py = _wijk_van_voorwerpen(rij_py, dx, schuif, werk, kaart_py, kaart_maat,
 		per_regel, regels)
 
 	if modus == "stapel" and is_equal_approx(rij_py, rij_py_nat) \
-			and is_equal_approx(kaart_py, kaart_py_nat) \
+			and (in_balk or is_equal_approx(kaart_py, kaart_py_nat)) \
 			and is_equal_approx(dx, basis) and is_zero_approx(schuif) and regels == 1:
 		modus = "gewoon"
 	return {"modus": modus, "haak_y": _hoogte_voor(rij_py), "dx": dx, "schuif": schuif,
@@ -697,7 +730,7 @@ func _teken_kaart(b: Dictionary, s: Dictionary) -> void:
 		vraag = "Welk kamernummer hoort in het gat?" if str(_p.get("variant", "")) == "kamers" \
 			else "Welk nummer hoort in het gat?"
 	_kaart = ctx.ui.somkaart("sleutelbordz", _rij_tekst(b), {
-		"id": "sl_kaart", "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
+		"id": KAART, "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
 		"icoon": "🔑", "regel": vraag, "titel": vraag,
 	})
 	if _kaart == null:
