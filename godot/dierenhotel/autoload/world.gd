@@ -22,6 +22,7 @@ signal kader_veranderd(rect: Rect2, schaal: Dictionary)
 signal kamer_veranderd(kamer: String)
 signal getekend()
 signal reis_gestart(id: String, kamer: String)   ## a guest set off through the doors
+signal bak_veranderd(kamer: String, slot: String)  ## a bowl really changed level
 
 const TIK := 1.0 / 15.0     ## world.js STAP: one think tick
 const MAX_INHAAL := 3       ## at most 3 catch-up ticks per frame
@@ -40,6 +41,7 @@ const SQUASH := 3           ## ticks flat on the stone after landing
 const SPRING_HOOG := {"hond": 5.0, "poes": 6.0, "konijn": 7.0, "gans": 4.0}
 const GANG_K := 16.0        ## gait phase per voxel; world.md does not pin it
 const DRIJF_PLONS := 30     ## a floating swimmer splashes every 30th tick
+const KAUW_PER_NIVEAU := 24  ## ticks one level is chewed off the bowl (V5, ≈1,6 s)
 
 var _kamer_nu: String = ""
 var _kader := Rect2()
@@ -55,6 +57,8 @@ var _kamerscene: Node2D = null
 var _dieren: Dictionary = {}       ## id -> Dier
 var _volgorde: Array[String] = []  ## insertion order, for the wander places
 var _bakken: Dictionary = {}       ## "kamer|slot" -> 0..4
+var _bak_kauw: Dictionary = {}     ## "kamer|slot" -> think ticks chewed on it (V5)
+var _kauwers: Dictionary = {}      ## "kamer|slot" -> the animal chewing it this tick
 var _deeltjes: Array = []          ## particles, in voxel-px around the room origin
 var _tijd := 0.0
 var _tikken := 0
@@ -102,6 +106,7 @@ class Dier extends RefCounted:
 	var v := 0.0
 	var gang := 0.0
 	var tikken := 0                ## ticks left in this state
+	var kauw := 0                  ## ticks chewed since this bout of eating began (V5)
 	var na := ""
 	var punten: Array = []         ## points still to walk, in this room
 	var route: Array = []          ## rooms still to travel through
@@ -728,9 +733,18 @@ func _roteer(voxels: Array, rot: int) -> Array:
 # ------------------------------------------------------------------ bakken
 
 ## `World.setBak(kamer, slot, 0..4)` — how full a feeding bowl is (world.md §2.8).
+## `bak_veranderd` goes out only when the level really moves (V5, PLAN.md): the
+## shell repaints the bowl button off that signal, and writing 4 over 4 says
+## nothing, so it must not wake a repaint either.
 func zet_bak(kamer_id: String, slot: String, niveau: int) -> int:
 	var n := clampi(niveau, 0, 4)
+	var oud := bak_stand(kamer_id, slot)
 	_bakken["%s|%s" % [kamer_id, slot]] = n
+	if oud != n:
+		# the chew restarts with the change: the counter counts ticks chewed
+		# since this bowl last moved, so every level costs KAUW_PER_NIVEAU
+		_bak_kauw.erase("%s|%s" % [kamer_id, slot])
+		bak_veranderd.emit(kamer_id, slot)
 	vuil()
 	return n
 
@@ -1353,6 +1367,7 @@ func _tik() -> void:
 			_grof_tik(d)
 		else:
 			_fijn_tik(d)
+	_bakjes_kauwen()
 	_deeltjes_tik()
 
 ## world.md §2.9 — off screen: keep the route, one step per tick, straight to
@@ -1455,25 +1470,44 @@ func _blij(d: Dier) -> void:
 		_pluis(d, ArtEffect.STER_N, ArtEffect.STER_KL[_tikken % 2], true)
 	_aftellen(d)
 
-## `eet` — a 5-tick chew that empties the bowl, then a happy bout.
+## `eet` — the chew.  The animal only moves its jaw here; the bowl itself is
+## chewed once per think tick by `_bakjes_kauwen()`, not once per animal
+## (V5, PLAN.md).  With the old `_tikken % 5` gate every eating guest took a
+## level off on the very same tick, so four of them emptied a full bowl in a
+## third of a second — while the 😋 bubble of 2,6 s was still up and the bowl
+## button still said "Vol".  A bowl now loses one level per `KAUW_PER_NIVEAU`
+## ticks however many animals stand at it, so four levels last ±6,4 s whether
+## one guest eats or four.  Off screen nothing chews: `_grof_tik` still
+## empties the bowl in one go (world.md §2.9).
 func _eet(d: Dier) -> void:
-	d.pose = "hap2" if (_tikken % 5) < 2 else "hap1"
+	d.kauw += 1
+	d.pose = "hap2" if (d.kauw % 5) < 2 else "hap1"
 	d.bob = 0.0
-	if _tikken % 5 == 0:
-		var r := Rooms.get_kamer(d.kamer)
-		var bak := _bak_van(r)
-		if bak.is_empty():
-			d.staat = "blij"
-			d.tikken = 50 + int(d.rnd.volgende() * 36.0)
-			return
-		var stand := bak_stand(d.kamer, bak["slot"])
+	var bak := _bak_van(Rooms.get_kamer(d.kamer))
+	if bak.is_empty() or bak_stand(d.kamer, str(bak["slot"])) <= 0:
+		d.staat = "blij"
+		d.tikken = 50 + int(d.rnd.volgende() * 36.0)
+		return
+	_kauwers["%s|%s" % [d.kamer, str(bak["slot"])]] = d
+
+## The other half of the chew, run once per think tick after the animals.
+## One bowl, one rate: the counter belongs to the bowl and only moves while
+## somebody is eating from it, so the number of guests does not change how
+## long the food lasts.  The last animal to report drops the crumbs.
+func _bakjes_kauwen() -> void:
+	for sleutel in _kauwers.keys():
+		var n := int(_bak_kauw.get(sleutel, 0)) + 1
+		_bak_kauw[sleutel] = n
+		if n < KAUW_PER_NIVEAU:
+			continue
+		var delen: PackedStringArray = String(sleutel).split("|")
+		var stand := bak_stand(delen[0], delen[1])
 		if stand <= 0:
-			d.staat = "blij"
-			d.tikken = 50 + int(d.rnd.volgende() * 36.0)
-			return
-		zet_bak(d.kamer, bak["slot"], stand - 1)
+			continue
+		zet_bak(delen[0], delen[1], stand - 1)
 		if not rust():
-			_pluis(d, ArtEffect.KRUIMEL_N, ArtEffect.KRUIMEL_KL, false)
+			_pluis(_kauwers[sleutel] as Dier, ArtEffect.KRUIMEL_N, ArtEffect.KRUIMEL_KL, false)
+	_kauwers.clear()
 
 ## Floating: he stays in the water, sways, paddles slowly and drops one splash
 ## every 30th tick (world.md §2.5).  He does NOT arrive again every tick — that

@@ -44,6 +44,7 @@ var _bezig := false
 var _gemeld := false
 var _tikken := 0
 var _geluid_klaar := false
+var _bak_repaint := false         ## a bowl repaint is already queued (V5)
 var _compact := false
 var _telefoon := false
 
@@ -78,6 +79,11 @@ func _ready() -> void:
 	Hotel.bord_veranderd.connect(_ververs_chroom)
 	Rooms.kamers_veranderd.connect(_nieuwe_kamers)
 	World.kamer_veranderd.connect(func(_k: String) -> void: kamerbalk.ververs())
+	# V5 (PLAN.md): a bowl level can change right in the middle of the world
+	# tick, while the eat loop is still walking over the animals.  A repaint
+	# there would rebuild the hotel's buttons underneath that loop, so it goes
+	# deferred — and only for the room the child is actually looking at.
+	World.bak_veranderd.connect(_bak_gewijzigd)
 
 	_op_venster()
 	_pas_shell()
@@ -86,6 +92,24 @@ func _ready() -> void:
 	if not has_meta("geen_start"):
 		_begin()
 		_meld_later()
+
+## Someone's bowl changed level.  The button that says "Vol" is built by
+## `Hotel.hotspots()`, which `render()` calls, so a change has to reach it —
+## but never on the tick that caused it (see the connect above).
+func _bak_gewijzigd(kamer: String, _slot: String) -> void:
+	if kamer != World.kamer_nu():
+		return
+	if _bak_repaint:
+		return          # four animals chewing one bowl is one repaint, not four
+	_bak_repaint = true
+	_schildert_bak.call_deferred()
+
+## The deferred half of `_bak_gewijzigd`.  The flag is cleared here and not by
+## a timer, so everything the world changed while this was queued is drawn by
+## this one render.
+func _schildert_bak() -> void:
+	_bak_repaint = false
+	Hotel.render()
 
 # ---------------------------------------------------------------- opstarten
 

@@ -11,7 +11,7 @@ extends Proef
 const T := "t_dier"
 
 func _na_afloop() -> void:
-	for id in ["t_dier", "t2", "t3", "t_slaap", "t_reis"]:
+	for id in ["t_dier", "t2", "t3", "t4", "t5", "t_slaap", "t_reis"]:
 		World.weg(id)
 	World.decor_wis_eigenaar("proef")
 	World.decor_wis_eigenaar("ander")
@@ -394,6 +394,111 @@ func test_eten_leegt_de_bak() -> void:
 			break
 	gelijk(World.bak_stand("kamer1", "bak"), 0, "de bak is leeg")
 	gelijk(d.staat, "blij", "en hij is blij")
+	World.naar("receptie")
+	_na_afloop()
+
+## V5 (PLAN.md): de kauwteller zit op het dier, niet op de wereld.  Met de
+## oude `_tikken % 5`-poort nam elke etende gast op dezelfde tik een niveau
+## mee, dus vier gasten leegden een vol bakje in een derde seconde — terwijl
+## het 😋-wolkje van 2,6 s nog stond en de knop "Vol" zei.  Twee gasten aan
+## een bakje van 4: na 20 tikken is er nog niets af (het eerste niveau komt
+## op de vierentwintigste), na 100 tikken is hij leeg.
+func test_het_bakje_blijft_even_vol() -> void:
+	World.naar("kamer1")
+	World.zet_bak("kamer1", "bak", 4)
+	var bak: Dictionary = Rooms.get_kamer("kamer1").slots["bak"]
+	World.zet(T, "kamer1", bak["sx"], bak["sz"], {"kind": "hond"})
+	World.zet("t2", "kamer1", float(bak["sx"]) + 1.0, float(bak["sz"]), {"kind": "poes"})
+	World.feest([T, "t2"])
+	gelijk(World.dier(T).staat, "eet", "twee gasten eten")
+	gelijk(World.dier("t2").staat, "eet", "beide")
+	for _i in 20:
+		World._tik()
+	var stand := World.bak_stand("kamer1", "bak")
+	waar(stand >= 3, "na 20 tikken is er hooguit één niveau af: stand %d" % stand)
+	for _i in 80:
+		World._tik()
+	gelijk(World.bak_stand("kamer1", "bak"), 0, "na 100 tikken is de bak leeg")
+	World.naar("receptie")
+	_na_afloop()
+
+## Hoeveel gasten er ook aan het bakje staan, de bak gaat op hetzelfde tempo
+## leeg (V5, PLAN.md: "ongeacht hoeveel dieren er eten").  Met de oude
+## `_tikken % 5`-poort namen vier gasten op dezelfde tik elk een niveau mee en
+## was een vol bakje in een derde seconde weg; de teller zit nu op het bakje.
+func test_eters_veranderen_het_kauwtempo_niet() -> void:
+	var per_eter := {}
+	for n in [1, 4]:
+		_na_afloop()
+		World.naar("kamer1")
+		World.zet_bak("kamer1", "bak", 4)
+		var bak: Dictionary = Rooms.get_kamer("kamer1").slots["bak"]
+		var ids: Array = []
+		for i in n:
+			var id := "t%d" % (i + 2)
+			World.zet(id, "kamer1", float(bak["sx"]) + float(i), float(bak["sz"]),
+				{"kind": "hond"})
+			ids.append(id)
+		World.feest(ids)
+		var tikken := 0
+		while World.bak_stand("kamer1", "bak") > 0 and tikken < 400:
+			World._tik()
+			tikken += 1
+		per_eter[n] = tikken
+		gelijk(tikken, 4 * World.KAUW_PER_NIVEAU,
+			"%d eter(s), vier niveaus à %d tikken: %d" % [n, World.KAUW_PER_NIVEAU, tikken])
+		World.naar("receptie")
+	gelijk(int(per_eter[1]), int(per_eter[4]), "één of vier eters, zelfde tempo")
+	_na_afloop()
+
+## `bak_veranderd` gaat precies één keer uit per echte verandering en niet als
+## er niets verandert (V5, PLAN.md) — de shell schildert de bakknop hierop
+## over, en 4 over 4 schrijven is geen nieuws.
+func test_bak_veranderd_vuurt_per_echte_verandering() -> void:
+	World.zet_bak("kamer1", "bak", 0)   # uitgangspositie, telt niet mee
+	var vertellingen := {"n": 0, "laatste": ""}
+	var hand := func(k: String, s: String) -> void:
+		vertellingen["n"] = int(vertellingen["n"]) + 1
+		vertellingen["laatste"] = "%s|%s" % [k, s]
+	World.bak_veranderd.connect(hand)
+	World.zet_bak("kamer1", "bak", 0)
+	gelijk(int(vertellingen["n"]), 0, "0 over 0 is geen verandering")
+	World.zet_bak("kamer1", "bak", 4)
+	gelijk(int(vertellingen["n"]), 1, "0 naar 4 vuurt één keer")
+	World.zet_bak("kamer1", "bak", 4)
+	gelijk(int(vertellingen["n"]), 1, "4 over 4 vuurt niet nog eens")
+	World.zet_bak("kamer1", "bak", 3)
+	gelijk(int(vertellingen["n"]), 2, "4 naar 3 vuurt weer")
+	gelijk(str(vertellingen["laatste"]), "kamer1|bak", "en noemt kamer en slot")
+	World.zet_bak("kamer1", "bak", 9)
+	gelijk(int(vertellingen["n"]), 3, "9 klemmt naar 4 en is wél een verandering")
+	gelijk(World.bak_stand("kamer1", "bak"), 4, "en blijft binnen 0..4")
+	World.bak_veranderd.disconnect(hand)
+	_na_afloop()
+
+## Een render die midden in de eetlus af gaat, gooit niets om (V5, PLAN.md).
+## De shell stelt zijn eigen repaint uit, maar de bakknop wordt door
+## `Hotel.render()` gebouwd en dat mag niet stuklopen terwijl de wereld
+## halverwege zijn dieren loopt.
+func test_render_midden_in_de_eetlus_gooit_niets_om() -> void:
+	State.nieuw_spel()
+	Hotel.start()
+	World.naar("kamer1")
+	World.zet_bak("kamer1", "bak", 4)
+	var bak: Dictionary = Rooms.get_kamer("kamer1").slots["bak"]
+	World.zet(T, "kamer1", bak["sx"], bak["sz"], {"kind": "hond"})
+	World.feest([T])
+	var keer := {"n": 0}
+	var hand := func(_k: String, _s: String) -> void:
+		keer["n"] = int(keer["n"]) + 1
+		Hotel.render()
+	World.bak_veranderd.connect(hand)
+	for _i in 120:
+		World._tik()
+	World.bak_veranderd.disconnect(hand)
+	waar(int(keer["n"]) >= 4,
+		"elk niveau riep de render op: %d keer" % int(keer["n"]))
+	gelijk(World.bak_stand("kamer1", "bak"), 0, "en de bak is leeg")
 	World.naar("receptie")
 	_na_afloop()
 
