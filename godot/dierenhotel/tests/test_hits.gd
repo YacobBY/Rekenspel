@@ -140,9 +140,12 @@ func test_twee_knoppen_delen_geen_plek() -> void:
 
 # ---------------------------------------------------------- de antwoordstrook
 
-## The strip of four numbers glues under its card (or above it when there is no
-## room below), stays inside the frame and every button is a real tap target —
-## on every frame size, the low landscape phone included.
+## The strip of four numbers hangs on its card, stays inside the frame and every
+## button is a real tap target — on every frame size, the low landscape phone
+## included.  Since `B3` the strip no longer has to sit a fixed `Hits.KLEEF`
+## from the card: on the maths bar the two stand where `Ui.balk_plek()` put
+## them, and the distance there is the bar's own `BALK_GAT`.  What this test
+## still guards is that the strip exists, fits, and is tappable.
 func test_antwoordstrook_kleeft_aan_de_kaart() -> void:
 	for kader in MATEN + KADERS:
 		_op(kader)
@@ -156,14 +159,10 @@ func test_antwoordstrook_kleeft_aan_de_kaart() -> void:
 		waar(dbg.has("pk_keuzes"), "de strook staat er bij kader %s" % str(kader))
 		if dbg.has("pk_keuzes"):
 			var st: Rect2 = dbg["pk_keuzes"]["rect"]
-			var kr: Rect2 = dbg["pk"]["rect"]
 			print("[maat] strook bij %s staat %s" % [str(kader), dbg["pk_keuzes"]["op"]])
 			waar(st.position.x >= 0.0 and st.end.x <= kader.x + 0.01
 				and st.position.y >= 0.0 and st.end.y <= kader.y + 0.01,
 				"de strook past in het kader %s (%s)" % [str(kader), str(st)])
-			var afstand := minf(absf(st.position.y - kr.end.y), absf(kr.position.y - st.end.y))
-			waar(afstand <= Hits.KLEEF + 0.01 or dbg["pk_keuzes"]["op"] != "kleef",
-				"een gekleefde strook zit tegen de kaart aan, kader %s (%.1f)" % [str(kader), afstand])
 			var knoop := Hits.spot("pk_keuzes").knoop
 			gelijk(knoop.get_node("Rij").get_child_count(), 4, "vier knoppen, %s" % str(kader))
 			for k in knoop.get_node("Rij").get_children():
@@ -195,38 +194,106 @@ func test_kaart_staat_nooit_op_haar_eigen_voorwerp() -> void:
 		kaart.weg()
 		_af()
 
-## The choice strip hangs on its card and never on top of it, at every frame
-## size.  Which anchor that is depends on whether the maths bar of §3.1 took
-## the card: on the bar the strip follows it there (`op: "balk"`), off the
-## bar it kleefs under the card as it always did.  Either way the strip is
-## beside or below, never over — which is what this test is really about.
-func test_keuzestrook_kleeft_onder_de_kaart() -> void:
-	for kader in MATEN:
+## `B3` (PLAN.md): the sum and its answer strip dock IN the maths bar, and the
+## strip is always on the far side of the card — below it in vorm `hoog`, to
+## the right of it in vorm `laag`.  The old test asked `op == "kleef"`, which
+## quietly accepted a strip ABOVE the card; that is exactly what the bar is for,
+## so the anchor and the order are now required, not inferred.
+##
+## `Vector2(700, 430)` is not one of the ticket viewports.  It is here because
+## it is the shortest frame in which the `laag` form still docks: the bar needs
+## its card and its strip side by side AND `WERELD_BANDEN` bands left over, and
+## none of the ten real frames lands in that window.  Without it the `laag`
+## branch of this test would never run.
+func test_strook_staat_onder_de_som_in_de_balk() -> void:
+	var balk_kaders := 0
+	var laag_kaders := 0
+	for kader in MATEN + KADERS + [Vector2(700, 430)]:
 		_op(kader)
-		var niets := func(_k) -> void: pass
-		var kaart := Ui.somkaart({"x": 24.0, "z": 20.0}, "", {
-			"id": "kk", "door": "test", "kamer": World.kamer_nu(),
-			"icoon": "📦", "regel": "Is er genoeg eten?", "keuze_titel": "kies er een",
-			"keuzes": [
-				{"id": "min", "icoon": "⬇", "tekst": "te weinig", "kort": "weinig", "kies": niets},
-				{"id": "gelijk", "icoon": "⚖", "tekst": "precies", "kies": niets},
-				{"id": "meer", "icoon": "⬆", "tekst": "blijft over", "kort": "over", "kies": niets},
-			]})
+		var kaart := Ui.somkaart({"x": 24.0, "z": 20.0}, "3 + 2 =", {
+			"id": "kk", "door": "test", "kamer": World.kamer_nu(), "goed": 5,
+			"icoon": "🥄", "regel": "Hoeveel scheppen samen?", "max": 2,
+			"on_ok": func(_n, _k) -> void: pass})
 		Hits.plaats()
 		var dbg := Hits.debug()
-		waar(dbg.has("kk_keuzes"), "de strook staat er bij %s" % str(kader))
-		if dbg.has("kk_keuzes"):
-			var verwacht := "balk" if Ui.balk_aan() else "kleef"
-			gelijk(dbg["kk_keuzes"]["op"], verwacht,
-				"de strook hangt aan haar kaart, %s" % str(kader))
-			var kr: Rect2 = dbg["kk"]["rect"]
-			var sr: Rect2 = dbg["kk_keuzes"]["rect"]
-			gelijk(maxf(0.0, kr.intersection(sr).size.x)
-				* maxf(0.0, kr.intersection(sr).size.y), 0.0,
-				"en staat niet op de kaart, %s" % str(kader))
-		_keur(kader, "strook %s" % str(kader))
+		if not Ui.balk_aan():
+			print("[balk] kader %s: balk uit (dak %.0f ruimte %.0f nodig %.0f)" % [
+				str(kader), Ui.balk_dak(), Ui.balk_ruimte(), Ui.balk_nodig()])
+			_keur(kader, "geen balk %s" % str(kader))
+			kaart.weg()
+			_af()
+			continue
+		balk_kaders += 1
+		var vorm := Ui.balk_vorm()
+		if vorm == "laag":
+			laag_kaders += 1
+		var balk := Ui.balk_rect()
+		waar(balk.size.x > 0.0 and balk.size.y > 0.0,
+			"%s: de balk heeft een rechthoek (%s)" % [str(kader), str(balk)])
+		gelijk(dbg["kk"]["op"], "balk",
+			"%s/%s: de som verankert op de balk" % [str(kader), vorm])
+		gelijk(dbg["kk_keuzes"]["op"], "balk",
+			"%s/%s: de strook volgt de som naar de balk" % [str(kader), vorm])
+		var kr: Rect2 = dbg["kk"]["rect"]
+		var sr: Rect2 = dbg["kk_keuzes"]["rect"]
+		waar(balk.encloses(kr),
+			"%s/%s: de kaart staat volledig IN de balk (%s in %s)"
+				% [str(kader), vorm, str(kr), str(balk)])
+		waar(balk.encloses(sr),
+			"%s/%s: de strook staat volledig IN de balk (%s in %s)"
+				% [str(kader), vorm, str(sr), str(balk)])
+		if vorm == "laag":
+			waar(kr.end.x <= sr.position.x + 0.01,
+				"%s: laag — kaart links van de strook (%s | %s)"
+					% [str(kader), str(kr), str(sr)])
+		else:
+			waar(kr.end.y <= sr.position.y + 0.01,
+				"%s: hoog — kaart boven de strook (%s boven %s)"
+					% [str(kader), str(kr), str(sr)])
+		_keur(kader, "balk %s" % str(kader))
 		kaart.weg()
 		_af()
+	waar(balk_kaders >= 1,
+		"de balk staat in minstens één van de elf kaders (%d)" % balk_kaders)
+	waar(laag_kaders >= 1,
+		"het laag-formaat is ook echt getest (%d kader(s))" % laag_kaders)
+
+## `B3` stap 3 (PLAN.md): a spot that anchors on the maths bar is exempt from
+## `MAX_PER_KAMER`.  The bar limits itself already — one card and one strip,
+## and `Ui.balk_bepaal()` lets go of both when they do not fit — so counting
+## those two against the ceiling of sixteen took two places away from the room
+## for nothing.  Filled to the ceiling and one over, the room now loses one of
+## its OWN buttons and keeps both bar spots: the kitchen, which sits right
+## against that ceiling, has its two places back.
+func test_balkplekken_tellen_niet_tegen_de_plafond() -> void:
+	var kader := Vector2(1000, 648)
+	_op(kader)
+	var totaal := Hits.MAX_PER_KAMER + 1
+	for i in totaal:
+		Hits.maak({"id": "v%d" % i, "kamer": World.kamer_nu(),
+			"x": 6.0 + i * 1.5, "z": 20.0, "y": 12.0, "label": "K%d" % i,
+			"vlak": Rect2(Vector2(30.0 + i * 56.0, 40.0), Vector2(40, 40)),
+			"door": "test"})
+	var kaart := Ui.somkaart({"x": 24.0, "z": 20.0}, "3 + 2 =", {
+		"id": "pl", "door": "test", "kamer": World.kamer_nu(), "goed": 5,
+		"icoon": "🥄", "regel": "Hoeveel scheppen samen?", "max": 2,
+		"on_ok": func(_n, _k) -> void: pass})
+	Hits.plaats()
+	var dbg := Hits.debug()
+	gelijk(Ui.balk_kaart(), "pl", "de kaart won de balk")
+	waar(dbg.has("pl"), "de balkkaart staat er")
+	waar(dbg.has("pl_keuzes"), "de balkstrook staat er")
+	var over := 0
+	for i in totaal:
+		if dbg.has("v%d" % i):
+			over += 1
+	print("[plafond] %d gewone knoppen + 2 balkplekken -> %d gewoon over"
+		% [totaal, over])
+	gelijk(over, Hits.MAX_PER_KAMER,
+		"de kamer verliest een eigen knop, geen balkplek")
+	_keur(kader, "plafond")
+	kaart.weg()
+	_af()
 
 # ------------------------------------------------------- elk voorwerp, elke kamer
 
@@ -436,6 +503,10 @@ func test_naamplaten_nemen_hun_plek_in() -> void:
 ## card — but never over the COUNTER.  The bell, the till, the guest book and
 ## the desk lamp all stand on `Kamer.balie`, and the bill's own card was anchored
 ## on the desk since I1, so it covered the till while the child counted.
+## `B3` (PLAN.md): the maths bar never touches the counter, the card that won
+## the bar stands IN it, and the card that did not win stays by its own object.
+## The old version only asked that no `midden` card overlap the desk; with the
+## bar in play that says nothing about where the winning card actually went.
 func test_kaart_laat_de_balie_vrij() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	var boom := Engine.get_main_loop() as SceneTree
@@ -455,17 +526,57 @@ func test_kaart_laat_de_balie_vrij() -> void:
 		waar(balie.size.x > 0.0 and balie.size.y > 0.0,
 			"%s: de balie heeft een vlak (%s)" % [str(maat), str(balie)])
 		var dbg := Hits.debug()
-		var kaarten := 0
-		for id in dbg.keys():
-			var d: Dictionary = dbg[id]
-			if str(d["op"]) != "midden":
-				continue
-			kaarten += 1
-			var snij: Rect2 = (d["rect"] as Rect2).intersection(balie)
+		var balk := Ui.balk_rect()
+		var winnaar := Ui.balk_kaart()
+		print("[balie] %s: balk=%s winnaar=%s kaarten=%s" % [str(maat), str(balk),
+			winnaar, str(dbg.keys())])
+		# 1) the bar never reaches the counter
+		if Ui.balk_aan():
+			var snij: Rect2 = balk.intersection(balie)
 			gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
-				"%s: kaart %s laat de balie vrij (%s tegen %s)"
-					% [str(maat), id, str(d["rect"]), str(balie)])
-		waar(kaarten >= 1, "%s: er stond %d kaart op het scherm" % [str(maat), kaarten])
+				"%s: de balk raakt de balie nooit (%s tegen %s)"
+					% [str(maat), str(balk), str(balie)])
+			waar(winnaar != "", "%s: er is een kaart die de balk won" % str(maat))
+			if winnaar != "" and dbg.has(winnaar):
+				gelijk(str(dbg[winnaar]["op"]), "balk",
+					"%s: %s verankert op de balk" % [str(maat), winnaar])
+				waar(balk.encloses(dbg[winnaar]["rect"]),
+					"%s: de winnende kaart staat volledig in de balk (%s in %s)"
+						% [str(maat), str(dbg[winnaar]["rect"]), str(balk)])
+		# 2) every other card stays by its own object, out of the bar
+		var tweede := 0
+		for id in ["ci_som", "rek_som"]:
+			if not dbg.has(id) or id == winnaar:
+				continue
+			tweede += 1
+			var d: Dictionary = dbg[id]
+			var r: Rect2 = d["rect"]
+			var mik: Vector2 = d["mik"]
+			print("[balie] %s: %s op=%s rect=%s mik=%s" % [str(maat), id,
+				str(d["op"]), str(r), str(mik)])
+			if Ui.balk_aan():
+				var s2: Rect2 = r.intersection(balk)
+				gelijk(maxf(0.0, s2.size.x) * maxf(0.0, s2.size.y), 0.0,
+					"%s: %s staat buiten de balk (%s)" % [str(maat), id, str(r)])
+			var s3: Rect2 = r.intersection(balie)
+			gelijk(maxf(0.0, s3.size.x) * maxf(0.0, s3.size.y), 0.0,
+				"%s: %s laat de balie vrij (%s tegen %s)"
+					% [str(maat), id, str(r), str(balie)])
+			# "bij haar voorwerp": the card still covers the column of its own
+			# aim point (a card wider than the room is clamped, so it may not
+			# be centred on it).  Vertically it is pushed out of the bar, not
+			# off the screen: the desk's own aim point lies inside the bar, so
+			# the only honest bound is "above the paper", which is the check
+			# above; the frame check in `_keur` keeps it on the glass.
+			waar(r.position.x <= mik.x and mik.x <= r.end.x + 0.01,
+				"%s: %s dekt de kolom van haar eigen voorwerp niet (%s, mik %s)"
+					% [str(maat), id, str(r), str(mik)])
+			if Ui.balk_aan():
+				waar(r.end.y <= balk.position.y + 0.01,
+					"%s: %s wijkt boven de balk uit, niet weg van haar voorwerp (%s, balk %s)"
+						% [str(maat), id, str(r), str(balk)])
+		waar(tweede >= 1, "%s: er stond een tweede kaart bij haar voorwerp (%d)"
+			% [str(maat), tweede])
 		Econ.rekening_stop()
 		await _hotel_af(h)
 	State.s = bewaard

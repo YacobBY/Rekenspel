@@ -389,9 +389,20 @@ func plaats() -> void:
 		if av != bv:
 			return av
 		return _diepte(a) > _diepte(b))
-	for i in lijstje.size():
-		if i >= MAX_PER_KAMER:
-			lijstje[i].zichtbaar = false
+	# Cull (B3, PLAN.md): at most `MAX_PER_KAMER` per room, but a spot that
+	# anchors to the maths bar is NOT counted.  The bar limits itself already
+	# — one card and one strip, and `Ui.balk_bepaal()` lets go when they do
+	# not fit — so charging those two against the ceiling of sixteen took two
+	# places away from the room for nothing.  That is exactly what §4 asks
+	# for here: "dat geeft de keuken meteen twee plaatsen terug".
+	var geteld := 0
+	for s in lijstje:
+		if _op_van(s) == "balk":
+			continue
+		if geteld >= MAX_PER_KAMER:
+			s.zichtbaar = false
+			continue
+		geteld += 1
 	# every object still in view is a box that a button must stay off
 	for s in lijstje:
 		if s.zichtbaar and s.vlak_nu.size.x > 0.0 and s.vlak_nu.size.y > 0.0:
