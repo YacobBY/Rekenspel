@@ -123,6 +123,8 @@ const WERELD_BANDEN := 5
 var _balk_kaart := ""     ## id of the card that owns the bar right now, "" = none
 var _balk_kost := 0.0     ## what the bar costs the world; cached, see _balk_herstel
 var _balk_stil := 0       ## > 0: cards are swapping, do not rescale mid-swap
+var _balk_tellingen := 0  ## how often the bar was recomputed; `test_balk.gd`
+                        ## counts these to prove nothing recomputes per frame
 
 ## The design height of the bar for the frame as it stands: the table of
 ## §3.1, already clamped to `BALK_DAK` by `UiThema.balk_maten()`.  This is
@@ -304,13 +306,58 @@ func balk_bepaal() -> float:
 	_balk_kost = maxf(0.0, kost)
 	return _balk_kost
 
-## The once-a-frame version: compute, and hand the result to the world.
-## Cheap — `World.zet_balk()` returns straight away when the height is the
-## same, which is the case in all but a handful of frames.
+## Recompute what the bar costs and hand the result to the world.  Called on
+## the events that can change it — a card opening or closing, a sentence, a
+## second sentence, a help line, an answer in the box — and from nowhere
+## else.  `World.zet_balk()` returns straight away when the height is the
+## same, so an event that changed nothing costs one minimum-size query.
+## `_balk_tellingen` is what `test_balk.gd` watches: nothing may tick while
+## the screen stands still.
 func _balk_herstel() -> void:
+	_balk_tellingen += 1
 	if _balk_stil > 0:
 		return
-	World.zet_balk(balk_bepaal())
+	_balk_pas()
+	# One more settle at the end of the same frame.  A game is allowed to
+	# tidy the card it just got — `games/voerkar/spel.gd` hides the som line
+	# and the answer box right after `somkaart()` returns — and it owes the
+	# bar no call for that.  A notification from inside the emit chain of a
+	# pass lands here too and is remembered rather than obeyed, which is what
+	# keeps that chain from recursing.
+	if not _balk_bezig and not _balk_nameeting:
+		_balk_nameeting = true
+		call_deferred("_balk_na_meeting")
+
+
+func _balk_na_meeting() -> void:
+	_balk_nameeting = false
+	if _balk_stil > 0:
+		return
+	_balk_pas()
+
+
+## True while a pass is running, so the `kader_veranderd` chain it starts
+## cannot start another one.
+var _balk_bezig := false
+
+## True while a deferred settle is already queued for this frame.
+var _balk_nameeting := false
+
+## One settle: compute what the bar costs and hand it to the world, and if
+## the world's answer changed the very card being measured, settle again —
+## four times at most.  `games/was/spel.gd` answers `kader_veranderd` by
+## re-weighing its legend, and that calls `Kaart.regel2()`, which notifies
+## the bar: without this guard that loop ran until the stack overflowed.
+func _balk_pas() -> void:
+	if _balk_bezig:
+		return
+	_balk_bezig = true
+	for _pas in 4:
+		var oud := _balk_kost
+		World.zet_balk(balk_bepaal())
+		if is_equal_approx(_balk_kost, oud):
+			break
+	_balk_bezig = false
 
 ## The open card with the highest `prio`, newest first among equals.  A card
 ## that is no longer in `_kaarten` (closed, or never opened through `Ui`) is
@@ -527,12 +574,17 @@ func toast_band() -> Rect2:
 	return Rect2(Vector2.ZERO, toastlaag.size if toastlaag != null else Vector2.ZERO)
 
 func _process(delta: float) -> void:
-	# The bar follows what is docked in it, once a frame.  A card whose
-	# sentence is replaced mid-turn, whose help line appears, or whose strip
-	# changes size never tells the bar about it — and a stale height means the
-	# paper and the world disagree.  `World.zet_balk()` no-ops when nothing
-	# changed, so this net costs one minimum-size query per frame.
-	_balk_herstel()
+	# Nothing about the bar is measured here.  It used to be, and that meant a
+	# minimum-size query on the docked card in EVERY frame a sum was open —
+	# and because `kaart_mat()` also flips the help rule and clears
+	# `custom_minimum_size`, every one of those frames re-laid the card out.
+	# The bar is event-driven now: `somkaart`, the card's `on_weg`, and the
+	# `Kaart` setters that can change its shape each call `_balk_herstel()`.
+	# A resize is not missing from that list on purpose — `World.meet()` asks
+	# `Ui.balk_bepaal()` itself BEFORE it computes the new frame, and asking
+	# again from `kader_veranderd` would feed the frame's own height back into
+	# the bar's ceiling (0.34 of a frame the bar just shrank) and let the two
+	# chase each other.
 	if _toast_tijd > 0.0:
 		_toast_tijd -= delta
 		if _toast_tijd <= 0.0 and _toast != null and is_instance_valid(_toast):
@@ -800,6 +852,8 @@ class Kaart extends RefCounted:
 		if k != null and k.regel_label != null:
 			k.zet_regel(zin)
 			Ui.keur_regel(id, zin)
+			# a different sentence wraps to a different number of lines
+			Ui._balk_herstel()
 
 	func regel2(zin: String) -> void:
 		var k := _knoop()
@@ -807,17 +861,21 @@ class Kaart extends RefCounted:
 			k.zet_regel2(zin)
 			if not zin.is_empty():
 				Ui.keur_regel(id + " (regel2)", zin)
+			# a whole second line appears or disappears
+			Ui._balk_herstel()
 
 	func som(tekst: String) -> void:
 		var k := _knoop()
 		if k != null and k.som_label != null:
 			k.som_label.text = tekst
+			Ui._balk_herstel()
 
 	func zet(tekst: String) -> void:
 		_getikt = tekst
 		var k := _knoop()
 		if k != null and k.vak_label != null:
 			k.vak_label.text = tekst
+			Ui._balk_herstel()
 
 	func hulp(tekst: String) -> void:
 		var k := _knoop()
@@ -854,6 +912,8 @@ class Kaart extends RefCounted:
 			k.zet_goed(true)
 			k.zet_af()
 		zet("✓")
+		# the strip that set the bar's width is gone
+		Ui._balk_herstel()
 
 	func weg() -> void:
 		if strook_id != "":

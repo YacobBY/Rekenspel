@@ -467,3 +467,57 @@ func test_de_balk_druwt_de_wereld_werkelijk_kleiner() -> void:
 			ergens += 1
 		_af()
 	waar(ergens >= 3, "op minstens drie van de tien kaders geeft de wereld echt mee (%d)" % ergens)
+
+## Nothing changes, so nothing computes.  The bar used to be measured in
+## `Ui._process`, which meant a minimum-size query on the docked card in
+## every single frame a sum was open — and because `kaart_mat()` also flips
+## the help rule and clears `custom_minimum_size`, every one of those frames
+## re-laid the card out.  The bar is event-driven now: only `somkaart`, the
+## card's `on_weg` and the `Kaart` setters that can change its shape call
+## `_balk_herstel()`, so a screen that stands still must tick zero times.
+##
+## What this deliberately does NOT claim: `Hits._maat_van` still asks
+## `Ui.kaart_mat()` for EVERY card that has a help line showing — not only
+## the one docked in the bar — and it does that while `Hits.plaats()` runs,
+## which is every frame.  That is the placement layer's own need (a card
+## measured at the wrong width becomes a strip of frame height) and it stays
+## exactly as it was; it is why this counts the bar's own recomputes and not
+## the calls to `kaart_mat`.
+##
+## Each event brings a second, deferred pass at the end of its own frame, so
+## a game that tidies the card right after receiving it (voerkar hides the
+## som line and the answer box) is still caught.  That pass belongs to the
+## event, not to the clock: a frame that saw no event measures nothing,
+## which is exactly what the ten idle frames below assert.
+func test_stilstand_verandert_niets_aan_de_balk() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	_op(Vector2(990, 637))
+	var kaart := _kaart("stilstaand")
+	await boom.process_frame
+	waar(Ui.balk_aan(), "de kaart dokt en de balk staat")
+	var rust := Ui._balk_tellingen
+	var kost := Ui.balk_kost()
+	for _i in 10:
+		await boom.process_frame
+	gelijk(Ui._balk_tellingen, rust,
+		"tien frames zonder iets te doen: de balk heeft geen enkele keer gerekend")
+	gelijk(Ui.balk_kost(), kost, "en zijn kost is niet geschoven")
+	# and every event that CAN change it is still heard
+	kaart.hulp("Tel de ballen: 3 en nog 2")
+	waar(Ui._balk_tellingen > rust, "de hulplijn wordt gehoord")
+	await boom.process_frame   # the deferred second pass
+	await boom.process_frame
+	var na_hulp := Ui._balk_tellingen
+	kaart.regel2("Elk blokje is 2 stuks")
+	waar(Ui._balk_tellingen > na_hulp, "de tweede regel wordt gehoord")
+	await boom.process_frame
+	await boom.process_frame
+	var na_regel2 := Ui._balk_tellingen
+	for _i in 10:
+		await boom.process_frame
+	gelijk(Ui._balk_tellingen, na_regel2,
+		"en daarna is het weer stil, ook met de hulplijn op het scherm")
+	kaart.weg()
+	await boom.process_frame
+	waar(not Ui.balk_aan(), "met de kaart weg geeft de balk zijn ruimte terug")
+	_af()
