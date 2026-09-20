@@ -200,12 +200,168 @@ func test_antwoordstrook_vier_getallen_een_tik() -> void:
 	gelijk(gekregen[0], 3, "één tik geeft het getal meteen door")
 	gelijk(keer[0], 1, "en precies één keer")
 	gelijk(kaart.getal(), 3, "en het staat in het vak")
-	waar(_kies("ak", "n5"), "5 is een knop")
-	gelijk(gekregen[0], 5, "de tweede tik ook")
+	# 3 was fout, dus de strook staat even op slot (S5).  Direct daarna nog
+	# eens tikken doet niets; pas na die pauze gaat de volgende tik door.
+	waar(_kies("ak", "n5"), "5 is een knop, maar de strook staat nog op slot")
+	gelijk(keer[0], 1, "en on_ok hoort die tik niet")
+	await _wacht(Ui.MIS_PAUZE + 0.3)
+	waar(_kies("ak", "n5"), "na de mispauze is de strook weer vrij")
+	gelijk(gekregen[0], 5, "en komt het goede getal door")
+	gelijk(keer[0], 2, "precies één keer extra")
 	kaart.klaar()
 	gelijk(kaart.getal(), null, "een afgevinkte kaart heeft geen getal meer")
 	waar(Hits.spot("ak_keuzes") == null, "klaar() haalt de strook weg")
 	kaart.weg()
+	_af()
+
+## Wait out real seconds on the main loop.  The miss pause is a wall-clock
+## timer, not a think tick, so this is what a UI test needs to sit through it.
+func _wacht(seconden: float) -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var eind := Time.get_ticks_msec() + int(seconden * 1000.0)
+	while Time.get_ticks_msec() < eind:
+		await boom.process_frame
+
+## The id of a button on the strip of card `id` whose number is NOT `goed`.
+func _verkeerd_getal(id: String, goed: int) -> String:
+	for n in _strook_getallen(id):
+		if n != goed:
+			return "n%d" % n
+	return ""
+
+## The guest these miss-tests hang their card on.
+const MIS_GAST := "ui_sip"
+
+## A card with `goed` and a strip, hanging where nothing else is.
+func _mis_kaart(id: String, goed: int, dier: String, keer: Array):
+	var o := {
+		"id": id, "door": "test", "kamer": World.kamer_nu(), "goed": goed, "max": 2,
+		"icoon": "🥄", "regel": "Hoeveel scheppen samen?", "dier": dier}
+	o["on_ok"] = func(n, _k) -> void: keer.append(n)
+	var kaart := Ui.somkaart({"x": 20.0, "z": 20.0}, "3 + 2 =", o)
+	Hits.plaats()
+	return kaart
+
+# --------------------------------------------------------------- S5: de misser
+
+## A wrong answer does something a child can see: the animal of the turn
+## goes `sip` for `Ui.SIP_TIKKEN` think ticks and comes out of it by itself
+## (PLAN.md S5).  Nothing was taken away to get there.
+func test_een_misser_maakt_het_dier_even_sip() -> void:
+	_op(Vector2(1000, 648))
+	World.zet(MIS_GAST, "receptie", 20.0, 20.0, {"kind": "hond"})
+	var keer: Array = []
+	var kaart = _mis_kaart("ms1", 5, MIS_GAST, keer)
+	waar(World.dier(MIS_GAST).pose != "sip", "voordat er iets misging was hij niet sip")
+	var f := _verkeerd_getal("ms1", 5)
+	waar(not f.is_empty() and _kies("ms1", f), "een verkeerd getal getikt")
+	gelijk(World.dier(MIS_GAST).pose, "sip", "het dier van de beurt is sip")
+	gelijk(World.dier(MIS_GAST).tikken, Ui.SIP_TIKKEN,
+		"en wel %d tikken, dus ~1,5 s bij World.TIK" % Ui.SIP_TIKKEN)
+	gelijk(keer.size(), 1, "en het spel hoort het foute antwoord gewoon")
+	for _i in Ui.SIP_TIKKEN + 2:
+		World._tik()
+	waar(World.dier(MIS_GAST).pose != "sip", "en na die tikken is hij het vanzelf kwijt")
+	kaart.weg()
+	World.weg(MIS_GAST)
+	_af()
+
+## The strip locks for `Ui.MIS_PAUZE` seconds: a second tap during that
+## window does nothing at all — no second answer, no sound, no number in the
+## box.  Afterwards it opens by itself.
+func test_de_strook_gaat_even_op_slot() -> void:
+	_op(Vector2(1000, 648))
+	var keer: Array = []
+	var kaart = _mis_kaart("sl1", 5, "", keer)
+	var f := _verkeerd_getal("sl1", 5)
+	waar(_kies("sl1", f), "de eerste verkeerde tik komt door")
+	gelijk(keer.size(), 1, "on_ok één keer aangeroepen")
+	var strook := Hits.spot("sl1_keuzes").knoop as UiKeuzes
+	waar(strook.op_slot, "de strook staat op slot")
+	for b in strook.get_node("Rij").get_children():
+		waar((b as Button).disabled, "elke knop is uit")
+		waar(float((b as Button).modulate.a) < 1.0, "en lichter van kleur")
+	waar(_kies("sl1", "n5"), "er wordt wél op geklikt")
+	gelijk(keer.size(), 1, "maar on_ok blijft bij één")
+	gelijk(kaart.getal(), int(f), "het foute getal staat nog in het vak")
+	await _wacht(Ui.MIS_PAUZE + 0.3)
+	waar(not strook.op_slot, "na de pauze is de strook weer open")
+	for b in strook.get_node("Rij").get_children():
+		waar(not (b as Button).disabled, "en elke knop weer aan")
+	gelijk(kaart.getal(), null, "en het antwoordvak is leeg")
+	waar(_kies("sl1", "n5"), "nu gaat de tik door")
+	gelijk(keer.size(), 2, "en on_ok hoort het tweede antwoord")
+	gelijk(keer[-1], 5, "het goede getal")
+	kaart.weg()
+	_af()
+
+## The pause is not a new question: the same four numbers stand in the same
+## order, and the box is empty so the child starts clean.
+func test_dezelfde_keuzes_komen_terug() -> void:
+	_op(Vector2(1000, 648))
+	var keer: Array = []
+	var kaart = _mis_kaart("kk1", 5, "", keer)
+	var voor := _strook_getallen("kk1")
+	gelijk(voor.size(), 4, "vier getallen")
+	waar(_kies("kk1", _verkeerd_getal("kk1", 5)), "verkeerd getikt")
+	await _wacht(Ui.MIS_PAUZE + 0.3)
+	gelijk(_strook_getallen("kk1"), voor, "dezelfde vier getallen, dezelfde volgorde")
+	gelijk(kaart.getal(), null, "en het antwoordvak is leeg")
+	kaart.weg()
+	_af()
+
+## R6 (HOTEL.md §1): a miss costs nothing.  No star away, no coin away, the
+## game is not locked, and the child may go on playing.
+func test_een_misser_kost_niets() -> void:
+	_op(Vector2(1000, 648))
+	var sterren_voor := int(State.s.get("sterren", 0))
+	var munten_voor := int(State.s.get("munten", 0))
+	var keer: Array = []
+	var kaart = _mis_kaart("kn1", 5, "", keer)
+	for _poging in 3:
+		waar(_kies("kn1", _verkeerd_getal("kn1", 5)), "nog een keer verkeerd")
+		await _wacht(Ui.MIS_PAUZE + 0.2)
+	gelijk(int(State.s.get("sterren", 0)), sterren_voor, "geen enkele ster weg")
+	gelijk(int(State.s.get("munten", 0)), munten_voor, "geen enkele munt weg")
+	gelijk(keer.size(), 3, "het spel hoort elke misser en doet zijn eigen tred")
+	waar(not kaart.pauze, "en na de derde pauze is de strook weer vrij")
+	kaart.weg()
+	_af()
+
+## A card with no animal still pauses: the lock is the point, the sad face is
+## only there when there is a face to make sad.
+func test_zonder_dier_alleen_de_pauze() -> void:
+	_op(Vector2(1000, 648))
+	var keer: Array = []
+	var kaart = _mis_kaart("nd1", 5, "", keer)
+	gelijk(kaart.dier, "", "er is geen dier van de beurt")
+	waar(_kies("nd1", _verkeerd_getal("nd1", 5)), "verkeerd getikt")
+	waar(Hits.spot("mis_nd1") == null, "er is geen treurwolkje")
+	var strook := Hits.spot("nd1_keuzes").knoop as UiKeuzes
+	waar(strook.op_slot, "maar de strook staat wél op slot")
+	await _wacht(Ui.MIS_PAUZE + 0.3)
+	waar(not strook.op_slot, "en die gaat gewoon weer open")
+	kaart.weg()
+	_af()
+
+## Closing the card in the middle of the pause leaves nothing behind: the
+## bubble goes with it, and the timer that is still running finds no card to
+## unlock and erases nothing.
+func test_sluiten_tijdens_de_pauze_lekt_niets() -> void:
+	_op(Vector2(1000, 648))
+	World.zet(MIS_GAST, "receptie", 20.0, 20.0, {"kind": "kat"})
+	var keer: Array = []
+	var kaart = _mis_kaart("lk1", 5, MIS_GAST, keer)
+	waar(_kies("lk1", _verkeerd_getal("lk1", 5)), "verkeerd getikt")
+	waar(Hits.spot("mis_lk1") != null, "het wolkje staat er")
+	waar(kaart.pauze, "en de kaart staat op slot")
+	kaart.weg()
+	waar(Hits.spot("mis_lk1") == null, "met de kaart weg gaat het wolkje mee")
+	waar(not kaart.pauze, "en is de pauze voorbij")
+	await _wacht(Ui.MIS_PAUZE + 0.4)
+	waar(Hits.spot("mis_lk1") == null, "en de lopende timer maakt hem niet terug")
+	gelijk(keer.size(), 1, "het spel heeft nog steeds maar één antwoord gehoord")
+	World.weg(MIS_GAST)
 	_af()
 
 ## The same card draws the same strip: after a slip the four choices come back

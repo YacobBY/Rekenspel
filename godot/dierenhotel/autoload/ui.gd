@@ -18,6 +18,9 @@ const TEKST_VLOER := UiThema.VLOER   ## px; never below this (HOTEL.md §9)
 const TAP := UiThema.HOT             ## px; minimum tap target (44 below 360 px)
 const TOAST_MS := 2600
 const PLAAT := "naam_"               ## hotspot id prefix of a name plate
+const MIS_WOLK := "mis_"             ## hotspot id prefix of the miss bubble (S5)
+const SIP_TIKKEN := 22               ## ~1,5 s of `sip` at World.TIK = 1/15 s
+const MIS_PAUZE := 1.2               ## s the answer strip is locked after a miss
 
 ## The breakpoint moved: the chrome rebuilds its own labels at the new size.
 signal thema_veranderd()
@@ -711,6 +714,7 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 	kaart.on_ok = o.get("on_ok", Callable())
 	kaart.kamer = o.get("kamer", World.kamer_nu())
 	kaart.door = o.get("door", "")
+	kaart.dier = _dier_van(obj, o)
 	var keuzes: Array = o.get("keuzes", [])
 	var vak := keuzes.is_empty()
 	if keuzes.is_empty() and o.has("goed"):
@@ -788,10 +792,99 @@ func _getal_keuzes(id: String, goed: int, kaart: Kaart, o: Dictionary) -> Array:
 		uit.append({"id": "n%d" % n, "icoon": icoon, "tekst": str(n), "kort": str(n),
 			"titel": str(n),
 			"kies": func(_k, k: Kaart) -> void:
+				if k == null or k.pauze:
+					return
 				k.zet(str(n))
 				k.zet_goed(false)
+				if n != goed:
+					# The miss is answered here, centrally, so every game that
+					# hands out four numbers gets it without knowing about it.
+					# `on_ok` still runs right after: the game keeps its own
+					# misser count, its own `Snd.zacht()` and its help ladder
+					# exactly as they are (S5 step 3).
+					misser(k, k.dier)
 				roep(k.on_ok, [n, k])})
 	return uit
+
+# ------------------------------------------------------------------ de misser
+
+## A wrong answer has to do something a child can see, and it has to cost
+## nothing (S5, owner 2026-09-20; R6 in HOTEL.md §1 stays intact).  Three
+## things happen: the animal of the turn goes `sip` for `SIP_TIKKEN` ticks, a
+## small bubble says `🔄 Nog een keer` beside it, and the answer strip locks
+## for `MIS_PAUZE` seconds.  Then the strip opens again, the box is empty,
+## and the SAME four choices stand in the SAME order — the seed of the card
+## never moved, so this is not a new question wearing an old one.
+##
+## Public, because the drag games (was, bedden, kraam, the hanging keys)
+## have no number strip and call this from their own miss path.  They do that
+## in their own task, not here: this commit changes only the strip.
+func misser(kaart: Kaart, dier: String) -> void:
+	if kaart == null or kaart.pauze:
+		return
+	kaart.pauze = true
+	var wolk_id := MIS_WOLK + kaart.id
+	if not dier.is_empty() and World.dier(dier) != null:
+		World.pose(dier, "sip", SIP_TIKKEN)
+		wolk({
+			"id": wolk_id, "door": kaart.door, "kamer": kaart.kamer,
+			"volg": _volg_dier(dier), "hoog": 46.0, "prio": 12,
+			"icoon": UiTekst.MIS_ICOON, "tekst": UiTekst.MIS_ZIN,
+		})
+	_strook_slot(kaart, true)
+	# The pause hangs on the card, not on the game: whoever calls this may
+	# walk away, and if the card is gone when the timer fires nothing wakes up
+	# to answer.
+	var boom := get_tree()
+	if boom == null:
+		_mis_vrij(kaart)
+		return
+	await boom.create_timer(MIS_PAUZE).timeout
+	_mis_vrij(kaart)
+
+
+## The far end of a miss: the bubble goes, the strip opens, the box is empty.
+## A card that was ticked or closed while the timer ran has already cleared
+## `pauze` itself, and then nothing here may touch what it wrote — a ✓ that
+## erases itself one second later is worse than no bubble at all.
+func _mis_vrij(kaart: Kaart) -> void:
+	if kaart == null or not kaart.pauze:
+		return
+	kaart.pauze = false
+	wolk_weg(MIS_WOLK + kaart.id)
+	_strook_slot(kaart, false)
+	kaart.zet("")
+
+
+func _strook_slot(kaart: Kaart, aan: bool) -> void:
+	if kaart == null or kaart.strook_id.is_empty():
+		return
+	var s := Hits.spot(kaart.strook_id)
+	if s == null or not is_instance_valid(s.knoop):
+		return
+	var strook := s.knoop as UiKeuzes
+	if strook != null:
+		strook.slot(aan)
+
+
+## Follow an animal the way the name plate follows its guest.
+func _volg_dier(id: String) -> Callable:
+	return func() -> Dictionary:
+		var d = World.dier(id)
+		if d == null:
+			return {}
+		return {"x": d.x, "z": d.z, "kamer": d.kamer, "vlak": World.vlak_van_dier(id)}
+
+
+## Whose turn this is (S5).  A game says so with `o["dier"]`; left out, the
+## object the card hangs on is the animal itself when there is one.  An empty
+## string means there is no animal, and then a miss is only the pause.
+func _dier_van(obj: Variant, o: Dictionary) -> String:
+	var gezegd := str(o.get("dier", ""))
+	if not gezegd.is_empty():
+		return gezegd
+	var s := str(obj)
+	return s if World.dier(s) != null else ""
 
 ## The mandatory sentence, checked.  Returns true when it fits the budget.
 func keur_regel(id: String, zin: String) -> bool:
@@ -839,6 +932,8 @@ class Kaart extends RefCounted:
 	var door := ""
 	var max_cijfers := 2
 	var on_ok: Callable
+	var dier := ""                ## the animal of this turn, "" when there is none (S5)
+	var pauze := false            ## true while a miss holds the strip shut (S5)
 	var _getikt := ""            ## what the child chose, never what a game wrote
 
 	func _knoop() -> UiSomkaart:
@@ -904,6 +999,7 @@ class Kaart extends RefCounted:
 
 	## Tick the card: the strip goes, the card stays readable.
 	func klaar() -> void:
+		_mis_af()
 		if strook_id != "":
 			Hits.weg(strook_id)
 			strook_id = ""
@@ -916,10 +1012,19 @@ class Kaart extends RefCounted:
 		Ui._balk_herstel()
 
 	func weg() -> void:
+		_mis_af()
 		if strook_id != "":
 			Hits.weg(strook_id)
 			strook_id = ""
 		Hits.weg(id)
+
+	## A card that ends in the middle of a miss ends the miss with it (S5
+	## step 6).  The timer is still running and will still fire; clearing
+	## `pauze` here is what tells it that there is nothing left to unlock,
+	## so it never clears a ✓ that the game wrote in the meantime.
+	func _mis_af() -> void:
+		pauze = false
+		Ui.wolk_weg(Ui.MIS_WOLK + id)
 
 func kaart_van(id: String) -> Kaart:
 	return _kaarten.get(id)

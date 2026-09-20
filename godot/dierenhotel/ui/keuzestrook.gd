@@ -10,6 +10,21 @@ extends PanelContainer
 
 var kort_gekozen := false
 var _kaart: RefCounted = null      ## the Ui.Kaart handle, second argument of `kies`
+var _knopen: Array[Button] = []
+var op_slot := false
+
+## Lock the strip for the length of a miss (S5).  Every button goes grey and
+## deaf: a tap during the pause does nothing at all — no sound, no callback,
+## no second answer.  `disabled` alone is not enough, because a test (and a
+## scripted game) can fire `pressed` on a disabled button and the signal
+## still arrives; the flag is what actually stops it.
+func slot(aan: bool) -> void:
+	op_slot = aan
+	for b in _knopen:
+		if not is_instance_valid(b):
+			continue
+		b.disabled = aan
+		b.modulate = Color(1, 1, 1, 0.45) if aan else Color(1, 1, 1, 1)
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -47,6 +62,7 @@ func _drop_data(at: Vector2, lading: Variant) -> void:
 		v._drop_data(punt - v.get_global_position(), lading)
 
 func _vul(rij: HBoxContainer, keuzes: Array, kort: bool, mt: Dictionary) -> void:
+	_knopen.clear()
 	for keuze in keuzes:
 		var woord: String = str(keuze.get("kort", keuze.get("tekst", ""))) if kort \
 			else str(keuze.get("tekst", ""))
@@ -63,6 +79,12 @@ func _vul(rij: HBoxContainer, keuzes: Array, kort: bool, mt: Dictionary) -> void
 		var id := str(keuze.get("id", ""))
 		if kies.is_valid():
 			b.pressed.connect(func() -> void:
+				if op_slot:
+					return
 				Snd.tik()
 				Ui.roep(kies, [id, _kaart]))
 		rij.add_child(b)
+		_knopen.append(b)
+	if op_slot:
+		# a strip rebuilt while locked stays locked
+		slot(true)

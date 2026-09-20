@@ -167,6 +167,18 @@ func _toets_fout() -> bool:
 			return true
 	return false
 
+## Wait out the miss pause S5 puts on the answer strip (`Ui.MIS_PAUZE`, plus
+## a little room).  A wrong answer now holds the four number buttons shut for
+## 1,2 s so a child cannot mash to a win; a test that wants three misses in a
+## row therefore has to sit through the pause between them, the way a child
+## with a real finger does.  Band 3 taps a strip of soort-words and is not
+## locked at all — only the `goed:` number strip is.
+func _wacht_mispauze() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var eind := Time.get_ticks_msec() + int(Ui.MIS_PAUZE * 1000.0) + 250
+	while Time.get_ticks_msec() < eind:
+		await boom.process_frame
+
 ## Press one button of the choice strip under the card.
 func _kies(knop_id: String) -> bool:
 	var s := Hits.spot("ws_vraag_keuzes")
@@ -556,6 +568,7 @@ func test_fout_antwoord_en_hulpladder() -> void:
 				"band 5: blokjes maal twee")
 		waar(_kaart_tekst("vak") != "✓", "het antwoordvakje blijft leeg")
 		# 2nd miss
+		await _wacht_mispauze()
 		fout_antwoord.call()
 		st = _stand()
 		gelijk(int(st["missers"]), 2, "band %d: twee missers" % band)
@@ -564,6 +577,7 @@ func test_fout_antwoord_en_hulpladder() -> void:
 				"band 3 wordt gerichter bij de tweede misser")
 		waar(Hits.spot("ws_sp0") == null, "nog geen spookcijfers na twee missers")
 		# 3rd miss: ghost numbers on the crates
+		await _wacht_mispauze()
 		fout_antwoord.call()
 		st = _stand()
 		gelijk(int(st["missers"]), 3, "band %d: drie missers" % band)
@@ -578,6 +592,7 @@ func test_fout_antwoord_en_hulpladder() -> void:
 		gelijk(int(State.s["sterren"]), sterren_voor, "geen ster erbij en geen ster eraf")
 		gelijk(str(_stand()["vak"]), str(vak), "het diagram staat er nog precies zo")
 		# and the right answer still works, with the ghosts gone
+		await _wacht_mispauze()
 		waar(_antwoord_goed(), "band %d: het goede antwoord komt er alsnog door" % band)
 		waar(Hits.spot("ws_sp0") == null, "de spookcijfers gaan weg bij goed")
 		Games.stop()
@@ -712,6 +727,7 @@ func test_herstel_uit_ctx_data() -> void:
 			l = i
 	for _p in 3:
 		_toets_fout()
+		await _wacht_mispauze()
 	gelijk(int(_stand()["missers"]), 3, "drie missers verdiend")
 	Games.stop()
 	Games.start(ID)

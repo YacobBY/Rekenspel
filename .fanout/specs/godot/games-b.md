@@ -116,6 +116,14 @@ Geen rood, geen kruis, geen buzzer, geen timer, geen ster minder, geen herhaling
 van een beurt als straf. Een fout antwoord levert een zacht geluid (`snd.zacht`)
 plus een hulpje. De ster hangt aan het **meedoen**, niet aan goed rekenen.
 
+S5 (eigenaar 2026-09-20) maakt dat scherper: geen herhaling van een *beurt* als
+straf, wél dezelfde vraag opnieuw na een sip-pauze van ~1,2 s — het dier van de
+beurt is even sip (`World.pose(id, "sip", 22)`), de antwoordstrook van `Ui` staat
+in die tijd op slot, en daarna komen **dezelfde vier keuzes in dezelfde volgorde**
+terug met leeg antwoordvakje. Het spel houdt zijn eigen `missers`, `snd.zacht()`
+en hulpladder; `Ui.misser(kaart, dier)` doet het centraal, de spellen hoeven er
+niets voor te doen.
+
 ### 0.7 Geluiden (namen, `ctx.snd.<naam>()`, geen argumenten)
 
 | naam | waar in deze vijf spellen |

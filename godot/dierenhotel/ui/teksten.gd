@@ -82,6 +82,21 @@ const BRIEVEN_UITLEG_2 := "Laat een gast zijn nachten uitslapen en reken netjes 
 # ------------------------------------------------------------------ §7.10
 const SPEL_MIS := "💛 Probeer iets anders"
 
+## A miss, said by the animal (S5, owner 2026-09-20).  Pictogram and word in
+## one bubble, as always; together they read `🔄 Nog een keer` — three words,
+## fourteen characters.  It is not a scolding and it is not a repeat of the
+## turn: the same question comes back after a short pause, and nothing was
+## taken away to get there.
+##
+## The plan asked for `😢`.  That codepoint (U+1F622) is not in `fonts/Emoji.ttf`,
+## the 112-glyph subset this build ships, so it would have drawn tofu.  🔄
+## (U+1F504) is in the subset and is already the house glyph for `opnieuw`
+## (voerkar `ICO_OPNIEUW`, tobbe's "opnieuw", bedden's "terug"), so the
+## picture says what the word says.  The sadness the plan wanted is not lost:
+## it is carried by the animal itself, which goes `sip`.
+const MIS_ICOON := "🔄"
+const MIS_ZIN := "Nog een keer"
+
 # ------------------------------------------------------------- de spelbalk
 ## The one button that leaves a running minigame, always in the same place
 ## (bottom left of the frame) with the game's name beside it.
