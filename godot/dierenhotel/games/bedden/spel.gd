@@ -27,6 +27,10 @@ extends MiniGame
 ## straft — één zacht wolkje met een pictogram en een getal, precies bij het
 ## plekje waar het over gaat.
 
+## Kinderteksten (HOTEL.md §9), letterlijk uit PLAN.md N9.
+const VRAAG_REGEL := "Hoeveel bedden heb je nodig?"    ## 5 woorden / 28 tekens
+const HULP_BEDJE := "nog een bedje erbij"              ## 4 woorden / 19 tekens
+
 const KAMER := "kamer1"          ## waar het icoontje hangt
 const MAX_RIJEN := 3
 const MAX_PER_RIJ := 10
@@ -52,6 +56,7 @@ const STIL := ["bed_%s_bed1", "bed_%s_bed2", "mand_%s", "bak_%s_bak"]
 
 var _kamer := KAMER
 var _kaart = null                ## Ui.Kaart
+var _kaart_vraag := false        ## ... is nu de openingsvraagkaart
 var _bezig := false              ## de dekengolf loopt; niets aanraken
 var _t0 := 0
 var _goot := 132.0               ## hoe ver een kaartje naast een strookje staat
@@ -339,12 +344,8 @@ func start(_c: SpelCtx) -> void:
 		if _fase() != "af":
 			_d()["fase"] = "af"
 		_som_af()
-	else:
-		# de deur van de kamer is zolang het "klaar"-moment (GAMES-API §2)
-		var r := Rooms.get_kamer(_kamer)
-		if r != null:
-			for deur in r.deuren:
-				ctx.hotspots.pak("deur_%s_%s" % [_kamer, str(deur["naar"])], _check)
+	# N9: de deur wordt niet meer geleend.  🐾 `bd_klaar` is de enige
+	# klaar-controle; weglopen is weglopen en de beurt staat in `ctx.data()`.
 	if _maat_af.is_valid():
 		_maat_af.call()
 	_maat_af = ctx.ui.op_kader(_op_kader)
@@ -426,7 +427,7 @@ func _nieuwe_opdracht(o: Dictionary, sig: String) -> void:
 	d["nieuw"] = 0
 	d["over"] = 0
 	d["spook"] = false
-	d["fase"] = "leg"
+	d["fase"] = "vraag"
 	d["vol"] = 0
 	d["laatste"] = -1
 	# de schuifwand hoort bij groep 5 (de verdeelstrategie van HOTEL.md §5)
@@ -541,6 +542,9 @@ func _teken() -> void:
 		_alleen_som()
 		return
 	if _fase() == "vol":
+		return
+	if _fase() == "vraag":
+		_vraag_teken()
 		return
 	var laatste := _aantal_stroken() - 1
 	var vol := _volle_rijen()
@@ -758,16 +762,71 @@ func _strook(r: int, spook_rij: int) -> void:
 	knop.custom_minimum_size = Vector2(maxf(48.0, nodig.x + 16.0),
 		maxf(48.0, nodig.y + 12.0))
 
+## De openingsvraag (N9): alleen de kaart met vier knoppen.  De strookjes,
+## de kist, 🔄 en 🐾 bestaan nog niet, en het gastwolkje blijft weg — zijn
+## getal zou het antwoord van de vraag verklappen.
+func _vraag_teken() -> void:
+	for r in range(0, MAX_RIJEN + 2):
+		ctx.hotspots.weg("bd_rij%d" % r)
+	for id in ["bd_kist", "bd_undo", "bd_wand", "bd_klaar", "bd_hulp"]:
+		ctx.hotspots.weg(id)
+	ctx.ui.wolk_weg("bd_wolk")
+	var som := "%d × %d =" % [_rijen(), _per_rij()]
+	if _kaart != null and _kaart_vraag and Hits.spot("bd_som") != null:
+		_kaart.som(som)
+		World.vuil()
+		_meld_straks()
+		return
+	if _kaart != null:
+		_kaart.weg()
+		_kaart = null
+	var sp := som_plek()
+	var wacht := _gasten_zonder_bed()
+	var o := {
+		"id": "bd_som", "kamer": _kamer, "hoog": sp["y"], "pad": false,
+		# prio 13: de kaart wijkt voor de rijen, nooit andersom (zie `_strook`)
+		"prio": 13, "icoon": "🛏",
+		"regel": VRAAG_REGEL,
+		# de vier knopjes dragen hetzelfde pictogram als de vraag (HOTEL.md §9)
+		"goed": _doel(), "min": 1,
+		"on_ok": func(n: int, _k) -> void: _op_vraag(n),
+	}
+	if not wacht.is_empty():
+		o["dier"] = str(wacht[0].get("id", ""))
+	_kaart = ctx.ui.somkaart({"x": sp["x"], "z": sp["z"]}, som, o)
+	_kaart_vraag = true
+	World.vuil()
+	_meld_straks()
+
+## De vraag beantwoord.  Goed: de kaart wordt groen en het leggen begint.
+## Fout: nooit een kruis en nooit een stap terug — één zacht geluidje en de
+## telladder als hulpregel onder de som; dezelfde vier knoppen blijven staan.
+func _op_vraag(n: int) -> void:
+	if n == _doel():
+		if _kaart != null:
+			_kaart.klaar()
+		_d()["fase"] = "leggen"
+		State.bewaar()
+		_teken()
+		return
+	ctx.snd.zacht()
+	if _kaart != null:
+		_kaart.hulp("tel mee: " + Econ.tel_mee(_per_rij(), _rijen()))
+	State.bewaar()
+
 ## De sommenkaart wordt één keer gemaakt en daarna bijgewerkt: in Godot staat
 ## een Control meteen op zijn plek, dus hem elke tekenbeurt opnieuw bouwen zou
 ## alleen maar flikkeren.
 func _som_bij(vol: int) -> void:
 	var per := _per_rij()
 	var som := "%s × %d =" % [str(vol) if vol > 0 else "?", per]
-	if _kaart != null and Hits.spot("bd_som") != null:
+	if _kaart != null and not _kaart_vraag and Hits.spot("bd_som") != null:
 		_kaart.som(som)
 		_kaart.zet(str(vol * per) if vol > 0 else "")
 		return
+	if _kaart != null:
+		_kaart.weg()      # de vraagkaart maakt plaats voor de leg-kaart
+		_kaart = null
 	var sp := som_plek()
 	_kaart = ctx.ui.somkaart({"x": sp["x"], "z": sp["z"]}, som, {
 		"id": "bd_som", "kamer": _kamer, "hoog": sp["y"], "pad": false,
@@ -784,11 +843,13 @@ func _som_bij(vol: int) -> void:
 	})
 	if _kaart != null:
 		_kaart.zet(str(vol * per) if vol > 0 else "")
+	_kaart_vraag = false
 
 func _som_af() -> void:
 	if _kaart != null:
 		_kaart.weg()
 		_kaart = null
+	_kaart_vraag = false
 	var doel := _doel()
 	var p := som_plek()
 	_kaart = ctx.ui.somkaart({"x": p["x"], "z": p["z"]},
@@ -975,14 +1036,10 @@ func hulp() -> void:
 		ctx.ui.wolk_weg("bd_wolkje")
 		if _klaar():
 			return
-		_zet_rij(rr, _per_rij())        # Wolkje legt de rij écht neer
-		_d()["laatste"] = rr
-		ctx.snd.ja()
-		State.bewaar()
-		_teken()
+		leg_in(rr)                     # Wolkje legt ÉÉN bedje bij (N9)
 	_wolk("bd_wolkje", plek_px(r, -_goot, float(Hits.RIJ)), {
 		"icoon": "🐑", "getal": _per_rij(), "tekst": "in elke rij",
-		"klas": "hulp", "prio": 14, "tik": tik,
+		"titel": HULP_BEDJE, "klas": "hulp", "prio": 14, "tik": tik,
 	})
 	State.zet_gezien("bedden_wolkje")
 	ctx.snd.brief()
@@ -1082,4 +1139,5 @@ func stop() -> void:
 		State.bewaar()
 		ctx.hotspots.wis_alles()      # geeft ook de geleende deur terug
 	_kaart = null
+	_kaart_vraag = false
 	_bezig = false
