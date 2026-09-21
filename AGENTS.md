@@ -30,6 +30,32 @@ contains the facts.
   changed, not just read about it. Skip only when the change has nothing to
   show (pure maths/logic, no visual difference).
 
+### Play the game yourself, do not only test it
+
+A green suite proves the rules hold. It does not prove a six-year-old can get
+through the game. So **play it** with `tools/speel.js`, which taps a sequence of
+buttons in the real export and writes a screenshot plus the game's own probe
+lines after every step.
+
+```bash
+node tools/speel.js --kamer kamer1 --band 4 --toon        # wat valt hier te tikken?
+node tools/speel.js --kamer kamer1 --band 4 \
+  --doe "spel_bedden; bd_som_keuzes#2/4; bd_rij0; bd_klaar" --uit tmp/speel
+```
+
+A step is a hotspot id, `chip:<naam>` for the room bar, or `wacht <ms>`. A strip
+reports itself as ONE rectangle (`bd_som_keuzes`), so tap the k-th of n boxes
+inside it with `id#k/n`, or a free spot with `id@0.5,0.8`. An unknown id stops
+the run and prints what the game did report — that answer is itself a finding.
+
+What to do with it: **play a real run of about six animals** — the loop of
+maths → coins → beds → more guests — and write down, per obstacle, where a child
+would be stuck and why. A dead end, a button that is never reported, a card that
+asks something the screen does not show, a strip that cannot be reached: report
+it in your own words, with the step and the screenshot that proves it. Findings
+belong in the PLAN.md §7 line of the task you are on, or as a new `- [ ]` task
+when they are bigger than the task at hand.
+
 ### Deciding for yourself instead of asking
 
 The owner is often away for hours. A question stops the work dead, so the
@@ -134,6 +160,8 @@ main.py                   PyCharm leftover, ignore
 | `tools/serve.sh [port]` | static server on 8642 for the export | — |
 | `node tools/probe.js --viewport 1024x768@2:ipad --knop bel` | chromium finger probe of the export, screenshots + rapport.json | ≈ 60 s |
 | `node tools/kiek.js --kamer zwembad --tik spel_zwembad` | one screenshot of one room/game of the export (serves build/web itself, seeds a save) | ≈ 40 s |
+| `node tools/speel.js --kamer kamer1 --band 4 --toon` | list what is tappable in a room | ≈ 40 s |
+| `node tools/speel.js --kamer kamer1 --band 4 --doe "spel_bedden; bd_som_keuzes#2/4; bd_rij0"` | PLAY: tap a sequence, screenshot + report after every step | ≈ 60 s |
 
 Godot is `~/.local/bin/godot` (4.7.2.stable); set `GODOT=` if it is not on
 `PATH`. Export templates: `~/.local/share/godot/export_templates/4.7.2.stable/`.
