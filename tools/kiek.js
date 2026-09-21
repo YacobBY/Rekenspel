@@ -32,7 +32,7 @@ const BUILD = path.join(REPO, 'godot', 'dierenhotel', 'build', 'web');
 function hulp() {
   console.log(`gebruik: node tools/kiek.js [opties]
 
-  --kamer ID          receptie | gang | kamer1 | kamer2 | keuken | tuin | zwembad | wasserij  (standaard receptie)
+  --kamer ID          receptie | gang | kamer1 | kamer2 | keuken | tuin | zwembad | wasserij | speelzaal  (standaard receptie)
   --tik HOTSPOT       tik deze hotspot aan na aankomst (bv. spel_zwembad, bel, prikbord) en maak nog een foto
   --chip NAAM         tik een chip van de kamerbalk aan (kaart = de plattegrond, of een kamer-id) en maak nog een foto
   --wacht MS          wachttijd na de tik voor de derde foto (standaard 2500)

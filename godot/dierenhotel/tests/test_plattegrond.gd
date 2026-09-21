@@ -144,7 +144,8 @@ func test_de_plattegrond_is_een_plattegrond() -> void:
 		and absf(k2.position.x - gang.position.x) <= 0.5,
 		"en beide in de kolom van de gang")
 	# every door of the hotel between two neighbouring cells, once per pair
-	gelijk(kaart.deurparen(), 7, "zeven deuren tussen buren")
+	# (R2: de speelzaal-deur bij de receptie maakt er acht van)
+	gelijk(kaart.deurparen(), 8, "acht deuren tussen buren")
 	_af()
 
 ## The tap: `scenes/main.gd` closes the sheet and walks to the room, so the

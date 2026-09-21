@@ -20,6 +20,7 @@ Pivot van het Kwispelsteeg-diorama naar een Habbo-achtig dierenhotel waarin de r
 | `tuin` | Tuin 🌳 | 130 × 130 | — (erf, vast kader) | keuken, zwembad | het erf van de Kwispelsteeg: tobbe, hok, boom, bal, kist, plus twee vrijgehouden vloerzones. |
 | `zwembad` | Zwembad 🏊 | 144 × 88 | 50 | tuin | een langwerpig bad ín de vloer tegen de achterwand, met een dek ervóór: de zwemles (G1). |
 | `wasserij` | Wasserij 🧺 | 100 × 90 | 52 | keuken | wasrek en wastobbe, vrije wand voor de kratten: de wasmandtoren (G4). |
+| `speelzaal` | Speelzaal 🧸 | 114 × 100 | 56 | receptie | klimrek, ballenbak, blokkentoren, kussenhoek en muziekdoos om een lichtblauwe mat: de dansvloer is vrijgehouden zone. |
 
 De deurgraaf is één samenhangend geheel (`Rooms.pad`); de tuin heeft geen wanden, dus haar twee doorgangen zijn gaten in het hek in plaats van deurgaten.
 

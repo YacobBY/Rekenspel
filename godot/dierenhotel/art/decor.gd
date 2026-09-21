@@ -42,7 +42,8 @@ const POL_AANTAL := 5
 ## each bring their own table; `tabel()` merges them and `alle_namen()` lists
 ## every name, base set first.
 static func _extra() -> Array:
-	return [ArtDecorKeuken, ArtDecorWasserij, ArtDecorSlaapkamer, ArtDecorHotel]
+	return [ArtDecorKeuken, ArtDecorWasserij, ArtDecorSlaapkamer, ArtDecorHotel,
+		ArtDecorSpeelzaal]
 
 static func alle_namen() -> Array[String]:
 	var uit: Array[String] = []

@@ -195,8 +195,10 @@ func test_de_rail_blijft_binnen_zijn_hoogte() -> void:
 			gelijk(b.custom_minimum_size.x, float(UiKamerbalk.RAIL_BREED),
 				"chip %s houdt de railbreedte" % id)
 		var rolt := _balk.vertical_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED
-		waar(extra or not rolt,
-			"de negen chips van vandaag passen zonder te rollen (%.0f units)" % nodig)
+		# R2: with the playroom the hotel has ten chips today and the 295-unit
+		# rail needs the scroll fallback `_meet_rail` was built for (the height
+		# itself is checked above); the scroll path is verified below — the
+		# last chip must come into view.
 		# A rail that had to scroll must still bring its last chip into view, or
 		# the room that was added would be the room nobody can reach.
 		if rolt:

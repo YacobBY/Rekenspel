@@ -113,7 +113,7 @@ func _notification(wat: int) -> void:
 # game is muted, asleep or in the background.
 
 const SFEER := {"tuin": "wind", "receptie": "tiktak", "zwembad": "water",
-	"keuken": "warm", "wasserij": "warm"}
+	"keuken": "warm", "wasserij": "warm", "speelzaal": "speeldoos"}
 const SFEER_DUUR := 4.0        ## seconds per loop; every modulation divides it
 const SFEER_TOP := 0.30        ## of MEESTER: the ceiling of any ambience sample
 
@@ -184,6 +184,14 @@ func sfeer_monster(naam: String) -> PackedFloat32Array:
 			for i in n:
 				b[i] += sin(TAU * f * float(i) / SR) * 0.10 * MEESTER
 			_ruisband(b, rnd, 0.015, 0.025, 0.5)
+		"speeldoos":
+			# R2: the playroom music box — C E G E, one note per second, a
+			# whole number of periods each so the loop seam is silent, over a
+			# soft breath of noise
+			var tonen := [880.0, 1109.0, 1319.0, 1109.0]
+			for i in int(SFEER_DUUR):
+				_noot(b, tonen[i], 0, 0.55, "sine", 0.05, float(i))
+			_ruisband(b, rnd, 0.012, 0.02, 0.5)
 	return b
 
 ## Low-passed white noise that swells with a slow sine: `alfa` is the one-pole

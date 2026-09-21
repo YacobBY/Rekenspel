@@ -1,5 +1,5 @@
 extends Proef
-## The rooms — eight today, `Rooms.lijst()` is what counts them: sizes, boxes,
+## The rooms — nine today, `Rooms.lijst()` is what counts them: sizes, boxes,
 ## the door graph, the floor rules, the derived grids and the furniture API —
 ## world.md §1.
 ##
@@ -10,7 +10,7 @@ extends Proef
 ## mulberry32 bit for bit (architecture.md §13, Q-X1-2).
 
 const ORDE := ["receptie", "gang", "kamer1", "kamer2", "keuken", "tuin",
-	"zwembad", "wasserij"]
+	"zwembad", "wasserij", "speelzaal"]
 
 ## The five floors `ArtVloer.kleur()` knows how to draw (`art/vloer.gd:18`);
 ## any other word gives a room the plank floor by accident.
@@ -70,6 +70,7 @@ func test_maten_en_vloeren() -> void:
 		"tuin": [130, 130, 0, "gras", 1.0],
 		"zwembad": [144, 88, 0, "gras", 1.5],
 		"wasserij": [100, 90, 52, "tegel", 1.25],
+		"speelzaal": [114, 100, 56, "hout", 1.5],
 	}
 	for id in verwacht:
 		var r := Rooms.get_kamer(id)
@@ -91,6 +92,7 @@ func test_kamerkaders() -> void:
 		"tuin": [-170, 190, -70, 220],
 		"zwembad": [-190, 300, -60, 250],
 		"wasserij": [-190, 210, -116, 200],
+		"speelzaal": [-210, 238, -124, 224],
 	}
 	for id in verwacht:
 		var box := Rooms.kader(Rooms.get_kamer(id))
@@ -115,6 +117,9 @@ func test_deurpunten() -> void:
 		["tuin", "zwembad", 44, 0, 44, 8],
 		["zwembad", "tuin", 0, 66, 8, 66],
 		["wasserij", "keuken", 68, 0, 68, 8],
+		# R2: de speelzaal-deuren, gegenereerd uit een headless run (2026-09-21)
+		["receptie", "speelzaal", 0, 114, 8, 114],
+		["speelzaal", "receptie", 63, 0, 63, 8],
 	]
 	for rij in verwacht:
 		var dp := Rooms.deur(rij[0], rij[1])
@@ -308,6 +313,7 @@ func test_niemand_loopt_door_de_balie() -> void:
 	doelen.append(Vector2(72, 96))                       # het midden van de mat
 	doelen.append(Vector2(24, 114))                      # WACHTPLEK
 	doelen.append(Vector2(45, 93))                       # "wil een bed"
+	doelen.append(Vector2(8, 114))                       # R2: stap binnen uit de speelzaal
 	for p in r.plekken:
 		doelen.append(Vector2(p[0], p[1]))
 	for p in doelen:
@@ -323,8 +329,9 @@ func test_niemand_loopt_door_de_balie() -> void:
 		if op_balie.has(stuk["n"]):
 			waar(_in_vak(b, Vector2(stuk["x"], stuk["z"])),
 				"%s staat op de balie" % stuk["n"])
-	# and there is exactly one door out of the receptie, so exactly one door button
-	gelijk(r.deuren.size(), 1, "de receptie heeft één deur")
+	# and there are exactly two doors out of the receptie now (R2: the playroom
+	# in the far corner), so exactly two door buttons
+	gelijk(r.deuren.size(), 2, "de receptie heeft twee deuren")
 
 func _in_vak(b: Dictionary, p: Vector2) -> bool:
 	return p.x >= b["x0"] and p.x <= b["x1"] and p.y >= b["z0"] and p.y <= b["z1"]

@@ -50,7 +50,7 @@ class Kamer extends RefCounted:
 	var erf := false                ## the garden: no walls, wider margin
 	var hek_x := HEK_X              ## the fence line along x (inside ⇔ x > hek_x)
 	var hek_z := HEK_Z              ## the fence line along z (inside ⇔ z > hek_z)
-	var matten: Dictionary = {}     ## {x0, x1, z0, z1, kl: [Color, Color]}
+	var matten = {}                 ## {x0, x1, z0, z1, kl: [Color, Color]} of een lijst daarvan (R2)
 	var bad: Dictionary = {}        ## {x0, x1, z0, z1} — water is a floor rule
 	var balie: Dictionary = {}      ## the desk footprint; nobody walks over it
 	var vrij_z0 := 0                ## no wander place in front of this z
@@ -511,7 +511,10 @@ func _bouw_kamers() -> void:
 			"kl": [Color("#E9BFC9"), Color("#E3B4C0")]},
 		"balie": {"x0": 28, "x1": 102, "z0": 13, "z1": 27},
 		"vrij_z0": 36,
-		"deuren": [{"naar": "gang", "wand": "x", "at": 24, "breed": 12}],
+		"deuren": [{"naar": "gang", "wand": "x", "at": 24, "breed": 12},
+			# R2: de speelzaal komt bij de plant in de verre hoek; de plant had
+			# die hoek al grotendeels leeggemaakt (zie tmp/log voor de meting).
+			{"naar": "speelzaal", "wand": "x", "at": 108, "breed": 12}],
 		"decor": [
 			{"n": "balie", "x": 48, "z": 20}, {"n": "balie", "x": 83, "z": 20},
 			{"n": "bel", "x": 36, "z": 20, "y": 14, "d": 12.5},   # sorts after the desk piece at (48, 20)
@@ -669,6 +672,24 @@ func _bouw_kamers() -> void:
 			{"n": "strijkplank", "x": 86, "z": 8},
 			{"n": "droogrekz", "x": 6, "z": 80},
 			{"n": "tobbe", "x": 80, "z": 74}, {"n": "wasmand", "x": 94, "z": 66}]})
+	# R2: de speelzaal.  Een houten zaal met een lichtblauwe speelmatted in het
+	# midden, het klimrek en de ballenbak bij de achterwand, de toren en de
+	# kussenhoek in de voorhoeken, de muziekdoos (toekomstige ingang van
+	# `spiegel`) bij de verre muur en de wimpel hoog boven de dansvloer.  De
+	# deur ligt aan de receptiezijde bij de plant in de verre hoek.
+	_kamer({"id": "speelzaal", "naam": "Speelzaal", "icoon": "🧸",
+		"w": 114, "d": 100, "wand": 56, "vloer": "hout", "loop": 1.5,
+		"matten": {"x0": 20, "x1": 94, "z0": 18, "z1": 82,
+			"kl": [Color("#BFE3F2"), Color("#AEDAEC")]},
+		"zones": {"dans": {"x0": 40, "x1": 74, "z0": 56, "z1": 80}},
+		"deuren": [{"naar": "receptie", "wand": "z", "at": 57, "breed": 12}],
+		"decor": [
+			{"n": "klimrek", "x": 16, "z": 14},
+			{"n": "ballenbak", "x": 96, "z": 14},
+			{"n": "blokkentoren", "x": 12, "z": 86},
+			{"n": "kussenhoek", "x": 100, "z": 86},
+			{"n": "muziekdoos", "x": 57, "z": 90},
+			{"n": "wimpel", "x": 30, "z": 50}]})
 	_bouw_tuin(_kamers["tuin"])
 	_bouw_zwembad(_kamers["zwembad"])
 	for id in _volgorde:
