@@ -711,6 +711,18 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 				_klem(Rect2(Vector2(mx, kr.position.y - KLEEF - maat.y), maat), kader),
 				_klem(Rect2(Vector2(kader.size.x * 0.5 - maat.x * 0.5,
 					kader.size.y - RAND - maat.y), maat), kader),
+				# K1 (2026-09-21): op een laag kader (liggende telefoon) zijn
+				# onder de kaart, boven de kaart én de kadervoet alle drie door
+				# de kaart zelf bezet — de strook met vier knoppen heeft dan
+				# niets meer over en wordt `krap`.  Probeer daarom ook de
+				# ZIJKANTEN van de kaart, op de hoogte van de kaart zelf.  De
+				# vloer ernaast is vrij: de kaart staat aan de rand en de
+				# strook is van dezelfde orde breed.  Laatst in de lijst, dus
+				# elke opstelling die vandaag al werkt blijft zoals hij is.
+				_klem(Rect2(Vector2(kr.end.x + KLEEF,
+					kr.get_center().y - maat.y * 0.5), maat), kader),
+				_klem(Rect2(Vector2(kr.position.x - KLEEF - maat.x,
+					kr.get_center().y - maat.y * 0.5), maat), kader),
 			]
 			for i in kandidaten.size():
 				var r := kandidaten[i]

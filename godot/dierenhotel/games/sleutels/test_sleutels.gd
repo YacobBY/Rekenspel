@@ -94,7 +94,85 @@ func _spel() -> Node:
 	return null
 
 
+## K1: de strook met de vier getalknoppen onder de vraagkaart.
+func _strook() -> Node:
+	var s := Hits.spot("sl_kaart_keuzes")
+	if s == null or not is_instance_valid(s.knoop):
+		return null
+	return s.knoop.get_node_or_null("Rij")
+
+
+## Staat de strook op slot onder de mispauze van `Ui.misser()` (S5)?
+func _strook_slot() -> bool:
+	var rij := _strook()
+	if rij == null or rij.get_child_count() == 0:
+		return false
+	var k = rij.get_child(0)
+	return k is BaseButton and (k as BaseButton).disabled
+
+
+## Het getal van de sleutel die NU in de hand zit.
+func _nummer_nu() -> int:
+	var p := _bord()
+	var nu := int(p.get("nu", 0))
+	var lijst: Array = p.get("sleutels", [])
+	if nu < 0 or nu >= lijst.size():
+		return -1
+	return int((lijst[nu] as Dictionary).get("nummer", -1))
+
+
+## Drukt op de knop met getal `n` van de strook.
+func _kies(n: int) -> bool:
+	var rij := _strook()
+	if rij == null:
+		return false
+	var kn := rij.get_node_or_null("Kn%d" % n)
+	if kn == null or not (kn is BaseButton):
+		return false
+	(kn as BaseButton).emit_signal("pressed")
+	return true
+
+
+## Drukt op een knop die níét het goede getal draagt; geeft dat getal terug.
+func _kies_fout() -> int:
+	var rij := _strook()
+	if rij == null:
+		return -1
+	var goed := "Kn%d" % _nummer_nu()
+	for k in rij.get_children():
+		if str(k.name) != goed and k is BaseButton:
+			(k as BaseButton).emit_signal("pressed")
+			return int(str(k.name).trim_prefix("Kn"))
+	return -1
+
+
+## Wacht de mispauze af die `Ui.misser()` op de strook legt (S5), plus lucht.
+## Komt direct terug als de strook open staat.
+func _wacht_mispauze() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var eind := Time.get_ticks_msec() + int(Ui.MIS_PAUZE * 1000.0) + 250
+	while Time.get_ticks_msec() < eind:
+		if not _strook_slot():
+			return
+		await boom.process_frame
+
+
+## Beantwoordt de openingsvraag goed; daarna pas mag de sleutel opgehangen
+## worden (K1).
+func _beantwoord() -> bool:
+	if str(_bord().get("stap", "reken")) != "reken":
+		return true
+	await _wacht_mispauze()
+	if not _kies(_nummer_nu()):
+		return false
+	Hits.plaats()
+	return str(_bord().get("stap", "")) == "hang"
+
 ## De sleutel op haakje `i` hangen — slepen of tikken, allebei de weg van een kind.
+##
+## K1: eerst gaat de vraag over het getal, want zolang dat niet gekozen is
+## hangt er niets op.  Het antwoord wordt door dezelfde knop gedrukt die een
+## kind zou drukken.
 ##
 ## Het slepen loopt door de KNOP, niet langs hem heen: een haakje heeft geen
 ## voorwerpvlak, dus zijn vangvlak ís zijn knop, en een kind laat de sleutel
@@ -102,6 +180,7 @@ func _spel() -> Node:
 ## van Z1 af — dan raakte de drop wél aan terwijl hij in het spel stil sneuvelde
 ## op de knop erboven.
 func _hang(i: int, slepen := true) -> void:
+	await _beantwoord()
 	var s := Hits.spot("sl_h%d" % i)
 	if s == null:
 		fout("haakje %d staat er niet" % i)
@@ -188,18 +267,31 @@ func test_alle_teksten_staan_er_woordelijk() -> void:
 	var bron := f.get_as_text()
 	f.close()
 	for zin in ["Het sleutelbord", "Sleutels", "Hang de sleutels op", "nog geen gasten",
-			"Welk nummer hoort in het gat?", "Welk kamernummer hoort in het gat?",
+			"Welk nummer mist er?", "Welk kamernummer mist er?",
+			"Hang %d op het lege haakje", "%s wacht op zijn sleutel",
+			"%s krijgt nummer %d", "tel met de sprongen mee",
+			"sleep of tik het lege haakje", "kies eerst het getal",
 			"De rij is nu af", "hang mij op", "kijk bij de buren", "leeg haakje",
 			"hier hoort ", "de sleutel van ", "nummer %d", "kamer %d",
 			"buurvrouw Els doet het voor", "naar mijn kamer", "alle sleutels hangen",
 			"om en om", "+ %d", " … ", " · ", " en ", "slaapt hier: ", "💡 "]:
 		waar(bron.contains(zin), 'de tekst "%s" staat woordelijk in de bron' % zin)
 	waar(bron.contains("…"), "het echte beletselteken U+2026, geen drie punten")
+	var spreek_geroepen := false
+	for regel in bron.split("\n"):
+		if regel.strip_edges().begins_with("Ui.spreek("):
+			spreek_geroepen = true
+	waar(not spreek_geroepen,
+		"de lege Ui.spreek() wordt nergens meer aangeroepen (K1 punt 7)")
 
 
 ## F4: de verplichte zin van de sommenkaart, ≤ 8 woorden en ≤ 40 tekens.
+## K1: de zinnen van beide stappen, met de langste naam en het langste getal erin.
 func test_de_zinnen_passen_in_het_budget() -> void:
-	for zin in ["Welk nummer hoort in het gat?", "Welk kamernummer hoort in het gat?",
+	for zin in ["Welk nummer mist er?", "Welk kamernummer mist er?",
+			"Stampertje wacht op zijn sleutel", "Stampertje krijgt nummer 1000",
+			"Hang 1000 op het lege haakje", "tel met de sprongen mee",
+			"sleep of tik het lege haakje", "kies eerst het getal",
 			"De rij is nu af"]:
 		waar(Ui.keur_regel("proef", zin), '"%s" past in het budget' % zin)
 
@@ -214,17 +306,266 @@ func test_rijtekst_en_burenlijn() -> void:
 	var spel := _spel()
 	waar(spel != null, "het spel hangt in de boom")
 	if spel != null:
-		gelijk(str(spel.debug()["rij_tekst"]), "5, __, 15, __, 25",
-			"de rij zoals je hem in je schrift schrijft")
-	# een misser zet het getallenlijntje in het antwoordvakje
+		gelijk(str(spel.debug()["rij_tekst"]), "5, __, 15, ?, 25",
+			"het actieve gat is __ en een later gat is ? (K1)")
+		gelijk(int(spel.debug()["gat"]), 1, "het actieve gat is het meest linkse lege")
+		gelijk(str(spel.debug()["stap"]), "reken", "het spel begint in de reken-stap")
+		gelijk(str(spel.debug()["hulp_tekst"]), "tel met de sprongen mee",
+			"de hulpregel is meteen gevuld")
+		waar(_kies(15), "een fout getal is te kiezen")
+		gelijk(int(p["missers"]), 1, "dat is een misser")
+		waar(int(p.get("gekozen", 0)) == 0, "er is niets gekozen")
+		waar(str(p.get("stap", "")) == "reken", "de stap blijft reken")
+		var strook := _strook()
+		waar(strook != null and strook.get_child_count() == 4,
+			"dezelfde vier keuzes staan er nog (%d)"
+				% (0 if strook == null else strook.get_child_count()))
+		await _wacht_mispauze()
+		waar(_kies(10), "het goede getal is te kiezen")
+		gelijk(str(p.get("stap", "")), "hang", "de beurt is overgegaan naar hang")
+		gelijk(int(p.get("gekozen", 0)), 10, "het gekozen getal staat in de save")
+	# een misser op een haakje zet het getallenlijntje in het hulpregeltje
 	var i := _fout_haakje(p, [])
-	_hang(i)
+	await _hang(i)
 	if spel != null:
 		var lijn := str(spel.debug()["buren_tekst"])
 		waar(lijn.contains(" … "), "het buurlijntje staat er: %s" % lijn)
 		waar(lijn.split(" … ").size() == 3, "met de twee buren en het gat: %s" % lijn)
 		waar(lijn.contains("?"), "en het gat staat er als ?: %s" % lijn)
 	_af()
+
+# ------------------------------------------------- 2b. K1: eerst het getal
+
+## Hangt zonder de vraag te beantwoorden — om de bewaking van de hang-stap te
+## testen (K1).
+func _hang_rauw(i: int) -> void:
+	var s := Hits.spot("sl_h%d" % i)
+	if s == null or not (s.knoop is BaseButton):
+		fout("haakje %d is er niet om op te tikken")
+		return
+	(s.knoop as BaseButton).emit_signal("pressed")
+
+
+## Vóór het antwoord draagt de sleutel geen getal en is hij niet te slepen:
+## er valt niets weg te lezen, en ophangen kan nog niet (K1 acceptatie 1).
+func test_de_sleutel_draagt_nog_geen_getal() -> void:
+	_op()
+	_wereld(5, 3)
+	waar(Games.start(ID), "het spel start")
+	var p := _bord()
+	gelijk(str(p.get("stap", "")), "reken", "de beurt begint met rekenen")
+	var bron := Ui.bron_van("sl_key")
+	waar(bron != null, "de sleutel ligt bij de poot van de gast")
+	if bron != null:
+		gelijk(bron.aantal, 0, "de sleutel draagt geen getal")
+		var lading = bron._get_drag_data(Vector2.ZERO)
+		waar(lading == null, "en hij is niet sleepbaar")
+	var missers := int(p.get("missers", 0))
+	var sterren := int(State.s["sterren"])
+	var gat := int(_spel().debug()["gat"])
+	_hang_rauw(gat)
+	gelijk(int(p.get("missers")), missers, "tikken zonder antwoord is geen misser")
+	gelijk(int(State.s["sterren"]), sterren, "en kost geen ster")
+	gelijk(str(p.get("stap", "")), "reken", "de vraag staat er nog")
+	_af()
+
+
+## Zoekt een kind op naam, hoe diep het ook hangt (de `Regel` van de kaart
+## zit in een kolom, niet direct onder de kaart).
+func _kind(node: Node, naam: String) -> Node:
+	if node == null:
+		return null
+	if str(node.name) == naam:
+		return node
+	for c in node.get_children():
+		var v := _kind(c, naam)
+		if v != null:
+			return v
+	return null
+
+
+## Bij N ≤ 3 is er precies één gat op het bord en toch een som met vier
+## keuzes; bij N = 4 zijn het er twee en krijgt elk gat zijn eigen vraag.
+## Deze aanname ligt vast: de kern is bevroren en mag hem niet meer veranderen
+## zonder deze test mee te nemen (K1 acceptatie 5).
+func test_bij_vier_gasten_is_er_precies_een_gat() -> void:
+	for n in [2, 3, 4]:
+		_op()
+		_wereld(n, 3)
+		waar(Games.start(ID), "het spel start met %d gasten" % n)
+		var p := _bord()
+		var gaten := 0
+		var haken_totaal := 0
+		for bo in (p.get("borden", []) as Array):
+			var b: Dictionary = bo
+			for h in (b.get("haken", []) as Array):
+				haken_totaal += 1
+				if bool((h as Dictionary).get("blanco", false)):
+					gaten += 1
+		var sl: Array = p.get("sleutels", [])
+		gelijk(gaten, sl.size(), "N=%d: elk gat heeft precies één sleutel" % n)
+		waar(haken_totaal >= 4, "N=%d: er staan minstens vier plaatjes" % n)
+		if n <= 3:
+			gelijk(gaten, 1, "N=%d: precies één blanco gat over alle borden" % n)
+		var strook := _strook()
+		waar(strook != null and strook.get_children().size() == 4,
+			"N=%d: er is toch een som met vier keuzes" % n)
+		gelijk(str(p.get("stap", "")), "reken", "N=%d: de vraag staat er" % n)
+		var spel := _spel()
+		if spel != null:
+			gelijk(int(spel.debug()["gat"]), int((sl[0] as Dictionary).get("haak", -2)),
+				"N=%d: het gat is het haakje van de sleutel" % n)
+		_af()
+
+
+## Een fout antwoord kost niets: dezelfde vier keuzes, geen ster en geen munt
+## weg, en de vraag blijft staan tot het goede getal is gekozen (K1 acceptatie 2).
+func test_een_fout_antwoord_straft_niet() -> void:
+	_op()
+	_wereld(5, 3)
+	waar(Games.start(ID), "het spel start")
+	var p := _bord()
+	var sterren := int(State.s["sterren"])
+	var munten := int(State.s["munten"])
+	var goed := _nummer_nu()
+	var strook := _strook()
+	waar(strook != null and strook.get_child_count() == 4, "er staan vier keuzes")
+	var fout_getal := _kies_fout()
+	waar(fout_getal > 0 and fout_getal != goed, "er stond een fout getal tussen")
+	gelijk(int(State.s["sterren"]), sterren, "een fout antwoord kost geen ster (F5)")
+	gelijk(int(State.s["munten"]), munten, "en geen munt")
+	gelijk(str(p.get("stap", "")), "reken", "de vraag blijft staan")
+	waar(int(p.get("gekozen", 0)) == 0, "er is niets gekozen")
+	var na := _strook()
+	waar(na != null and na.get_child_count() == 4, "het zijn dezelfde vier keuzes")
+	var namen: Array[String] = []
+	if na != null:
+		for k in na.get_children():
+			namen.append(str(k.name))
+	waar(namen.has("Kn%d" % goed), "het goede getal staat er nog tussen")
+	await _wacht_mispauze()
+	waar(_kies(goed), "het goede getal is te kiezen")
+	gelijk(str(p.get("stap", "")), "hang", "en dan pas mag de sleutel op")
+	_af()
+
+
+## De vier keuzes blijven binnen de band: 20, 100, 1000 (K1 acceptatie 3).
+func test_de_keuzes_blijven_binnen_de_band() -> void:
+	for geval in [{"n": 2, "kunnen": 3, "band": 3, "plafond": 20},
+			{"n": 5, "kunnen": 3, "band": 4, "plafond": 100},
+			{"n": 7, "kunnen": 4, "band": 5, "plafond": 1000}]:
+		_op()
+		_wereld(int(geval["n"]), int(geval["kunnen"]))
+		gelijk(State.band(), int(geval["band"]), "band bij N %d" % int(geval["n"]))
+		waar(Games.start(ID), "het spel start op band %d" % int(geval["band"]))
+		var strook := _strook()
+		waar(strook != null, "band %d: de strook staat er" % int(geval["band"]))
+		if strook != null:
+			var n := 0
+			for k in strook.get_children():
+				var v := int(str(k.name).trim_prefix("Kn"))
+				waar(v >= 1 and v <= int(geval["plafond"]),
+					"band %d: keuze %d ligt binnen 1..%d"
+						% [int(geval["band"]), v, int(geval["plafond"])])
+				n += 1
+			gelijk(n, 4, "band %d: vier knoppen" % int(geval["band"]))
+		_af()
+
+
+## De stap en het gekozen getal overleven een herlaad (K1 acceptatie 4).
+func test_de_stap_overleeft_een_herlaad() -> void:
+	_op()
+	_wereld(5, 3)
+	Games.start(ID)
+	var p := _bord()
+	var goed := _nummer_nu()
+	waar(_kies(goed), "het getal is gekozen")
+	gelijk(str(p.get("stap", "")), "hang", "de stap staat op hang")
+	Games.stop()
+	var doc = JSON.parse_string(JSON.stringify(State.s))
+	waar(typeof(doc) == TYPE_DICTIONARY, "de savegame overleeft JSON")
+	if typeof(doc) == TYPE_DICTIONARY:
+		State.s = doc
+	Hotel.herstel_wereld()
+	World.naar("receptie")
+	Games.start(ID)
+	var q := _bord()
+	gelijk(str(q.get("stap", "")), "hang", "na de herlaad staat de stap nog op hang")
+	gelijk(int(q.get("gekozen", 0)), goed, "en het gekozen getal is er nog")
+	var bron := Ui.bron_van("sl_key")
+	waar(bron != null and bron.aantal == goed, "de sleutel draagt het gekozen getal")
+	_af()
+
+
+## De hulpregel is altijd gevuld, en na Els staan buurlijn én tip samen op
+## één regel (K1 punt 5 en B4).
+func test_de_hulpregel_is_altijd_geregen() -> void:
+	_op()
+	_wereld(5, 3)
+	Games.start(ID)
+	var p := _bord()
+	var spel := _spel()
+	if spel == null:
+		fout("het spel draait niet")
+		_af()
+		return
+	gelijk(str(spel.debug()["hulp_tekst"]), "tel met de sprongen mee",
+		"bij de vraag staat de telregel")
+	await _beantwoord()
+	gelijk(str(spel.debug()["hulp_tekst"]), "sleep of tik het lege haakje",
+		"bij het hangen staat de doe-regel")
+	var eerste := _fout_haakje(p, [])
+	await _hang(eerste)
+	var tweede := _fout_haakje(p, [eerste])
+	await _hang(tweede)
+	gelijk(int(p["missers"]), 2, "twee missers")
+	var els := Hits.spot("sl_els")
+	waar(els != null, "Els staat er")
+	if els != null and is_instance_valid(els.knoop):
+		(els.knoop as BaseButton).emit_signal("pressed")
+	var d: Dictionary = spel.debug()
+	var lijn := str(d["buren_tekst"])
+	var tip := str(d["tip"])
+	var hulp := str(d["hulp_tekst"])
+	waar(not lijn.is_empty(), "de buurlijn staat er: %s" % lijn)
+	waar(not tip.is_empty(), "de tip van Els staat er: %s" % tip)
+	waar(hulp.contains(lijn) and hulp.contains(tip),
+		"beide staan op ÉÉN hulpregeltje: %s" % hulp)
+	_af()
+
+
+## De regel die op de kaart getekend wordt past in het budget, in beide
+## stappen en over alle banden (K1 acceptatie 6: geen te lange regel).
+func test_getekende_regels_passen() -> void:
+	for geval in [{"n": 2, "kunnen": 3}, {"n": 5, "kunnen": 3}, {"n": 7, "kunnen": 4}]:
+		_op()
+		_wereld(int(geval["n"]), int(geval["kunnen"]))
+		waar(Games.start(ID), "het spel start met N %d" % int(geval["n"]))
+		for fase in ["reken", "hang"]:
+			var s := Hits.spot("sl_kaart")
+			waar(s != null and is_instance_valid(s.knoop),
+				"N %d %s: de kaart staat er" % [int(geval["n"]), fase])
+			if s == null or not is_instance_valid(s.knoop):
+				continue
+			var regel_node := _kind(s.knoop, "Regel")
+			waar(regel_node != null, "N %d %s: de kaart heeft een regel" % [int(geval["n"]), fase])
+			if regel_node == null:
+				continue
+			var regel := str((regel_node as Label).text)
+			waar(Ui.keur_regel("k1-%s" % fase, regel),
+				"N %d %s: '%s' (%d woorden, %d tekens) past"
+					% [int(geval["n"]), fase, regel,
+						regel.split(" ", false).size(), regel.length()])
+			var r2 := _kind(s.knoop, "Regel2")
+			if r2 != null and not str((r2 as Label).text).is_empty():
+				var regel2 := str((r2 as Label).text)
+				waar(Ui.keur_regel("k1-%s-r2" % fase, regel2),
+					"N %d %s: '%s' (%d woorden, %d tekens) past"
+						% [int(geval["n"]), fase, regel2,
+							regel2.split(" ", false).size(), regel2.length()])
+			if fase == "reken":
+				await _beantwoord()
+		_af()
 
 # ------------------------------------------------------------- 3. de beurt
 
@@ -248,7 +589,7 @@ func test_een_hele_beurt_op_elke_band() -> void:
 		for beurt in sleutels.size():
 			var s: Dictionary = sleutels[int(p["nu"])]
 			waar(Hits.spot("sl_key") != null, "de sleutel ligt bij zijn poot")
-			_hang(int(s["haak"]), beurt % 2 == 0)
+			await _hang(int(s["haak"]), beurt % 2 == 0)
 			waar(bool(s["op"]), "sleutel %d hangt" % int(s["nummer"]))
 			var g := State.gast_van(str(s["gast"]))
 			gelijk(str(g.get("waar", "")), str(g.get("kamer", "")),
@@ -285,7 +626,7 @@ func test_taak_wordt_afgevinkt() -> void:
 	var p := _bord()
 	for beurt in (p["sleutels"] as Array).size():
 		var s: Dictionary = (p["sleutels"] as Array)[int(p["nu"])]
-		_hang(int(s["haak"]))
+		await _hang(int(s["haak"]))
 	var af := false
 	for q in State.s["taken"]:
 		if str((q as Dictionary).get("id", "")) == "sleutels" \
@@ -308,7 +649,7 @@ func test_misser_helpt_en_straft_nooit() -> void:
 	var sterren := int(State.s["sterren"])
 	var munten := int(State.s["munten"])
 	var eerste := _fout_haakje(p, [])
-	_hang(eerste)
+	await _hang(eerste)
 	gelijk(int(p["missers"]), 1, "de misser is geteld")
 	gelijk(int(State.s["sterren"]), sterren, "een misser kost geen ster (F5)")
 	gelijk(int(State.s["munten"]), munten, "en geen munt")
@@ -332,9 +673,9 @@ func test_misser_helpt_en_straft_nooit() -> void:
 	# tweede misser: Els komt erbij, en ze blijft daarna staan
 	var tweede := _fout_haakje(p, [eerste])
 	if tweede >= 0:
-		_hang(tweede)
+		await _hang(tweede)
 	else:
-		_hang(eerste)
+		await _hang(eerste)
 	gelijk(int(p["missers"]), 2, "twee missers")
 	var els := Hits.spot("sl_els")
 	waar(els != null, "na twee missers staat Els er")
@@ -360,7 +701,7 @@ func test_misser_helpt_en_straft_nooit() -> void:
 	# en daarna telt de ster gewoon: meedoen is genoeg
 	for beurt in (p["sleutels"] as Array).size():
 		var q: Dictionary = (p["sleutels"] as Array)[int(p["nu"])]
-		_hang(int(q["haak"]))
+		await _hang(int(q["haak"]))
 	gelijk(int(State.s["sterren"]), sterren + 1, "de ster komt er ondanks de missers")
 	_af()
 
@@ -375,9 +716,9 @@ func test_bezet_haakje_is_een_misser() -> void:
 		_af()
 		return
 	var eerste: Dictionary = (p["sleutels"] as Array)[0]
-	_hang(int(eerste["haak"]))
+	await _hang(int(eerste["haak"]))
 	var missers := int(p["missers"])
-	_hang(int(eerste["haak"]))          # het haakje is nu bezet
+	await _hang(int(eerste["haak"]))          # het haakje is nu bezet
 	gelijk(int(p["missers"]), missers + 1, "op een bezet haakje is een misser")
 	gelijk(int(p["nu"]), 1, "en de beurt blijft staan waar hij stond")
 	_af()
@@ -393,7 +734,7 @@ func test_beurt_overleeft_een_herlaad() -> void:
 	var p := _bord()
 	var sig := str(p["sig"])
 	var eerste: Dictionary = (p["sleutels"] as Array)[0]
-	_hang(int(eerste["haak"]))
+	await _hang(int(eerste["haak"]))
 	var nu := int(_bord()["nu"])
 	waar(nu >= 1, "er hangt een sleutel")
 	Games.stop()

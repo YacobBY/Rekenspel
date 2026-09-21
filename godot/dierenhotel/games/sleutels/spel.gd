@@ -47,6 +47,25 @@ const RAND := 6.0                 ## lucht tot de kaderrand (Hits.RAND)
 ## schil zelf al in en heeft de kaart geen plek meer bóven de rij.
 const LAAG_KADER := 450.0
 
+## K1 (PLAN.md): de beurt is er twee.  Eerst kiest het kind het getal uit vier
+## knoppen, en pas dáárna hangt het de sleutel op.  De sleutel draagt vóór het
+## antwoord geen getal (`aantal: 0` maakt hem via `UiBron._get_drag_data` ook
+## niet sleepbaar), dus er valt niets weg te lezen.  Elke kindertekst staat hier
+## als `const` — de tekstkeuring leest de bron (HOTEL.md §9).
+const STAP_KEY := "stap"          ## de sleutel in `ctx.data()` voor de fase
+const STAP_REKEN := "reken"       ## de stap van de vier getalknoppen
+const STAP_HANG := "hang"         ## de stap van het lege haakje
+
+const VRAAG_MIST := "Welk nummer mist er?"                 ## 4 woorden / 20 tekens
+const VRAAG_MIST_KAMER := "Welk kamernummer mist er?"     ## 4 / 26, de kamers-variant
+const VRAAG_WACHT := "%s wacht op zijn sleutel"           ## 5 / 32 met "Stampertje"
+const TITEL_HANG := "Hang %d op het lege haakje"          ## 6 / 27 met 30
+const TITEL_KRIJGT := "%s krijgt nummer %d"               ## 5 / 28 met "Stampertje"
+const HULP_KIES := "tel met de sprongen mee"              ## 4 / 23
+const HULP_HANG := "sleep of tik het lege haakje"         ## 6 / 28
+const KIES_WOLK := "kies eerst het getal"                 ## 4 / 20
+const WOLK_KORT := 1.6            ## zo lang staat een kort wolkje (K1 punt 7)
+
 # --------------------------------------------------------------------- staat
 
 var _p: Dictionary = {}           ## de opdracht (Sommen.Sleutels.maak_opdracht)
@@ -107,6 +126,12 @@ func start(_c: SpelCtx) -> void:
 	_p = d["bord"]
 	if int(_p.get("t0", 0)) == 0:
 		_p["t0"] = Time.get_ticks_msec()
+	# K1: een oude save zonder de twee stappen hervat in de reken-stap; een
+	# `hang` zonder gekozen getal is onbestaanbaar en valt terug.
+	if not _p.has(STAP_KEY) or str(_p.get(STAP_KEY, "")).is_empty():
+		_p[STAP_KEY] = STAP_REKEN
+	if _stap() == STAP_HANG and _gekozen() <= 0:
+		_p[STAP_KEY] = STAP_REKEN
 	_haal_gast()
 	_kader_af = ctx.ui.op_kader(_op_kader)
 	_teken()
@@ -249,11 +274,24 @@ func _verdieping(w: int) -> String:
 
 
 ## De rij zoals je hem in je schrift schrijft: `5, 10, __, 20, 25`.
+## K1: het actieve gat — het meest linkse lege haakje — is het enige `__`;
+## een gat dat later komt blijft een `?`, want daar is nu nog niets aan.
 func _rij_tekst(b: Dictionary) -> String:
+	var haken := _haken(b)
+	var gat := -1
+	for i in haken.size():
+		if _is_leeg(haken[i]):
+			gat = i
+			break
 	var stuks: Array[String] = []
-	for h in _haken(b):
-		var haak: Dictionary = h
-		stuks.append("__" if _is_leeg(haak) else str(int(haak.get("w", 0))))
+	for i in haken.size():
+		var haak: Dictionary = haken[i]
+		if not _is_leeg(haak):
+			stuks.append(str(int(haak.get("w", 0))))
+		elif i == gat:
+			stuks.append("__")
+		else:
+			stuks.append("?")
 	var label := str(b.get("label", ""))
 	return ("%s: " % label if not label.is_empty() else "") + ", ".join(stuks)
 
@@ -294,6 +332,87 @@ func _buren_tekst() -> String:
 		var h: Dictionary = haken[k]
 		stuks.append("?" if (k == _buur_gat and _is_leeg(h)) else str(int(h.get("w", 0))))
 	return " … ".join(stuks)
+
+# ------------------------------------------------------- de twee stappen (K1)
+
+## De fase van deze beurt: `"reken"` (kies het getal) of `"hang"` (hang hem op).
+func _stap() -> String:
+	return STAP_HANG if str(_p.get(STAP_KEY, STAP_REKEN)) == STAP_HANG else STAP_REKEN
+
+
+func _gekozen() -> int:
+	return int(_p.get("gekozen", 0))
+
+
+## Het actieve gat: het meest linkse lege haakje van het huidige bord (K1).
+## De bevroren kern legt de sleutels in blanco-volgorde aan, dus dit is ook het
+## haakje van de sleutel die nu in de hand zit.
+func _gat_nu() -> int:
+	var haken := _haken(_bord_nu())
+	for i in haken.size():
+		if _is_leeg(haken[i]):
+			return i
+	return -1
+
+
+## De twee buren van het gat die het kind WERKELIJK ziet: de plaatjes links en
+## rechts ervan.  De kern zet geen twee gaten naast elkaar, dus dit zijn altijd
+## de getallen die op het bord staan — precies wat `Afleiders` als `liever` wil.
+func _buren_zichtbaar(gat: int) -> Array[int]:
+	var haken := _haken(_bord_nu())
+	var uit: Array[int] = []
+	if gat - 1 >= 0 and gat - 1 < haken.size():
+		uit.append(int((haken[gat - 1] as Dictionary).get("w", 0)))
+	if gat + 1 >= 0 and gat + 1 < haken.size():
+		uit.append(int((haken[gat + 1] as Dictionary).get("w", 0)))
+	return uit
+
+
+## Het plafond van de band: 20, 100 of 1000 (de kern kent dezelfde cijfers).
+func _plafond() -> int:
+	return int(Sommen.Sleutels.PLAFOND.get(clampi(int(_p.get("band", 3)), 3, 5), 20))
+
+
+## Het cijferbudget van het antwoordvakje: drie pas als de rij die haalt.
+func _cijfers() -> int:
+	var b := _bord_nu()
+	return 3 if (not b.is_empty() and _drie_cijfers(b)) else 2
+
+
+## Eén hulpregel voor beide stappen (K1 punt 5 en B4): de buurlijn en de tip
+## van Els staan samen op één regel, en er staat altijd iets.
+func _hulp_tekst() -> String:
+	var s := _sleutel_nu()
+	if s.is_empty():
+		return ""
+	if _stap() == STAP_REKEN:
+		return HULP_KIES
+	var stukken: Array[String] = []
+	var lijn := _buren_tekst()
+	if not lijn.is_empty():
+		stukken.append(lijn)
+	if not _tip.is_empty():
+		stukken.append(_tip)
+	if stukken.is_empty():
+		return HULP_HANG
+	return "  ·  ".join(stukken)
+
+
+## Een kort wolkje op de plek van de gast: de vervanger van de lege
+## `Ui.spreek()` (K1 punt 7).  Zelfde id, dus hij staat nooit dubbel.
+func _kort_wolkje(id: String, tekst: String, klas: String) -> void:
+	var s := _sleutel_nu()
+	if s.is_empty():
+		return
+	var gast := str(s.get("gast", ""))
+	var punt := _gast_punt(gast, _plek(0.75, 0.85))
+	ctx.ui.wolk({"id": id, "kamer": ctx.kamer, "hoog": 46.0, "prio": 13,
+		"x": punt["x"], "z": punt["z"], "icoon": "🔑", "tekst": tekst,
+		"klas": klas, "volg": _volg_gast(gast)})
+	if not await na(WOLK_KORT):
+		return
+	ctx.ui.wolk_weg(id)
+	ctx.wereld.vuil()
 
 # ------------------------------------------------------- plekken uit Rooms
 
@@ -436,6 +555,13 @@ func _opbouw(b: Dictionary) -> Dictionary:
 			links_min = kaart_px + kaart_maat.x * 0.5 + GAT
 		"krap":
 			kaart_py = RAND + kaart_maat.y * 0.5
+	# K1: in een laag kader is er boven het sleutelbord geen plek voor zowel de
+	# kaart als de strook met de vier getalknoppen — de strook zou daar tegen
+	# het bord zelf aan drukken.  Zet de kaart dan ONDER het bord: zo blijft
+	# haar eigen voorwerp vrij (dekking 0) en houdt de knoppenlaag de strook
+	# rechts naast de kaart kwijt, op de vrije vloer onder de rij.
+	if _stap() == STAP_REKEN and kort and bord_vlak.size.y > 0.0:
+		kaart_py = maxf(kaart_py, bord_vlak.end.y + GAT + kaart_maat.y * 0.5)
 	# ze mag over de wereld staan, maar niet over het bord waar ze aan hangt
 	# (`Hits._wijk_omhoog` doet dat ook, maar dan weet de rij het niet)
 	kaart_py = _wijk_kaart(kaart_py, kaart_maat, bord_vlak, werk)
@@ -672,10 +798,16 @@ func _vaste_vlakken() -> Array[Rect2]:
 ## worden ná een tekenbeurt.
 func _kaart_maat() -> Vector2:
 	var s := Hits.spot("sl_kaart")
-	if s != null and is_instance_valid(s.knoop):
-		var m: Vector2 = s.knoop.get_combined_minimum_size()
-		if m.x > 0.0 and m.y > 0.0:
-			return m
+	if s != null and is_instance_valid(s.knoop) and s.knoop is UiSomkaart:
+		# De kaart van K1 heeft áltijd een hulpregel.  Ruw meten doet die regel
+		# dan op een verkeerde breedte antwoorden: één zin van vier woorden wordt
+		# een strook van kaderhoogte (659 units).  `Ui.kaart_mat()` meet de
+		# hulpregel op de breedte waarop de kaart écht getekend wordt — precies
+		# wat `Hits._maat_van()` ook doet, dus nu plant het spel op de maat die
+		# de knoppenlaag werkelijk gebruikt.
+		var eerlijk: Vector2 = Ui.kaart_mat(s.knoop)
+		if eerlijk.x > 0.0 and eerlijk.y > 0.0:
+			return eerlijk
 	return Vector2(UiSomkaart.BREED_KLEIN if Ui.smal() else UiSomkaart.BREED, 96.0)
 
 # ----------------------------------------------------------------- tekenen
@@ -716,33 +848,84 @@ func _meld_rij() -> void:
 		var spot := Hits.spot("sl_h%d" % i)
 		if spot != null and is_instance_valid(spot.knoop):
 			rijtje.append("sl_h%d=%s" % [i, str((spot.knoop as Control).get_global_rect())])
+	var staat := func(id: String) -> String:
+		return "1" if Hits.spot(id) != null else "0"
 	print("[probe] sleutels opbouw=", _lay.get("modus", ""), " nu=", int(_p.get("nu", 0)),
+		" stap=", _stap(), " gekozen=", _gekozen(), " gat=", _gat_nu(),
 		" sleutel=", int(s.get("nummer", -1)), " goed=", int(s.get("haak", -1)),
 		" missers=", int(_p.get("missers", 0)), " klaar=", bool(_p.get("klaar", false)),
+		" sl_key=", staat.call("sl_key"), " sl_tag=", staat.call("sl_tag"),
+		" sl_els=", staat.call("sl_els"),
 		" rij=[", " ".join(rijtje), "]")
 
 
 ## De rij staat er nooit kaal (HOTEL.md §9): één gewone vraag erboven, met het
-## pictogram vooraan op diezelfde regel.
+## pictogram vooraan op diezelfde regel.  K1 maakt er twee kaarten van: de
+## reken-kaart met vier getalknoppen en de hang-kaart met het gekozen getal.
 func _teken_kaart(b: Dictionary, s: Dictionary) -> void:
-	var vraag := "De rij is nu af"
-	if not s.is_empty():
-		vraag = "Welk kamernummer hoort in het gat?" if str(_p.get("variant", "")) == "kamers" \
-			else "Welk nummer hoort in het gat?"
-	_kaart = ctx.ui.somkaart("sleutelbordz", _rij_tekst(b), {
-		"id": KAART, "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
-		"icoon": "🔑", "regel": vraag, "titel": vraag,
-	})
-	if _kaart == null:
-		return
+	var kamers := str(_p.get("variant", "")) == "kamers"
 	if s.is_empty():
-		_kaart.klaar()
+		_kaart = ctx.ui.somkaart("sleutelbordz", _rij_tekst(b), {
+			"id": KAART, "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
+			"icoon": "🔑", "regel": "De rij is nu af", "titel": "De rij is nu af",
+		})
+		if _kaart != null:
+			_kaart.klaar()
+		return
+	var nummer := int(s.get("nummer", 0))
+	var gast := str(s.get("gast", ""))
+	if _stap() == STAP_REKEN:
+		var vraag := VRAAG_MIST_KAMER if kamers else VRAAG_MIST
+		# Op een laag kader is elk duimpje hoogteschaar: de rij staat al op het
+		# bord zelf, dus de somregel van de kaart is daar een dubbeling van.
+		# Zonder die regel is de kaart laag genoeg om onder het bord te passen
+		# (zie `_opbouw`) en houdt ze haar eigen voorwerp vrij.
+		var som := "" if ctx.wereld.kader_rect().size.y < LAAG_KADER else _rij_tekst(b)
+		_kaart = ctx.ui.somkaart("sleutelbordz", som, {
+			"id": KAART, "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
+			"icoon": "🔑", "regel": vraag, "titel": vraag,
+			"regel2": VRAAG_WACHT % str(s.get("naam", "")),
+			"goed": nummer, "min": 1, "max": _cijfers(), "max_getal": _plafond(),
+			"liever": _buren_zichtbaar(_gat_nu()), "dier": gast,
+			"on_ok": _op_getal,
+		})
 	else:
-		_kaart.zet("🔑%d" % int(s.get("nummer", 0)))
-	if not _buren.is_empty():
-		_kaart.hulp(_buren_tekst())
-	elif not _tip.is_empty():
-		_kaart.hulp(_tip)
+		var titel := TITEL_HANG % nummer
+		_kaart = ctx.ui.somkaart("sleutelbordz", _rij_tekst(b), {
+			"id": KAART, "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
+			"icoon": "🔑", "regel": titel, "titel": titel, "vak": true, "dier": gast,
+		})
+		if _kaart != null:
+			_kaart.zet(str(_gekozen() if _gekozen() > 0 else nummer))
+	if _kaart != null:
+		var hulp := _hulp_tekst()
+		if not hulp.is_empty():
+			_kaart.hulp(hulp)
+
+
+## De keuze is gedaan (K1).  Goed: het getal gaat op de sleutel en de beurt
+## schuift door naar de hang-stap.  Fout: een misser die niets kost — de kaart
+## komt met dezelfde vier keuzes terug, want het zaad van de kaart is niet
+## verzet en de gast wordt alleen `sip`, nooit weggestuurd.
+func _op_getal(n: int, _kaart) -> void:
+	if not actief:
+		return
+	var s := _sleutel_nu()
+	if s.is_empty():
+		return
+	if n != int(s.get("nummer", 0)):
+		_mis(int(s.get("haak", _gat_nu())))
+		return
+	_p["gekozen"] = n
+	_p[STAP_KEY] = STAP_HANG
+	ctx.snd.munt()
+	ctx.snd.ja()
+	_teken()
+	var bron := Ui.bron_van("sl_key")
+	if bron != null:
+		bron.zet(n, 1)
+	State.bewaar()
+	_kort_wolkje("sl_kies", TITEL_KRIJGT % [str(s.get("naam", "")), n], "goed")
 
 
 ## De kaart gaat naar de hoogte die de opstelling voor haar koos.  Het mikpunt
@@ -756,10 +939,14 @@ func _verzet_kaart(lay: Dictionary) -> void:
 	spot.y = float(lay.get("kaart_y", spot.y))
 
 
-## De nummerplaatjes aan de wand: sleepdoelen met hun getal erop.
+## De nummerplaatjes aan de wand: sleepdoelen met hun getal erop.  K1: het
+## actieve gat is het meest linkse lege haakje en dat gloeit tijdens `reken`;
+## een later gat blijft een `?`.  In de hang-stap gloeien alle lege haakjes.
 func _teken_haken(b: Dictionary, lay: Dictionary) -> void:
 	var haken := _haken(b)
 	var drie := _drie_cijfers(b)
+	var gat := _gat_nu()
+	var hang := _stap() == STAP_HANG
 	for i in haken.size():
 		var h: Dictionary = haken[i]
 		var leeg := _is_leeg(h)
@@ -769,6 +956,9 @@ func _teken_haken(b: Dictionary, lay: Dictionary) -> void:
 		var titel := ("hier hoort %d" % w if _spook else "leeg haakje") if leeg else _nr_tekst(w)
 		var id := "sl_h%d" % i
 		var idx := i
+		var label := str(w)
+		if leeg and not _spook:
+			label = "__" if i == gat else "?"
 		ctx.hotspots.maak({
 			"id": id, "kamer": ctx.kamer,
 			"x": plek["x"], "z": plek["z"], "y": plek["y"],
@@ -782,11 +972,12 @@ func _teken_haken(b: Dictionary, lay: Dictionary) -> void:
 			"kind": "drop", "drop": DROP, "data": {"i": idx}, "op": "midden",
 			"vast": true, "prio": 12, "titel": titel,
 			"icoon": "🔑" if not str(h.get("sleutel", "")).is_empty() else "",
-			"label": (str(w) if (_spook or not leeg) else "?"),
+			"label": label,
 			"aan": func(_s) -> void: _tik_haak(idx),
 			"val": func(_lading, _data) -> void: _hang(idx),
 		})
-		_kleur_haak(id, leeg and _spook, _licht == i or _buren.has(i), drie)
+		var gloeit := leeg and (hang or i == gat)
+		_kleur_haak(id, leeg and _spook, gloeit or _licht == i or _buren.has(i), drie)
 
 
 ## Het lichtje op een plaatje: aangetikt of buurman van een misser.  Een
@@ -814,15 +1005,27 @@ func _kleur_haak(id: String, spook: bool, licht: bool, drie: bool) -> void:
 ## De sleutel bij zijn poot: de sleepbron.  Zolang de gast nog onderweg is naar
 ## de balie wacht hij op de sleutelplek; zodra de gast er staat schuift hij mee
 ## en weet de knoppenlaag welke plek ze vrij moet laten.
+##
+## K1: in de reken-stap draagt de sleutel nog geen getal.  `aantal` is dan 0,
+## en `UiBron._get_drag_data` geeft bij `aantal <= 0` geen lading — de sleutel
+## is dus ook niet sleepbaar.  Het getal valt niet weg te lezen vóór het antwoord.
 func _teken_sleutel(s: Dictionary) -> void:
 	if s.is_empty():
 		return
 	var id := str(s.get("gast", ""))
 	var nummer := int(s.get("nummer", 0))
+	var reken := _stap() == STAP_REKEN
+	var toon := 0
+	if not reken:
+		toon = _gekozen() if _gekozen() > 0 else nummer
+	var wie := str(s.get("naam", ""))
+	var titel := ("de sleutel van %s: %s" % [wie, KIES_WOLK]) if reken \
+		else ("de sleutel van %s: %s" % [wie, _nr_tekst(nummer)])
 	ctx.hotspots.bron(_gast_punt(id, _plek(0.675, 0.975)), {
-		"id": "sl_key", "icoon": "🔑", "aantal": nummer, "hoog": _hoog(0.05),
+		"id": "sl_key", "icoon": "🔑", "aantal": toon, "hand": 0 if reken else 1,
+		"hoog": _hoog(0.05),
 		"prio": 12, "op": "onder", "kamer": ctx.kamer,
-		"titel": "de sleutel van %s: %s" % [str(s.get("naam", "")), _nr_tekst(nummer)],
+		"titel": titel,
 		"sleep": DROP, "drop": "", "data": {"nummer": nummer},
 		"volg": _volg_gast(id),
 		"tik": func(_s) -> void: _wijs_aan(),
@@ -830,20 +1033,35 @@ func _teken_sleutel(s: Dictionary) -> void:
 
 
 ## Het wolkje boven de kop van de gast: pictogram, nummer én woorden in
-## hetzelfde wolkje (HOTEL.md §9).
+## hetzelfde wolkje (HOTEL.md §9).  K1: in de reken-stap zegt het wolkje
+## niets over het getal — de gast wacht, hij vraagt het niet.
 func _teken_wolk(s: Dictionary, lay: Dictionary) -> void:
 	if s.is_empty():
 		return
+	var hint := not _buren.is_empty()
+	# K1: in de reken-stap vraagt de kaart zelve al om het getal, en de gast
+	# vraagt niets — hij wacht.  Een wolkje boven zijn hoofd moet dan naast de
+	# kaart een plekje vinden en drukt op een smal kader tegen de naamplaat
+	# aan.  Dus: geen wolkje zolang er alleen gerekend wordt; het komt terug
+	# zodra de sleutel in de hand ligt of wanneer er na een misser bij de
+	# buren gekeken moet worden.
+	if not hint and _stap() == STAP_REKEN:
+		return
 	var id := str(s.get("gast", ""))
 	var wacht := _gast_punt(id, _plek(0.75, 0.85))
-	ctx.ui.wolk({
+	var o := {
 		"id": "sl_tag", "kamer": ctx.kamer, "hoog": float(lay.get("wolk_y", DIER_HOOG)),
 		"x": wacht["x"], "z": wacht["z"],
-		"icoon": "🔑", "getal": int(s.get("nummer", 0)),
-		"tekst": "kijk bij de buren" if not _buren.is_empty() else "hang mij op",
-		"klas": "hulp" if not _buren.is_empty() else "", "prio": 10,
+		"icoon": "🔑", "klas": "hulp" if hint else "", "prio": 10,
 		"volg": _volg_gast(id),
-	})
+	}
+	if hint:
+		o["getal"] = (_gekozen() if _stap() == STAP_HANG else null)
+		o["tekst"] = "kijk bij de buren"
+	else:
+		o["getal"] = int(s.get("nummer", 0))
+		o["tekst"] = "hang mij op"
+	ctx.ui.wolk(o)
 
 
 ## Buurvrouw Els: pas na twee pogingen, en ze legt spookcijfers neer.
@@ -919,13 +1137,20 @@ func _deur_plaatjes() -> void:
 
 # ------------------------------------------------------------------- spelen
 
-## Een tik op de sleutel of op een plaatje leest het getal voor.
+## Een tik op de sleutel leest het getal voor — als kort wolkje van 1,6 s,
+## want `Ui.spreek()` is in deze run een lege huls (K1 punt 7).  In de
+## reken-stap verraadt de sleutel niets: de tik vraagt om eerst het getal te
+## kiezen.
 func _wijs_aan() -> void:
 	var s := _sleutel_nu()
 	if s.is_empty():
 		return
+	if _stap() == STAP_REKEN:
+		_kort_wolkje("sl_wijs", KIES_WOLK, "hulp")
+		return
 	var nummer := int(s.get("nummer", 0))
-	Ui.spreek(_verdieping(nummer) if str(_p.get("variant", "")) == "kamers" else str(nummer))
+	_kort_wolkje("sl_wijs", _verdieping(nummer)
+		if str(_p.get("variant", "")) == "kamers" else str(nummer), "")
 
 
 func _tik_haak(i: int) -> void:
@@ -942,17 +1167,36 @@ func _tik_haak(i: int) -> void:
 	_buren = []
 	_buur_gat = -1
 	_teken()
-	Ui.spreek(_verdieping(int(h.get("w", 0))) if str(_p.get("variant", "")) == "kamers"
-		else str(int(h.get("w", 0))))
+	var h_nummer := int(h.get("w", 0))
+	var tekst := _verdieping(h_nummer) if str(_p.get("variant", "")) == "kamers" \
+		else str(h_nummer)
+	var h_punt := _haak_plek(i, float(_lay.get("dx", 0.0)), float(_lay.get("haak_y", 0.0)),
+		float(_lay.get("schuif", 0.0)), int(_lay.get("per_regel", 0)))
+	ctx.ui.wolk({"id": "sl_lees", "kamer": ctx.kamer, "hoog": 46.0, "prio": 13,
+		"x": float(h_punt.get("x", 0.0)), "z": float(h_punt.get("z", 0.0)),
+		"icoon": "🔑", "tekst": tekst, "klas": ""})
+	_lees_wolk_weg()
+
+
+func _lees_wolk_weg() -> void:
+	if not await na(WOLK_KORT):
+		return
+	ctx.ui.wolk_weg("sl_lees")
+	ctx.wereld.vuil()
 
 
 ## De sleutel ophangen: slepen naar een haakje of erop tikken met de sleutel in
 ## je hand.  Bezet of het verkeerde getal is een misser — nooit een straf.
+## K1: zolang het getal niet gekozen is doet een hang niets; de tik vraagt om
+## eerst te kiezen en er wordt niets geteld.
 func _hang(i: int) -> void:
 	var b := _bord_nu()
 	var haken := _haken(b)
 	var s := _sleutel_nu()
 	if s.is_empty() or i < 0 or i >= haken.size():
+		return
+	if _stap() == STAP_REKEN:
+		_kort_wolkje("sl_wijs", KIES_WOLK, "hulp")
 		return
 	var h: Dictionary = haken[i]
 	if not str(h.get("sleutel", "")).is_empty():
@@ -983,8 +1227,17 @@ func _goed(i: int) -> void:
 	ctx.state.tel(int(s.get("mis", 0)) == 0, maxi(0, nu - int(_p.get("t0", nu))))
 	_p["t0"] = nu
 	_naar_kamer(gast, true)
+	var vorige_bord := int(s.get("bord", 0))
 	_p["nu"] = int(_p.get("nu", 0)) + 1
 	var volgende := _sleutel_nu()
+	# B2: zodra de hand naar een ander bord gaat laat het lichtje achter — anders
+	# blijft het plaatje van het vorige bord lichten terwijl de sleutel ergens
+	# anders ligt.
+	if volgende.is_empty() or int(volgende.get("bord", -1)) != vorige_bord:
+		_licht = -1
+	# K1: elke nieuwe sleutel begint weer bij de vraag naar het getal
+	_p[STAP_KEY] = STAP_REKEN
+	_p["gekozen"] = 0
 	_teken()
 	# de gast die net zijn sleutel kreeg loopt weg: kort wolkje mee
 	var afscheid := _gast_punt(gast, _plek(0.75, 0.85))
@@ -1014,8 +1267,14 @@ func _mis(i: int) -> void:
 	if not s.is_empty():
 		s["mis"] = int(s.get("mis", 0)) + 1
 	_licht = -1
-	_buren = _buren_van(b, i)
-	_buur_gat = i
+	# B3: de buren gaan om het gat van de SLEUTEL, niet om het haakje waar
+	# naar gemikt is.  Het gat is wat het kind moet invullen; het aangewezen
+	# haakje was slechts de misser.
+	var gat := i
+	if not s.is_empty():
+		gat = int(s.get("haak", i))
+	_buren = _buren_van(b, gat)
+	_buur_gat = gat
 	ctx.snd.zacht()          # de zachte "nee", nooit een zoemer (F5)
 	ctx.snd.terug()          # de sleutel glijdt terug
 	_teken()
@@ -1093,4 +1352,6 @@ func _op_kader(_rect: Rect2, _schaal: Dictionary) -> void:
 func debug() -> Dictionary:
 	return {"bord": _p, "opbouw": _lay, "spook": _spook, "tip": _tip,
 		"licht": _licht, "buren": _buren, "buren_tekst": _buren_tekst(),
+		"stap": _stap(), "gekozen": _gekozen(), "gat": _gat_nu(),
+		"hulp_tekst": _hulp_tekst(),
 		"rij_tekst": _rij_tekst(_bord_nu()), "bord_plek": _bord_plek}
