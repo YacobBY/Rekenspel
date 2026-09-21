@@ -3,6 +3,9 @@
 .fanout/scratch/
 .claude/worktrees/
 
+# Agent scratch: logs, screenshots, godot config (see AGENTS.md sandbox rules)
+tmp/
+
 # Godot — the import cache and the exported web build are never committed
 # (godot/dierenhotel/.gitignore repeats them for the project on its own)
 .godot/

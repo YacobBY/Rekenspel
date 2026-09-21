@@ -30,6 +30,38 @@ contains the facts.
   changed, not just read about it. Skip only when the change has nothing to
   show (pure maths/logic, no visual difference).
 
+### Deciding for yourself instead of asking
+
+The owner is often away for hours. A question stops the work dead, so the
+default is: **pick the option you would recommend, say in one line that you
+picked it and why, and carry on.** Do not open an `ask` for something you can
+answer yourself.
+
+Decide and continue when the choice is:
+
+- reversible in code (a layout constant, a helper, a test's own scaffolding,
+  which of two equivalent fixes to use);
+- covered by a rule you can look up (`HOTEL.md` §9 for text, the spec section
+  for the game, the design contract in §1 of this file);
+- a trade-off where one option is clearly the smallest change that keeps the
+  suite green and the contract intact — that one wins.
+
+Ask ONLY when proceeding either way could be wrong in a way code cannot undo:
+
+- the **frozen maths core** (`core/sommen.gd`) would have to change;
+- a **binding string from the spec** must be altered (spec text is law; if it
+  does not fit, that is a real question);
+- shared code that every game uses (`autoload/hits.gd`, `ui/kaart.gd`,
+  `ui/ui.gd`) would change behaviour for other games;
+- the task itself is ambiguous about what "done" means, or the plan marks it
+  as an owner decision.
+
+When you do ask: put the recommended option first, keep it to three options,
+and state in one sentence what you will do if there is no answer. When you
+decide for yourself: record the decision and the alternative in the PLAN.md §7
+line for that task, so the owner can overrule it afterwards. An assumption
+written down and moved past is worth more than a session that waits.
+
 ## 1. What this is
 
 A tablet maths game for Dutch children of 6–9 (groep 3–5): a voxel **animal
@@ -107,13 +139,30 @@ Godot is `~/.local/bin/godot` (4.7.2.stable); set `GODOT=` if it is not on
 `PATH`. Export templates: `~/.local/share/godot/export_templates/4.7.2.stable/`.
 Playwright for probe.js: `/home/pc/work/ergomouse/node_modules/playwright`.
 
-Sandbox rules (the agent may only write inside this workspace and `/tmp`):
+Sandbox rules (write ONLY inside this workspace — never outside it):
 
+- **Every log, screenshot and scratch file goes in `tmp/` in this repository**,
+  never in `/tmp`. `tmp/` is git-ignored, so it never shows up in a commit.
+  Use it like this, always with a relative path from the repository root:
+
+  ```bash
+  mkdir -p tmp/log
+  DH_TEST_FILTER=sleutels tools/test.sh > tmp/log/k1.log 2>&1; echo "exit=$?"
+  DH_LOG_DIR=tmp/log tools/export.sh                 # export + import logs
+  node tools/kiek.js --kamer keuken --uit tmp/kiek   # screenshots
+  ```
+
+  `tools/import.sh`, `tools/export.sh`, `probe.js` and `kiek.js` all read
+  `DH_LOG_DIR` and create the directory themselves; without it they fall back to
+  `/tmp/dierenhotel-log`, which is outside the workspace. So pass `DH_LOG_DIR`.
+  Writing outside the workspace costs an approval prompt and stalls the run
+  until a human answers it; staying in `tmp/` keeps you going.
 - Godot writes editor settings to `$XDG_CONFIG_HOME/godot` on every run; when
   that is denied it logs an ERROR that trips the export gate. `tools/export.sh`
-  already sets `XDG_CONFIG_HOME=/tmp/godot-config`. For a raw `godot` call do
-  the same. NEVER redirect `HOME` or `XDG_DATA_HOME` for an export: the templates
-  live in the real home. There is no `--user-data-dir` flag in Godot 4.7.
+  sets this itself, so a plain `tools/export.sh` needs nothing. For a raw
+  `godot` call set `XDG_CONFIG_HOME=$PWD/tmp/godot-config` yourself. NEVER
+  redirect `HOME` or `XDG_DATA_HOME` for an export: the templates live in the
+  real home. There is no `--user-data-dir` flag in Godot 4.7.
 - `tools/test.sh` and `probe.js` work unchanged in the sandbox.
 - Never run the suite and an export at the same time in one checkout (shared
   `.godot/` cache; it crashed the suite once).
