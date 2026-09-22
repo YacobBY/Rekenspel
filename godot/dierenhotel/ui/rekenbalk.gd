@@ -26,7 +26,8 @@ extends Control
 
 const RONDING := 18      ## the two top corners of the strip
 const RAND := 2          ## the line along the top edge
-const LIJN := 22         ## the ruled pitch; the same as UiSomkaart.LIJN
+const LIJN := 22         ## the ruled pitch while no docked card sets one
+const VOET := 4.0        ## the ruling stops this far above the frame's bottom
 
 var _kaart := Rect2()    ## where the card docks; `B5` draws the pointer from here
 var _nu: Button = null   ## the `Nu` chip of `B6`; hidden until it has words
@@ -87,10 +88,57 @@ func _draw() -> void:
 	# One rounded rectangle drawn by the engine: the strip runs off the bottom
 	# of the frame, so only its two top corners are rounded.
 	draw_style_box(_vlak, r)
-	# Squared paper, the same 22 unit pitch and the same pale blue as the card
-	# standing on it, so the two read as one sheet torn from the same pad.
-	var y := r.end.y - float(LIJN)
-	while y > r.position.y + float(LIJN) * 0.5:
+	# Ruled paper in the same pale blue as the card standing on it, so the two
+	# read as one sheet torn from the same pad.
+	for y in lijnen():
 		draw_line(Vector2(r.position.x + 12.0, y), Vector2(r.end.x - 12.0, y),
 			UiThema.PAPIER_LIJN, 1.0)
-		y -= float(LIJN)
+
+## The ruled lines of the strip in this layer's own coordinates, top to
+## bottom.  §3.1: "lijnen op de regelhoogtes van de balk zelf, dus nooit meer
+## dwars door een letter".  The docked card says where its text stands
+## (`UiSomkaart.lijn_ys`): a line lies under every line of it, and the ruling
+## goes on at the card's sentence pitch above and below — behind the answer
+## buttons — to the edges of the paper.  The old ruling counted a fixed pitch
+## up from the bottom edge and ran through the letters of every row.  With
+## no card to follow (the moment between a card leaving and the bar letting
+## go) the plain pitch from the bottom edge is left.
+func lijnen() -> PackedFloat32Array:
+	var uit := PackedFloat32Array()
+	var r := balk_rect()
+	if r.size.x < 1.0 or r.size.y < 1.0:
+		return uit
+	var stap := float(LIJN)
+	var eigen := PackedFloat32Array()
+	var kaart := Ui.balk_kaart_node()
+	if kaart != null and kaart.in_balk:
+		stap = maxf(8.0, kaart.lijn_afstand())
+		# The card's resting place: `position`, never its drawn transform, so
+		# its appear-scale does not drag the lines along for 0.16 s.
+		var naar := get_global_transform().affine_inverse()
+		var ouder := kaart.get_parent() as CanvasItem
+		if ouder != null:
+			naar = naar * ouder.get_global_transform()
+		for ky in kaart.lijn_ys():
+			var hier := (naar * (kaart.position + Vector2(0.0, ky))).y
+			if hier > r.position.y and hier < r.end.y - VOET:
+				eigen.append(hier)
+	var dak := r.position.y + stap * 0.5
+	if eigen.is_empty():
+		var t := r.end.y - stap
+		while t > dak:
+			uit.append(t)
+			t -= stap
+		uit.reverse()
+		return uit
+	var y := eigen[0] - stap
+	while y > dak:
+		uit.append(y)
+		y -= stap
+	uit.reverse()
+	uit.append_array(eigen)
+	y = eigen[eigen.size() - 1] + stap
+	while y <= r.end.y - VOET:
+		uit.append(y)
+		y += stap
+	return uit

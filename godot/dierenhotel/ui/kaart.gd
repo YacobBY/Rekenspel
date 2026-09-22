@@ -14,7 +14,7 @@ signal ok_getikt()
 
 const BREED := 290       ## the card's own maximum, in units
 const BREED_KLEIN := 170 ## below a 360 unit frame (art §16.6)
-const LIJN := 22         ## the ruled paper pitch
+const ONDER := 0.5       ## a ruled line lies this far under its baseline
 
 var regel_label: Label
 var regel2_label: Label
@@ -55,6 +55,8 @@ var _vak := ""
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	# The ruled lines follow the text, so a card that moves is a paper to redraw.
+	item_rect_changed.connect(_lijnen_verschoven)
 
 func _ready() -> void:
 	if not Ui.rust_modus() and DisplayServer.get_name() != "headless" and is_inside_tree() and not Engine.is_editor_hint():
@@ -124,6 +126,9 @@ func _bouw(balk: bool) -> void:
 	var kolom := VBoxContainer.new()
 	kolom.name = "Kolom"
 	kolom.add_theme_constant_override("separation", 0 if balk else (2 if _smal else 4))
+	# A container sorts its children deferred, after the card may already have
+	# drawn: the lines are redrawn once the text really stands where it stands.
+	kolom.sort_children.connect(_lijnen_verschoven)
 	add_child(kolom)
 
 	var zin_grootte := int(_mt["klein"])
@@ -167,6 +172,7 @@ func _bouw(balk: bool) -> void:
 	var rij := HBoxContainer.new()
 	rij.name = "Rij"
 	rij.add_theme_constant_override("separation", 6)
+	rij.sort_children.connect(_lijnen_verschoven)
 	kolom.add_child(rij)
 
 	som_label = Label.new()
@@ -415,12 +421,118 @@ func _drop_data(at: Vector2, lading: Variant) -> void:
 	if v != null:
 		v._drop_data(punt - v.get_global_position(), lading)
 
+# ------------------------------------------------------------ het papier
+
+## The ruled lines of this card's paper, in the card's own coordinates, top to
+## bottom: one under every line of text the card draws, `ONDER` below that
+## line's baseline, so a letter stands ON its line and no line runs through
+## one (PLAN.md §3.1).  The paper used to rule a fixed 22 unit pitch from its
+## top edge while a text row is 24 units plus the column's 4, so the lines
+## drifted through the text: 2 units into the foot of the first sentence,
+## through the middle of the second (the owner's screenshot, 2026-09-22).
+## Both papers ask here: the floating card for itself, the maths bar for the
+## docked card.
+##
+## Where the baseline is, measured in the web build (2026-09-22): a `Label`
+## row is as tall as the WHOLE font chain (`Symbolen` reaches deep: 15 + 9 at
+## size 14), and the text it holds — Nunito plus an emoji, 15 + 5 — is
+## CENTRED in that row.  So the baseline is not "row top + ascent" (off by 2
+## to 4 units, the line cut through the foot of every letter) but the row top
+## plus half the slack plus the ascent of what is really written there.  The
+## rows come from the label's own layout (`get_character_bounds` walks the
+## lines it draws), so a sentence that wraps gets a line per row.
+##
+## The height of a row is taken the way the label cuts it: the text is shaped
+## once and every row is a SUBSTRING of it, which keeps only the fonts that
+## really draw in that row.  Shaping the row anew (`TextLine`) also counts
+## the fonts the fallback merely tried — on the web build that is `Symbolen`
+## for the emoji, 24/14 instead of 23/8 at size 22 — and the line came out
+## 2.5 units high again; on the desktop both ways agree, so only the web
+## build shows it.
+func lijn_ys() -> PackedFloat32Array:
+	var ys := PackedFloat32Array()
+	var ts := TextServerManager.get_primary_interface()
+	for l in [regel_label, regel2_label, som_label, hulp_label]:
+		var lbl: Label = l
+		if lbl == null or lbl.text.is_empty() or not _zichtbaar(lbl):
+			continue
+		var f := lbl.get_theme_font("font")
+		if f == null:
+			continue
+		var maat := lbl.get_theme_font_size("font_size")
+		var boven := _in_kaart(lbl).y
+		# Every row: its box, and where in the text it starts.
+		var vakken: Array[Rect2] = []
+		var begin: Array[int] = []
+		for i in lbl.text.length():
+			var vak := lbl.get_character_bounds(i)
+			if vak.size.y <= 0.0:
+				continue
+			if vakken.is_empty() or not is_equal_approx(vak.position.y, vakken[-1].position.y):
+				vakken.append(vak)
+				begin.append(i)
+		var vorm := ts.create_shaped_text()
+		ts.shaped_text_add_string(vorm, lbl.text, f.get_rids(), maat, f.get_opentype_features())
+		for r in vakken.size():
+			var eind := begin[r + 1] if r + 1 < begin.size() else lbl.text.length()
+			var rij := ts.shaped_text_substr(vorm, begin[r], eind - begin[r])
+			var stijg := ts.shaped_text_get_ascent(rij)
+			var speling := vakken[r].size.y - (stijg + ts.shaped_text_get_descent(rij))
+			ts.free_rid(rij)
+			ys.append(boven + vakken[r].position.y + speling * 0.5 + stijg + ONDER)
+		ts.free_rid(vorm)
+	ys.sort()
+	return ys
+
+## The pitch of one sentence line.  The bar rules its paper at this pitch
+## above and below the docked card, so the lines it adds read as the next
+## lines to write on.
+func lijn_afstand() -> float:
+	var sep := 0.0
+	var kolom := get_node_or_null("Kolom")
+	if kolom != null:
+		sep = float(kolom.get_theme_constant("separation"))
+	if regel_label == null:
+		return 22.0
+	var maat := regel_label.get_theme_font_size("font_size")
+	var f := regel_label.get_theme_font("font")
+	if f == null:
+		return float(maat) + 2.0 + sep
+	return f.get_height(maat) + float(regel_label.get_theme_constant("line_spacing")) + sep
+
+## Shown on THIS card, whether or not the card itself is in a tree yet.
+func _zichtbaar(c: CanvasItem) -> bool:
+	var n: Node = c
+	while n != null and n != self:
+		if n is CanvasItem and not (n as CanvasItem).visible:
+			return false
+		n = n.get_parent()
+	return n == self
+
+## Where `c` stands in this card's own coordinates.  Only positions add up:
+## nothing between the card and its labels scales, and the card's own
+## appear-scale must not count — the paper is drawn in the card's space.
+func _in_kaart(c: Control) -> Vector2:
+	var p := Vector2.ZERO
+	var n: Node = c
+	while n != null and n != self:
+		if n is Control:
+			p += (n as Control).position
+		n = n.get_parent()
+	return p
+
+## The text moved — laid out again, or the card itself moved — so the paper
+## under it redraws: this card's own, or the bar's while the card is docked.
+func _lijnen_verschoven() -> void:
+	queue_redraw()
+	if in_balk and Ui.balklaag != null and is_instance_valid(Ui.balklaag):
+		Ui.balklaag.queue_redraw()
+
 ## The ruled paper, drawn over the panel (CanvasItem calls `_draw` after the
 ## container painted its stylebox).
 func _draw() -> void:
 	if in_balk:
-		return   # the bar is the paper; the card draws no ruled lines (B4)
-	var y := float(LIJN)
-	while y < size.y - 2.0:
-		draw_line(Vector2(4, y), Vector2(size.x - 4, y), UiThema.PAPIER_LIJN, 1.0)
-		y += LIJN
+		return   # the bar is the paper; it rules itself under this card (B4)
+	for y in lijn_ys():
+		if y < size.y - 2.0:
+			draw_line(Vector2(4, y), Vector2(size.x - 4, y), UiThema.PAPIER_LIJN, 1.0)

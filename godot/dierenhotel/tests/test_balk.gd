@@ -526,3 +526,187 @@ func test_stilstand_verandert_niets_aan_de_balk() -> void:
 	await boom.process_frame
 	waar(not Ui.balk_aan(), "met de kaart weg geeft de balk zijn ruimte terug")
 	_af()
+
+# ------------------------------------------------------------ het papier
+
+## The check-in card of the receptie (`Hotel.paint_checkin`, step 2): two
+## sentences that both open with a pictogram, a sum, and a strip of WORDS —
+## the card the owner saw the ruled lines run through on 2026-09-22.
+func _inchecken(id: String) -> Ui.Kaart:
+	var niets := func(_k) -> void: pass
+	return Ui.somkaart({"x": 20.0, "z": 20.0}, "4 × 2", {
+		"id": id, "door": "test", "icoon": "🥄", "prio": 14,
+		"regel": "Elke dag 2 scheppen, 4 dagen lang",
+		"regel2": "📦 In huis: 20 scheppen. Genoeg?",
+		"keuzes": [
+			{"id": "meer", "icoon": "⬇", "tekst": "te weinig", "kort": "weinig", "kies": niets},
+			{"id": "precies", "icoon": "⚖", "tekst": "precies", "kort": "precies", "kies": niets},
+			{"id": "minder", "icoon": "⬆", "tekst": "blijft over", "kort": "over", "kies": niets}]})
+
+## A card's labels only stand where they stand after `Kolom` and `Rij` did
+## their deferred sort.
+func _laat_zetten() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	for _i in 3:
+		await boom.process_frame
+
+## The ruled lines of the paper that carries `k`, in the CARD's coordinates:
+## its own paper while it floats, the bar's while it is docked.  In `_op` the
+## card and the bar share one parent and the bar stands at its origin, so the
+## bar's y minus the card's y is the card's y.
+func _lijnen_onder(k: UiSomkaart) -> PackedFloat32Array:
+	var uit := PackedFloat32Array()
+	if not k.in_balk:
+		for y in k.lijn_ys():
+			if y < k.size.y - 2.0:   # what `UiSomkaart._draw` draws
+				uit.append(y)
+		return uit
+	waar(k.get_parent() == _papier.get_parent() and _papier.position == Vector2.ZERO,
+		"de kaart en het papier delen één ouder")
+	for y in _papier.lijnen():
+		uit.append(y - k.position.y)
+	return uit
+
+## The rows a label draws, top to bottom, in the label's own coordinates.
+func _rijvakken(lbl: Label) -> Array[Rect2]:
+	var vakken: Array[Rect2] = []
+	for i in lbl.text.length():
+		var vak := lbl.get_character_bounds(i)
+		if vak.size.y > 0.0 and (vakken.is_empty() or vak.position.y > vakken[-1].position.y + 0.5):
+			vakken.append(vak)
+	return vakken
+
+## Every row of text on `k` stands ON exactly one of `lijnen` and none of them
+## runs through its letters.  The rows come from the label's own layout and
+## the positions from the global rects; the text is broken as ONE paragraph at
+## the label's width (`TextParagraph`), not cut into rows the way `lijn_ys`
+## does, and centred in its row the way the web build draws it (see the test
+## after this one for the measured numbers).  Returns how many rows it checked.
+func _staat_op_de_lijnen(k: UiSomkaart, lijnen: PackedFloat32Array, wat: String) -> int:
+	var rijen := 0
+	for l in [k.regel_label, k.regel2_label, k.som_label, k.hulp_label]:
+		var lbl: Label = l
+		if not lbl.is_visible_in_tree() or lbl.text.is_empty():
+			continue
+		var alinea := TextParagraph.new()
+		alinea.add_string(lbl.text, lbl.get_theme_font("font"), lbl.get_theme_font_size("font_size"))
+		alinea.width = lbl.size.x - lbl.get_theme_stylebox("normal").get_minimum_size().x
+		alinea.break_flags = TextServer.BREAK_MANDATORY | TextServer.BREAK_WORD_BOUND \
+			| TextServer.BREAK_ADAPTIVE
+		var boven := lbl.get_global_rect().position.y - k.get_global_rect().position.y
+		var vakken := _rijvakken(lbl)
+		gelijk(vakken.size(), alinea.get_line_count(),
+			"%s: '%s' breekt in de alinea net zo als in het label" % [wat, lbl.text])
+		for r in mini(vakken.size(), alinea.get_line_count()):
+			rijen += 1
+			var stijg := alinea.get_line_ascent(r)
+			var hoog := stijg + alinea.get_line_descent(r)
+			var inkt := boven + vakken[r].position.y + (vakken[r].size.y - hoog) * 0.5
+			var voet := inkt + stijg
+			var op := 0
+			var door := PackedFloat32Array()
+			for y in lijnen:
+				if y >= voet - 0.25 and y <= voet + 2.0:
+					op += 1
+				elif y > inkt + 1.0 and y < voet - 0.25:
+					door.append(y)
+			gelijk(op, 1, "%s: '%s' rij %d staat op één lijn (voet %.1f, lijnen %s)"
+				% [wat, lbl.text, r + 1, voet, str(lijnen)])
+			waar(door.is_empty(), "%s: geen lijn door '%s' (letters %.1f–%.1f, door %s)"
+				% [wat, lbl.text, inkt, voet, str(door)])
+	return rijen
+
+## Where the web build really puts the foot of the letters, read off its own
+## pixels on 2026-09-22 (`tools/speel.js` at 1280×640@2 with the card floating
+## and at 1024×768@2 with it in the bar, two pixels per unit): the foot of
+## "Elke", "In huis" and "4" below the top of the row that holds it.  A row
+## is as tall as the whole font chain and the text is centred in it, so "row
+## top + ascent" lands 2 to 4 units too high — the first try of this fix did
+## exactly that, and its line cut through the foot of every letter while a
+## test built on the same formula stayed green.  These numbers are the truth
+## that formula has to meet.
+func test_de_voet_staat_waar_de_webbouw_hem_tekent() -> void:
+	for geval in [["los", 14, 17.0, 21, 25.5], ["balk", 22, 26.5, 34, 41.0]]:
+		_op(Vector2(990, 637))
+		var kaart := _inchecken("ci")
+		if geval[0] == "los":
+			kaart.hulp("🥄🥄 + 🥄🥄 + 🥄🥄 + 🥄🥄")   # too tall for the bar: it floats
+		Hits.plaats()
+		await _laat_zetten()
+		var k: UiSomkaart = Hits.spot("ci").knoop
+		var wat := "voet %s" % geval[0]
+		gelijk(k.in_balk, geval[0] == "balk", "%s: de kaart staat waar de meting stond" % wat)
+		gelijk(k.regel_label.get_theme_font_size("font_size"), geval[1], "%s: de zinmaat van de meting" % wat)
+		gelijk(k.som_label.get_theme_font_size("font_size"), geval[3], "%s: de sommaat van de meting" % wat)
+		var ys := k.lijn_ys()
+		for paar in [[k.regel_label, geval[2]], [k.regel2_label, geval[2]], [k.som_label, geval[4]]]:
+			var lbl: Label = paar[0]
+			var rij: float = k._in_kaart(lbl).y + _rijvakken(lbl)[0].position.y
+			var gevonden := false
+			for y in ys:
+				if absf(y - UiSomkaart.ONDER - rij - float(paar[1])) <= 0.26:
+					gevonden = true
+			waar(gevonden, "%s: '%s' — voet %.1f onder de rijtop gemeten, lijnen %s (rijtop %.1f)"
+				% [wat, lbl.text, float(paar[1]), str(ys), rij])
+		_af()
+
+## The owner's screenshot of 2026-09-22: on the check-in card the ruled lines
+## ran through the letters, floating and docked alike, because both papers
+## ruled a fixed 22 unit pitch that knew nothing of the rows of text on them.
+## Now every row of text stands on a line
+## of its own and no line crosses one — on all ten frames, docked or floating,
+## with and without a worked example, and for a card with an answer box too.
+func test_de_letters_staan_op_de_lijnen() -> void:
+	var gedokt := 0
+	var los := 0
+	for kader in KADERS:
+		for soort in ["inchecken", "inchecken+hulp", "vak"]:
+			_op(kader)
+			var kaart := _kaart("ci") if soort == "vak" else _inchecken("ci")
+			if soort == "inchecken+hulp":
+				kaart.hulp("🥄🥄 + 🥄🥄 + 🥄🥄 + 🥄🥄")
+			Hits.plaats()
+			await _laat_zetten()
+			var k: UiSomkaart = Hits.spot("ci").knoop
+			if k.in_balk:
+				gedokt += 1
+			else:
+				los += 1
+			var wat := "%s %s %s" % [str(kader), soort, "balk" if k.in_balk else "los"]
+			var rijen := _staat_op_de_lijnen(k, _lijnen_onder(k), wat)
+			waar(rijen >= (2 if soort == "vak" else 3), "%s: %d tekstrijen gemeten" % [wat, rijen])
+			_af()
+	# Both papers really were measured, not just one of them.
+	waar(gedokt > 0 and los > 0, "gedokt %d keer, zwevend %d keer" % [gedokt, los])
+
+## The bar rules the whole strip, not only the rows of the card: the ruling
+## goes on at the card's sentence pitch down to the bottom of the paper,
+## behind the answer buttons, every line lies on the paper, and no two lines
+## lie on top of each other.
+func test_de_balk_lijnt_het_hele_papier() -> void:
+	var gedokt := 0
+	for kader in KADERS:
+		_op(kader)
+		_inchecken("ci")
+		Hits.plaats()
+		await _laat_zetten()
+		var k: UiSomkaart = Hits.spot("ci").knoop
+		if not k.in_balk:
+			_af()
+			continue
+		gedokt += 1
+		var wat := "papier %s" % str(kader)
+		var b := Ui.balk_rect()
+		var lijnen := _papier.lijnen()
+		waar(lijnen.size() >= 4, "%s: %d lijnen" % [wat, lijnen.size()])
+		for i in lijnen.size():
+			waar(lijnen[i] > b.position.y and lijnen[i] < b.end.y,
+				"%s: lijn %.1f ligt op het papier %s" % [wat, lijnen[i], str(b)])
+			if i > 0:
+				waar(lijnen[i] - lijnen[i - 1] >= 8.0,
+					"%s: %.1f en %.1f liggen niet op elkaar" % [wat, lijnen[i - 1], lijnen[i]])
+		waar(b.end.y - lijnen[lijnen.size() - 1] <= k.lijn_afstand() + UiRekenbalk.VOET,
+			"%s: de lijnen lopen door tot onderaan (laatste %.1f, bodem %.1f)"
+			% [wat, lijnen[lijnen.size() - 1], b.end.y])
+		_af()
+	waar(gedokt > 0, "de inchecksom dokt op %d van de %d kaders" % [gedokt, KADERS.size()])
