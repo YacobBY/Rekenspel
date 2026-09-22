@@ -557,19 +557,15 @@ func _bruikbaar(stuk: Variant) -> bool:
 ## A tap target is at least 48 x 48; a number tag and a name plate keep their
 ## natural size — neither is clickable, so neither is a fingertip.
 func _maat_van(s: Spot) -> Vector2:
-	# A sum card whose help line is showing is measured by `Ui.kaart_mat()`,
-	# not by the Control.  The Control answers with the height its help line
-	# needs at whatever width it last happened to be laid out at, and the
-	# caller below pins that answer into `custom_minimum_size` for good: a
-	# card whose help line arrived before its first frame answers 631 units
-	# for one short sentence and becomes a strip of frame height.  The
-	# zwembad test `test_de_kaart_na_een_bots_past_in_het_kader` walks into
-	# exactly that trap and papers over it with a delay between the hit and
-	# the question; measuring the line at the width the card is drawn at is
-	# the fix, and it is also what lets the maths bar of §3.1 size itself to
-	# a card it has never laid out.
-	if s.kind == "kaart" and s.knoop is UiSomkaart \
-			and s.knoop.hulp_label != null and s.knoop.hulp_label.visible:
+	# Every sum card answers through `Ui.kaart_mat()`, never through its own
+	# Control minimum.  A freshly built or just-released card has labels that
+	# were never laid out at the width they are drawn at, so the Control
+	# answers a one-word-per-line tower (1225 units for a card that draws 90)
+	# and `Hits` would pin that into `custom_minimum_size` and place the card
+	# far outside the frame.  `kaart_mat` measures the docked card with
+	# `maat_balk()` and the floating card with the theme at its own width, so
+	# neither a dock nor a float can place a tower (B4).
+	if s.kind == "kaart" and s.knoop is UiSomkaart:
 		var eerlijk := Ui.kaart_mat(s.knoop)
 		if eerlijk.x > 0.0 and eerlijk.y > 0.0:
 			return eerlijk
@@ -723,6 +719,17 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 					kr.get_center().y - maat.y * 0.5), maat), kader),
 				_klem(Rect2(Vector2(kr.position.x - KLEEF - maat.x,
 					kr.get_center().y - maat.y * 0.5), maat), kader),
+				# B4: the honest (unpinned) width of a floating card is a few
+				# units narrower than the width it used to carry, so the strip
+				# centred beside it can graze a tile that sits right at the
+				# card's edge.  Slide the strip along the card's own height
+				# column — top-aligned, then bottom-aligned — so it can dodge
+				# such a sliver.  Last in the list: every arrangement that
+				# already fits keeps its spot.
+				_klem(Rect2(Vector2(kr.end.x + KLEEF, kr.position.y), maat), kader),
+				_klem(Rect2(Vector2(kr.end.x + KLEEF, kr.end.y - maat.y), maat), kader),
+				_klem(Rect2(Vector2(kr.position.x - KLEEF - maat.x, kr.position.y), maat), kader),
+				_klem(Rect2(Vector2(kr.position.x - KLEEF - maat.x, kr.end.y - maat.y), maat), kader),
 			]
 			for i in kandidaten.size():
 				var r := kandidaten[i]

@@ -345,6 +345,11 @@ func test_de_hulplijn_groeit_de_balk_mee() -> void:
 		_op(kader)
 		var kaart := _kaart("k1")
 		var zonder := Ui.balk_kost()
+		# The card's OWN height before the help line, so "grew" is measured
+		# against the card and not against the bar's total cost (B4: the wide
+		# docked card fits a help line on one short line, so it is shorter
+		# than the bar it sits in — comparing the two was a category error).
+		var kaart_zonder: float = Ui.kaart_mat(Hits.spot("k1").knoop).y
 		var wat := "hulp %s" % str(kader)
 		gelijk(Ui.balk_kandidaat(), "k1", "%s: de kaart is de kandidaat" % wat)
 		kaart.hulp("Kijk: 3 en 2 samen zijn 5, tel de boterhammen na")
@@ -358,7 +363,7 @@ func test_de_hulplijn_groeit_de_balk_mee() -> void:
 			Hits.plaats()
 			var r: Rect2 = Hits.debug()["k1"]["rect"]
 			waar(Ui.balk_rect().encloses(r), "%s: %s staat op het papier" % [wat, str(r)])
-			waar(r.size.y >= zonder, "%s: de kaart is echt gegroeid (%s)" % [wat, str(r.size.y)])
+			waar(r.size.y >= kaart_zonder, "%s: de kaart is echt gegroeid (%s)" % [wat, str(r.size.y)])
 		else:
 			waar(Ui.balk_kaart() == "", "%s: de balk laat netjes los" % wat)
 		_af()

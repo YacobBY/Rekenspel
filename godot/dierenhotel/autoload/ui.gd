@@ -194,6 +194,12 @@ func balk_strook_node() -> Control:
 ## The theme's `wrap_hoogte()` is the honest measure, at the width the card
 ## is actually drawn.
 func kaart_mat(k: UiSomkaart) -> Vector2:
+	# A card that stands IN the bar measures itself the way the bar reserved
+	# it (`maat_balk()`): one number for the fit and for the placement, so
+	# the paper always encloses the card it is holding (B4).  The floating
+	# card below keeps its own help-line gap; the bar's stack has none.
+	if k.in_balk:
+		return k.maat_balk()
 	# `Hits` writes the size it placed a card at back into
 	# `custom_minimum_size` (hits.gd:418), so a card that was once measured
 	# while its help line was laid out at a narrow width carries that number
@@ -209,14 +215,20 @@ func kaart_mat(k: UiSomkaart) -> Vector2:
 	var m := k.get_combined_minimum_size()
 	if hulp != null:
 		hulp.visible = was
-		if was:
-			m.y += UiThema.wrap_hoogte(hulp, maxf(60.0, m.x - 24.0)) + 4.0
+	# The height comes from the theme at the card's own width, not from the
+	# Control: a wrapping label left laid out at a width of one (the state a
+	# released bar card is in) would answer a tower here (B4).
+	m.y = k.inhoud_hoogte(maxf(60.0, m.x))
 	k.custom_minimum_size = pin
 	return m
 
 func _strook_mat() -> Vector2:
 	var s := balk_strook_node()
-	return s.get_combined_minimum_size() if s != null else Vector2.ZERO
+	if s == null:
+		return Vector2.ZERO
+	if s is UiKeuzes:
+		return (s as UiKeuzes).maat_balk()
+	return s.get_combined_minimum_size()
 
 ## What the docked card and its strip need, in frame units, in the form the
 ## frame asks for.  `INF` when there is nothing to dock.
@@ -224,7 +236,7 @@ func balk_nodig() -> float:
 	var k := balk_kaart_node()
 	if k == null:
 		return INF
-	var km := kaart_mat(k)
+	var km := k.maat_balk()
 	var sm := _strook_mat()
 	if sm.y <= 0.0:
 		return km.y + 2.0 * BALK_LUCHT
@@ -237,7 +249,7 @@ func balk_breed_nodig() -> float:
 	var k := balk_kaart_node()
 	if k == null:
 		return 0.0
-	var km := kaart_mat(k)
+	var km := k.maat_balk()
 	var sm := _strook_mat()
 	if sm.y <= 0.0:
 		return km.x + 2.0 * BALK_LUCHT
@@ -293,6 +305,7 @@ func balk_bepaal() -> float:
 	# The owner is written down FIRST: `balk_nodig()` asks the card and the
 	# strip what they measure, and both of them look up `_balk_kaart` to find
 	# the strip.  Deciding after measuring would measure nothing.
+	var oud := _balk_kaart
 	_balk_kaart = balk_kandidaat()
 	var kost := 0.0
 	if _balk_kaart != "":
@@ -306,8 +319,26 @@ func balk_bepaal() -> float:
 			kost = clampf(nodig, bodem, plafond)
 	if kost <= 0.0:
 		_balk_kaart = ""
+	# The look follows the dock: the card and its strip that own the bar render
+	# in bar-mode (big, bare), the one that just lost it goes back to its paper
+	# (B4).  The fit was measured in bar-mode either way, so this cannot make
+	# the decision wobble.
+	_zet_balk_render(oud, false)
+	_zet_balk_render(_balk_kaart, true)
 	_balk_kost = maxf(0.0, kost)
 	return _balk_kost
+
+## Put one card and its answer strip into the bar look (`aan`) or back to the
+## floating look.  A no-op when the card is gone.
+func _zet_balk_render(id: String, aan: bool) -> void:
+	if id == "":
+		return
+	var s = Hits.spot(id)
+	if s != null and is_instance_valid(s.knoop) and s.knoop is UiSomkaart:
+		(s.knoop as UiSomkaart).zet_balk_stand(aan)
+	var st = Hits.spot(id + "_keuzes")
+	if st != null and is_instance_valid(st.knoop) and st.knoop is UiKeuzes:
+		(st.knoop as UiKeuzes).zet_balk_stand(aan)
 
 ## Recompute what the bar costs and hand the result to the world.  Called on
 ## the events that can change it — a card opening or closing, a sentence, a
@@ -481,7 +512,7 @@ func maak_knop(kind: String, o: Dictionary) -> Control:
 		"keuzes":
 			var s := UiKeuzes.new()
 			s.bouw(o.get("keuzes", []), World.kader_rect().size.x, maten,
-				str(o.get("titel", "")), o.get("kaart", null))
+				str(o.get("titel", "")), o.get("kaart", null), bool(o.get("in_balk", false)))
 			return s
 		"tag":
 			var t := UiGetalTag.new()
@@ -961,15 +992,15 @@ class Kaart extends RefCounted:
 
 	func som(tekst: String) -> void:
 		var k := _knoop()
-		if k != null and k.som_label != null:
-			k.som_label.text = tekst
+		if k != null:
+			k.zet_som(tekst)
 			Ui._balk_herstel()
 
 	func zet(tekst: String) -> void:
 		_getikt = tekst
 		var k := _knoop()
 		if k != null and k.vak_label != null:
-			k.vak_label.text = tekst
+			k.zet_vak(tekst)
 			Ui._balk_herstel()
 
 	func hulp(tekst: String) -> void:
@@ -983,8 +1014,7 @@ class Kaart extends RefCounted:
 		# card whose help line arrived before its first frame answers 631
 		# units for "Tel de ballen: 3 en nog 2".  `Ui.kaart_mat()` asks
 		# the theme instead, at the width the card is really drawn at.
-		k.hulp_label.text = tekst
-		k.hulp_label.visible = not tekst.is_empty()
+		k.zet_hulp(tekst)
 		Ui._balk_herstel()
 
 	func getal() -> Variant:

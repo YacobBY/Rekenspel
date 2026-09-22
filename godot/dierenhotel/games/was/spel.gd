@@ -1087,8 +1087,13 @@ func _kaart_maat() -> Vector2:
 	var s := Hits.spot(HOT_KAART)
 	if s == null or not is_instance_valid(s.knoop):
 		return Vector2.ZERO
-	s.knoop.custom_minimum_size = Vector2.ZERO
-	var maat := s.knoop.get_combined_minimum_size()
+	# B4: the card's own Control minimum answers a one-word-per-line tower
+	# when its wrapping labels have not been laid out at the width they are
+	# drawn at (a freshly built or re-rendered card).  Ask the theme at the
+	# card's width instead — the same honest measure `Hits._maat_van` now uses
+	# to place the card — so the legend's card-vs-bubble decision sees the
+	# height the card really has, not the tower.
+	var maat := Ui.kaart_mat(s.knoop)
 	return Vector2(maxf(maat.x, 48.0), maxf(maat.y, 48.0))
 
 ## Where the top edge of the question card will be, in frame units.  `INF` while
