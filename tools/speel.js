@@ -35,7 +35,9 @@ function hulp() {
   console.log(`gebruik: node tools/speel.js [opties]
 
   --kamer ID          receptie | gang | kamer1 | kamer2 | keuken | tuin | zwembad | wasserij  (standaard receptie)
-  --doe "a; b; c"     de reeks stappen: een knop-id, chip:<naam>, of "wacht <ms>"
+  --doe "a; b; c"     de reeks stappen: een knop-id, chip:<naam>,
+                      chroom:<naam> (Munt/Brieven/Geluid/Prikbord/Avond),
+                      of "wacht <ms>"
   --toon              speel niets; meld alleen wat er in deze kamer te tikken valt
   --stap-wacht MS     wachttijd na elke tik voor de foto (standaard 1800)
   --band 3|4|5        aantal gasten/kunnen dat die band oplevert (standaard 3)
@@ -264,12 +266,18 @@ const midden = (l) => {
       continue;
     }
     const chip = stap.match(/^chip[:\s]+(\S+)$/i);
-    const soort = chip ? 'chip' : 'knop';
+    // De chroomknoppen bovenin (Munt, Brieven, Geluid, Prikbord, Avond) melden
+    // zich als `[probe] chroomknop <naam>=` en zijn géén hotspot, dus zonder
+    // eigen stapsoort was de hele dagcyclus onbespeelbaar (eigenaarsvraag
+    // 2026-09-22: "speel de lus, dag na dag").
+    const chroom = stap.match(/^chroom[:\s]+(\S+)$/i);
+    const soort = chip ? 'chip' : (chroom ? 'chroomknop' : 'knop');
     // Een strook meldt zichzelf als één rechthoek (bv. `bd_som_keuzes`), niet
     // als vier knoppen.  Met `id#2/4` tik je het tweede van vier vakjes erin,
     // met `id@0.5,0.8` op een eigen plek (breuk van breedte, hoogte).
-    const vak = (chip ? chip[1] : stap).match(/^([^#@]+)(?:#(\d+)\/(\d+))?(?:@([\d.]+),([\d.]+))?$/);
-    const id = vak ? vak[1] : (chip ? chip[1] : stap);
+    const kaal = chip ? chip[1] : (chroom ? chroom[1] : stap);
+    const vak = kaal.match(/^([^#@]+)(?:#(\d+)\/(\d+))?(?:@([\d.]+),([\d.]+))?$/);
+    const id = vak ? vak[1] : kaal;
     // Een hotspot meldt zich als `knop <id>=`, een chip als `chip <id>=`; een
     // strook of kaart meldt zich kaal als `<id>=[P: ...]`.  Alle drie mogen.
     const zoek = () => laatste(`[probe] ${soort} ${id}=`)

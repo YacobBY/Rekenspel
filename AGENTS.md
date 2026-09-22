@@ -63,6 +63,11 @@ default is: **pick the option you would recommend, say in one line that you
 picked it and why, and carry on.** Do not open an `ask` for something you can
 answer yourself.
 
+**The hard rule: if you can name a recommended option, you do not ask — you
+take it.** An `ask` whose first line is "option 1 (recommended)" is a question
+you have already answered yourself. Take that option, write one line about it,
+and keep working. This costs an hour of waiting every time you get it wrong.
+
 Decide and continue when the choice is:
 
 - reversible in code (a layout constant, a helper, a test's own scaffolding,
@@ -70,17 +75,26 @@ Decide and continue when the choice is:
 - covered by a rule you can look up (`HOTEL.md` §9 for text, the spec section
   for the game, the design contract in §1 of this file);
 - a trade-off where one option is clearly the smallest change that keeps the
-  suite green and the contract intact — that one wins.
+  suite green and the contract intact — that one wins;
+- **touching a file outside your task's file set**, including shared code
+  (`autoload/ui.gd`, `autoload/hits.gd`, `ui/kaart.gd`). That is allowed and
+  normal. Keep the change additive, put new candidates or branches LAST so
+  every arrangement that works today keeps working, run the full suite, and
+  record the deviation in the PLAN.md §7 line. Green suite = proof.
 
-Ask ONLY when proceeding either way could be wrong in a way code cannot undo:
+Ask ONLY when you genuinely cannot continue on your own:
 
 - the **frozen maths core** (`core/sommen.gd`) would have to change;
 - a **binding string from the spec** must be altered (spec text is law; if it
   does not fit, that is a real question);
-- shared code that every game uses (`autoload/hits.gd`, `ui/kaart.gd`,
-  `ui/ui.gd`) would change behaviour for other games;
-- the task itself is ambiguous about what "done" means, or the plan marks it
-  as an owner decision.
+- the answer is information that is simply not in the repository (a wish of the
+  owner, a choice between two designs that both satisfy the spec equally well);
+- two instructions contradict each other and you cannot tell which wins;
+- the plan marks the task itself as an owner decision.
+
+Not a reason to ask: the change is bigger than expected, it spans more files
+than the task named, you are unsure whether the owner will like it, or you want
+a sanity check. Do it, prove it with the suite, and write down what you did.
 
 When you do ask: put the recommended option first, keep it to three options,
 and state in one sentence what you will do if there is no answer. When you
