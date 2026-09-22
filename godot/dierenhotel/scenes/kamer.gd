@@ -29,6 +29,8 @@ var _meubel_versie := 0
 var _decor: Array[WereldObject] = []
 var _los: Dictionary = {}          ## id -> WereldObject, a game's loose decor
 var _dieren: Dictionary = {}       ## gast id -> Dierbeeld
+var _bed_nodes: Dictionary = {}    ## slot-id -> WereldObject van een bed hier
+var _bedden_verborgen := false     ## de kamer leeg voor de vraag (zie verberg_bedden)
 var _dingen: Dictionary = {}       ## ding id -> WereldObject
 var _proefwereld = null            ## only with --demo / ?demo=1
 
@@ -74,6 +76,7 @@ func bouw(kamer_id: String) -> void:
 	_decor.clear()
 	_los.clear()
 	_dieren.clear()
+	_bed_nodes.clear()
 	if Ui.naamlaag != null:
 		Ui.naamplaten_leeg()      # plates of guests in another room are hidden
 	_dingen.clear()
@@ -94,6 +97,7 @@ func bouw(kamer_id: String) -> void:
 		_decor.append(o)
 	for sid in r.slots:
 		_bouw_slot(r, sid)
+	_zet_bedden(not _bedden_verborgen)
 	_ververs_dingen()
 	_ververs_dieren()
 	_ververs_los()
@@ -131,6 +135,37 @@ func _bouw_slot(r: Rooms.Kamer, sid: String) -> void:
 	b.zet_model(model, {})
 	b.plaats(slot["x"], slot["z"], 0.0)
 	_decor.append(b)
+	if String(slot.get("soort", "")) == "bed":
+		_bed_nodes[sid] = b
+
+## Zet álle bedden van deze kamer in het zicht of weg (zie `verberg_bedden`).
+func _zet_bedden(zichtbaar: bool) -> void:
+	for sid in _bed_nodes:
+		var nd = _bed_nodes[sid]
+		if is_instance_valid(nd):
+			nd.visible = zichtbaar
+
+## Eigenaarsduw (2026-09-21): op het moment dat de gast aankomt en de kaart
+## vraagt hoeveel bedden er nodig zijn, moet de kamer leeg zijn. Zolang dit
+## aanstaat verdwijnen de bedden die hier al staan én de gasten die erin
+## slapen; de rest van de kamer blijft zoals het is. Zo telt het kind niet,
+## maar rekent. Alleen `bedden` roept dit aan.
+func verberg_bedden(aan: bool) -> void:
+	_bedden_verborgen = aan
+	_zet_bedden(not aan)
+	_ververs_dieren()
+
+## De gasten die in een bed van deze kamer slapen, maar alleen zolang de
+## bedden verborgen zijn. Leeg als er niets te verbergen is.
+func _slapende_gasten() -> Dictionary:
+	var ids := {}
+	if not _bedden_verborgen:
+		return ids
+	for sid in _bed_nodes:
+		var g: Dictionary = State.gast_in_bed(_kamer, sid)
+		if not g.is_empty():
+			ids[String(g.get("id", ""))] = true
+	return ids
 
 func gast_vlak(id: String = "") -> Rect2:
 	if id != "" and _dieren.has(id):
@@ -159,6 +194,7 @@ func _op_kader(_rect: Rect2, _schaal: Dictionary) -> void:
 ## point it hangs on (world.md §2.10).
 func _ververs_dieren() -> void:
 	var gezien := {}
+	var slaap := _slapende_gasten()
 	for d in World.dieren(_kamer):
 		gezien[d.id] = true
 		var beeld: Dierbeeld = _dieren.get(d.id)
@@ -167,6 +203,13 @@ func _ververs_dieren() -> void:
 			objecten.add_child(beeld)
 			_dieren[d.id] = beeld
 		beeld.volg()
+		if slaap.has(d.id):
+			# het bed is weg, dus de slaper die erin ligt ook
+			beeld.visible = false
+			if Ui.naamlaag != null:
+				Ui.naamplaat_weg(d.id)
+			continue
+		beeld.visible = true
 		if Ui.naamlaag != null and d.naam != "":
 			Ui.naamplaat(d.id, d.naam)
 	for id in _dieren.keys():

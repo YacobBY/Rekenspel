@@ -766,6 +766,11 @@ func _strook(r: int, spook_rij: int) -> void:
 ## de kist, 🔄 en 🐾 bestaan nog niet, en het gastwolkje blijft weg — zijn
 ## getal zou het antwoord van de vraag verklappen.
 func _vraag_teken() -> void:
+	# De kamer moet leeg zijn als de vraag valt.  Staan er al bedden van
+	# eerdere beurten, dan kan het kind ze aflezen in plaats van te rekenen;
+	# dus gaan de bedden én de slapers erin weg tot het antwoord klopt
+	# (eigenaar 2026-09-21).
+	ctx.wereld.bedden_verberg(true)
 	for r in range(0, MAX_RIJEN + 2):
 		ctx.hotspots.weg("bd_rij%d" % r)
 	for id in ["bd_kist", "bd_undo", "bd_wand", "bd_klaar", "bd_hulp"]:
@@ -807,6 +812,7 @@ func _op_vraag(n: int) -> void:
 			_kaart.klaar()
 		_d()["fase"] = "leggen"
 		State.bewaar()
+		ctx.wereld.bedden_verberg(false)   # het antwoord klopt: de kamer terug
 		_teken()
 		return
 	ctx.snd.zacht()
@@ -1135,6 +1141,7 @@ func stop() -> void:
 		for id in ["bd_wolk", "bd_fout", "bd_goed", "bd_op", "bd_wolkje", "bd_vol"]:
 			ctx.ui.wolk_weg(id)
 		_spook_weg()
+		ctx.wereld.bedden_verberg(false)   # wat we wegmaakten komt terug
 		print("[probe] spel=stop id=bedden fase=", _fase())
 		State.bewaar()
 		ctx.hotspots.wis_alles()      # geeft ook de geleende deur terug

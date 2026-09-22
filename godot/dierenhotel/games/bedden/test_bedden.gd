@@ -112,6 +112,11 @@ func _op(kader := Vector2(1000, 648)) -> void:
 
 func _af() -> void:
 	Games.stop()
+	# De kamerscene van `test_de_kamer_wordt_leeg_gemaakt` maakt naamplaten van
+	# de gasten; die leven in `Ui._naamplaten` en in `Hits` en moeten vóór het
+	# wissen van de hotspots weg, anders houdt de Ui ze vast en meldt de motor
+	# bij het afsluiten "resources still in use" (zoals in `test_hits.gd`).
+	Ui.naamplaten_leeg()
 	Hits.wis_alles()
 	World.sync([])
 	Rooms.herstel()
@@ -525,6 +530,51 @@ func test_het_spel_begint_met_een_vraag() -> void:
 	waar(_beantwoord(), "het goede antwoord zet de fase op 'leggen'")
 	waar(Hits.spot("bd_rij0") != null, "nu verschijnen de strookjes")
 	waar(Hits.spot("bd_klaar") != null, "en het pootje")
+	await _af()
+
+# ------------------------------------------- de lege kamer bij de vraag
+#
+# Eigenaarsduw 2026-09-21: de kamer moet LEEG zijn op het moment dat de gast
+# aankomt en de kaart vraagt "Hoeveel bedden heb je nodig?".  Daarvoor
+# bleven de bedden van eerdere beurten met hun slapers gewoon staan, en kon
+# het kind ze aflezen in plaats van te rekenen.
+#
+# De kamerkant van die wens (dat `verberg_bedden` het bed en zijn slaper
+# écht wegkrijgt) staat in `tests/test_zzz_kamer_leeg.gd` en niet hier: dit
+# is het eerst geladen testbestand van de suite, en vandaaruit
+# `res://scenes/kamer.gd` laden zet diens hele preloadketen vast — dan meldt
+# de motor `7 resources still in use at exit` en valt de suite af.  Zie de
+# kop van dat bestand voor de meting.  Wat hier wél staat is de spelkant: dat
+# `bedden` op het juiste moment vraagt.
+
+## Een kamertje dat onthoudt welke verberg-verzoeken het kreeg.
+class _TelKamer extends Node2D:
+	var verzoeken: Array = []
+
+	func verberg_bedden(aan: bool) -> void:
+		verzoeken.append(aan)
+
+## Het spel vraagt dit zelf, op de juiste momenten: weg bij de vraag, terug
+## na het goede antwoord, en terug als het spel ophoudt.
+func test_bedden_maken_de_kamer_leeg_rond_de_vraag() -> void:
+	_op()
+	_hotel(4, 3, 3)
+	var tel := _TelKamer.new()
+	_vp.add_child(tel)
+	World.registreer_viewport(_vp, tel)
+	waar(Games.start(SPEL), "bedden start")
+	Hits.plaats()
+	gelijk(str(_d().get("fase", "")), "vraag", "de eerste fase is 'vraag'")
+	waar(tel.verzoeken.size() >= 1, "het spel doet een verzoek bij de kamer")
+	waar(bool(tel.verzoeken[tel.verzoeken.size() - 1]),
+		"bij de vraag gaan de bedden weg")
+	waar(_beantwoord(), "het goede antwoord zet de fase op 'leggen'")
+	waar(not bool(tel.verzoeken[tel.verzoeken.size() - 1]),
+		"na het goede antwoord komen de bedden terug")
+	Games.stop()
+	waar(not bool(tel.verzoeken[tel.verzoeken.size() - 1]),
+		"stop laat de kamer niet verborgen achter")
+	tel.queue_free()
 	await _af()
 
 ## Wolkje legt één bedje bij, niet een hele rij (N9).

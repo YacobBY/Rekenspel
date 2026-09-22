@@ -1339,6 +1339,14 @@ func plaats_meubel(kamer_id: String, type: String, x: float = NAN, z: float = NA
 		rot: int = 0) -> Dictionary:
 	return Rooms.meubel_zet(kamer_id, type, x, z, rot)
 
+## Zet de bedden van de kamer in het zicht of weg, samen met de gasten die
+## erin slapen (scenes/kamer.gd `verberg_bedden`). Bedoeld voor `bedden`: bij
+## de vraag "hoeveel bedden heb je nodig?" moet de kamer leeg zijn. Geen
+## kamer in beeld, of een scene zonder deze methode: doet niets.
+func bedden_verberg(aan: bool) -> void:
+	if _kamerscene != null and _kamerscene.has_method("verberg_bedden"):
+		_kamerscene.verberg_bedden(aan)
+
 ## `wereld.getalTag(obj, n, o)` — a bare number ON an object.
 func getal_tag(obj: Variant, n: Variant, o: Dictionary = {}) -> String:
 	return Ui.getal_tag(obj, n, o)
