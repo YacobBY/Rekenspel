@@ -241,6 +241,113 @@ func test_wie_je_aantikt_gaat_in_bad() -> void:
 	waar(not erin.has(str(gasten[0]["id"])), "en niet de eerste van het rijtje")
 	_af()
 
+## Eigenaar, 2026-09-23: "Zorg dat de minigame pas begint wanneer het dier er
+## is."  Na de som lopen de badgasten van elders naar de tobbes; hun knopje
+## komt pas als ze er staan, en tot dan hangt het hotelwolkje "komt eraan" met
+## `👀 Volg` aan de tuindeur — ook tijdens het spel.  Wie meeloopt en met hem
+## terugkomt, vindt de kaart van de tobbes weer op haar plek, en het knopje
+## werkt.
+func test_een_badgast_van_elders_komt_eraan() -> void:
+	_op()
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(false)
+	var gasten := _gasten(3, 1, 3)
+	var id := str(gasten[0]["id"])
+	gasten[0]["behoefte"] = "bad"
+	gasten[0]["blij"] = false
+	World.zet(id, str(gasten[0]["kamer"]), 60.0, 60.0)   # in zijn eigen kamer
+	World.pauzeer(true)                     # de test tikt de wereld zelf
+	waar(Games.start(ID), "het spel start")
+	var spel = _spel()
+	if spel == null:
+		World.pauzeer(false)
+		Ui.zet_rust_modus(rust_voor)
+		_af()
+		return
+	# de som is af en het sop eerlijk verdeeld: het water staat klaar
+	var st: Dictionary = spel._s
+	st["stap"] = "vullen"
+	st["rek"] = 0
+	for i in int(st["M"]):
+		st["tob"][i] = int(st["per"])
+	st["kan"] = int(st["rest"])
+	spel._check()
+	gelijk(str(spel._s["stap"]), "baden", "de badstap")
+	waar(Games.verwacht_dier(id), "het spel wacht op de badgast")
+	waar(Hits.spot("tb_dier" + id) == null, "zijn knopje is er nog niet")
+	waar(_komt_eraan_in_beeld(id), "zijn wolkje 'komt eraan' hangt aan de tuindeur")
+	var som = Hits.spot("tb_som")
+	waar(som != null and som.knoop.visible, "de kaart van de tobbes staat er")
+	var wolk = Hits.spot("komt_" + id)
+	if wolk != null and is_instance_valid(wolk.knoop):
+		(wolk.knoop as BaseButton).pressed.emit()
+	gelijk(Hotel.volgt(), id, "👀 Volg: de camera loopt met hem mee")
+	waar(World.kamer_nu() != "tuin", "naar de kamer waar hij is")
+	Hits.plaats()
+	som = Hits.spot("tb_som")
+	waar(som != null and not som.knoop.visible, "de kaart van de tobbes blijft in de tuin")
+	var t := 0
+	while not Hotel.volgt().is_empty() and t < 5000:
+		World._tik()
+		Hotel._volg_stap()
+		t += 1
+	gelijk(World.kamer_nu(), "tuin", "de camera eindigt bij de tobbes")
+	gelijk(Games.actief(), ID, "en het spel loopt nog")
+	Hits.plaats()
+	som = Hits.spot("tb_som")
+	waar(som != null and som.knoop.visible, "terug in de tuin staat de kaart weer")
+	var d: Dictionary = Hits.debug().get("tb_som", {})
+	var r: Rect2 = d.get("rect", Rect2())
+	waar(r.size.x > 0.0 and r.position.x >= -0.01 and r.end.x <= _laag.size.x + 0.01
+		and r.position.y >= -0.01 and r.end.y <= _laag.size.y + 0.01,
+		"opnieuw neergelegd, binnen het kader (%s)" % str(r))
+	waar(_tik_tot_hij_staat(id, "tuin"), "hij loopt naar de tobbes")
+	waar(await _staat_er_binnen("tb_dier" + id, 1500), "hij staat er: zijn knopje")
+	var knop = Hits.spot("tb_dier" + id)
+	if knop != null:
+		(knop.knoop as BaseButton).pressed.emit()
+	waar(spel._in_bad_ids().has(id), "en dat werkt: hij gaat in bad")
+	World.pauzeer(false)
+	Ui.zet_rust_modus(rust_voor)
+	_af()
+
+## Tick until `id` stands still in `kamer`: arrived, not walking any more.
+func _tik_tot_hij_staat(id: String, kamer: String) -> bool:
+	var d = World.dier(id)
+	var t := 0
+	while d != null and t < 5000 and not (d.kamer == kamer and str(d.reis_doel).is_empty()
+			and (d.route as Array).is_empty() and (d.punten as Array).is_empty()):
+		World._tik()
+		t += 1
+	return d != null and d.kamer == kamer and (d.punten as Array).is_empty()
+
+## Tick until `id` has stepped into `kamer` (and may still walk on in it).
+func _tik_tot_hij_binnen_is(id: String, kamer: String) -> bool:
+	var d = World.dier(id)
+	var t := 0
+	while d != null and d.kamer != kamer and t < 5000:
+		World._tik()
+		t += 1
+	return d != null and d.kamer == kamer
+
+## Real time, frames running, until hotspot `id` exists.
+func _staat_er_binnen(id: String, ms: int) -> bool:
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < ms:
+		if Hits.spot(id) != null:
+			return true
+		await boom.process_frame
+	return Hits.spot(id) != null
+
+## The hotel's "komt eraan" bubble of `id` hangs in the room in view, and stands
+## on the glass while the game runs.
+func _komt_eraan_in_beeld(id: String) -> bool:
+	Hotel.komt_eraan()
+	Hits.plaats()
+	var w := Hits.spot("komt_" + id)
+	return w != null and is_instance_valid(w.knoop) and w.knoop.visible
+
 ## A miss costs nothing: the turn goes on, the star count does not move.
 func test_misser_helpt_en_straft_nooit() -> void:
 	_op()

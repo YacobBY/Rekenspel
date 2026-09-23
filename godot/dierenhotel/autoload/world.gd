@@ -1249,6 +1249,19 @@ func solo(id: String, _act: String = "") -> bool:
 	var p := _vrije_plek(d)
 	return ga(id, p.x, p.y, "blij")
 
+## Stay where you stand and take end state `na` (§2.5), in this frame: the
+## order a game gives the animal of its turn once he is at his place
+## (`ctx.wacht_op`) — "wacht" keeps him there instead of wandering off.
+func blijf(id: String, na: String = "wacht") -> bool:
+	var d: Dier = _dieren.get(id)
+	if d == null:
+		return false
+	_breek(d, false)
+	d.na = na
+	_eind_staat(d)
+	vuil()
+	return true
+
 ## 'sad' | 'happy' | 'idle' — sulk at the sulking place, bounce, or resume.
 func mood(id: String, stemming: String) -> bool:
 	var d: Dier = _dieren.get(id)

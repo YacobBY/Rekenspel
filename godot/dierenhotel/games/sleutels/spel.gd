@@ -70,6 +70,9 @@ const HULP_KIES := "tel met de sprongen mee"              ## 4 / 23
 const HULP_HANG := "sleep of tik het lege haakje"         ## 6 / 28
 const KIES_WOLK := "kies eerst het getal"                 ## 4 / 20
 const WOLK_KORT := 1.6            ## zo lang staat een kort wolkje (K1 punt 7)
+## Zo dicht bij zijn wachtplek aan de balie staat een gast er al (de HTML: 8
+## voxels manhattan); verder weg loopt hij eerst het laatste stukje.
+const BALIE_MARGE := 6.0
 
 # --------------------------------------------------------------------- staat
 
@@ -86,6 +89,8 @@ var _bord_plek: Dictionary = {}   ## de plek van het sleutelbord, uit Rooms
 var _kader_af: Callable           ## opzegging van ctx.ui.op_kader
 var _kader_teller := 0            ## ontdubbelt de kaderwachters
 var _af := false                  ## de ronde is uitgespeeld
+var _wacht := ""                  ## de gast op wie het bord wacht, "" = hij staat er
+var _wacht_nr := 0                ## ontdubbelt de wachters
 
 # ---------------------------------------------------------------- aanmelding
 
@@ -111,6 +116,7 @@ func start(_c: SpelCtx) -> void:
 	_spook = false
 	_tip = ""
 	_af = false
+	_wacht = ""
 	_bord_plek = _zoek_bord()
 	_gasten = _gasten_met_bed()
 	if _gasten.is_empty():
@@ -145,10 +151,9 @@ func start(_c: SpelCtx) -> void:
 		_p[STAP_KEY] = STAP_REKEN
 	if _stap() == STAP_HANG and _gekozen() <= 0:
 		_p[STAP_KEY] = STAP_REKEN
-	_haal_gast()
 	ctx.speelt(str(_sleutel_nu().get("gast", "")))
 	_kader_af = ctx.ui.op_kader(_op_kader)
-	_teken()
+	_haal_gast()                      # het bord komt als zijn gast aan de balie staat
 	print("[probe] spel=start id=", ctx.id, " band=", band, " borden=", _borden().size(),
 		" sleutels=", _sleutels().size(), " opbouw=", _lay.get("modus", ""))
 
@@ -243,24 +248,31 @@ func _gasten_kloppen(p) -> bool:
 	return true
 
 
-## De gast van de huidige sleutel komt naar de balie — tenzij hij daar al
-## binnen 8 voxels (manhattan) staat.
+## De gast van de huidige sleutel komt naar de balie, en pas als hij daar
+## staat komt zijn vraag (eigenaar, 2026-09-23: "Zorg dat de minigame pas
+## begint wanneer het dier er is").  Zolang hij door het hotel loopt staat er
+## niets van het bord: het hotelwolkje "komt eraan" hangt bij de deur, met de
+## balk en `👀 Volg` (`ctx.wacht_op`).  Staat hij er al — binnen
+## `BALIE_MARGE` van zijn plek — dan komt de vraag meteen.  Dat geldt voor
+## elke sleutel: na een opgehangen sleutel komt de volgende gast naar voren.
 func _haal_gast() -> void:
 	var s := _sleutel_nu()
-	if s.is_empty():
-		return
 	var id := str(s.get("gast", ""))
-	var g: Dictionary = ctx.state.gast_van(id)
-	if g.is_empty():
+	if s.is_empty() or ctx.state.gast_van(id).is_empty():
+		_wacht = ""
+		_teken()
 		return
+	_wacht = id
+	_wacht_nr += 1
+	var mijn := _wacht_nr
 	var plek := _plek(0.75, 0.85)
-	var d = ctx.wereld.dier(id)
-	if d != null and d.kamer == ctx.kamer \
-			and absf(d.x - plek.x) + absf(d.z - plek.y) < 8.0:
+	if not ctx.is_er(id, plek, BALIE_MARGE):
+		_teken()                      # de vorige vraag gaat weg terwijl hij loopt
+	var _er: bool = await ctx.wacht_op(id, plek, {"marge": BALIE_MARGE})
+	if not actief or mijn != _wacht_nr:
 		return
-	ctx.wereld.reis(id, ctx.kamer, {"x": plek.x, "z": plek.y, "na": "wacht"})
-	g["waar"] = ctx.kamer
-	ctx.wereld.vuil()
+	_wacht = ""
+	_teken()
 
 
 ## Het dier gaat naar zijn eigen kamer en kruipt in bed.
@@ -634,7 +646,12 @@ func _opbouw(b: Dictionary) -> Dictionary:
 				"z": float(_bord_plek.get("z", 0.0)), "y": 0.0}),
 				2.0 + kaart_maat.x * 0.5,
 				maxf(2.0 + kaart_maat.x * 0.5, kader.size.x - 2.0 - kaart_maat.x * 0.5))
-			links_min = kaart_px + kaart_maat.x * 0.5 + GAT
+			# de kolom van de kaart is zo breed als de breedste van kaart en
+			# getallenstrook: staat de gast aan de balie (en dat doet hij sinds
+			# het bord op hem wacht, eigenaar 2026-09-23), dan neemt hij de vloer
+			# naast de kaart in en stapelt de strook bóven in die kolom — en daar
+			# mag het eerste haakje niet onder liggen
+			links_min = kaart_px + maxf(kaart_maat.x, _strook_breed()) * 0.5 + GAT
 		"krap":
 			kaart_py = RAND + kaart_maat.y * 0.5
 	# K1: in een laag kader is er boven het sleutelbord geen plek voor zowel de
@@ -1146,6 +1163,13 @@ func _kaart_maat() -> Vector2:
 			return eerlijk
 	return Vector2(UiSomkaart.BREED_KLEIN if Ui.smal() else UiSomkaart.BREED, 96.0)
 
+## De breedte van de getallenstrook onder de vraagkaart, 0 zonder strook.
+func _strook_breed() -> float:
+	var s := Hits.spot(KAART + "_keuzes")
+	if s == null or not is_instance_valid(s.knoop):
+		return 0.0
+	return (s.knoop as Control).get_combined_minimum_size().x
+
 # ----------------------------------------------------------------- tekenen
 
 ## Alles wat dit spel op het scherm zet, in één beurt: eerst de kaart (die weet
@@ -1155,6 +1179,12 @@ func _teken() -> void:
 	if not actief or _p.is_empty():
 		return
 	ctx.hotspots.wis_alles()
+	# niets van het bord zolang de gast van deze sleutel naar de balie loopt
+	# (`_haal_gast`); de lampjes boven de deuren in de gang blijven branden
+	if not _wacht.is_empty():
+		_deur_plaatjes()
+		ctx.wereld.vuil()
+		return
 	var b := _bord_nu()
 	if b.is_empty():
 		return
@@ -1601,7 +1631,12 @@ func _goed(i: int) -> void:
 	# K1: elke nieuwe sleutel begint weer bij de vraag naar het getal
 	_p[STAP_KEY] = STAP_REKEN
 	_p["gekozen"] = 0
-	_teken()
+	if volgende.is_empty():
+		_teken()
+	else:
+		# de volgende gast komt naar de balie; zijn vraag komt als hij er staat
+		ctx.speelt(str(volgende.get("gast", "")))
+		_haal_gast()
 	# de gast die net zijn sleutel kreeg loopt weg: kort wolkje mee
 	var afscheid := _gast_punt(gast, _plek(0.75, 0.85))
 	ctx.ui.wolk({"id": "sl_af", "kamer": ctx.kamer, "hoog": 40.0, "prio": 13,
@@ -1610,8 +1645,6 @@ func _goed(i: int) -> void:
 		"volg": _volg_gast(gast)})
 	_wolk_weg_straks()
 	if not volgende.is_empty():
-		_haal_gast()
-		ctx.speelt(str(volgende.get("gast", "")))
 		State.bewaar()
 		return
 	_klaar()

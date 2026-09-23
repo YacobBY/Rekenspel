@@ -66,8 +66,6 @@ const RECHT_S := 0.9         ## level: a moment to see it, then the question
 const BLIJF_S := 1.5         ## how often the guest of the turn is kept at his spot
 const AF_S := 3.4
 const LEEG_S := 1.8
-const GAST_POLL := 0.7
-const GAST_KEER := 24
 const SPOOK_NA := 3          ## the ghost number at the third miss on a question
 const SPOOK_LEG := 8         ## and the recipe after eight weights up and down
 
@@ -77,8 +75,6 @@ var _kaart = null            ## Ui.Kaart
 var _kaart_stap := ""
 var _kaart_hulp := ""        ## the help line the card carries now (small frames)
 var _t0 := 0
-var _gast_gestuurd := false
-var _gast_keer := 0
 
 # ------------------------------------------------------------- aanmelding
 
@@ -150,13 +146,11 @@ func start(_c: SpelCtx) -> void:
 	_t0 = Time.get_ticks_msec()
 	_kaart = null
 	_kaart_stap = ""
-	_gast_gestuurd = false
-	_gast_keer = 0
+	# the balance and its weights stand there at once; the card waits for the
+	# weigher (`_begin`)
 	_zet_decor()
-	_kaart_neer()
-	_teken()
 	State.bewaar()
-	_haal_gast()
+	_begin()
 	# the one whose turn was dropped makes room at the scale — after the new
 	# guest was sent, so he walks off to a place the new one is not heading for
 	if not weg.is_empty() and weg != _gast_id():
@@ -234,34 +228,23 @@ func _bewaar() -> void:
 
 # ------------------------------------------------------------ de gast halen
 
-func _haal_gast() -> void:
+## The weigher first, then the first reading (owner, 2026-09-23: "Zorg dat de
+## minigame pas begint wanneer het dier er is").  The balance with the pumpkin
+## on it stands there at once; the card comes the moment the guest of the turn
+## stands beside it — after a walk through the doors with the hotel's "komt
+## eraan" bubble and its `👀 Volg` at the kas door when he comes from another
+## room (`ctx.wacht_op`, games-c.md §3.6).
+func _begin() -> void:
 	if ctx == null:
 		return
-	var g: Dictionary = ctx.state.gast_van(_gast_id())
-	if g.is_empty():
+	if not await ctx.wacht_op(_gast_id(), Vector2(GAST_X, GAST_Z)):
+		if actief:
+			ctx.sluit.call_deferred()      # the weigher is gone
 		return
-	var id := str(g["id"])
-	var d = World.dier(id)
-	if d == null:
+	if not actief or S.is_empty() or O.is_empty():
 		return
-	while d != null and d.kamer != KAMER:
-		if not _gast_gestuurd:
-			_gast_gestuurd = true
-			ctx.wereld.reis(id, KAMER, {"x": GAST_X, "z": GAST_Z, "na": "wacht"})
-			g["waar"] = KAMER
-		if _gast_keer >= GAST_KEER:
-			return
-		_gast_keer += 1
-		if not await na(GAST_POLL):
-			return
-		if S.is_empty():
-			return
-		d = World.dier(id)
-	g["waar"] = KAMER
-	var _gehaald: bool = await ctx.wereld.loop_naar(id, GAST_X, GAST_Z, {"na": "wacht"})
-	if not actief or S.is_empty():
-		return
-	ctx.wereld.vuil()
+	_kaart_neer()
+	_teken()
 	_houd_bij_de_schaal()
 
 ## The guest of the turn stays beside the balance for the whole turn: a waiting

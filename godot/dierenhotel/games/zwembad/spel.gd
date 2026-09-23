@@ -177,12 +177,22 @@ func _gast_kies() -> Dictionary:
 		return {"id": str(gasten[0]["id"]), "wens": false}
 	return {}
 
-## The question first, the water after it (PLAN N3 step 1, R1): within a second
-## of the tap on the pool there is a card with an answer strip, and the journey,
-## the little stair and the dive are what the first ANSWER buys.  `_kies()` puts
-## him in the water itself, so nothing here waits for a walk — the guest may
-## still be in another room, which `_zet_gasttag` and `_vrij_vak` both allow.
+## The swimmer first, then the question (owner, 2026-09-23: "Zorg dat de
+## minigame pas begint wanneer het dier er is" — this turns PLAN N3 step 1
+## round, where the first card stood there while he was still in another
+## room).  He walks to the deck at the start of the lane, through the doors
+## with the hotel's "komt eraan" bubble and its `👀 Volg` at the gate, and the
+## card comes the moment he stands there (`ctx.wacht_op`).  A lane that was
+## half swum waits for him on the deck its `stop()` put him on (`_dek_nu`).
+## The stair, the dive and the swim are still what the first ANSWER buys:
+## `_kies()` puts him in the water, on his own metre.
 func _begin() -> void:
+	if not await ctx.wacht_op(_gast, _dek_nu()):
+		if actief:
+			ctx.sluit.call_deferred()      # the swimmer is gone: nobody to teach
+		return
+	if not actief or not str(_b.get("klaar", "")).is_empty():
+		return
 	_zet_gasttag()
 	_vraag()
 

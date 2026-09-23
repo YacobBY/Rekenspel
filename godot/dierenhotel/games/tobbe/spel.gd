@@ -347,6 +347,7 @@ func start(_c: SpelCtx) -> void:
 	_teken()
 	if str(_s["stap"]) == "baden":
 		_bubbels()
+		_haal_baders()              # a reload in the bath step: who is still away comes
 
 ## Zeepbellen boven wie in bad zit, zolang de badstap duurt (review plan
 ## pijler 4).  Eén lus tegelijk; `na()` stopt hem met het spel.
@@ -893,18 +894,10 @@ func _geslaagd() -> void:
 	_s["stap"] = "baden"
 	_s["lijn"] = 1
 	_s["mors"] = -1
-	_s["tel"] = 0
 	_zeg(null)
 	_spook_weg()
 	# het water is klaar: wie in bad moet komt er zelf aan lopen
-	var p0: Dictionary = _p[0]
-	for g in _moet_nog_in_bad():
-		var d := World.dier(str(g["id"]))
-		if d != null and d.kamer == KAMER:
-			continue
-		World.reis(str(g["id"]), KAMER, {"x": maxf(12.0, float(p0["x"]) - 16.0),
-			"z": float(p0["z"]), "na": "wacht"})
-		g["waar"] = KAMER
+	_haal_baders()
 	# Het adaptieve signaal telt hier al mee; de STER hoort bij de hele ronde en
 	# valt pas als de gasten gebaad hebben — anders krijgt één ronde twee sterren.
 	ctx.state.tel(int(_s["missers"]) == 0, Time.get_ticks_msec() - int(_s["t0"]))
@@ -997,7 +990,8 @@ func _teken_baden() -> void:
 	for g in wacht.slice(0, 3):
 		var id := str(g["id"])
 		var d := World.dier(id)
-		if d == null or d.kamer != KAMER:
+		# his button comes when he is there, not while he still walks in
+		if d == null or d.kamer != KAMER or Games.verwacht_dier(id):
 			continue
 		ctx.hotspots.maak({
 			"id": "tb_dier" + id, "kamer": KAMER, "x": d.x, "z": d.z, "y": 34.0,
@@ -1032,22 +1026,26 @@ func _teken_baden() -> void:
 			"op": "onder", "obj": "tobbe", "icoon": "✓", "label": "klaar", "prio": 13,
 			"titel": "klaar met badderen", "aan": func(_spot) -> void: _klaar_met_baden()})
 	_teken_zeg()
-	# een dier met de wens 🛁 kan nog onderweg zijn: dan tekenen we straks
-	# opnieuw, hooguit acht keer, nooit een eindeloze lus
-	if str(_s["stap"]) == "baden" and int(_s["tel"]) < 8:
-		var onderweg := false
-		for g in _moet_nog_in_bad():
-			var q := World.dier(str(g["id"]))
-			if q == null or q.kamer != KAMER:
-				onderweg = true
-		if onderweg:
-			_s["tel"] = int(_s["tel"]) + 1
-			_wacht_op_dier()
 
-func _wacht_op_dier() -> void:
-	if not await na(0.9):
+## Wie in bad moet en nog elders in het hotel is, loopt naar de tobbes, en zijn
+## knopje komt pas als hij er staat (eigenaar, 2026-09-23: "Zorg dat de
+## minigame pas begint wanneer het dier er is"): zolang hangt het hotelwolkje
+## "komt eraan" met zijn balk en `👀 Volg` bij de tuindeur (`ctx.wacht_op`).
+## Wie al in de tuin is, krijgt zijn knopje meteen, zoals altijd.
+func _haal_baders() -> void:
+	if _p.is_empty():
 		return
-	if _s.is_empty() or str(_s["stap"]) != "baden":
+	var p0: Dictionary = _p[0]
+	var plek := Vector2(maxf(12.0, float(p0["x"]) - 16.0), float(p0["z"]))
+	for g in _moet_nog_in_bad():
+		var d := World.dier(str(g["id"]))
+		if d != null and d.kamer == KAMER:
+			continue
+		_haal_bader(str(g["id"]), plek)
+
+func _haal_bader(id: String, plek: Vector2) -> void:
+	var _er: bool = await ctx.wacht_op(id, plek)
+	if not actief or _s.is_empty() or str(_s["stap"]) != "baden":
 		return
 	_teken()
 

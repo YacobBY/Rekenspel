@@ -38,8 +38,7 @@ const TRAP_BORD := 18
 ## between two numbers; at one voxel they would share a pixel column.
 const BORD_LOS := 2.0
 
-const WACHT_S := 0.5            ## how often we look whether the guest arrived
-const HERSTUUR := 24            ## every 24th look (~12 s) we send him again
+const STEEN_MARGE := 2.5        ## voxels from his stone: he stands on it (`_op_start_steen`)
 const VRIJ_S := 2.0             ## how often the strip is swept clear again
 const ZEG_S := 2.4              ## how long the soft word at the animal stays
 const EIND_S := 4.6             ## and how long the finished card stays readable
@@ -89,7 +88,7 @@ var _s: Dictionary = {}
 var _kaart: Ui.Kaart = null
 var _opzij: Array[String] = []      ## guests we sent off the strip
 var _hop_nr := 0                    ## every hop series gets a number
-var _wacht_loopt := false           ## exactly ONE waiting chain at a time
+var _wacht_loopt := false           ## exactly ONE wait for the guest at a time
 var _t0 := 0
 
 # =================================================================== aanmelding
@@ -202,21 +201,19 @@ func start(_c: SpelCtx) -> void:
 		d["stand"] = _s
 	ctx.speelt(str(_s.get("gast", "")))
 	_t0 = Time.get_ticks_msec()
-	_s["wacht"] = 0
 	if str(_s["fase"]) == "hop":
 		_s["fase"] = "sprong"          # a hop survives no reload
 	_hop_nr += 1
 	_opzij.clear()
+	_wacht_loopt = false
 	_zet_decor()
-	_haal_gast()
+	State.bewaar()
+	_haal_gast()                       # the card comes once he stands on his stone
 	# who hopped the dropped path makes room, or turns back on his way here;
 	# on the stones the loop below sends him to the grass like any other guest
 	if not weg.is_empty() and weg != str(_s.get("gast", "")):
 		ctx.laat_gaan(weg)
-	_teken()
 	_houd_vrij_lus()                   # the other guests off the stones
-	_wacht_lus()                       # and watch for our guest to arrive
-	State.bewaar()
 
 func stop() -> void:
 	_hop_nr += 1                       # running hop series decide nothing more
@@ -255,7 +252,7 @@ func _nieuwe_stand(n: int, band: int, dag: int, gast_id: String) -> Dictionary:
 	return {"dag": dag, "N": n, "band": int(b["band"]), "E": int(b["E"]),
 		"stap": int(b["stap"]), "gast": gast_id, "s": int(b["s"]),
 		"doel": int(b["doel"]), "sprong": 0, "n": int(b["n"]), "hops": 0,
-		"tel": 0, "wacht": 0, "fase": "sprong", "melding": "",
+		"tel": 0, "fase": "sprong", "melding": "",
 		"missers": 0, "pogingen": 0, "ster": 0, "wens": 0}
 
 # =================================================================== de gasten
@@ -565,54 +562,42 @@ func _op_start_steen() -> bool:
 	return absf(d.x - _dier_x(float(int(_s["s"])))) <= 2.5 \
 		and absf(d.z - float(m["zDier"])) <= 3.5
 
-## An order always walks INSIDE the room the animal is in, so a guest lying in
-## kamer 1 first has to walk through the hotel; the choice strip only appears
-## once he stands on his stone.
+## The guest first, then the card (owner, 2026-09-23: "Zorg dat de minigame
+## pas begint wanneer het dier er is" — this overrules PLAN N11, where the sum
+## stood there at once while the animal was still on his way).  He walks to his
+## stone — a guest lying in kamer 1 through the whole hotel, with the hotel's
+## "komt eraan" bubble and its `👀 Volg` at the garden door — and nothing of
+## the turn is on screen until he stands there: no card, no strip, not the
+## number above his head (`_teken`).  There is always exactly ONE wait
+## (`_wacht_loopt`); `ctx.wacht_op` sends him again when a journey was
+## overtaken by the engine or by another game.
 func _haal_gast() -> void:
+	if _wacht_loopt or _s.is_empty():
+		return
 	var g := _gast()
 	if g.is_empty():
 		return
 	var id := str(g["id"])
-	var d = ctx.wereld.dier(id)
-	if d == null:
+	var plek := Vector2(_dier_x(float(int(_s["s"]))), float(_pad_maat()["zDier"]))
+	_wacht_loopt = true
+	if not ctx.is_er(id, plek, STEEN_MARGE):
+		_teken()                         # the old card goes while he walks
+	var er: bool = await ctx.wacht_op(id, plek, {"tempo": 1.4, "marge": STEEN_MARGE})
+	_wacht_loopt = false
+	if not actief or _s.is_empty():
 		return
-	var m := _pad_maat()
-	if d.kamer != "tuin":
-		g["waar"] = "tuin"
-		ctx.wereld.reis(id, "tuin", {"x": _dier_x(float(int(_s["s"]))),
-			"z": float(m["zDier"]), "na": "wacht"})
+	if not er:
+		ctx.sluit.call_deferred()        # the hopper is gone
 		return
-	if not _op_start_steen():
-		_loop_los(id, _dier_x(float(int(_s["s"]))), float(m["zDier"]),
-			{"tempo": 1.4, "na": "wacht"})
+	if str(_s.get("fase", "")) == "hop":
+		_s["fase"] = "sprong"            # a series that never set off: ask again
+		_s["sprong"] = 0
+	_teken()
 
 ## A walk nobody waits for.  `World.loop_naar` is awaitable; this void wrapper
 ## is the shape `games/_voorbeeld/spel.gd` uses to fire one and forget it.
 func _loop_los(id: String, x: float, z: float, o: Dictionary) -> void:
 	await ctx.wereld.loop_naar(id, x, z, o)
-
-## Every half second we look whether he has arrived; when he has, we draw again
-## and the choice strip appears.  After ~12 s in another room we send him on his
-## way once more — a journey can have been overtaken by the engine or by another
-## game.  There is always exactly ONE chain.
-func _wacht_lus() -> void:
-	if _wacht_loopt:
-		return
-	_wacht_loopt = true
-	while actief and not _s.is_empty() and str(_s.get("fase", "")) != "af":
-		if _op_start_steen():
-			if int(_s.get("wacht", 0)) > 0:
-				_s["wacht"] = 0
-				_teken()
-			break
-		_s["wacht"] = int(_s.get("wacht", 0)) + 1
-		if int(_s["wacht"]) == 1:
-			_teken()                    # "komt eraan", right away
-		elif int(_s["wacht"]) % HERSTUUR == 0:
-			_haal_gast()
-		if not await na(WACHT_S):
-			break
-	_wacht_loopt = false
 
 # =================================================================== de anderen
 
@@ -710,15 +695,9 @@ func _zinnen() -> Dictionary:
 	var fase := str(_s["fase"])
 	if fase == "af":
 		return {"icoon": "✅", "zin": ["Precies op de trap!"]}
-	# still on his way to his stone?  Then the card says so, in every phase, and
-	# there is no choice strip under it.
-	if not _op_start_steen() and fase != "hop":
-		return {"icoon": _ico(g), "zin": ["Komt eraan"] if k
-			else ["%s komt eraan" % nm, "Tel straks mee"]}
+	# no "komt eraan" card: while he walks to his stone the game draws nothing
+	# and the hotel's own bubble says who is coming (owner, 2026-09-23)
 	if fase == "hop":
-		if not _op_start_steen() and int(_s["tel"]) == 0:
-			return {"icoon": _ico(g), "zin": ["Komt eraan"] if k
-				else ["%s komt eraan" % nm, "Tel straks mee"]}
 		return {"icoon": _ico(g), "zin": ["Tel maar mee"] if k
 			else ["%s hinkelt" % nm, "Tel maar mee"]}
 	if fase == "aantal":
@@ -894,6 +873,10 @@ func _teken() -> void:
 	if not actief or _s.is_empty():
 		return
 	ctx.hotspots.wis_alles()
+	# nothing of the turn while he walks to his stone (`_haal_gast`)
+	if _wacht_loopt:
+		ctx.wereld.vuil()
+		return
 	_teken_cijfers()
 	_teken_kaart()
 	ctx.wereld.vuil()
@@ -940,11 +923,10 @@ func _antwoord(n: int) -> void:
 		return
 	# The strip only stands there once the guest is on his stone; through the
 	# test hook an answer can still arrive early.  Then we fetch him first and
-	# the question simply stays (nothing counts, nothing is lost).
+	# the same question comes back when he is there (nothing counts, nothing
+	# is lost).
 	if not _op_start_steen():
 		_haal_gast()
-		_wacht_lus()
-		_teken()
 		return
 	var goed := _aantal_goed(int(_s["sprong"]))
 	_s["pogingen"] = int(_s["pogingen"]) + 1
@@ -963,7 +945,6 @@ func _hop(aantal: int) -> void:
 		return
 	if not _op_start_steen():
 		_haal_gast()
-		_wacht_lus()
 		return
 	var id := str(g["id"])
 	var m := _pad_maat()
@@ -985,7 +966,6 @@ func _hop(aantal: int) -> void:
 	_s["fase"] = "hop"
 	_s["hops"] = hops
 	_s["tel"] = 0
-	_s["wacht"] = 0
 	State.bewaar()
 	_teken()
 	_hop_nr += 1
@@ -1017,7 +997,6 @@ func _loop_eerst(id: String, mijn: int) -> bool:
 	var d = ctx.wereld.dier(id)
 	if d == null or d.kamer != "tuin":
 		_haal_gast()
-		_wacht_lus()
 		return false
 	var doel_x := _dier_x(float(int(_s["s"])))
 	if absf(d.x - doel_x) <= 2.5 and absf(d.z - float(m["zDier"])) <= 3.5:

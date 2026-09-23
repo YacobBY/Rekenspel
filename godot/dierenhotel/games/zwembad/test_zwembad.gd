@@ -611,10 +611,64 @@ func test_de_ster_valt_alleen_bij_precies() -> void:
 	gelijk(int(State.s["sterren"]), sterren_voor + 1, "nu valt de ster")
 	await _af()
 
-## R1 (PLAN N3 stap 1): binnen een tik staat de som er.  De reis, het trapje en
-## de duik zijn voortaan de belóning van het eerste antwoord, niet de wachtkamer
-## ervoor — de zwemmer mag zelfs nog in een andere kamer staan.
-func test_de_vraag_staat_er_voor_de_duik() -> void:
+## Eigenaar, 2026-09-23: "Bij het zwembad is er geen volg optie om boef aan te
+## komen tenzij ik eerst op 'terug' druk.  Zorg dat de minigame pas begint
+## wanneer het dier er is."  De zwemmer staat nog in de receptie: het spel
+## wacht op hem — geen kaart, geen strook — en het hotelwolkje "komt eraan" met
+## zijn balk en `👀 Volg` staat bij het hek, ook nu het spel loopt.  Zodra hij
+## op het dek staat komt de eerste vraag; het trapje, de duik en het zwemmen
+## zijn nog steeds wat het eerste antwoord koopt.  (Tot 2026-09-23 stond de
+## vraag er meteen en was de zwemmer "nog niet eens in het zwembad", PLAN N3.)
+func test_de_vraag_wacht_op_de_zwemmer() -> void:
+	_op()
+	Ui.zet_rust_modus(false)
+	var gasten := _gasten(4)
+	gasten[2]["behoefte"] = "zwemmen"      # de wensende gast staat in de receptie
+	gasten[2]["blij"] = false
+	var id := str(gasten[2]["id"])
+	World.pauzeer(true)                    # de test tikt de wereld zelf
+	waar(Games.start(ID), "het spel start")
+	gelijk(str(_beurt()["gast"]), id, "de wensende gast zwemt")
+	gelijk(Games.speler(), id, "en staat op de spelbalk")
+	waar(Hits.spot(KAART) == null and not _kaart_staat(), "nog geen vraag: hij is er nog niet")
+	waar(Games.verwacht_dier(id), "het spel wacht op hem")
+	var d = World.dier(id)
+	gelijk(str(d.reis_doel), ID, "hij loopt naar het zwembad")
+	Hotel.komt_eraan()
+	Hits.plaats()
+	var w := Hits.spot("komt_" + id)
+	waar(w != null and is_instance_valid(w.knoop) and w.knoop.visible,
+		"zijn wolkje 'komt eraan' staat in beeld, ook nu het spel loopt")
+	var t := 0
+	while d.kamer != ID and t < 4000:
+		World._tik()
+		t += 1
+	gelijk(d.kamer, ID, "hij stapt het zwembad in")
+	await _wacht(func() -> bool: return false, 350)
+	waar(not _kaart_staat(), "maar zolang hij naar het dek loopt, is er geen vraag")
+	while not (d.punten as Array).is_empty() and t < 4000:
+		World._tik()
+		t += 1
+	waar(await _wacht(_kaart_staat, 2000), "op het dek: nu komt de vraag")
+	waar(not Games.verwacht_dier(id), "het spel wacht niet meer")
+	var dek: Vector2 = Rooms.get_kamer(ID).dek["start"]
+	waar(Vector2(d.x, d.z).distance_to(dek) <= 3.0,
+		"hij staat op het dek aan het begin van de baan (%.0f, %.0f)" % [d.x, d.z])
+	gelijk(int(_beurt()["p"]), 0, "nog op meter 0")
+	var kaart := _kaart_knoop()
+	waar(kaart != null, "het is een echte somkaart")
+	if kaart != null:
+		gelijk(kaart.regel_label.text,
+			"🏊 " + ZwembadBeurt.regel_start(int(_beurt()["L"])), "met de baan erop")
+	Hotel.komt_eraan()
+	waar(Hits.spot("komt_" + id) == null, "en zijn wolkje is weg")
+	World.pauzeer(false)
+	await _af()
+
+## Rustmodus lost elke wandeling meteen op (games-b.md §0.11): dan staat de
+## zwemmer uit de receptie in dezelfde tik op het dek, en de vraag staat er
+## zonder één frame te wachten.
+func test_in_rust_staat_de_vraag_er_meteen() -> void:
 	_op()
 	var gasten := _gasten(4)
 	gasten[2]["behoefte"] = "zwemmen"      # de wensende gast staat in de receptie
@@ -625,15 +679,51 @@ func test_de_vraag_staat_er_voor_de_duik() -> void:
 	gelijk(int(_beurt()["p"]), 0, "en hij ligt nog op meter 0")
 	var rij := Hits.spot(STROOK).knoop.get_node_or_null("Rij")
 	waar(rij != null and rij.get_child_count() == 4, "de kaart draagt vier keuzes")
-	var kaart := _kaart_knoop()
-	waar(kaart != null, "het is een echte somkaart")
-	if kaart != null:
-		gelijk(kaart.regel_label.text,
-			"🏊 " + ZwembadBeurt.regel_start(int(_beurt()["L"])), "met de baan erop")
 	var d = World.dier(str(gasten[2]["id"]))
-	waar(d != null and d.kamer != ID, "en de zwemmer is nog niet eens in het zwembad")
+	waar(d != null and d.kamer == ID, "de zwemmer is er al")
+	waar(not Games.verwacht_dier(str(gasten[2]["id"])), "er valt niets te wachten")
 	await _frames(2)
 	waar(_kaart_staat(), "ook na de eerste plaatsing staat de vraag er")
+	await _af()
+
+## Het dier op de spelbalk wisselen terwijl het spel nog wacht: de vorige
+## zwemmer keert om naar zijn bed (`ctx.laat_gaan`), het spel wacht op de
+## nieuwe, en diens wolkje "komt eraan" hangt nu bij het hek.
+func test_wisselen_terwijl_het_spel_wacht() -> void:
+	_op()
+	Ui.zet_rust_modus(false)
+	var gasten := _gasten(4)
+	var eerst := str(gasten[2]["id"])
+	var dan := str(gasten[3]["id"])
+	gasten[2]["behoefte"] = "zwemmen"
+	gasten[2]["blij"] = false
+	World.pauzeer(true)
+	waar(Games.start(ID), "het spel start")
+	gelijk(Games.speler(), eerst, "de wensende gast zwemt eerst")
+	waar(Games.verwacht_dier(eerst), "en het spel wacht op hem")
+	Hotel.komt_eraan()
+	waar(Hits.spot("komt_" + eerst) != null, "zijn wolkje hangt bij het hek")
+	gelijk(Games.volgende_speler(), dan, "de volgende op de balk")
+	waar(Games.wissel_speler(), "het dier op de balk geeft de beurt door")
+	gelijk(Games.speler(), dan, "nu zwemt de volgende")
+	waar(not Games.verwacht_dier(eerst), "op de vorige wacht niemand meer")
+	waar(Games.verwacht_dier(dan), "op de nieuwe wel")
+	waar(Hits.spot(KAART) == null and not _kaart_staat(), "en er is nog steeds geen vraag")
+	var vorige = World.dier(eerst)
+	gelijk(str(vorige.reis_doel), str(gasten[2]["kamer"]),
+		"de vorige keert om naar zijn eigen kamer")
+	Hotel.komt_eraan()
+	waar(Hits.spot("komt_" + eerst) == null, "zijn wolkje is weg")
+	waar(Hits.spot("komt_" + dan) != null, "en het wolkje van de nieuwe hangt er")
+	var d = World.dier(dan)
+	var t := 0
+	while (d.kamer != ID or not (d.punten as Array).is_empty()) and t < 4000:
+		World._tik()
+		t += 1
+	waar(await _wacht(_kaart_staat, 2000), "de nieuwe staat op het dek: zijn vraag")
+	var kaart := _kaart_knoop()
+	waar(kaart != null and str(_beurt()["gast"]) == dan, "zijn eigen baan")
+	World.pauzeer(false)
 	await _af()
 
 ## De twee klimaxmomenten spatten: de wand en de overkant (pijler 4).  Met de

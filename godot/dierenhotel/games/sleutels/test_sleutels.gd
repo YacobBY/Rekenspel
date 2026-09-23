@@ -32,11 +32,19 @@ const MODUS := {"(1024, 768)": "wand", "(768, 1024)": "wand",
 
 var _laag: Control = null
 var _bewaard: Dictionary = {}
+var _rust_voor := false
 
 # ------------------------------------------------------------------ gereedschap
 
+## Rustmodus voor de hele reeks: het bord wacht tot de gast van de sleutel aan
+## de balie staat (eigenaar, 2026-09-23: "Zorg dat de minigame pas begint
+## wanneer het dier er is"), en in rustmodus is elke wandeling meteen klaar
+## (world.md §2.5) — dus een beurt begint nog steeds zonder wachttijd.
+## `test_het_bord_wacht_op_de_gast` laat de gasten echt lopen.
 func _op(kader := Vector2(990, 637)) -> void:
 	_bewaard = State.s.duplicate(true)
+	_rust_voor = Ui.rust_modus()
+	Ui.zet_rust_modus(true)
 	var boom := Engine.get_main_loop() as SceneTree
 	_laag = Control.new()
 	_laag.size = kader
@@ -58,6 +66,7 @@ func _af() -> void:
 	if not _bewaard.is_empty():
 		State.s = _bewaard
 		_bewaard = {}
+	Ui.zet_rust_modus(_rust_voor)
 
 
 ## `n` gasten uit de pool; de eerste vier krijgen een echt bed van het hotel.
@@ -819,6 +828,80 @@ func test_het_kind_kiest_wie_zijn_sleutel_krijgt() -> void:
 	_af()
 
 
+## Eigenaar, 2026-09-23: "Zorg dat de minigame pas begint wanneer het dier er
+## is."  De gasten liggen in bed: het bord wacht tot de gast van de sleutel aan
+## de balie staat — geen vraag, geen haakjes — en zijn wolkje "komt eraan" met
+## `👀 Volg` hangt aan de deur, ook nu het spel loopt.  Na de eerste sleutel
+## komt de volgende gast naar voren, en ook zijn vraag wacht op hem.
+func test_het_bord_wacht_op_de_gast() -> void:
+	_op()
+	Ui.zet_rust_modus(false)
+	_wereld(5, 3)
+	World.pauzeer(true)                     # de test tikt de wereld zelf
+	waar(Games.start(ID), "het spel start")
+	var sleutels: Array = _bord()["sleutels"]
+	waar(sleutels.size() >= 2, "er zijn twee sleutels (%d)" % sleutels.size())
+	var eerste := str((sleutels[0] as Dictionary)["gast"])
+	gelijk(Games.speler(), eerste, "de gast van de eerste sleutel")
+	waar(Hits.spot("sl_kaart") == null, "nog geen vraag")
+	waar(Hits.spot("sl_h0") == null, "en geen haakjes")
+	waar(Games.verwacht_dier(eerste), "het bord wacht op hem")
+	waar(_komt_eraan_in_beeld(eerste), "zijn wolkje 'komt eraan' hangt aan de deur")
+	waar(_tik_tot_hij_binnen_is(eerste, "receptie"), "hij stapt de receptie in")
+	await (Engine.get_main_loop() as SceneTree).create_timer(0.35).timeout
+	waar(Hits.spot("sl_kaart") == null, "zolang hij naar de balie loopt, is er geen vraag")
+	waar(_tik_tot_hij_staat(eerste, "receptie"), "hij loopt naar de balie")
+	waar(await _staat_er_binnen("sl_kaart_keuzes", 1500), "aan de balie: de vraag met de strook")
+	waar(Hits.spot("sl_h0") != null, "en de haakjes")
+	await _hang(int((sleutels[0] as Dictionary)["haak"]))
+	gelijk(int(_bord()["nu"]), 1, "de eerste sleutel hangt")
+	var tweede := str(((_bord()["sleutels"] as Array)[1] as Dictionary)["gast"])
+	gelijk(Games.speler(), tweede, "nu is de volgende gast aan de beurt")
+	waar(Hits.spot("sl_kaart") == null, "zijn vraag wacht tot hij er is")
+	waar(Games.verwacht_dier(tweede), "het bord wacht op hem")
+	waar(_tik_tot_hij_staat(tweede, "receptie"), "hij loopt naar de balie")
+	waar(await _staat_er_binnen("sl_kaart_keuzes", 1500), "aan de balie: zijn vraag")
+	World.pauzeer(false)
+	_af()
+
+
+## Tick until `id` stands still in `kamer`: arrived, not walking any more.
+func _tik_tot_hij_staat(id: String, kamer: String) -> bool:
+	var d = World.dier(id)
+	var t := 0
+	while d != null and t < 5000 and not (d.kamer == kamer and str(d.reis_doel).is_empty()
+			and (d.route as Array).is_empty() and (d.punten as Array).is_empty()):
+		World._tik()
+		t += 1
+	return d != null and d.kamer == kamer and (d.punten as Array).is_empty()
+
+## Tick until `id` has stepped into `kamer` (and may still walk on in it).
+func _tik_tot_hij_binnen_is(id: String, kamer: String) -> bool:
+	var d = World.dier(id)
+	var t := 0
+	while d != null and d.kamer != kamer and t < 5000:
+		World._tik()
+		t += 1
+	return d != null and d.kamer == kamer
+
+## Real time, frames running, until hotspot `id` exists.
+func _staat_er_binnen(id: String, ms: int) -> bool:
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < ms:
+		if Hits.spot(id) != null:
+			return true
+		await boom.process_frame
+	return Hits.spot(id) != null
+
+## The hotel's "komt eraan" bubble of `id` hangs in the room in view, and stands
+## on the glass while the game runs.
+func _komt_eraan_in_beeld(id: String) -> bool:
+	Hotel.komt_eraan()
+	Hits.plaats()
+	var w := Hits.spot("komt_" + id)
+	return w != null and is_instance_valid(w.knoop) and w.knoop.visible
+
 ## Een verse dag geeft een verse opdracht (de handtekening klopt niet meer).
 func test_nieuwe_dag_geeft_nieuwe_opdracht() -> void:
 	_op()
@@ -979,6 +1062,8 @@ func _keur_rij(kader: Vector2, regels: int, per_regel: int, wand := false) -> vo
 ## niet op dat van een ander (architecture.md §4.3, §12.2).
 func test_dekking_is_nul_op_vier_schermen() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(true)            # de gast staat meteen aan de balie (zie `_op`)
 	# De schil vertelt `Ui` de CSS-maat van het HELE scherm, en daar hangt de
 	# 44/48 px tikregel aan.  Een test die een schil bouwt laat die maat staan,
 	# en `res://games/...` draait vóór `res://tests/...` — dus zonder dit
@@ -1018,7 +1103,10 @@ func test_dekking_is_nul_op_vier_schermen() -> void:
 			var d: Dictionary = dbg[id]
 			var r: Rect2 = d["rect"]
 			gelijk(Hits.dekking(id), 0.0, "%s: %s dekt zijn voorwerp niet" % [str(maat), id])
-			waar(not bool(d["krap"]), "%s: %s vond een echte plek" % [str(maat), id])
+			if maat == Vector2i(740, 360) and id == "sl_kaart_keuzes":
+				_keur_gestapelde_strook(dbg, id, r, str(maat))
+			else:
+				waar(not bool(d["krap"]), "%s: %s vond een echte plek" % [str(maat), id])
 			waar(r.position.x >= -0.01 and r.position.y >= -0.01
 				and r.end.x <= kader.size.x + 0.01 and r.end.y <= kader.size.y + 0.01,
 				"%s: %s staat binnen het kader" % [str(maat), id])
@@ -1052,6 +1140,31 @@ func test_dekking_is_nul_op_vier_schermen() -> void:
 		Ui.registreer_lagen(null, null, null)
 	State.s = bewaard
 	Ui.set("_scherm", scherm_terug)
+	Ui.zet_rust_modus(rust_voor)
+
+
+## De liggende telefoon (740 x 360), open voor de plaatsing: sinds het bord wacht
+## tot de gast aan de balie staat (eigenaar, 2026-09-23) meet de dekkingstest het
+## bord MET de gast erbij — tot dan keek hij vóór diens aankomst.  Op dit kader
+## neemt de gast de vloer naast de kaart in waar de strook hoorde (K1), en de
+## strook stapelt boven in de kolom van de kaart; het bandenrooster noemt dat
+## `krap` omdat het eerste haakje in dezelfde kolom van het rooster valt.  Zo
+## stond het ook in het oude spel zodra de gast er was, toen met de strook óp
+## het eerste haakje.  Wat hier moet: de strook ligt op niets anders — geen
+## haakje, geen kaart, geen naambordje — en laat de gast heel.
+func _keur_gestapelde_strook(dbg: Dictionary, id: String, r: Rect2, wat: String) -> void:
+	for ander in dbg.keys():
+		if str(ander) == id:
+			continue
+		var o: Rect2 = dbg[ander]["rect"]
+		var snij := r.intersection(o)
+		gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
+			"%s: de gestapelde strook ligt niet op %s" % [wat, str(ander)])
+	var spel := _spel()
+	var wie := str((spel._sleutel_nu() as Dictionary).get("gast", "")) if spel != null else ""
+	var gast := r.intersection(World.vlak_van_dier(wie))
+	gelijk(maxf(0.0, gast.size.x) * maxf(0.0, gast.size.y), 0.0,
+		"%s: de strook laat de gast aan de balie heel" % wat)
 
 
 ## Eigenaar, 2026-09-23: "ja" op "zal ik het sleutelspel ombouwen zodat de
@@ -1062,6 +1175,8 @@ func test_dekking_is_nul_op_vier_schermen() -> void:
 ## bovenin.
 func test_de_haakjes_blijven_aan_de_muur() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(true)            # de gast staat meteen aan de balie (zie `_op`)
 	var scherm_terug = Ui.get("_scherm")
 	var boom := Engine.get_main_loop() as SceneTree
 	var vp := SubViewport.new()
@@ -1110,3 +1225,4 @@ func test_de_haakjes_blijven_aan_de_muur() -> void:
 	Ui.registreer_lagen(null, null, null)
 	State.s = bewaard
 	Ui.set("_scherm", scherm_terug)
+	Ui.zet_rust_modus(rust_voor)

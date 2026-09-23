@@ -57,9 +57,6 @@ const TERUG_S := 0.75
 ## The end card is readable this long before the game closes itself (§5.10).
 const AF_S := 3.4
 const LEEG_S := 1.8
-## Fetching the guest: look again every 700 ms, at most 24 times (§5.5).
-const GAST_POLL := 0.7
-const GAST_KEER := 24
 ## After a right sum the card is redrawn 600 ms later (§5.9).
 const SOM_S := 0.6
 ## The buttons on the grass, in css px left of the stall (§5.4).
@@ -125,9 +122,6 @@ var _kaart: Ui.Kaart = null
 var _terug_munt := 0
 var _terug_nr := 0
 var _kader_af := Callable()
-var _gast_gestuurd := false
-var _gast_gelopen := false
-var _gast_keer := 0
 var _t0 := 0
 
 # ------------------------------------------------------------- aanmelding
@@ -210,9 +204,6 @@ func start(_c: SpelCtx) -> void:
 	_t0 = Time.get_ticks_msec()
 	_terug_munt = 0
 	_terug_nr = 0
-	_gast_gestuurd = false
-	_gast_gelopen = false
-	_gast_keer = 0
 	_herstel_bank()
 	# A coin in your hand that this band does not have becomes the smallest one.
 	if not (O["munten"] as Array).has(int(S.get("hand", 0))):
@@ -222,15 +213,16 @@ func start(_c: SpelCtx) -> void:
 	# are recomputed every pass by `_volg_kaart`, so this listener never redraws
 	# and can never become the 86-bus-beats loop the HTML had to guard against.
 	_kader_af = ctx.ui.op_kader(_op_kader)
+	# the stall and its goods stand there at once; the card, the prices and the
+	# coins come when the shopper stands at the counter (`_begin`)
 	_zet_decor()
-	_haal_gast()
+	State.bewaar()
+	_begin()
 	# the one who was waiting at the counter for the dropped turn makes room —
 	# after the new guest was sent, so he walks off to a place the new one is
 	# not heading for
 	if not weg.is_empty() and weg != str(S.get("gast", "")):
 		ctx.laat_gaan(weg)
-	_teken()
-	State.bewaar()
 
 func stop() -> void:
 	if _kader_af.is_valid():
@@ -249,9 +241,6 @@ func stop() -> void:
 	_kaart = null
 	_terug_munt = 0
 	_terug_nr = 0
-	_gast_gestuurd = false
-	_gast_gelopen = false
-	_gast_keer = 0
 
 ## The star belongs to the whole turn and falls at most once (§5.10 step 4).
 func _ster() -> bool:
@@ -483,40 +472,24 @@ func _zet_decor() -> void:
 static func _model_van(w: Dictionary) -> String:
 	return "kraam_" + str(w["model"]).trim_prefix("kr_")
 
-## The guest walks to his place in front of the counter.  In another room he
-## travels through the doors first — sent ONCE, because sending him again on the
-## way restarts his route — and we look again every 700 ms (§5.5).
-func _haal_gast() -> void:
+## The shopper first, then the sum (owner, 2026-09-23: "Zorg dat de minigame
+## pas begint wanneer het dier er is").  He walks to his place in front of the
+## counter — through the doors from another room, with the hotel's "komt
+## eraan" bubble and its `👀 Volg` at the garden door — and the card, the price
+## tags and the coins come the moment he stands there (`ctx.wacht_op`, §5.5).
+## The card reads his rectangle every pass itself, so nothing is re-measured.
+func _begin() -> void:
 	var g := _gast()
-	if g.is_empty():
+	if g.is_empty() or P.is_empty():
 		return
-	var id := str(g["id"])
-	var d = World.dier(id)
-	if d == null:
+	var plek := Vector2(float(P["gast"]["x"]), float(P["gast"]["z"]))
+	if not await ctx.wacht_op(str(g["id"]), plek):
+		if actief:
+			ctx.sluit.call_deferred()      # the shopper is gone
 		return
-	while d != null and d.kamer != KAMER:
-		if not _gast_gestuurd:
-			_gast_gestuurd = true
-			ctx.wereld.reis(id, KAMER, {"x": P["gast"]["x"], "z": P["gast"]["z"], "na": "wacht"})
-			g["waar"] = KAMER
-		if _gast_keer >= GAST_KEER:
-			return
-		_gast_keer += 1
-		if not await na(GAST_POLL):
-			return
-		if S.is_empty() or P.is_empty():
-			return
-		d = World.dier(id)
-	if _gast_gelopen:
+	if not actief or S.is_empty() or O.is_empty():
 		return
-	_gast_gelopen = true
-	g["waar"] = KAMER
-	# No re-measure on arrival: the card reads his rectangle every pass itself.
-	var gehaald: bool = await ctx.wereld.loop_naar(id, P["gast"]["x"], P["gast"]["z"], {"na": "wacht"})
-	if not actief or S.is_empty():
-		return
-	if gehaald:
-		ctx.wereld.vuil()
+	_teken()
 
 # ------------------------------------------------------------------ tekenen
 

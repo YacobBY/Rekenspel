@@ -551,6 +551,7 @@ Practical speed: **20–35 voxels/s in a `loop 1.5` room**.
 | `World.feed(ids)` | walk to the eating place and eat |
 | `World.mood(id, 'sad'\|'happy'\|'idle')` | walk to the sip place and sulk / bounce / resume |
 | `World.solo(id, act)` | walk to a free place and be happy there |
+| `World.blijf(id, na)` | **port:** stay where you stand and take end state `na` (default `wacht`) in this frame — what `ctx.wacht_op` (§5.3) gives the animal of a turn once he is at his place, so he does not wander off from under the card |
 | `World.loopNaar(id, x, z, o)` / `World.stappen(id, punten, o)` | **promise-based** movement |
 | `World.pose(id, naam, duur)` | set one pose; `true`/`false` |
 | **port** `World.kom_binnen(id, x, z, kamer = 'receptie')` | the guest arrives at the hotel: he appears on the threshold of the room's front door (`Rooms.ingang`, §1.2) and plays his own entrance to `(x, z)` (state `komt`, art-sound-rules.md §11.8), ending there in `wacht` as `ga(id, x, z, 'wacht')` would. Not awaitable. Reduced motion, or a room without a front door: he simply stands at `(x, z)`. Off screen the arrival is skipped to its end; any other order above supersedes it (a guest in mid-hop lands at once) |
@@ -1195,11 +1196,15 @@ Currently registered games:
 
 `Games.start(id)`:
 1. if another game is open → `stop()` it first;
-2. `actief = id`, `actieveKamer = def.kamer`;
+2. `actief = id`, `actieveKamer = def.kamer`; **port:** `Games.beurt()` counts one more
+   start (every `ctx.wacht_op` of an earlier start is over), and a walk along with a
+   guest (`👀 Volg`, §6.3) ends — the camera is the game's now;
 3. close the prikbord;
 4. `Hits.voorrang(id)` — from now on this game picks its screen positions first, the
    hotel's buttons give way, the wish bubbles disappear, and the loose decor of every
-   *other* registered game is removed;
+   *other* registered game is removed.  **Port (owner 2026-09-23):** one hotel element
+   stays — the "komt eraan" bubble of the animal the game waits for (`ctx.wacht_op`),
+   which the hotel marks `data.spel = <id>` (§6.3);
 5. `Hotel.render()`, `hersteek()`;
 6. travel to `def.kamer` if not already there;
 7. call `def.start(ctx)` inside a `try`; a throw resets `actief = null` and toasts
@@ -1209,7 +1214,8 @@ Currently registered games:
 
 `Games.stop()`: clear `actief`, call `def.stop()` in a `try`, `Hits.wisEigenaar(id)` (which
 also returns every borrowed button), `Hits.voorrang(null)`, `Ui.leegPaneel()`,
-`hersteek()`, `Hotel.render()`.
+`hersteek()`, `Hotel.render()`. **Port:** nobody is awaited any more, and a walk along with
+the animal it waited for ends where the camera is (the room bar comes back there).
 
 **Supersede** = starting another game: exactly the sequence above, so a game never has to
 detect it — its `stop()` runs, its hotspots, bubbles, cards, number tags, sources and loose
@@ -1254,6 +1260,37 @@ The animal of the turn (§5.8): `ctx.voorkeur(kandidaten)` → the animal the ch
 it; call it whenever the turn takes or moves on to an animal); `ctx.wissel_speler()` →
 `Games.wissel_speler()`; `ctx.laat_gaan(gastId)` → the animal whose unfinished turn the
 pick dropped makes room (§5.8).
+
+**Port (owner 2026-09-23): waiting for the animal.** `await ctx.wacht_op(gastId, plek, o)`
+→ `bool`: the game begins when its animal is there ("Zorg dat de minigame pas begint
+wanneer het dier er is", §5.8). `plek` is his place in the game's own room (voxels);
+`o = {na: 'wacht', tempo: 1, marge: 3}`.
+
+* It **sends** him — `World.reis` through the doors, `World.stappen` inside the room —
+  unless he is on his way there already (walking into this room, or inside it with his
+  last point at `plek`): a guest who walks in keeps his route, so the bar of his "komt
+  eraan" bubble never jumps back. `State` `waar` becomes the game's room, as the games
+  always did when they sent somebody.
+* **Already there** (within `marge` voxels, standing still): `true` at once, in the same
+  call, without a frame in between. **Reduced motion** resolves every walk at once
+  (§2.5), so there it is always at once.
+* Otherwise it looks every **0.1 s** in the timer phase — where the games make their
+  cards — and is `true` the moment he stands at his place. Whenever it is `true` he
+  stands in end state `na` (`World.blijf`).
+* Meanwhile the running game **waits for him**: `Games.verwacht_dier(gastId)` is true,
+  the hotel keeps his "komt eraan" bubble with its bar and `👀 Volg` in view although
+  every other hotel button steps aside (§5.2 step 4, §6.3), and `Hotel.volg` may walk
+  along with him into the game's room.
+* `false` when **this start** of the game is over — stopped, superseded, the animal
+  switched (`Games.wissel_speler` is a fresh start; `Games.beurt()` counts the starts) —
+  or when the guest is gone. A game checks `actief` after it anyway; a game that is still
+  running when it gets `false` has lost its animal and closes itself.
+* Nothing a reload would need lives in memory: a resumed turn simply asks again, and a
+  guest the reload put somewhere else is sent again. A walk that another order took
+  over (a wander, another game) is sent again after 1 s.
+
+`ctx.is_er(gastId, plek, marge?)` → the same "is he there" test, for a game that wants to
+clear its screen only when it will really have to wait.
 
 Extensions are added through `window.CTX_UITBREIDINGEN` — a list of
 `function(ctx, eigen)` that registry runs once per game, so a motor module can add API
@@ -1499,6 +1536,31 @@ the sum, not a player), `meubels`, `was`, `voerkar` (serves everybody at once) a
 bath step, and since 2026-09-23 a tap on it bathes THAT animal — games-a §6.5 E — so the
 child picks who bathes there).
 
+**The game begins when its animal is there** (owner, 2026-09-23: "Bij het zwembad is er
+geen volg optie om boef aan te komen tenzij ik eerst op 'terug' druk. Zorg dat de minigame
+pas begint wanneer het dier er is"). Until 2026-09-23 the games put their first card up
+while the animal of the turn was still walking in (PLAN.md R1 "binnen één seconde", N3,
+N11), and during a game the child could neither see who was coming nor follow him. Now
+every game whose animal has to walk into its room sends him with `ctx.wacht_op` (§5.3) and
+puts up **nothing that looks like a task** — no card, no strip, no price, no coin, no hook,
+no number above his head — until he stands at his place. The world props of the game (the
+stall, the stones, the lane markers, the table, the balance) stand there at once; the game
+bar shows the animal (`🐶 Boef 🔄`, so the child may switch while waiting); and at the door
+he will come through hangs the hotel's own bubble `🐶 Boef komt eraan` with its bar and
+`👀 Volg` (§6.3). Already there, or reduced motion: the first card comes at once, as before.
+R1's "within a second" now counts from his arrival.
+
+| game | his place (`ctx.wacht_op`) | what waits |
+|---|---|---|
+| `sleutels` | the desk (`plek(0.75, 0.85)`, within 6 voxels) | the question, the hooks, the key — for EVERY key: after a hung key the next guest comes forward and the board waits for him |
+| `kraam` | in front of the counter (`P.gast`) | the card, the price tags, the coins, the ✔ |
+| `hinkel` | his stone (`dierX(s)`, `zDier`, within 2.5 voxels; the card "komt eraan / Tel straks mee" is gone — PLAN N11 overruled) | the card, the strip, the number above his head |
+| `zwembad` | the deck at the start of the lane (`dek.start`; a half-swum lane: the deck `stop()` put him on) | the question and the number on his back; the stair, the dive and the swim are still what the first answer buys |
+| `oogst` | beside the picking table (64, 32) | the counting question |
+| `weeg` | beside the balance (62, 88) | the first reading |
+| `tobbe` | (no animal of the turn) each bather who comes from elsewhere after the sum, beside the first tub | his own bath button — the sum itself needs nobody |
+| `wekker` | nobody walks: the sleepers are woken where they lie | nothing — the card comes at once |
+
 ---
 
 ## 6. UI shell
@@ -1576,7 +1638,22 @@ about a second of ring); `Snd.bel()` keeps the HTML's reference sound.
   is where the child was looking.  His name plate reads `👀 <naam>` meanwhile.  Every
   other room change ends it (a door, the room bar, the map, a game's own camera — the
   walk's own switches are the only ones it lets through), and so does a game that
-  starts; during a game nobody is followed.  Not saved.
+  starts.  Not saved.
+* **Port (owner 2026-09-23): following during a game.**  "Bij het zwembad is er geen
+  volg optie om boef aan te komen tenzij ik eerst op 'terug' druk."  While a game runs,
+  the bubble of the animal that game waits for (`ctx.wacht_op`, §5.3, §5.8) stays in view
+  — the hotel marks it `data.spel = <game>` and `Hits` lets exactly that one through the
+  voorrang (§5.2 step 4) — and its `👀 Volg` works: the camera walks along with him
+  through every door and ends in the game's room, where the game then begins.  Only that
+  animal may be followed during a game (`Games.verwacht_dier`); every other guest's
+  bubble stays off the glass and `Hotel.volg` refuses him.  A game that STARTS while you
+  follow still ends the walk (step 2 of §5.2); a walk begun during a game ends when that
+  start of the game ends (`⬅ Terug`, a supersede, the animal switch) — the camera stays
+  where it is — and when the guest is gone or no longer awaited before he reached the
+  game's room, the camera goes back there (`stop_volgen(true)`): the child is never left
+  in a room whose doors the game hides.  While the camera is away, the game's own things
+  are simply not in view (they belong to its room); back in the room `Hits` lays them out
+  again.
 * **Port (owner 2026-09-23): a hotel button stands only where a tap does something**
   ("actions such as a blank bed are available ... but when you click on them you can't
   execute them ... this provides visual clutter").  Outside a game: the bell only with a

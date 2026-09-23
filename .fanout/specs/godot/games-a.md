@@ -820,8 +820,20 @@ afgerond. De keuze wordt opnieuw gemaakt bij elke kaderverandering
 
 `sleutelNu()` = `sleutels[P.nu]`; het bord in beeld is dat van de huidige
 sleutel (of het laatste bord als alles op is). De gast van de huidige sleutel
-reist naar `GAST_PLEK` met `na: 'wacht'` — tenzij hij daar al binnen 8 voxels
-(manhattan) staat.
+reist naar `GAST_PLEK` met `na: 'wacht'` — tenzij hij daar al staat.
+
+**Port (eigenaar 2026-09-23): het bord wacht op zijn gast.** "Zorg dat de minigame
+pas begint wanneer het dier er is." Het halen is `ctx.wacht_op(gast, GAST_PLEK,
+{marge: 6})` (world.md §5.3; 6 voxels is de oude "binnen 8 voxels manhattan"). Zolang
+hij door het hotel loopt staat er niets van het bord — geen vraagkaart, geen strook,
+geen haakjes, geen sleutel, geen wolkje, geen Els; alleen de 💡-plaatjes in de gang
+blijven — en bij de deur hangt het hotelwolkje `🐶 Boef komt eraan` met zijn balk en
+`👀 Volg` (world.md §6.3). Staat hij aan de balie, dan tekent het bord zich zoals
+hieronder. Dat geldt voor elke sleutel: na een opgehangen sleutel komt de volgende gast
+naar voren, de spelbalk toont hem, en zijn vraag komt pas als hij er staat.  In de
+opstelling `naast` (liggende telefoon) is de kolom van de kaart zo breed als de
+breedste van kaart en strook: de gast aan de balie neemt dan de vloer naast de kaart in
+en de strook stapelt boven in die kolom, niet op het eerste haakje.
 
 **Tikken op een plaatje met een getal:** `licht = i`, buren uit,
 `Snd.tik()`, hertekenen, en `ui.spreek(...)` leest het voor
@@ -841,7 +853,7 @@ haakje terwijl je een sleutel hebt):
 eigen bed (`wereld.slaap(gast, kamer, bed)`, `setMood('blij')`), `P.nu++`.
 Een kort wolkje aan de gast: 💤 + nummer + `"naar mijn kamer"`, klas `goed`,
 hoog 40, prio 13, na **2600 ms** weg. Is er nog een sleutel → volgende gast
-halen en opslaan; anders `klaar()`.
+halen (het bord wacht op hem, zie hierboven) en opslaan; anders `klaar()`.
 
 **Mis:** `P.missers++`, `s.mis++`, licht uit, **de twee buurplaatjes lichten op**
 (`burenVan`: links en rechts; aan de rand de twee plaatjes die er wél zijn, dus
@@ -1321,6 +1333,13 @@ getallen op één tobbe staan én is er ruimte tekort (hooguit 16 knoppen).
 **D. Geslaagd:** `stap = 'baden'`, spookcijfers weg,
 `state.tel(missers === 0, nu - t0)`, `Snd.tover()`, en iedereen die nog in bad
 moet komt zelf aanlopen (`reis(gast, 'tuin', {x: max(12, P[0].x - 16), z: P[0].z, na:'wacht'})`).
+**Port (eigenaar 2026-09-23: "Zorg dat de minigame pas begint wanneer het dier er
+is"):** wie van elders komt wordt gehaald met `ctx.wacht_op` (world.md §5.3) op diezelfde
+plek; zolang hangt het hotelwolkje `🐶 Boef komt eraan` met zijn balk en `👀 Volg` aan de
+tuindeur, ook tijdens het spel (world.md §6.3), en zijn knopje van stap E komt pas als hij
+er staat — ook na een herlaad midden in de badstap, want dan wordt wie nog weg is opnieuw
+gehaald. De oude herteken-lus (hooguit acht keer per 0,9 s) is daarmee weg: een badgast
+die door vier deuren moest, kreeg zijn knopje soms nooit.
 Wolkje ✅ + per + `"even hoog"`, klas `goed`, na **2200 ms** weg.
 **De ster valt hier nog niet** — die hoort bij de hele ronde (rekenen + baden).
 

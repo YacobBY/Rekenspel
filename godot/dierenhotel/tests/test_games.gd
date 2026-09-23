@@ -392,7 +392,15 @@ func test_het_dier_van_de_beurt_gaat_rond() -> void:
 	waar(Games.start("zwembad"), "het zwembad start opnieuw")
 	gelijk(Games.speler(), ids[2], "met het dier dat het kind koos")
 	Games.stop()
-	# ... as long as it may take part; otherwise the game chooses itself
+	# ... as long as it may take part; otherwise the game chooses itself.  Since
+	# 2026-09-23 every turn brings its swimmer to the pool BEFORE the question
+	# (`ctx.wacht_op`, owner: "Zorg dat de minigame pas begint wanneer het dier
+	# er is"), so the three who swam above now stand at the water and the game's
+	# own rule 2 ("who is here, nearest the start edge") would pick one of them.
+	# Back to the desk with everybody, as at the top of this test: then its own
+	# choice is rule 3, the first guest with a bed.
+	for i in gasten.size():
+		World.zet(ids[i], "receptie", 40.0 + i * 8.0, 60.0)
 	State.s["speler"] = ids[3]
 	(State.s["spel"] as Dictionary).erase("zwembad")
 	waar(Games.start("zwembad"), "het zwembad start met een keuze zonder bed")

@@ -555,6 +555,71 @@ func test_herladen_hervat_de_beurt() -> void:
 ## order; the animal on the game bar hands the table to the next one in a
 ## fresh turn — nothing is taken away — and the next start picks with the
 ## animal the child chose.
+## Eigenaar, 2026-09-23: "Zorg dat de minigame pas begint wanneer het dier er
+## is."  De plukker komt uit zijn kamer: de pluktafel met haar bakjes staat er
+## al, maar de telvraag komt pas als hij naast de tafel staat.  Tot dan hangt
+## het hotelwolkje "komt eraan" met `👀 Volg` aan de kasdeur, ook tijdens het
+## spel.
+func test_de_telvraag_wacht_op_de_plukker() -> void:
+	_op()
+	Ui.zet_rust_modus(false)
+	var gasten := _wereld(1, 3)
+	var id := str(gasten[0]["id"])
+	World.zet(id, str(gasten[0]["kamer"]), 60.0, 60.0)   # in zijn eigen kamer
+	World.pauzeer(true)                     # de test tikt de wereld zelf
+	waar(Games.start(SPEL), "het spel start")
+	gelijk(Games.speler(), id, "hij plukt")
+	waar(Hits.spot(KAART) == null, "nog geen vraag")
+	waar(not _tafel().is_empty(), "de pluktafel staat er al")
+	waar(Games.verwacht_dier(id), "het spel wacht op hem")
+	waar(_komt_eraan_in_beeld(id), "zijn wolkje 'komt eraan' hangt aan de kasdeur")
+	waar(_tik_tot_hij_binnen_is(id, KAMER), "hij stapt de kas in")
+	await _wacht(0.35)
+	waar(Hits.spot(KAART) == null, "zolang hij naar de tafel loopt, is er geen vraag")
+	waar(_tik_tot_hij_staat(id, KAMER), "hij loopt naar de tafel")
+	waar(await _staat_er_binnen(STROOK, 1500), "naast de tafel: de telvraag met de strook")
+	gelijk(_kaart_tekst("Kolom/Regel"), "🍓 " + Beurt.T_TEL, "hoeveel aardbeien er liggen")
+	waar(not Games.verwacht_dier(id), "het spel wacht niet meer")
+	World.pauzeer(false)
+	_af()
+
+## Tick until `id` stands still in `kamer`: arrived, not walking any more.
+func _tik_tot_hij_staat(id: String, kamer: String) -> bool:
+	var d = World.dier(id)
+	var t := 0
+	while d != null and t < 5000 and not (d.kamer == kamer and str(d.reis_doel).is_empty()
+			and (d.route as Array).is_empty() and (d.punten as Array).is_empty()):
+		World._tik()
+		t += 1
+	return d != null and d.kamer == kamer and (d.punten as Array).is_empty()
+
+## Tick until `id` has stepped into `kamer` (and may still walk on in it).
+func _tik_tot_hij_binnen_is(id: String, kamer: String) -> bool:
+	var d = World.dier(id)
+	var t := 0
+	while d != null and d.kamer != kamer and t < 5000:
+		World._tik()
+		t += 1
+	return d != null and d.kamer == kamer
+
+## Real time, frames running, until hotspot `id` exists.
+func _staat_er_binnen(id: String, ms: int) -> bool:
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < ms:
+		if Hits.spot(id) != null:
+			return true
+		await boom.process_frame
+	return Hits.spot(id) != null
+
+## The hotel's "komt eraan" bubble of `id` hangs in the room in view, and stands
+## on the glass while the game runs.
+func _komt_eraan_in_beeld(id: String) -> bool:
+	Hotel.komt_eraan()
+	Hits.plaats()
+	var w := Hits.spot("komt_" + id)
+	return w != null and is_instance_valid(w.knoop) and w.knoop.visible
+
 func test_het_kind_kiest_wie_er_plukt() -> void:
 	_op()
 	var gasten := _wereld(4, 4)

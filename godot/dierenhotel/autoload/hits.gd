@@ -365,10 +365,13 @@ func plaats() -> void:
 		# and so does every other button of the hotel: doors, bell, board, the
 		# entries of the other games — they are not part of the sum and they
 		# took half the frame (owner, 2026-09-18).  What the game BORROWED
-		# (`ctx.hotspots.pak`) is its own for the time being and stays; the
+		# (`ctx.hotspots.pak`) is its own for the time being and stays, and so
+		# does what the hotel hangs up FOR it (`data.spel`): the "komt eraan"
+		# bubble of the animal the game waits for (owner, 2026-09-23); the
 		# fixed layer (name plates, number tags) is information, not a button.
 		if _voorrang != "" and s.laag in [Laag.WENS, Laag.HOTEL] \
-				and s.geleend_door != _voorrang:
+				and s.geleend_door != _voorrang \
+				and str(s.data.get("spel", "")) != _voorrang:
 			s.zichtbaar = false
 		if s.zichtbaar:
 			lijstje.append(s)

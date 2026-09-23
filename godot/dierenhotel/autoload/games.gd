@@ -27,6 +27,8 @@ var _actief := ""
 var _actieve_kamer := ""
 var _knoop: Node = null         ## the running game's node
 var _speler := ""               ## the running game's animal of the turn, as it said
+var _beurt := 0                 ## counts the starts: a wait of an older start knows it is over
+var _verwacht: Dictionary = {}  ## guest id -> the start (`_beurt`) whose game waits for him
 
 const EIGENAAR := "registry"
 
@@ -130,6 +132,9 @@ func start(id: String) -> bool:
 	if _actief != "":
 		stop()
 	_speler = ""
+	# a fresh start: every wait of an earlier one is over (`ctx.wacht_op`)
+	_beurt += 1
+	_verwacht.clear()
 	var def: Dictionary = _defs[id]
 	# every game's resting props go: this game puts down its real ones, and
 	# world.md §5.2 step 4 wants the others' out of the way
@@ -137,6 +142,10 @@ func start(id: String) -> bool:
 		_zet_rust(str(ander), false)
 	_actief = id
 	_actieve_kamer = def.get("kamer", World.kamer_nu())
+	# a game that starts ends a walk along with a guest (world.md §6.3): the
+	# camera is the game's now, and only the animal it waits for may be
+	# followed from here on
+	Hotel.stop_volgen()
 	Hotel.bord_dicht()
 	Hits.voorrang(id)
 	# world.md §5.2 step 4: the loose decor of every OTHER game goes
@@ -181,6 +190,10 @@ func stop() -> void:
 	_actief = ""
 	_actieve_kamer = ""
 	_speler = ""
+	_verwacht.clear()
+	# a walk along with the animal it waited for ends with the game; the
+	# camera stays where it is and the room bar comes back
+	Hotel.stop_volgen()
 	if _knoop != null and is_instance_valid(_knoop):
 		if _knoop.has_method("_spel_stop"):
 			_knoop._spel_stop()
@@ -263,6 +276,31 @@ func meld_speler(spel_id: String, gast_id: String) -> void:
 		return
 	_speler = gast_id
 	speler_veranderd.emit(gast_id)
+
+# ------------------------------------------------ wachten tot het dier er is
+
+## Which start of a game runs: `Games.start` counts them, so a wait that an
+## earlier start began (`ctx.wacht_op`) knows its turn is over — also when the
+## same game started again, which is exactly what an animal switch does.
+func beurt() -> int:
+	return _beurt
+
+## `ctx.wacht_op` says it waits for `gast_id` (`aan`) or no longer does.  Only
+## the start that is running may say so, and a wait that ends only takes its
+## own name off the list.
+func verwacht(gast_id: String, beurt_nr: int, aan: bool) -> void:
+	if aan:
+		if _actief != "" and beurt_nr == _beurt:
+			_verwacht[gast_id] = beurt_nr
+	elif int(_verwacht.get(gast_id, -1)) == beurt_nr:
+		_verwacht.erase(gast_id)
+
+## Does the running game wait for this guest to walk in (owner, 2026-09-23:
+## "Zorg dat de minigame pas begint wanneer het dier er is")?  Then the hotel
+## keeps his "komt eraan" bubble with its `👀 Volg` in view while the game
+## runs, and `Hotel.volg` may walk along with him (world.md §5.8, §6.3).
+func verwacht_dier(gast_id: String) -> bool:
+	return _actief != "" and int(_verwacht.get(gast_id, -1)) == _beurt
 
 # ------------------------------------------------------------- de ingangen
 

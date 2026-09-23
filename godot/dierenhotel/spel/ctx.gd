@@ -99,6 +99,121 @@ func laat_gaan(gast_id: String) -> void:
 		return
 	World.solo(gast_id)
 
+# ------------------------------------------------ wachten tot het dier er is
+
+const WACHT_TIK := 0.1         ## how often a wait looks whether he is there
+const WACHT_MARGE := 3.0       ## voxels from his place still count as "there"
+const WACHT_HERSTUUR := 1.0    ## a guest who is on nobody's way is sent again after this
+
+## `if not await ctx.wacht_op(gast_id, plek): return` — the game begins when
+## its animal is there (owner, 2026-09-23: "Zorg dat de minigame pas begint
+## wanneer het dier er is").  `plek` is his place in THIS game's room, in voxels.
+##
+##   * He is sent there — through the doors with `World.reis`, inside the room
+##     with `World.stappen` — unless he is on his way there already: a guest
+##     who walks into this room keeps his route, so the bar of his "komt eraan"
+##     bubble never jumps back.
+##   * Already there (within `o.marge`, standing still): true AT ONCE, in the
+##     same call and without a frame in between.  Reduced motion resolves every
+##     walk at once (world.md §2.5), so there it is always at once.
+##   * Whenever it is true he stands in end state `o.na` (`World.blijf`): a
+##     waiting guest does not wander off from under the card.
+##   * Otherwise it looks every `WACHT_TIK` s, in the timer phase — where every
+##     game makes its cards (games/zwembad `_bots_en_terug`) — and is true the
+##     moment he stands at his place.  Meanwhile the running game waits for him
+##     (`Games.verwacht_dier`): the hotel keeps his "komt eraan" bubble with its
+##     bar and `👀 Volg` in view during the game, and `Hotel.volg` may follow
+##     him into the game's room (world.md §5.8, §6.3).
+##   * False when THIS start of the game is over — stopped, superseded, the
+##     animal switched (`Games.wissel_speler` is a fresh start) — or when the
+##     guest is gone.  The caller checks `actief` after it anyway.
+##   * Nothing a reload would need lives in memory: a resumed turn simply asks
+##     again, and a guest the reload put somewhere else is sent again.  A walk
+##     that another order took over is sent again after `WACHT_HERSTUUR` s.
+##
+##   o = {na: "wacht", tempo: 1.0, marge: WACHT_MARGE}
+func wacht_op(gast_id: String, plek: Vector2, o: Dictionary = {}) -> bool:
+	var beurt: int = Games.beurt()
+	if not _loopt(beurt) or World.dier(gast_id) == null:
+		return false
+	var marge := float(o.get("marge", WACHT_MARGE))
+	var na := str(o.get("na", "wacht"))
+	_stuur(gast_id, plek, o, marge)
+	if is_er(gast_id, plek, marge):
+		World.blijf(gast_id, na)
+		return true
+	Games.verwacht(gast_id, beurt, true)
+	var boom := Engine.get_main_loop() as SceneTree
+	var los := 0.0
+	var er := false
+	while boom != null:
+		await boom.create_timer(WACHT_TIK).timeout
+		if not _loopt(beurt) or World.dier(gast_id) == null:
+			break
+		if is_er(gast_id, plek, marge):
+			er = true
+			break
+		los = 0.0 if _onderweg(gast_id, plek, marge) else los + WACHT_TIK
+		if World.rust() or los >= WACHT_HERSTUUR:
+			los = 0.0
+			_stuur(gast_id, plek, o, marge)
+			if is_er(gast_id, plek, marge):
+				er = true
+				break
+	Games.verwacht(gast_id, beurt, false)
+	if er:
+		World.blijf(gast_id, na)
+	return er
+
+## Does `gast_id` stand at `plek` in this game's room — arrived, not walking?
+func is_er(gast_id: String, plek: Vector2, marge: float = WACHT_MARGE) -> bool:
+	var d = World.dier(gast_id)
+	return d != null and d.kamer == kamer and str(d.reis_doel).is_empty() \
+		and (d.route as Array).is_empty() and (d.punten as Array).is_empty() \
+		and Vector2(d.x, d.z).distance_to(plek) <= marge
+
+## This start of this game still runs.
+func _loopt(beurt: int) -> bool:
+	return Games.actief() == id and Games.beurt() == beurt
+
+## On his way to `plek`: walking through the doors into this room, or inside it
+## with his last point at `plek`.
+func _onderweg(gast_id: String, plek: Vector2, marge: float) -> bool:
+	var d = World.dier(gast_id)
+	if d == null:
+		return false
+	if d.kamer != kamer:
+		return str(d.reis_doel) == kamer
+	var punten: Array = d.punten
+	if punten.is_empty():
+		return false
+	var laatste: Vector2 = punten[punten.size() - 1]
+	return laatste.distance_to(plek) <= marge
+
+## Send him — unless he is there or on his way.  In reduced motion `reis`
+## walks the doors at once and leaves the last leg for the ticks; `stappen`
+## then puts him on his place in the same call.
+func _stuur(gast_id: String, plek: Vector2, o: Dictionary, marge: float) -> void:
+	var d = World.dier(gast_id)
+	if d == null or kamer.is_empty() or is_er(gast_id, plek, marge) \
+			or (_onderweg(gast_id, plek, marge) and not World.rust()):
+		return
+	var na := str(o.get("na", "wacht"))
+	if d.kamer != kamer:
+		World.reis(gast_id, kamer, {"x": plek.x, "z": plek.y, "na": na})
+		var g := State.gast_van(gast_id)
+		if not g.is_empty():
+			g["waar"] = kamer          # the save says where he is going
+		d = World.dier(gast_id)
+		if d == null or d.kamer != kamer or not World.rust():
+			return
+	_loop_los(gast_id, plek, {"na": na, "tempo": float(o.get("tempo", 1.0))})
+
+## A walk nobody waits for (the shape of hinkel's `_loop_los`): the wait looks
+## at the world, not at this promise.
+func _loop_los(gast_id: String, plek: Vector2, o: Dictionary) -> void:
+	await World.stappen(gast_id, [plek], o)
+
 ## Owner-stamped hotspot API (`ctx.hotspots`).
 class Knoppen extends RefCounted:
 	var _door: String

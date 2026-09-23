@@ -573,9 +573,72 @@ func test_het_kind_kiest_wie_er_hinkelt() -> void:
 	gelijk(str((Games._knoop as Node).proef_stand()["gast"]), volgende, "met het gekozen dier")
 	await _af()
 
+# ====================================================== wachten op het dier
+
+## Eigenaar, 2026-09-23: "Zorg dat de minigame pas begint wanneer het dier er
+## is" — dat overrulet PLAN N11 ("de som staat er meteen, het dier komt
+## eraan").  De hinkelaar ligt in zijn kamer: zolang hij door het hotel loopt
+## staat er niets van het spel — geen kaart, geen strook, geen getal boven zijn
+## kop — maar wel het hotelwolkje "komt eraan" met `👀 Volg` aan de tuindeur.
+## Op zijn steen komt de kaart met de eerste vraag.
+func test_de_kaart_wacht_op_de_hinkelaar() -> void:
+	_op()
+	Ui.zet_rust_modus(false)
+	_gasten(2, 1, 3)
+	var g: Dictionary = State.s["gasten"][0]
+	g["behoefte"] = "spelen"                # hk0 wil spelen: hij hinkelt
+	g["blij"] = false
+	var id := str(g["id"])
+	World.zet(id, str(g["kamer"]), 60.0, 60.0)
+	World.pauzeer(true)                     # de test tikt de wereld zelf
+	waar(Games.start("hinkel"), "het spel start")
+	var node: Node = Games._knoop
+	gelijk(Games.speler(), id, "wie wil spelen, hinkelt")
+	waar(Hits.spot("hk_som") == null, "nog geen kaart")
+	waar(Hits.spot("hk_som_keuzes") == null, "en geen strook")
+	waar(Hits.spot("hk_gast") == null, "en geen getal boven zijn kop")
+	waar(Games.verwacht_dier(id), "het spel wacht op hem")
+	var stenen := 0
+	for stuk in World.decor_lijst("tuin"):
+		if str(stuk["door"]) == "hinkel":
+			stenen += 1
+	waar(stenen > 0, "de stenen en het trapje liggen er al (%d)" % stenen)
+	Hotel.komt_eraan()
+	Hits.plaats()
+	var w := Hits.spot("komt_" + id)
+	waar(w != null and is_instance_valid(w.knoop) and w.knoop.visible,
+		"zijn wolkje 'komt eraan' hangt aan de tuindeur, ook nu het spel loopt")
+	var d = World.dier(id)
+	var t := 0
+	while d.kamer != "tuin" and t < 4000:
+		World._tik()
+		t += 1
+	gelijk(d.kamer, "tuin", "hij stapt de tuin in")
+	var boom := Engine.get_main_loop() as SceneTree
+	await boom.create_timer(0.35).timeout
+	waar(Hits.spot("hk_som") == null, "zolang hij naar zijn steen loopt, is er geen kaart")
+	while not (d.punten as Array).is_empty() and t < 4000:
+		World._tik()
+		t += 1
+	var t0 := Time.get_ticks_msec()
+	while Hits.spot("hk_som_keuzes") == null and Time.get_ticks_msec() - t0 < 1500:
+		await boom.process_frame
+	waar(Hits.spot("hk_som_keuzes") != null, "op zijn steen: de kaart met de strook")
+	waar(node.proef_op_start_steen(), "hij staat op zijn steen")
+	waar(not Games.verwacht_dier(id), "het spel wacht niet meer")
+	var regels := _regels()
+	waar(not regels.is_empty() and regels[0].contains("staat op"),
+		"de eerste vraag: waar hij staat (%s)" % str(regels))
+	World.pauzeer(false)
+	await _af()
+
 # ============================================================== de kindtekst
 
 ## F3: every child-facing string of games-b.md §3.9 stands verbatim in the file.
+## The card "<naam> komt eraan / Tel straks mee" is gone since the owner's wish of
+## 2026-09-23 ("Zorg dat de minigame pas begint wanneer het dier er is"): while
+## the hopper walks in the game draws nothing and the hotel's own "komt eraan"
+## bubble says who is coming (`test_de_kaart_wacht_op_de_hinkelaar`).
 func test_kindtekst_staat_woordelijk_in_het_bestand() -> void:
 	var f := FileAccess.open("res://games/hinkel/spel.gd", FileAccess.READ)
 	waar(f != null, "het spelbestand is te lezen")
@@ -584,8 +647,8 @@ func test_kindtekst_staat_woordelijk_in_het_bestand() -> void:
 	var bron := f.get_as_text()
 	f.close()
 	for zin in ["Hinkelen", "%s wil hinkelen", "Hinkel op de stenen",
-			"nog geen gasten", "van %d naar %d", "%s komt eraan", "Tel straks mee",
-			"Komt eraan", "%s staat op %d, trap bij %d", "Kies je sprong",
+			"nog geen gasten", "van %d naar %d",
+			"%s staat op %d, trap bij %d", "Kies je sprong",
 			"Nog even verder", "Oei, te ver!", "Kies je sprong terug",
 			"%s springt %d", " terug", " per keer", "Hoeveel sprongen?",
 			"%s hinkelt", "Tel maar mee", "Precies op de trap!",

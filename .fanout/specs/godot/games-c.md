@@ -196,7 +196,12 @@ wachtende gast gaat na 16 s anders dwalen en liep dan vóór de bakjes.
 
 ### 2.6 De beurt
 
-1. **tel** — de kaart meteen (R1): regel "Hoeveel aardbeien liggen er?", in groep 3 met
+0. **de plukker komt** (eigenaar 2026-09-23: "Zorg dat de minigame pas begint wanneer het
+   dier er is", world.md §5.8) — de tafel met haar bakjes staat er meteen; de gast van de
+   beurt wordt gehaald met `ctx.wacht_op(gast, (64, 32))`, en tot hij naast de tafel staat
+   is er geen kaart, maar hangt het hotelwolkje "🐶 Boef komt eraan" met zijn balk en
+   `👀 Volg` aan de kasdeur.  Staat hij er al, dan meteen door naar stap 1.
+1. **tel** — de kaart zodra hij er staat (R1 telt vanaf zijn aankomst): regel "Hoeveel aardbeien liggen er?", in groep 3 met
    een vol bakje erbij de tweede zin "Een vol bakje heeft 10 aardbeien"; somregel leeg,
    het antwoordvakje en vier getallen.
 2. **bij** — regel "Hoeveel passen er nog bij?" (groep 5: "Hoeveel nog tot
@@ -351,7 +356,11 @@ woord, en de rij op de vloer laat zien welk gewicht welke kleur heeft.
 
 ### 3.6 De beurt
 
-1. **lees1** — de kaart meteen (R1): "🎃 Hoeveel kilo is de pompoen?", somregel
+0. **de weger komt** (eigenaar 2026-09-23, world.md §5.8) — de weegschaal met de pompoen
+   en de rij gewichten staan er meteen; de gast van de beurt wordt gehaald met
+   `ctx.wacht_op(gast, (62, 88))`, en tot hij naast de weegschaal staat is er geen kaart,
+   maar hangt het hotelwolkje "komt eraan" met `👀 Volg` aan de kasdeur.
+1. **lees1** — de kaart zodra hij er staat (R1 telt vanaf zijn aankomst): "🎃 Hoeveel kilo is de pompoen?", somregel
    `10 + 2 + 1 =`, vier getallen; de weegschaal staat recht.
 2. **leg** — na een goed antwoord gaat de pompoen eraf en ligt het tweede ding erop; de
    balans zakt naar die kant.  "⚖️ Maak de weegschaal weer recht", de strook met de

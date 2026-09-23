@@ -25,11 +25,19 @@ const KADERS := [Vector2(1000, 648), Vector2(768, 1024), Vector2(326, 558),
 
 var _laag: Control = null
 var _bewaard: Dictionary = {}
+var _rust_voor := false
 
 # ------------------------------------------------------------------ harnas
 
+## Reduced motion for the run: the card waits until the shopper stands at the
+## counter (owner, 2026-09-23: "Zorg dat de minigame pas begint wanneer het
+## dier er is"), and in reduced motion that walk resolves in the same frame
+## (games-b.md §0.11), so a turn still starts without wall-clock waiting.
+## `test_de_kaart_wacht_op_de_klant` walks him in for real.
 func _op(kader := Vector2(1000, 648)) -> void:
 	_bewaard = State.s.duplicate(true)
+	_rust_voor = Ui.rust_modus()
+	Ui.zet_rust_modus(true)
 	var boom := Engine.get_main_loop() as SceneTree
 	_laag = Control.new()
 	_laag.size = kader
@@ -44,6 +52,7 @@ func _af() -> void:
 	World.decor_wis_alles()
 	_scherm_terug()
 	Ui.registreer_lagen(null, null, null)
+	Ui.zet_rust_modus(_rust_voor)
 
 ## The keypad reads the SCREEN for its key size (art-sound-rules.md §16.5) and
 ## `Ui` has no public way to forget one; a test that built the real shell would
@@ -734,6 +743,54 @@ func test_het_kind_kiest_wie_er_koopt() -> void:
 	_af()
 
 const T_SAMEN := "Hoeveel euro samen?"
+
+## Eigenaar, 2026-09-23: "Zorg dat de minigame pas begint wanneer het dier er
+## is."  De klant komt uit zijn kamer: de kraam en haar waren staan er al, maar
+## de kaart, de prijskaartjes en de munten komen pas als hij aan de toonbank
+## staat.  Tot dan hangt het hotelwolkje "komt eraan" met `👀 Volg` aan de
+## tuindeur — ook nu het spel loopt.
+func test_de_kaart_wacht_op_de_klant() -> void:
+	_op()
+	Ui.zet_rust_modus(false)
+	var gasten := _wereld(1, 3)
+	var id := str(gasten[0]["id"])
+	World.zet(id, str(gasten[0]["kamer"]), 60.0, 60.0)
+	World.pauzeer(true)                     # de test tikt de wereld zelf
+	waar(Games.start(SPEL), "het spel start")
+	gelijk(Games.speler(), id, "hij koopt")
+	waar(Hits.spot(KAART) == null, "nog geen kaart")
+	waar(Hits.spot("kr_p0") == null, "en nog geen prijskaartje")
+	waar(not World.decor_plek("kr_toonbank", KAMER).is_empty(), "de kraam staat er al")
+	waar(not World.decor_plek("kr_w0", KAMER).is_empty(), "met haar waren")
+	waar(Games.verwacht_dier(id), "het spel wacht op hem")
+	Hotel.komt_eraan()
+	Hits.plaats()
+	var w := Hits.spot("komt_" + id)
+	waar(w != null and is_instance_valid(w.knoop) and w.knoop.visible,
+		"zijn wolkje 'komt eraan' hangt aan de tuindeur")
+	var d = World.dier(id)
+	var t := 0
+	while d.kamer != KAMER and t < 4000:
+		World._tik()
+		t += 1
+	gelijk(d.kamer, KAMER, "hij stapt de tuin in")
+	await _wacht(0.35)
+	waar(Hits.spot(KAART) == null, "zolang hij naar de toonbank loopt, is er geen kaart")
+	while not (d.punten as Array).is_empty() and t < 4000:
+		World._tik()
+		t += 1
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	while Hits.spot(KAART) == null and Time.get_ticks_msec() - t0 < 1500:
+		await boom.process_frame
+	waar(Hits.spot(KAART) != null, "aan de toonbank: nu de kaart")
+	waar(Hits.spot("kr_p0") != null, "met de prijskaartjes")
+	var plek: Dictionary = _plekken(1)["gast"]
+	waar(Vector2(d.x, d.z).distance_to(Vector2(float(plek["x"]), float(plek["z"]))) <= 3.0,
+		"hij staat voor de toonbank")
+	gelijk(d.staat, "wacht", "en wacht daar")
+	World.pauzeer(false)
+	_af()
 
 # --------------------------------------------------------------- de getallen
 

@@ -239,6 +239,17 @@ mag doen; een bewaarde beurt van een ANDER dier wordt dan niet hervat maar is ge
 niet afgemaakt. Er gaat niets af: geen ster, geen munt, en `tel()` telt alleen
 afgemaakte beurten. `was` heeft geen dier van de beurt en geen dierknop.
 
+**Het spel begint pas als het dier er is** (eigenaar 2026-09-23: "Bij het zwembad is er
+geen volg optie om boef aan te komen tenzij ik eerst op 'terug' druk. Zorg dat de minigame
+pas begint wanneer het dier er is"; world.md §5.8). Moet het dier van de beurt de kamer van
+het spel nog in lopen, dan stuurt het spel hem met `ctx.wacht_op` en staat er niets dat op
+een opdracht lijkt tot hij op zijn plek staat: geen kaart, geen strook, geen cijfer. Het
+eigen decor van het spel staat er wel, en bij de deur hangt het hotelwolkje
+`🐶 Boef komt eraan` met zijn balk en `👀 Volg` — ook tijdens het spel, zodat het kind met
+hem mee kan lopen tot in de kamer van het spel (world.md §6.3). Staat hij er al, of in
+rustmodus, dan komt de eerste kaart meteen. PLAN.md R1 ("binnen één seconde") telt voortaan
+vanaf zijn aankomst; PLAN N3 stap 1 (zwembad) en N11 (hinkel) zijn daarmee overruled.
+
 ---
 
 ## 1. G1 — HET ZWEMBAD (`zwembad`)
@@ -433,9 +444,19 @@ rood, geen ster minder, geen herhaling van de beurt.
 
 ### 1.6 Zwemmen zelf
 
+* **Eerst de zwemmer, dan de vraag** (Godot-poort, eigenaar 2026-09-23, §0.12): de start
+  haalt hem met `ctx.wacht_op(gast, dek.start)` — door de deuren met het hotelwolkje
+  `komt eraan` en `👀 Volg` bij het hek — en pas als hij op het dek staat komen het cijfer
+  op zijn rug (`0 m`) en de eerste vraagkaart. De baan zelf (streepjes, cijfers op de
+  rand, de vlag met `<L> m`) staat er meteen. Een half gezwommen baan wacht op hem op het
+  dek waar `stop()` hem neerzette (`dekNu`: `over` vanaf halverwege, anders `start`). Het
+  trapje, de duik en het zwemmen blijven wat het eerste antwoord koopt: `zorgInWater`
+  hieronder. (Tot 2026-09-23 stond de eerste vraag er meteen en liep hij pas na het
+  antwoord het hotel door — PLAN N3 stap 1.)
 * `zorgInWater(na)`: staat het dier al in het bad én binnen 3 voxels van
   `x(p)`, dan meteen door; anders `naarWater`.
-* `naarWater`: is het dier niet in `zwembad`, dan `reis(id, 'zwembad',
+* `naarWater`: is het dier niet in `zwembad` (sinds hij vóór de vraag al gehaald wordt
+  alleen nog een vangnet), dan `reis(id, 'zwembad',
   {x: dek.start.x, z: dek.start.z, na: 'wacht'})` en elke **220 ms** kijken of
   hij er is, met een geduld van **25 000 ms**. Daarna naar de **trappenvoet
   van het startblok** bij het westeinde van het water, `x = blok_x − 8 = 6`,
@@ -660,7 +681,10 @@ vraagkaart terugzetten.
 
 Na een herlaad (`herstel`): staat `p > 0`, dan wordt het dier met `World.zet`
 teruggezet op `x(p)`, `z = 28`, krijgt `pose('zwem', 0)`, zijn cijfer en zijn
-vraagkaart. Anders loopt hij opnieuw het water in.
+vraagkaart. Anders loopt hij opnieuw het water in. **Godot-poort:** de vraagkaart komt
+als hij op het dek staat (`ctx.wacht_op(gast, dekNu)`, §1.6 — een herlaad zet hem in zijn
+kamer van `waar`, dus meestal loopt hij eerst een stukje); het eerste antwoord zet hem met
+`World.zet` terug op `x(p)` en hij zwemt vandaar verder.
 
 `normaliseer(b)` vult een oude bewaarde beurt aan: band klemmen, `M` uit
 `maxVan(L, band)`, `stap` uit `L ≤ 20 ? 5 : 10`, `p` klemmen op `0…L`, `leg`,
@@ -697,6 +721,10 @@ gekozen dat erop staat, dan begint een verse ronde bij hem en gaat rond: hooguit
 het gekozen dier voorop (`idx` 0, dus de getallen van de eerste beurt van de dag). Een
 bewaarde ronde gaat alleen verder als het gekozen dier daarin al aan de beurt was of
 is; bij de wissel wordt niemand gewekt, wie sliep slaapt door.
+
+**Niemand loopt hier binnen** (eigenaar 2026-09-23, §0.12): de slapers worden gewekt
+waar ze liggen en het wekkerkaartje hangt bij hen in hun eigen kamer, dus de kaart onder de
+klok komt meteen — er is geen dier om op te wachten.
 
 ### 2.2 Aanmelding en start
 
@@ -1242,6 +1270,16 @@ er opnieuw getekend (en dan verschijnt de keuzestrook). Bij de eerste wachtbeurt
 wordt meteen getekend ("komt eraan"). Elke 24e beurt (≈ **12 s**) wordt hij
 opnieuw op weg gestuurd. Er loopt altijd maar **één** wachtketting.
 
+**Godot-poort (eigenaar 2026-09-23: "Zorg dat de minigame pas begint wanneer het dier er
+is", §0.12 — dit overrulet PLAN.md N11 "de som staat er meteen, het dier komt eraan").**
+`haalGast()` + `wachtOpGast()` zijn samen één `ctx.wacht_op(gast, {x: dierX(s), z: zDier},
+{tempo: 1.4, marge: 2.5})` (world.md §5.3): hij kijkt elke 0,1 s en stuurt een ingehaalde
+reis na een tel opnieuw. Er is nog steeds maar **één** wacht (`_wacht_loopt`). Zolang hij
+loopt tekent het spel **niets** — geen kaart, geen strook, geen cijfer boven zijn kop; de
+stenen en het trapje liggen er wel — en bij de tuindeur hangt het hotelwolkje
+`🐶 Boef komt eraan` met zijn balk en `👀 Volg`. De kaart "komt eraan / Tel straks mee"
+bestaat niet meer. Staat hij op zijn steen, dan komt de kaart met de eerste vraag.
+
 `houdVrij()`: elke gast die niet meedoet en zich op of vlak bij de strook bevindt
 (`x` binnen `zone.x0 − 10 … zone.x1 + 10`, `z` binnen `zone.z0 − 7 … zone.z1 + 7`)
 wordt naar een vrij grasvak vóór de strook gestuurd met `na: 'wacht'`, zodat hij
@@ -1287,8 +1325,8 @@ voxels uitgemeten en die schaalt de motor zelf mee.
 `snd.tik()`, bewaren, opnieuw tekenen.
 
 `antwoord(n)` (fase `aantal`): staat de gast nog niet op zijn steen, dan wordt hij
-eerst gehaald en blijft de vraag staan (er telt niets mee en er gaat niets
-verloren). Anders: `pogingen++`, bij fout `missers++`, `state.tel(goed, ms)` en
+eerst gehaald en komt dezelfde vraag terug zodra hij er staat (er telt niets mee en er
+gaat niets verloren; in de poort gaat de kaart zolang weg). Anders: `pogingen++`, bij fout `missers++`, `state.tel(goed, ms)` en
 dan hoppen — **ook bij een fout antwoord**: het dier springt het gekozen aantal
 en de kaart vraagt van daaruit verder.
 
@@ -1335,7 +1373,7 @@ bewaarde stand gewist en sluit het spel zichzelf.
 | prikbord | 🪨 | `'<naam> wil hinkelen'` of `'Hinkel op de stenen'` |
 | geen gasten | 🛏 | `'nog geen gasten'` |
 | sombalk (altijd, behalve op het eind) | — | `'van <s> naar <doel>'` |
-| gast komt eraan | diersoort | `'<naam> komt eraan'` / `'Tel straks mee'` (krap: `'Komt eraan'`) |
+| gast komt eraan | — | **geen kaart meer** (eigenaar 2026-09-23, §3.6): het hotelwolkje `'<naam> komt eraan'` met balk en `👀 Volg` bij de tuindeur (world.md §6.3) |
 | kies je sprong | diersoort | `'<naam> staat op <s>, trap bij <doel>'` / `'Kies je sprong'` (krap: `'Kies je sprong'`) |
 | te kort | diersoort | `'<naam> staat op <s>'` / `'Nog even verder'` (krap: `'Nog even verder'`) |
 | te ver | diersoort | `'Oei, te ver!'` / `'Kies je sprong terug'` (krap: `'Oei, te ver!'`) |
@@ -1903,6 +1941,13 @@ elke **700 ms** opnieuw kijken, hooguit **24** keer. Zodra hij in de tuin is,
 `loopNaar(P.gast.x, P.gast.z, {na: 'wacht'})`; op zijn aankomst wordt de
 sommenkaart opnieuw nagemeten, want pas dan weten we waar hij staat en **de kaart
 mag nooit over hem heen liggen**.
+
+**Godot-poort (eigenaar 2026-09-23, §0.12):** het halen is `ctx.wacht_op(gast, P.gast)`
+(world.md §5.3) — ook die stuurt een reis maar één keer en laat een gast die al onderweg
+is zijn route houden. De kraam, de toonbank en de waren staan er meteen; de sommenkaart,
+de prijskaartjes, de munten en de ✔ komen pas als hij voor de toonbank staat. Tot dan
+hangt het hotelwolkje `🐶 Boef komt eraan` met zijn balk en `👀 Volg` bij de tuindeur. Er
+hoeft dus niets meer nagemeten te worden: de kaart wordt pas getekend als hij er staat.
 
 ### 5.6 De kaart, het cijferpad en de nameting (bindend — G5-F2)
 
