@@ -146,9 +146,57 @@ func zet(n: int, in_hand: int = -1) -> void:
 
 # ------------------------------------------------------------------ slepen
 
+## A drag starts on where the finger REALLY is, not on Godot's own count.
+## Godot begins one as soon as the summed `relative` of the moves reaches 10
+## units, and the web export takes that from `PointerEvent.movementX` — which
+## Firefox measures, for a FINGER, from the last place of the MOUSE.  Once the
+## mouse moved in a session, the first tremble of a tap was hundreds of units,
+## every tap on a source became a drag that landed nowhere, and the tap was
+## lost (found on the voerkar in Firefox 156, 2026-09-23).  So Godot's start is
+## refused while the finger is still within `SLEEP_AF` of where it pressed, and
+## the source starts the drag itself once it really is further (`force_drag`).
+const SLEEP_AF := 10.0
+var _druk_op := Vector2.INF
+
+func _gui_input(ev: InputEvent) -> void:
+	var mb := ev as InputEventMouseButton
+	if mb != null:
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			_druk_op = mb.position if mb.pressed else Vector2.INF
+		return
+	var mm := ev as InputEventMouseMotion
+	if mm == null or _druk_op == Vector2.INF or (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) == 0:
+		return
+	if get_viewport().gui_is_dragging() or mm.position.distance_to(_druk_op) <= SLEEP_AF:
+		return
+	var lading = _lading()
+	if lading == null:
+		return
+	_druk_op = Vector2.INF
+	force_drag(lading, _spook())
+
 func _get_drag_data(_at: Vector2) -> Variant:
+	# a tremble of a tap is no drag, whatever the browser says it moved
+	if _druk_op != Vector2.INF and get_local_mouse_position().distance_to(_druk_op) <= SLEEP_AF:
+		return null
+	var lading = _lading()
+	if lading == null:
+		return null
+	set_drag_preview(_spook())
+	return lading
+
+## What a drag carries, or `null` when this source gives nothing (no name, or
+## nothing left in it).
+func _lading() -> Variant:
 	if sleep_naam.is_empty() or aantal <= 0:
 		return null
+	var lading := sleep_data.duplicate()
+	lading["sleep"] = sleep_naam
+	lading["bron"] = name
+	return lading
+
+## The picture that goes with the finger: the source's own text, `HEF` above it.
+func _spook() -> Control:
 	var spook := Control.new()
 	var l := Label.new()
 	l.text = text
@@ -156,11 +204,7 @@ func _get_drag_data(_at: Vector2) -> Variant:
 	spook.add_child(l)
 	l.position = Vector2(-l.get_combined_minimum_size().x * 0.5,
 		-l.get_combined_minimum_size().y * 0.5 - HEF)
-	set_drag_preview(spook)
-	var lading := sleep_data.duplicate()
-	lading["sleep"] = sleep_naam
-	lading["bron"] = name
-	return lading
+	return spook
 
 ## A source is a Button too, so a drop that lands on it dies there (Z1) — and a
 ## source often stands on the very thing it feeds.  Hand the drop on, same as

@@ -29,6 +29,74 @@ func _af() -> void:
 		_laag.queue_free()
 		_laag = null
 
+# ------------------------------------------------------- slepen of tikken
+
+## Firefox measures a finger's `movementX` from where the MOUSE last was: once
+## the mouse moved in a session, the first tremble of a tap arrives as a
+## `relative` of hundreds of units, Godot started a drag on it and the tap on a
+## source was lost (found on the voerkar, 2026-09-23).  A source now starts a
+## drag on the REAL distance from where it was pressed: that tremble stays a
+## tap, and a finger that really moves still drags.
+func test_een_trillende_tik_op_een_bron_blijft_een_tik() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var vp := SubViewport.new()
+	vp.size = Vector2i(1000, 648)
+	vp.gui_embed_subwindows = true
+	boom.root.add_child(vp)
+	var laag := Control.new()
+	laag.size = Vector2(1000, 648)
+	vp.add_child(laag)
+	Ui.registreer_lagen(laag, laag, laag, laag, laag)
+	World.meet(Rect2(Vector2.ZERO, laag.size))
+	var tikken := [0]
+	Ui.bron({"x": 40.0, "z": 40.0}, {"id": "proefbron", "kamer": World.kamer_nu(),
+		"icoon": "🍪", "label": "koekjes", "aantal": 3, "sleep": "proef",
+		"tik": func(_s = null) -> void: tikken[0] += 1})
+	Hits.plaats()
+	await boom.process_frame
+	var bron := Ui.bron_van("proefbron")
+	waar(bron != null, "de bron staat er")
+	if bron != null:
+		var p := bron.get_global_rect().get_center()
+		_druk(vp, p, true)
+		await boom.process_frame
+		var mm := InputEventMouseMotion.new()
+		mm.position = p + Vector2(1, 0)
+		mm.global_position = mm.position
+		mm.relative = Vector2(-553, -367)     # what Firefox reports for that tremble
+		mm.button_mask = MOUSE_BUTTON_MASK_LEFT
+		vp.push_input(mm)
+		await boom.process_frame
+		waar(not vp.gui_is_dragging(), "een trillinkje is geen sleep")
+		_druk(vp, p + Vector2(1, 0), false)
+		await boom.process_frame
+		gelijk(tikken[0], 1, "de tik kwam aan")
+		# and a finger that really moves still drags
+		_druk(vp, p, true)
+		await boom.process_frame
+		for i in range(1, 6):
+			var m2 := InputEventMouseMotion.new()
+			m2.position = p + Vector2(8.0 * i, 0)
+			m2.global_position = m2.position
+			m2.relative = Vector2(8, 0)
+			m2.button_mask = MOUSE_BUTTON_MASK_LEFT
+			vp.push_input(m2)
+			await boom.process_frame
+		waar(vp.gui_is_dragging(), "40 eenheden verder is het wel een sleep")
+		_druk(vp, p + Vector2(40, 0), false)
+		await boom.process_frame
+	Hits.wis_alles()
+	Ui.registreer_lagen(null, null, null)
+	vp.queue_free()
+
+func _druk(vp: SubViewport, p: Vector2, in_: bool) -> void:
+	var mb := InputEventMouseButton.new()
+	mb.button_index = MOUSE_BUTTON_LEFT
+	mb.pressed = in_
+	mb.position = p
+	mb.global_position = p
+	vp.push_input(mb)
+
 # ------------------------------------------------- knop of mededeling
 
 ## What you can press looks pressable, what only speaks does not (owner,
