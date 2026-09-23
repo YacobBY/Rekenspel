@@ -724,6 +724,16 @@ De receptie is 120 × 120. Alles staat als breuk (`Rooms.plek`,
 De diepte `x + z` blijft dus altijd 150: de rij houdt haar plek in de
 tekenvolgorde en staat vóór de balie en de gast.
 
+**Poort (eigenaar 2026-09-23): `kan` — geen knop zonder iets te doen.**  `bedden`:
+alleen als ergens nog plek is voor twee bedden en de beurt van vandaag niet al af is
+(`kan_nu`, statisch; de capaciteit, `kies_kamer`, `max_stroken` en de signatuur zijn
+daarvoor statisch gemaakt).  `voerkar`: alleen als er een leeg bakje is in een kamer
+waar iemand slaapt (`Hotel.lege_bakken()`); en een kar in het laatje van een andere dag
+telt niet meer — `Hotel.morgen()` zette alleen `state.kar` op null, dus de volgende
+ochtend zei het spel "Alle bakjes vol!" terwijl elk bakje leeg was; een nieuwe kar
+draagt `dag`.  `meubels`: alleen met munten, een ster of iets dat nog neergezet moet
+worden.
+
 ### 4.4 De vier opstellingen (X1) — wat de poort moet nabootsen
 
 Na een eerste tekenbeurt op de gewone plekken meet `opbouw()` de échte maten op

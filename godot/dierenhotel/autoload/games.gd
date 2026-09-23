@@ -102,6 +102,19 @@ func ontgrendeld(id: String) -> bool:
 		return bool(slot.call(State.n_gasten(), State.band()))
 	return true
 
+## `kan(s)` — has the game something to do right now?  Absent means yes.  An
+## entry that would only open a game that says "nothing to do" and closes
+## again is not shown (owner, 2026-09-23: "actions ... are available ... but
+## when you click on them you can't execute them ... this provides visual
+## clutter").  Like `taak.wanneer` it is a STATIC Callable on `State.s` —
+## autoloads and literals only — because it outlives the scanned instance.
+func speelbaar_nu(id: String) -> bool:
+	var def := definitie(id)
+	var kan = def.get("kan", null)
+	if kan is Callable and (kan as Callable).is_valid():
+		return bool((kan as Callable).call(State.s))
+	return true
+
 ## world.md §5.2.  Starting another game supersedes the running one completely:
 ## there is no pause.
 func start(id: String) -> bool:
@@ -210,6 +223,7 @@ func hersteek() -> void:
 		if hs.is_empty() or str(def.get("kamer", "")) != nu \
 				or bool(def.get("stub", false)) \
 				or not ontgrendeld(id) \
+				or (_actief != id and not speelbaar_nu(id)) \
 				or (_actief == id and not bool(hs.get("blijf", false))) \
 				or (kort and _actief != "" and _actief != id):
 			Hits.weg(knop_id)

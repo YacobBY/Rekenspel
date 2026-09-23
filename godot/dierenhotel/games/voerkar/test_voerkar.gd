@@ -801,3 +801,37 @@ func _ruim_op(vp: SubViewport) -> void:
 	State.s = _bewaard
 	_bewaard = {}
 	Rooms.herstel()
+
+## De kar van gisteren telt niet meer (2026-09-23).  `Hotel.morgen()` zet
+## `state.kar` op null en leegt de bakjes, maar de kopie in het laatje bleef
+## staan, en dan zei het spel de volgende ochtend "✅ Alle bakjes vol!" terwijl
+## elk bakje leeg was.  Een nieuwe kar draagt zijn dag.
+func test_de_kar_van_gisteren_telt_niet_meer() -> void:
+	_op()
+	var spel := _start(3, 3, 1, 3)
+	waar(spel != null, "het spel draait")
+	if spel == null:
+		_af()
+		return
+	gelijk(int(spel.K.get("dag", -1)), 1, "de kar weet van welke dag hij is")
+	# gisteren: alles geleverd, en het spel werd in het slotwolkje gestopt
+	var geleverd := {}
+	for q in spel.open_kamers():
+		geleverd[str(q["kamer"])] = true
+	spel.K["geleverd"] = geleverd
+	spel.K["stap"] = "duwen"
+	Games.stop()
+	waar(typeof(State.spel_data(SPEL).get("kar", null)) == TYPE_DICTIONARY,
+		"de volle kar staat nog in het laatje")
+	# de nieuwe dag: het hotel ruimt `state.kar` op, het laatje niet
+	State.s["dag"] = 2
+	State.s["kar"] = null
+	Games.start(SPEL)
+	Hits.plaats()
+	var vandaag := _spel()
+	waar(vandaag != null, "het spel draait vandaag")
+	if vandaag != null:
+		gelijk(int(vandaag.K.get("dag", -1)), 2, "een nieuwe kar voor vandaag")
+		gelijk((vandaag.K["geleverd"] as Dictionary).size(), 0, "met nog niets geleverd")
+		waar(not vandaag.open_kamers().is_empty(), "en er zijn kamers om naar toe te duwen")
+	_af()

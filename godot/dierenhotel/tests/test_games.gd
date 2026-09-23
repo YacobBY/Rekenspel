@@ -276,3 +276,43 @@ func test_elk_spel_hangt_aan_zijn_eigen_rustspul() -> void:
 	State.s = bewaard
 	Games.hersteek()
 	_af()
+
+## `kan` (world.md §5.1): a game with nothing to do right now has no entry and no
+## task card — tapping it only said "vol ✓", "Alle bakjes vol!" or "Nog geen
+## munten" (owner, 2026-09-23: "you can't execute them ... visual clutter").
+func test_een_spel_zonder_iets_te_doen_heeft_geen_knop() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	_op()
+	State.nieuw_spel()
+	for i in 3:
+		(State.s["gasten"] as Array).append({"id": "kn%d" % i, "naam": "Kn%d" % i,
+			"kind": "hond", "soort": "puppy", "scoops": 1, "kamer": "kamer1",
+			"bed": "bed%d" % (1 + i % 2), "behoefte": "eten"})
+	# the voerkar: with every bowl full it has nothing to deliver
+	for b in Hotel.alle_bakken():
+		World.zet_bak(str(b["kamer"]), str(b["slot"]), 3)
+	waar(not Games.speelbaar_nu("voerkar"), "voerkar: alle bakjes vol, niets te doen")
+	World.zet_bak("kamer1", "bak", 0)
+	waar(Games.speelbaar_nu("voerkar"), "voerkar: een leeg bakje, wel iets te doen")
+	# the meubelboek: no coins and no stars, nothing to buy
+	State.s["munten"] = 0
+	State.s["sterren"] = 0
+	waar(not Games.speelbaar_nu("meubels"), "meubels: zonder munten en sterren niets te kopen")
+	State.s["munten"] = 2
+	waar(Games.speelbaar_nu("meubels"), "meubels: met munten wel")
+	# bedden: today's turn already done
+	var d := State.spel_data("bedden")
+	waar(Games.speelbaar_nu("bedden"), "bedden: een nieuwe beurt kan")
+	d["klaar"] = true
+	var keus := (load("res://games/bedden/spel.gd") as GDScript).call("kies_kamer") as Dictionary
+	var o := Sommen.Bedden.opdracht(State.band(), int(State.s["dag"]), State.n_gasten(),
+		int(keus["cap"]), (load("res://games/bedden/spel.gd") as GDScript).call("max_stroken"))
+	d["sig"] = (load("res://games/bedden/spel.gd") as GDScript).call("_signatuur_van", o, str(keus["kamer"]))
+	waar(not Games.speelbaar_nu("bedden"), "bedden: de beurt van vandaag is al af")
+	# and the task card goes with the entry
+	var kaarten := []
+	for q in Hotel.spel_taken():
+		kaarten.append(str(q["spel"]))
+	waar(not kaarten.has("bedden"), "geen taakkaartje voor een spel zonder iets te doen")
+	State.s = bewaard
+	_af()

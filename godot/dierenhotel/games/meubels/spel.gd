@@ -116,6 +116,16 @@ func definitie() -> Dictionary:
 		# Vanaf drie gasten: dan zijn er munten uit het uitchecken en is er ook
 		# een reden om bij te bouwen (games-a.md §1.1).
 		"unlock": func(n: int, _band: int) -> bool: return n >= 3,
+		# `kan` (world.md §5.1): zonder munten en zonder sterren valt er niets
+		# te kopen — het goedkoopste stuk kost €1, versiering een ster — en
+		# bleef het boek open met "💰 Nog geen munten" (eigenaar, 2026-09-23:
+		# "you can't execute them").  Wat nog neergezet moet worden telt wel.
+		"kan": func(s: Dictionary) -> bool:
+			if int(s.get("munten", 0)) > 0 or int(s.get("sterren", 0)) >= 1:
+				return true
+			var w = ((s.get("spel", {}) as Dictionary).get("meubels", {}) as Dictionary).get("wacht", null)
+			return typeof(w) == TYPE_DICTIONARY \
+				and not ((w as Dictionary).get("nog", []) as Array).is_empty(),
 		"stub": false,
 		"taak": {"id": "meubels", "icoon": "📖", "tekst": "Koop iets moois",
 			"kamer": "receptie", "prio": 5,

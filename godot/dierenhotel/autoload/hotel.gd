@@ -743,6 +743,7 @@ func antwoord2(keus: String) -> void:
 	if keus == goed:
 		v["stap"] = 3
 		paint_checkin()
+		hotspots()          # now a free bed is something to tap
 		Snd.ja()
 		Ui.toast("Goed gerekend! 🎉", "happy")
 		State.tel(int(v["fouten2"]) == 0, Time.get_ticks_msec() - int(v["t0"]))
@@ -898,6 +899,10 @@ func spel_taken() -> Array:
 		if t == null or typeof(t) != TYPE_DICTIONARY:
 			continue
 		if not Games.ontgrendeld(id) or bool(def.get("stub", false)):
+			continue
+		# a card that leads to a game with nothing to do is an action that
+		# cannot be carried out either (owner, 2026-09-23)
+		if not Games.speelbaar_nu(id):
 			continue
 		var aan := true
 		var wanneer = t.get("wanneer", null)
@@ -1246,14 +1251,27 @@ func hotspots() -> void:
 			"kind": "drop", "drop": "deur", "data": {"naar": naar, "kamer": nu},
 			"volg": _volg_deur(nu, naar),
 			"aan": func(_s): naar_kamer(naar)})
+	# While a game runs the hotel's own buttons are off the glass anyway
+	# (`Hits` hides them) — and a game may BORROW one (`ctx.hotspots.pak`, the
+	# voerkar takes the bowls), so then they are all made as they always were.
+	# Outside a game a button stands only where a tap does something.
+	var spel := not Games.actief().is_empty()
 	if nu == "receptie":
 		var bp := decor_plek("receptie", "bel")
-		if not bp.is_empty():
-			var vrij := not State.bed_vrij().is_empty() and State.s["nieuweGast"] == null
+		# Only where ringing brings a guest: a free bed and nobody at the desk
+		# yet.  With the beds full or a guest still checking in, a tap only said
+		# "alle bedden vol" or "Er staat al iemand" (owner, 2026-09-23:
+		# "actions ... are available ... but when you click on them you can't
+		# execute them ... this provides visual clutter").
+		var vrij := not State.bed_vrij().is_empty() and State.s["nieuweGast"] == null \
+			and State.s["checkin"] == null
+		if bp.is_empty() or not (vrij or spel):
+			Hits.weg("bel")
+		else:
 			Hits.maak({"id": "bel", "door": EIGENAAR, "kamer": "receptie",
 				"x": bp["x"], "z": bp["z"], "y": 20, "icoon": "🔔", "label": "Bel",
-				"op": "aan", "badge": "!" if vrij else "",
-				"titel": "Bel voor de volgende gast", "klas": "hotbel vrij" if vrij else "hotbel", "prio": 10,
+				"op": "aan", "badge": "!",
+				"titel": "Bel voor de volgende gast", "klas": "hotbel vrij", "prio": 10,
 				"aan": func(_s): bel()})
 		var pp := decor_plek("receptie", "prikbord")
 		if not pp.is_empty():
@@ -1275,10 +1293,13 @@ func hotspots() -> void:
 		else:
 			Hits.weg("lamp")
 	# an OCCUPIED bed gets no button: the sleeping animal with its name plate
-	# already says it, and the room stays quiet to look at
+	# already says it, and the room stays quiet to look at.  A FREE bed gets
+	# one only while a guest waits for a bed (check-in step 3): at any other
+	# time a tap only said "🛏 Bel eerst een gast" (owner, 2026-09-23).
+	var kiest := spel or (State.s["checkin"] != null and int(State.s["checkin"].get("stap", 0)) == 3)
 	for slot in _slots(nu, "bed"):
 		var sid := str(slot.get("id", ""))
-		if not State.gast_in_bed(nu, sid).is_empty():
+		if not kiest or not State.gast_in_bed(nu, sid).is_empty():
 			Hits.weg("bed_%s_%s" % [nu, sid])
 			continue
 		Hits.maak({"id": "bed_%s_%s" % [nu, sid], "door": EIGENAAR, "kamer": nu,
@@ -1294,10 +1315,15 @@ func hotspots() -> void:
 			if str(g.get("kamer", "")) == nu and str(g.get("behoefte", "")) == "spelen" \
 					and not g.get("blij", false):
 				wil += 1
-		Hits.maak({"id": "mand_%s" % nu, "door": EIGENAAR, "kamer": nu,
-			"x": mp["x"], "z": mp["z"], "y": 8, "icoon": "🧶", "label": "Speelmand", "op": "aan",
-			"titel": "De speelmand", "badge": str(wil) if wil > 0 else "", "prio": 7,
-			"aan": func(_s): tik_mand(nu)})
+		# only when somebody in this room wants to play: otherwise a tap only
+		# said "🧶 Straks samen spelen" (owner, 2026-09-23)
+		if wil <= 0 and not spel:
+			Hits.weg("mand_%s" % nu)
+		else:
+			Hits.maak({"id": "mand_%s" % nu, "door": EIGENAAR, "kamer": nu,
+				"x": mp["x"], "z": mp["z"], "y": 8, "icoon": "🧶", "label": "Speelmand",
+				"op": "aan", "titel": "De speelmand", "badge": str(wil) if wil > 0 else "", "prio": 7,
+				"aan": func(_s): tik_mand(nu)})
 	for slot in _slots(nu, "bak"):
 		var sid := str(slot.get("id", ""))
 		if bool(slot.get("tijdelijk", false)):
@@ -1305,9 +1331,19 @@ func hotspots() -> void:
 			continue
 		var niveau := _bak_stand(nu, sid)
 		var hier := 0
+		var honger := 0
 		for g in State.s["gasten"]:
 			if str(g.get("kamer", "")) == nu:
 				hier += 1
+				if not g.get("gegeten", false):
+					honger += 1
+		# a bowl is something to tap when there is food in it and somebody here
+		# still has to eat (the tap feeds them); an empty one only said "🍪 Vul
+		# eerst de voerkar" or "🍽 Hier slaapt niemand" — the hungry guest's
+		# own 🍪 bubble already says it (owner, 2026-09-23)
+		if not spel and (niveau <= 0 or honger <= 0):
+			Hits.weg("bak_%s_%s" % [nu, sid])
+			continue
 		Hits.maak({"id": "bak_%s_%s" % [nu, sid], "door": EIGENAAR, "kamer": nu,
 			"x": slot.get("x", 0), "z": slot.get("z", 0), "y": 7,
 			"icoon": "🍪" if niveau > 0 else "🍽",

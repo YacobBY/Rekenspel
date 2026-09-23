@@ -1096,6 +1096,7 @@ half-loaded.
 | `hotspot` | optional | `{obj, icoon, label, hoog, dx, dz, blijf, rust}` — the entry button; `rust` names the resting prop it hangs on |
 | `modellen` | optional | `{naam: builder}` — the game's own models, registered at the scan; the builders are STATIC (a function of the game's script, `Callable(get_script(), …)`), because the scanned instance is freed |
 | `rust` | optional | loose decor entries `{id, model, x, z, y?, params?}` that stand in the room whenever the game may be played and NO game runs (owner 2026-09-23: "Dan hangt elk spel aan iets wat je echt ziet"); owner `rust:<id>`, put down and taken away by `hersteek`, all of them cleared when any game starts |
+| `kan` | optional | **port:** `func(s) -> bool` — has the game something to do right now?  Absent = yes.  False hides the entry button and the game's task card (`Games.speelbaar_nu`): a game that would only say "vol ✓", "Alle bakjes vol!" or "Nog geen munten" is an action that cannot be carried out (owner 2026-09-23: "actions ... are available ... but when you click on them you can't execute them ... this provides visual clutter").  STATIC like `taak.wanneer` (autoloads and literals only).  bedden: room for two beds and today's turn not done; voerkar: `Hotel.lege_bakken()` not empty; meubels: coins, a star, or something still to place |
 | `unlock(N, band)` | optional | may it be played? (`true` when absent; a throw counts as `true`) |
 | `wens` | optional | which wish it fulfils: a name or an array of names |
 | `taak` | optional | prikbord card `{id?, icoon, tekst (string or fn(state)), wanneer(state), kamer?, prio?}` |
@@ -1405,6 +1406,15 @@ check-in is repainted (it comes first), otherwise the prikbord opens when the ro
   each showing icon, name and the waiting badge, and a `Sluiten` button.
 * `Hotel.naarKamer(id)` = `World.naar(id)` + `state.kamerNu = id` + `Snd.deur()` +
   `render()`.
+* **Port (owner 2026-09-23): a hotel button stands only where a tap does something**
+  ("actions such as a blank bed are available ... but when you click on them you can't
+  execute them ... this provides visual clutter").  Outside a game: the bell only with a
+  free bed and nobody at the desk or checking in; a free bed only while a guest waits for
+  one (check-in step 3 — the step repaints the buttons); the play basket only while a guest
+  in that room wants to play; a bowl only with food in it and a guest there that has not
+  eaten (the tap feeds).  Doors, the prikbord and the lamp keep their rules.  While a game
+  runs every hotel button is made as before: `Hits` keeps them off the glass anyway, and a
+  game may borrow one (the voerkar takes the bowls and the doors).
 * **Door hotspots** (**port:** the sign hangs ON its door, prio 11 — §5.4 port rules): one per door of the room in view, at the door point, `y = 9`, icon and
   label of the target room, title `Ga naar <naam>`, badge `wachtIn(target)`, class
   `hotdeur`, prio 8, and a drop target `deur` with `data = {naar, kamer}` — that is how the

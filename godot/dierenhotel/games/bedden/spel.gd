@@ -32,6 +32,7 @@ const VRAAG_REGEL := "Hoeveel bedden heb je nodig?"    ## 5 woorden / 28 tekens
 const HULP_BEDJE := "nog een bedje erbij"              ## 4 woorden / 19 tekens
 
 const KAMER := "kamer1"          ## waar het icoontje hangt
+const SPEL_ID := "bedden"        ## de map, en dus het laatje in `State.s.spel`
 const RUST_KIST := "rust_bd_kist" ## de dekenkist tussen de bedden, als er niet gespeeld wordt
 const KIST_X := 32
 const KIST_Z := 51
@@ -83,6 +84,7 @@ func definitie() -> Dictionary:
 			"hoog": 14, "dx": -4, "dz": -4, "rust": RUST_KIST},
 		"rust": [{"id": RUST_KIST, "model": "dekenkist", "x": KIST_X, "z": KIST_Z}],
 		"unlock": func(n: int, _band: int) -> bool: return n >= 1,
+		"kan": Callable(get_script(), "kan_nu"),
 		"stub": false,
 		"taak": {"id": "bedden", "icoon": "🛏", "tekst": "Zet de bedden op rij",
 			"wanneer": func(s: Dictionary) -> bool: return (s["gasten"] as Array).size() >= 2,
@@ -167,7 +169,7 @@ func _kist_over() -> int:
 ## CONTRACTGAT: de HTML leest ze als `wereld.slots(kamer, 'vrij')`
 ## (`rooms.js:854` geeft dan `r.vrij` terug); `Rooms.slots()` in de poort
 ## filtert alleen de meubelslots, dus dit spel leest `Kamer.vrij` zelf.
-func _vrije_vakken(kamer_id: String) -> Array:
+static func _vrije_vakken(kamer_id: String) -> Array:
 	var r := Rooms.get_kamer(kamer_id)
 	if r == null:
 		return []
@@ -176,15 +178,15 @@ func _vrije_vakken(kamer_id: String) -> Array:
 		uit.append(Vector2(float(cel["x"]), float(cel["z"])))
 	return uit
 
-func _bed_punten(kamer_id: String) -> Array:
+static func _bed_punten(kamer_id: String) -> Array:
 	var uit: Array = []
-	for b in ctx.wereld.slots(kamer_id, "bed"):
+	for b in World.slots(kamer_id, "bed"):
 		uit.append(Vector2(float(b.get("x", 0.0)), float(b.get("z", 0.0))))
 	return uit
 
 ## Het vrije vakje dat het verst van ALLE bedden af ligt: zo staan de nieuwe
 ## bedden mooi verdeeld door de kamer in plaats van tegen elkaar aan.
-func _verste_vak(vrij: Array, bedden: Array) -> int:
+static func _verste_vak(vrij: Array, bedden: Array) -> int:
 	var beste := -1
 	var best := -1.0
 	for i in vrij.size():
@@ -202,7 +204,7 @@ func _verste_vak(vrij: Array, bedden: Array) -> int:
 ## bedje wordt straks een ECHT bed.  Een neergezet bed haalt de vakjes binnen
 ## 18 voxels van zich af uit het raster, dus het aantal vrije vakjes is niet
 ## het aantal bedden: we spelen de greedy plaatsing droog na en tellen.
-func _ruwe_capaciteit(kamer_id: String) -> int:
+static func _ruwe_capaciteit(kamer_id: String) -> int:
 	var vrij := _vrije_vakken(kamer_id)
 	var bedden := _bed_punten(kamer_id)
 	var n := 0
@@ -220,17 +222,17 @@ func _ruwe_capaciteit(kamer_id: String) -> int:
 		vrij = over
 	return n
 
-func capaciteit(kamer_id: String) -> int:
+static func capaciteit(kamer_id: String) -> int:
 	return mini(MAX_CAP, _ruwe_capaciteit(kamer_id))
 
 ## Het liefst de kamer van het icoontje; is die vol, dan lopen we door naar de
 ## volgende slaapkamer die nog plek heeft.  Zo blijft de groeilus doorlopen.
-func kies_kamer() -> Dictionary:
+static func kies_kamer() -> Dictionary:
 	var beste := {"kamer": KAMER, "cap": capaciteit(KAMER)}
 	if int(beste["cap"]) >= 2:
 		return beste
-	for id in ctx.wereld.kamers():
-		if id == KAMER or ctx.wereld.slots(id, "bed").is_empty():
+	for id in World.kamers():
+		if id == KAMER or World.slots(id, "bed").is_empty():
 			continue
 		var c := capaciteit(id)
 		if c > int(beste["cap"]):
@@ -251,7 +253,7 @@ func _beste_vak() -> Dictionary:
 ## kader echt heeft en houden er vier vrij voor de sommenkaart, de dekenkist en
 ## de knoppenrij.  De uitkomst blijft 3 of 4, dus `rijen` blijft begrensd op 2
 ## of 3 — precies zoals §3.3 het bedoelt.
-func max_stroken() -> int:
+static func max_stroken() -> int:
 	var h := World.kader_rect().size.y
 	if h <= 0.0:
 		h = 480.0
@@ -413,12 +415,31 @@ func _normaliseer() -> void:
 			d[sleutel] = int(d[sleutel])
 
 func _signatuur(o: Dictionary) -> String:
-	# alles door `int()`: na een herlaad komt `dag` als 3.0 uit de JSON terug en
-	# "3.0|..." is een andere signatuur dan "3|...", waardoor de beurt opnieuw
-	# zou beginnen in plaats van te hervatten
+	return _signatuur_van(o, _kamer)
+
+# alles door `int()`: na een herlaad komt `dag` als 3.0 uit de JSON terug en
+# "3.0|..." is een andere signatuur dan "3|...", waardoor de beurt opnieuw zou
+# beginnen in plaats van te hervatten
+static func _signatuur_van(o: Dictionary, kamer: String) -> String:
 	return "|".join(PackedStringArray([str(int(o["band"])), str(int(State.s["dag"])),
-		str(ctx.state.n_gasten()), _kamer, str(int(o["cap"])), str(int(o["rijen"])),
+		str(State.n_gasten()), kamer, str(int(o["cap"])), str(int(o["rijen"])),
 		str(int(o["perRij"]))]))
+
+## `kan` (world.md §5.1): heeft het spel nu iets te doen?  Niet als er nergens
+## meer plek is voor twee bedden (het kaartje "vol ✓"), en niet als de beurt van
+## vandaag al af is — dan liet de knop alleen de afgemaakte som nog eens zien
+## (eigenaar, 2026-09-23: "you can't execute them ... this provides visual
+## clutter").  Statisch: het leeft langer dan het proefexemplaar van de scan.
+static func kan_nu(s: Dictionary) -> bool:
+	var keus := kies_kamer()
+	if int(keus["cap"]) < 2:
+		return false
+	var d: Dictionary = (s.get("spel", {}) as Dictionary).get(SPEL_ID, {})
+	if not bool(d.get("klaar", false)):
+		return true
+	var o := Sommen.Bedden.opdracht(State.band(), int(s.get("dag", 1)), State.n_gasten(),
+		int(keus["cap"]), max_stroken())
+	return str(d.get("sig", "")) != _signatuur_van(o, str(keus["kamer"]))
 
 func _nieuwe_opdracht(o: Dictionary, sig: String) -> void:
 	var d := _d()

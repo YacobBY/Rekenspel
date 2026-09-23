@@ -98,6 +98,11 @@ func definitie() -> Dictionary:
 		"kamer": KAMER,
 		"hotspot": {"obj": "kar", "icoon": ICO_KAR, "label": "Voerkar", "hoog": 16},
 		"unlock": func(n: int, _band: int) -> bool: return n >= 1,
+		# `kan` (world.md §5.1): alleen als er een leeg bakje is in een kamer
+		# waar iemand slaapt — met alles gevuld zei het spel "✅ Alle bakjes
+		# vol!" en ging het weer dicht (eigenaar, 2026-09-23: "you can't
+		# execute them").  Dezelfde vraag als het hotelkaartje "Vul de voerkar".
+		"kan": func(_s: Dictionary) -> bool: return not Hotel.lege_bakken().is_empty(),
 		# geen eigen taakkaartje: het hotel heeft er al één ("🍪 Vul de voerkar",
 		# prikbord.gd), en dat vinkt `taak_klaar("voer")` af.
 	}
@@ -173,6 +178,13 @@ func _lees_kar(g: Array) -> void:
 	var bewaard = ctx.state.s.get("kar", null)
 	if typeof(bewaard) != TYPE_DICTIONARY:
 		bewaard = ctx.data().get("kar", null)
+		# `Hotel.morgen()` zet `state.kar` op null en leegt de bakjes, maar de
+		# kopie in het laatje bleef staan: de volgende ochtend zei het spel
+		# "Alle bakjes vol!" terwijl elk bakje leeg was.  Een kar van een andere
+		# dag telt niet meer.
+		if typeof(bewaard) == TYPE_DICTIONARY \
+				and int(bewaard.get("dag", -1)) != int(ctx.state.s["dag"]):
+			bewaard = null
 	if typeof(bewaard) == TYPE_DICTIONARY and int(bewaard.get("T", 0)) > 0:
 		K = _herstel(bewaard)
 	else:
@@ -181,7 +193,7 @@ func _lees_kar(g: Array) -> void:
 			"T": int(som["T"]), "per": int(som["k"]), "rest": int(som["r"]),
 			"op_kar": 0, "pot": 0, "stap": "som",
 			"geleverd": {}, "missers": 0, "spook": 0,
-			"t0": Time.get_ticks_msec(),
+			"t0": Time.get_ticks_msec(), "dag": int(ctx.state.s["dag"]),
 		}
 	_bewaar_kar()
 

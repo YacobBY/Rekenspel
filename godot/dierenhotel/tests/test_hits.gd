@@ -1260,3 +1260,56 @@ func test_de_gast_checkt_in_aan_de_balie() -> void:
 	Ui.zet_rust_modus(ui_rust)
 	await _hotel_af(h)
 	State.s = bewaard
+
+## Owner, 2026-09-23: "actions such as a blank bed are available after entering
+## a guest but when you click on them you can't execute them ... this provides
+## visual clutter".  Outside a game a hotel button stands only where a tap does
+## something: a free bed while a guest waits for one, the play basket while
+## somebody here wants to play, a bowl with food while somebody here still has
+## to eat, the bell while a free bed waits and nobody stands at the desk.
+func test_een_knop_staat_er_alleen_als_hij_iets_doet() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var boom := Engine.get_main_loop() as SceneTree
+	var h: Dictionary = await _hotel_op(Vector2i(1024, 768))
+	# one guest in kamer 1, bed 1: it has eaten, it does not want to play
+	State.s["gasten"] = [{"id": "kv0", "naam": "Kv", "kind": "hond", "soort": "puppy",
+		"scoops": 1, "kamer": "kamer1", "bed": "bed1", "waar": "kamer1",
+		"behoefte": "eten", "gegeten": true, "blij": false}]
+	World.sync(Hotel.alle_dieren())
+	Hotel.naar_kamer("kamer1")
+	for _f in 3:
+		await boom.process_frame
+	waar(Hits.spot("bed_kamer1_bed2") == null, "een vrij bed zonder wachtende gast heeft geen knop")
+	waar(Hits.spot("mand_kamer1") == null, "de speelmand zonder speler heeft geen knop")
+	waar(Hits.spot("bak_kamer1_bak") == null, "een leeg bakje heeft geen knop")
+	waar(Hits.spot("deur_kamer1_gang") != null, "de deur staat er wel")
+	# somebody wants to play: the basket is something to tap
+	(State.s["gasten"][0] as Dictionary)["behoefte"] = "spelen"
+	Hotel.render()
+	waar(Hits.spot("mand_kamer1") != null, "met een speler heeft de speelmand een knop")
+	# food in the bowl and a guest that still has to eat: the bowl feeds
+	(State.s["gasten"][0] as Dictionary)["gegeten"] = false
+	World.zet_bak("kamer1", "bak", 2)
+	Hotel.render()
+	waar(Hits.spot("bak_kamer1_bak") != null, "een vol bakje met een hongerige gast heeft een knop")
+	# the bell: a free bed and nobody at the desk
+	Hotel.naar_kamer("receptie")
+	for _f in 2:
+		await boom.process_frame
+	waar(Hits.spot("bel") != null, "met een vrij bed staat de bel er")
+	Hotel.bel()
+	for _f in 2:
+		await boom.process_frame
+	waar(Hits.spot("bel") == null, "met een gast aan de balie niet meer")
+	# the check-in reaches the bed: now a free bed is something to tap
+	var v = State.s["checkin"]
+	waar(v != null, "de gast checkt in")
+	if v != null:
+		v["stap"] = 3
+		Hotel.naar_kamer("kamer1")
+		for _f in 2:
+			await boom.process_frame
+		waar(Hits.spot("bed_kamer1_bed2") != null, "bij het kiezen van een bed heeft het vrije bed een knop")
+		waar(Hits.spot("bed_kamer1_bed1") == null, "een bezet bed nooit")
+	await _hotel_af(h)
+	State.s = bewaard

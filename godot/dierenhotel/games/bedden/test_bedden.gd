@@ -667,7 +667,17 @@ func test_stop_laat_de_kamer_schoon_achter() -> void:
 		"en het losse decor van bedden is weg")
 	var deur2 := Hits.spot("deur_%s_gang" % KAMER)
 	waar(deur2 == null or deur2.geleend_door == "", "de deur is weer gewoon de deur")
-	waar(Hits.spot("mand_%s" % KAMER) != null, "en de kamer is weer van het hotel")
+	# de kamer is weer van het hotel: zijn deurbordje staat er, en de
+	# speelmand heeft een knop precies als hier iemand wil spelen (eigenaar,
+	# 2026-09-23: geen knop die bij een tik niets kan)
+	waar(deur2 != null and deur2.door == Hotel.EIGENAAR, "en de kamer is weer van het hotel")
+	var wil := false
+	for g in State.s["gasten"]:
+		if str(g.get("kamer", "")) == KAMER and str(g.get("behoefte", "")) == "spelen" \
+				and not g.get("blij", false):
+			wil = true
+	gelijk(Hits.spot("mand_%s" % KAMER) != null, wil,
+		"de speelmand heeft een knop als hier iemand wil spelen")
 	await _af()
 
 ## De kamer zit vol: één vriendelijk kaartje, geen opdracht, geen ster.
