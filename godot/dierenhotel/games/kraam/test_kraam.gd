@@ -655,7 +655,10 @@ func test_stop_ruimt_alles_op() -> void:
 	waar(_knoop(KAART) != null, "en de kaart hangt er")
 	var voor := World.kader_veranderd.get_connections().size()
 	Games.stop()
-	gelijk(World.decor_lijst("tuin").size(), 0, "na stop staat er geen los decor meer")
+	# the resting props (`Games.RUST`: the stall again, and the hopscotch
+	# stones) come back after a stop; the game's own decor does not
+	gelijk(World.decor_lijst("tuin").filter(func(d): return d["door"] == SPEL).size(), 0,
+		"na stop staat er geen los decor meer")
 	for id in [KAART, STROOK, BANK, KLAAR, "kr_m1", "kr_p0", "kr_zeg", "kr_af"]:
 		gelijk(_knoop(id), null, "hotspot %s is opgeruimd" % id)
 	waar(World.kader_veranderd.get_connections().size() <= voor - 1,

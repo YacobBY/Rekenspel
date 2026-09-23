@@ -554,7 +554,10 @@ func _bouw_kamers() -> void:
 			{"n": "bloemen", "x": 72, "z": 20, "y": 14, "d": 11.5},
 			{"n": "boek", "x": 84, "z": 20, "y": 14},
 			{"n": "lamp", "x": 99, "z": 20, "y": 14, "sleutel": "balielamp"},
-			{"n": "prikbord", "x": 12, "z": 1, "ver": true},
+			# the notice board hangs over the bench in the waiting corner, turned
+			# onto the left wall (owner, 2026-09-23: the task cards stay AT the
+			# board — behind the desk the visible wall had no room for them)
+			{"n": "prikbord", "x": 1, "z": 64, "y": 14, "rot": 1, "ver": true},
 			{"n": "klok", "x": 70, "z": 1, "y": 36, "ver": true},
 			{"n": "poster_poot", "x": 112, "z": 1, "y": 32, "ver": true},
 			{"n": "sleutelbordz", "x": 1, "z": 84, "ver": true},
@@ -677,10 +680,12 @@ func _bouw_kamers() -> void:
 	#   * behind the back fence lies the pool itself (`uitzicht`): deck, rim,
 	#     water, a ladder and a parasol, seen through a white pool gate with a
 	#     lifebuoy on it;
-	#   * the doghouse moved to the far right corner and the tree to the front
-	#     left, so neither stands in front of an exit any more (the doghouse
-	#     beside the kitchen door read as a second door), and a potted plant
-	#     closes the corner between the hotel and the fence.
+	#   * the doghouse stands in the back corner against the hotel, where it
+	#     also closes the gap between the wall and the fence, and the hopscotch
+	#     path starts in front of it; the tree moved to the front left.  Neither
+	#     stands in front of an exit any more.  (For a while the doghouse stood
+	#     in the far right corner — but the souvenir stall, which stays standing
+	#     now, would hide it there.)
 	_kamer({"id": "tuin", "naam": "Tuin", "icoon": "🌳", "w": 130, "d": 130,
 		"wand": 0, "vloer": "gras", "loop": 1.0, "erf": true,
 		"hek_x": 0,
@@ -692,9 +697,9 @@ func _bouw_kamers() -> void:
 		"deuren": [
 			{"naar": "keuken", "wand": "x", "at": 34, "breed": 12},
 			{"naar": "zwembad", "wand": "z", "at": 38, "breed": 12, "poort": true}],
-		"decor": [{"n": "boom", "x": 22, "z": 126}, {"n": "hok", "x": 112, "z": 22},
+		"decor": [{"n": "boom", "x": 22, "z": 126}, {"n": "hok", "x": 22, "z": 22},
 			{"n": "tobbe", "x": 32, "z": 94}, {"n": "bal", "x": 120, "z": 76},
-			{"n": "kist", "x": 12, "z": 84}, {"n": "plant", "x": 7, "z": 16},
+			{"n": "kist", "x": 12, "z": 84},
 			{"n": "gevelraamz", "x": 1, "z": 70, "y": 9, "ver": true},
 			{"n": "luifelz", "x": 1, "z": 40, "y": 27, "ver": true},
 			{"n": "deurmatz", "x": 5, "z": 40},

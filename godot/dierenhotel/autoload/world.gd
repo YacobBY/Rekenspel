@@ -39,6 +39,11 @@ const ZWEM_DIEP := ArtEffect.ZWEM_DIEP   ## a swimmer sinks this many voxels
 const SPRING_TIKKEN := 6    ## ticks in the air per jump, at tempo 1
 const SQUASH := 3           ## ticks flat on the stone after landing
 const SPRING_HOOG := {"hond": 5.0, "poes": 6.0, "konijn": 7.0, "gans": 4.0}
+## The hop onto a bed (owner, 2026-09-23: "een animatie dat het dier op het bed
+## springt wanneer je een vrij bed kiest"): the hinkel's own arc, a little
+## slower and this much higher, so the child sees the guest jump in.
+const BED_SPRONG_TEMPO := 0.7
+const BED_SPRONG_EXTRA := 4.0
 const GANG_K := 16.0        ## gait phase per voxel; world.md does not pin it
 const DRIJF_PLONS := 30     ## a floating swimmer splashes every 30th tick
 const KAUW_PER_NIVEAU := 24  ## ticks one level is chewed off the bowl (V5, ≈1,6 s)
@@ -125,6 +130,8 @@ class Dier extends RefCounted:
 	var spring_h0 := 0.0           ## the height he springs FROM (the stair)
 	var spring_land := 0.0         ## the height he springs TO (NAN = same as h0)
 	var land_hoogte := NAN         ## the `land_hoogte` of the current order
+	var spring_extra := 0.0        ## voxels added to the top of this jump's arc
+	var bed_sprong := false        ## this jump ends on the mattress (`_spring_in_bed`)
 	var reis_doel := ""            ## the room a `reis` heads for; "" once he is in it
 	var reis_deuren := 0           ## doors on that journey
 	var reis_klaar := 0            ## doors already passed
@@ -429,10 +436,12 @@ func mik(obj: Variant, kamer_id: String = "") -> Dictionary:
 	return {}
 
 ## The screen rectangle a model occupies, in frame units.  Hotspots need it to
-## guarantee 0 % coverage; it comes straight from the baked plate.
+## guarantee 0 % coverage; it comes straight from the baked plate — the turned
+## plate when the piece stands turned (`rot`), or a turned board or bed got the
+## box of the unturned one.
 func vlak_van(model: String, x: float, z: float, y: float, params: Dictionary = {},
-		anker := Vector2.ZERO) -> Rect2:
-	var p := Art.plaat(model, _schaal["g"], params)
+		anker := Vector2.ZERO, rot := 0) -> Rect2:
+	var p = plaat(model, _schaal["g"], params, rot)
 	if p == null:
 		return Rect2()
 	var g: float = float(_schaal["g"])
@@ -1240,6 +1249,8 @@ func _breek(d: Dier, gehaald: bool) -> void:
 		d.lift = 0.0
 	d.slaap_doel = ""
 	d.slaap_kamer = ""
+	d.bed_sprong = false
+	d.spring_extra = 0.0
 
 func _zet_plek(d: Dier, p: Vector2) -> void:
 	d.x = p.x
@@ -1619,7 +1630,7 @@ func _spring(d: Dier) -> void:
 		var plek := d.spring_van.lerp(d.spring_naar, f)
 		d.x = plek.x
 		d.z = plek.y
-		var top: float = SPRING_HOOG.get(d.kind, 5.0)
+		var top: float = SPRING_HOOG.get(d.kind, 5.0) + d.spring_extra
 		d.hoogte = lerpf(d.spring_h0, d.spring_land, f) + top * 4.0 * f * (1.0 - f)
 		d.lift = -d.hoogte * Art.HG
 		d.pose = "loopA" if f < 0.25 else ("blijA" if f < 0.75 else "loopB")
@@ -1649,6 +1660,14 @@ func _spring(d: Dier) -> void:
 ## Arrived at the last point of this leg.
 func _aangekomen(d: Dier) -> void:
 	d.v = 0.0
+	if d.bed_sprong:
+		# landed on the mattress: lie down right there
+		d.bed_sprong = false
+		d.spring_extra = 0.0
+		d.beweeg_pose = ""
+		d.land_hoogte = NAN
+		_in_bed(d)
+		return
 	# a dive lands in the water and stays there; a hop lands where it started
 	if d.spring_land < 0.0:
 		d.hoogte = d.spring_land
@@ -1667,9 +1686,33 @@ func _aangekomen(d: Dier) -> void:
 		op.rond(true)
 		return
 	if d.slaap_doel != "" and d.kamer == d.slaap_kamer:
-		_in_bed(d)
+		_spring_in_bed(d)
 		return
 	_eind_staat(d)
+
+## Walked up to the side of the bed: hop from the floor onto the mattress, then
+## lie down (owner, 2026-09-23).  The jump is the hinkel's arc (`_spring`),
+## slower and higher, landing at MATRAS on the bed's own point; `_aangekomen`
+## sees `bed_sprong` and puts the guest to bed where it landed.  With reduced
+## motion there is no jump — the guest lies down at once, as before.
+func _spring_in_bed(d: Dier) -> void:
+	var r := Rooms.get_kamer(d.slaap_kamer)
+	if r == null or not r.slots.has(d.slaap_doel) or rust():
+		_in_bed(d)
+		return
+	var bed: Dictionary = r.slots[d.slaap_doel]
+	d.punten = [Vector2(bed["x"], bed["z"])]
+	d.stap_nr = 0
+	d.per_stap = Callable()
+	d.beweeg_pose = "spring"
+	d.beweeg_tempo = BED_SPRONG_TEMPO
+	d.land_hoogte = MATRAS
+	d.spring_extra = BED_SPRONG_EXTRA
+	d.bed_sprong = true
+	d.staat = "spring"
+	_spring_start(d)
+	Snd.hup()
+	vuil()
 
 ## `na` on arrival (world.md §2.5): a known state, or `stil` for a while.
 func _eind_staat(d: Dier) -> void:

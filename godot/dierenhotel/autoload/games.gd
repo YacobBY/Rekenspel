@@ -58,11 +58,23 @@ func scan() -> void:
 		def["id"] = map
 		_defs[map] = def
 		_scenes[map] = scene
+		_meld_modellen(def)
+
+## The models a game's resting props are drawn with (`definitie().modellen`,
+## name -> a STATIC builder), registered at the scan: the props stand in the
+## room before the game ever ran.  A builder bound to the scanned instance
+## would die with it, so the games hand in functions of their script.
+func _meld_modellen(def: Dictionary) -> void:
+	var modellen: Dictionary = def.get("modellen", {})
+	for naam in modellen:
+		if not Art.heeft_model(str(naam)):
+			Art.registreer_model(str(naam), modellen[naam])
 
 ## Manual registration, for tests and for a game built at runtime.
 func registreer(def: Dictionary, scene: PackedScene) -> void:
 	_defs[def["id"]] = def
 	_scenes[def["id"]] = scene
+	_meld_modellen(def)
 
 func lijst() -> Array[String]:
 	var uit: Array[String] = []
@@ -101,6 +113,10 @@ func start(id: String) -> bool:
 	if _actief != "":
 		stop()
 	var def: Dictionary = _defs[id]
+	# every game's resting props go: this game puts down its real ones, and
+	# world.md §5.2 step 4 wants the others' out of the way
+	for ander in _defs.keys():
+		_zet_rust(str(ander), false)
 	_actief = id
 	_actieve_kamer = def.get("kamer", World.kamer_nu())
 	Hotel.bord_dicht()
@@ -172,6 +188,13 @@ func _maak_ctx(id: String, def: Dictionary) -> SpelCtx:
 ## why an entry button must hang on a FIXED object, never on a game's own loose
 ## decor.
 func hersteek() -> void:
+	# the resting props first: they are world, not buttons, so they stand
+	# there with or without a shell — but only while no game runs
+	for sleutel in _defs.keys():
+		var rid := str(sleutel)
+		var rdef: Dictionary = _defs[rid]
+		_zet_rust(rid, _actief == "" and not bool(rdef.get("stub", false))
+			and ontgrendeld(rid))
 	if Ui.knoplaag == null:
 		return                     # headless, or before the shell registered
 	var nu := World.kamer_nu()
@@ -219,9 +242,37 @@ func hersteek() -> void:
 		# band grid — "Bedden" in the middle of kamer 1 (owner, 2026-09-23).
 		# An icon moved FAR from its object (the laundry pile, the hopscotch
 		# path, the stall) stands where the game will be, not at the object.
-		if absf(float(hs.get("dx", 0))) + absf(float(hs.get("dz", 0))) <= DUWTJE:
+		# ... and an icon whose game leaves its props standing hangs on them
+		# (`hotspot.rust`, owner 2026-09-23: "Dan hangt elk spel aan iets wat
+		# je echt ziet")
+		var rust_obj := str(hs.get("rust", ""))
+		if rust_obj != "" and not World.decor_plek(rust_obj, nu).is_empty():
+			o["obj"] = rust_obj
+		elif absf(float(hs.get("dx", 0))) + absf(float(hs.get("dz", 0))) <= DUWTJE:
 			o["obj"] = str(hs.get("obj", ""))
 		Hits.maak(o)
+
+## The props a game leaves standing while it does not run (`definitie().rust`:
+## loose decor entries with ids of their own), so that its entry button hangs on
+## something the child can see — the hopscotch stones, the market stall, the
+## pile of washing (owner, 2026-09-23).  They belong to `rust:<id>`, not to the
+## game: its own decor, and every test that counts it, stays its own.  Put down
+## or taken away only when that changes, because every `World.decor()` redraws
+## the room.
+const RUST := "rust:"
+
+func _zet_rust(id: String, aan: bool) -> void:
+	var def: Dictionary = _defs.get(id, {})
+	var kamer := str(def.get("kamer", ""))
+	for stuk in def.get("rust", []):
+		var sid := str((stuk as Dictionary).get("id", ""))
+		var staat := not World.decor_plek(sid, kamer).is_empty()
+		if aan and not staat:
+			var o: Dictionary = (stuk as Dictionary).duplicate(true)
+			o["door"] = RUST + id
+			World.decor(kamer, o)
+		elif not aan and staat:
+			World.decor_weg(kamer, sid)
 
 ## The object an entry button hangs on: a loose thing first (the trolley, the
 ## desk lamp), then whatever `World.mik` finds (slots, fixed decor, the running

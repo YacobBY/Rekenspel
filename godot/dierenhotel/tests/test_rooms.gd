@@ -259,8 +259,8 @@ func test_tuin_is_deterministisch() -> void:
 		["pol0", 60.5, 125.5], ["pol2", 92.0, 14.0], ["pol4", 169.5, 29.5],
 		["pol0", 159.5, 40.5], ["pol1", 138.5, 68.5], ["pol4", 52.5, 65.5],
 		["pol0", 117.5, 123.5], ["pol2", 50.5, 142.5], ["pol4", 62.5, 142.5],
-		["pol2", 145.0, 57.0], ["pol1", 132.5, 100.5], ["pol4", 24.0, 154.0],
-		["pol0", 150.5, 35.5], ["pol3", 45.0, 128.0],
+		["pol2", 145.0, 57.0], ["pol0", 111.0, 16.0], ["pol1", 132.5, 100.5],
+		["pol4", 24.0, 154.0], ["pol0", 150.5, 35.5], ["pol3", 45.0, 128.0],
 	]
 	gelijk(pollen.size(), verwacht.size(), "aantal graspollen")
 	for i in mini(pollen.size(), verwacht.size()):

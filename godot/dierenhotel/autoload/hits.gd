@@ -520,7 +520,8 @@ func _vlak_van(s: Spot) -> Rect2:
 	var stuk := s._voorwerp
 	return World.vlak_van(str(stuk.get("model", stuk.get("n", ""))),
 		float(stuk.get("x", 0.0)), float(stuk.get("z", 0.0)),
-		float(stuk.get("hoog", stuk.get("y", 0.0))), stuk.get("params", {}))
+		float(stuk.get("hoog", stuk.get("y", 0.0))), stuk.get("params", {}),
+		Vector2.ZERO, int(stuk.get("rot", 0)))
 
 ## The thing a hotspot stands on: by name when it has one, otherwise the nearest
 ## thing in the room within VLAK_NABIJ voxels of its aim point.

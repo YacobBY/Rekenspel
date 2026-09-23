@@ -44,6 +44,7 @@ const TUSSEN_MIN := 8
 
 ## Where things stand (games-b.md §4.4), as a fraction of the room.
 const BERG_F := Vector2(0.60, 0.60)      ## (60, 54) — in front of the row
+const RUST_BERG := 12                     ## the resting pile: six pieces of washing
 const KAART_F := Vector2(0.88, 0.933)    ## (88, 84) — further forward still
 const LEGENDA_F := Vector2(0.12, 0.30)   ## (12, 27)
 ## The card aims at the FLOOR of its point: the lower its aim, the further it
@@ -82,7 +83,13 @@ func definitie() -> Dictionary:
 		# exists once the game runs, so the entry button hangs on the wash tub
 		# with a nudge to where the pile will be: (80,74) − (20,20) = (60,54).
 		"hotspot": {"obj": "tobbe", "icoon": "🧺", "label": "Was sorteren",
-			"hoog": 14, "dx": -20, "dz": -20},
+			"hoog": 14, "dx": -20, "dz": -20, "rust": "rust_was_berg"},
+		# The pile of washing stays on the bath mat while nobody sorts (owner,
+		# 2026-09-23: "Dan hangt elk spel aan iets wat je echt ziet"); the
+		# crates come with a turn.
+		"modellen": {MODEL_KRAT: WasSoorten.krat, MODEL_BERG: WasSoorten.berg},
+		"rust": [{"id": "rust_was_berg", "model": MODEL_BERG,
+			"x": _plek(BERG_F).x, "z": _plek(BERG_F).y, "params": {"n": RUST_BERG}}],
 		"unlock": func(n: int, _band: int) -> bool: return n >= 1,
 		# always available, low priority: the animals' wishes and the other
 		# chores sit on 0 … 5

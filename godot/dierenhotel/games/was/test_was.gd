@@ -755,7 +755,9 @@ func test_stop_laat_de_wereld_schoon() -> void:
 	waar(not World.decor_lijst("wasserij").is_empty(), "er staat eigen decor")
 	waar(Hits.spot("ws_berg") != null, "en er hangen knoppen")
 	Games.stop()
-	gelijk(World.decor_lijst("wasserij").size(), 0, "al het eigen decor is weg")
+	# the resting pile (`Games.RUST`) comes back; the game's own decor does not
+	gelijk(World.decor_lijst("wasserij").filter(func(d): return d["door"] == ID).size(), 0,
+		"al het eigen decor is weg")
 	for id in ["ws_berg", "ws_hand", "ws_vraag", "ws_vraag_pad", "ws_vraag_keuzes",
 			"ws_legenda", "ws_k0", "ws_k1", "ws_k2", "ws_k3", "ws_sp0"]:
 		waar(Hits.spot(id) == null, "hotspot %s is opgeruimd" % id)

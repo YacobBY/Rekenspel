@@ -1008,14 +1008,18 @@ func toon_bord() -> void:
 			"x": pp.get("x", 0), "z": pp.get("z", 0), "hoog": 26,
 			"icoon": "🐾", "tekst": "Speel lekker rond", "prio": 10})
 		return
+	var pp := decor_plek("receptie", "prikbord")
 	for i in t.size():
 		var q: Dictionary = t[i]
-		var p := _plek(0.075 + i * 0.325, 0.025 + i * 0.325)
 		Ui.wolk({"id": "bord_%d" % i, "door": BORD, "kamer": "receptie",
 			# the card is pinned on the notice board, so that is the thing it
-			# must not cover and the rect `Hits.dekking` measures (V1 finding 5)
+			# must not cover and the rect `Hits.dekking` measures (V1 finding 5).
+			# All three aim AT the board and the band grid hangs them round it
+			# (owner, 2026-09-23: at the board, not across the room on the
+			# diagonal they used to lie on).  That needs free wall round the
+			# board, which is why it hangs over the bench in the waiting corner.
 			"obj": "prikbord",
-			"x": p.get("x", 0), "z": p.get("z", 0), "hoog": 22, "prio": 10,
+			"x": pp.get("x", 0), "z": pp.get("z", 0), "hoog": 22, "prio": 10,
 			"icoon": "✅" if q.get("klaar", false) else str(q["icoon"]),
 			"tekst": str(q["tekst"]),
 			"tik": func(): doe_taak(q)})

@@ -279,6 +279,40 @@ func test_slapen_ligt_op_het_matras() -> void:
 	Rooms.herstel()
 	_na_afloop()
 
+## OWNER, 2026-09-23: "een animatie dat het dier op het bed springt wanneer je
+## een vrij bed kiest".  A guest who walks up to a bed hops from the floor onto
+## the mattress — up over it and down on it — and only then lies down.  With
+## reduced motion the guest lies down at once, as before.
+func test_de_gast_springt_op_het_bed() -> void:
+	Rooms.herstel()
+	World.naar("kamer1")
+	World.zet("t_slaap", "receptie", 90.0, 30.0, {"kind": "poes"})
+	World.slaap("t_slaap", "kamer1", "bed1")
+	var d := World.dier("t_slaap")
+	var bed: Dictionary = Rooms.get_kamer("kamer1").slots["bed1"]
+	var sprong := false
+	var van_de_vloer := false
+	var hoogst := 0.0
+	var t := 0
+	while not World.slaapt("t_slaap") and t < 1500:
+		World._tik()
+		if d.staat == "spring":
+			if not sprong:
+				van_de_vloer = d.hoogte < 1.0 and d.kamer == "kamer1"
+			sprong = true
+			hoogst = maxf(hoogst, d.hoogte)
+		t += 1
+	waar(sprong, "hij springt eerst op het bed")
+	waar(van_de_vloer, "vanaf de vloer naast het bed, in de slaapkamer")
+	waar(hoogst > World.MATRAS + 2.0, "met een boog over het matras (top %.1f)" % hoogst)
+	waar(World.slaapt("t_slaap"), "en ligt daarna in bed (%d tikken)" % t)
+	gelijk(d.hoogte, World.MATRAS, "op het matras")
+	gelijk(d.pose, "lig", "liggend")
+	gelijk(d.x, bed["x"], "op het bed x")
+	gelijk(d.z, bed["z"], "op het bed z")
+	Rooms.herstel()
+	_na_afloop()
+
 ## Waking up: a guest that is sent somewhere else leaves the bed behind and
 ## never climbs back into it on arrival.
 func test_uit_bed_blijft_uit_bed() -> void:
@@ -550,8 +584,12 @@ func test_los_decor_kent_zijn_eigenaar() -> void:
 			"door": "proef"})
 	gelijk(World.decor_lijst("tuin").size(), World.LOS_MAX, "hooguit LOS_MAX per kamer")
 	World.decor_wis_eigenaar("proef")
-	gelijk(World.decor_lijst("tuin").size(), 0, "de eigenaar ruimt alles op")
-	gelijk(World.decor_lijst("receptie").size(), 0, "ook in de receptie")
+	# the games' resting props (`Games.RUST`, the hopscotch stones and the
+	# stall) may stand in the garden: they are not this owner's
+	var van_proef := func(k: String) -> int:
+		return World.decor_lijst(k).filter(func(d): return d["door"] == "proef").size()
+	gelijk(van_proef.call("tuin"), 0, "de eigenaar ruimt alles op")
+	gelijk(van_proef.call("receptie"), 0, "ook in de receptie")
 
 # ------------------------------------------------------------------ de dingen
 

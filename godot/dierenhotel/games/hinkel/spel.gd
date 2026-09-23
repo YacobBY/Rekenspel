@@ -144,6 +144,16 @@ func definitie() -> Dictionary:
 		return "%s wil hinkelen" % str(g["naam"]) if not g.is_empty() \
 			else "Hinkel op de stenen"
 
+	# The stones stay on the path while no turn runs (owner, 2026-09-23: "Dan
+	# hangt elk spel aan iets wat je echt ziet"): band 3's eleven plain stones —
+	# the big ones on 0, 5 and 10 — with no plates.  No staircase: it stands on
+	# the target of a turn, and at the end of the path the souvenir stall would
+	# hide it.  A turn replaces them by its own.
+	var rust: Array = []
+	for i in int(m["stenen"]):
+		rust.append({"id": "rust_hk_steen%d" % i, "model": "hinkel_steen",
+			"x": float(m["eerste"]) + float(m["steek"]) * float(i), "z": float(m["zSteen"]),
+			"params": {"groot": i % 5 == 0}})
 	return {
 		"naam": "Hinkelpad",
 		"kamer": "tuin",
@@ -151,7 +161,10 @@ func definitie() -> Dictionary:
 		"wens": "spelen",
 		"hotspot": {"obj": "hok", "icoon": "🪨", "label": "Hinkelen", "hoog": 6,
 			"dx": JsGetal.rond(float(m["eerste"]) - float(hok["x"])),
-			"dz": JsGetal.rond(float(m["zSteen"]) - float(hok["z"]))},
+			"dz": JsGetal.rond(float(m["zSteen"]) - float(hok["z"])),
+			"rust": "rust_hk_steen0"},
+		"modellen": modellen(),
+		"rust": rust,
 		"unlock": func(n: int, _band: int) -> bool: return n >= 1,
 		"taak": taak,
 	}
@@ -373,11 +386,17 @@ static func _getal_breed(txt: String) -> int:
 	return txt.length() * 4 - 1
 
 func _registreer_modellen() -> void:
-	Art.registreer_model("hinkel_steen", _steen_model)
-	Art.registreer_model("hinkel_trap", _trap_model)
+	for naam in modellen():
+		Art.registreer_model(naam, modellen()[naam])
+
+## The two models, as functions of the SCRIPT: the registry draws the resting
+## stones with them long after the instance it scanned was freed.
+func modellen() -> Dictionary:
+	return {"hinkel_steen": Callable(get_script(), "_steen_model"),
+		"hinkel_trap": Callable(get_script(), "_trap_model")}
 
 ## The number plate: one slab, one voxel thick, with the digits painted on it.
-func _bak_getal(v: Array, txt: String, dx: float, y0: int, zp: int) -> void:
+static func _bak_getal(v: Array, txt: String, dx: float, y0: int, zp: int) -> void:
 	var w := _getal_breed(txt)
 	var x0 := JsGetal.rond(dx - float(w - 1) / 2.0)
 	for r in range(-1, 6):
@@ -397,7 +416,7 @@ func _bak_getal(v: Array, txt: String, dx: float, y0: int, zp: int) -> void:
 ## (band 4/5) is bigger and darker, so the path carries its own tick marks.  A
 ## stone with a number wears its plate BEHIND it, just peeping over the top: it
 ## covers nothing, and the path stays a path instead of becoming a fence.
-func _steen_model(p: Dictionary) -> Array:
+static func _steen_model(p: Dictionary) -> Array:
 	var v: Array = []
 	var getal := int(p.get("getal", -1))
 	var groot := bool(p.get("groot", false))
@@ -426,7 +445,7 @@ func _steen_model(p: Dictionary) -> Array:
 ## flag — the very thing the child is aiming at.  The board on `TRAP_BORD`
 ## (y 17..23) and the flag on y 24 clear the tallest guest by four voxel-px at
 ## every voxel size, and the pole underneath keeps it standing on its stone.
-func _trap_model(p: Dictionary) -> Array:
+static func _trap_model(p: Dictionary) -> Array:
 	var v: Array = []
 	for j in 3:
 		var h := 3 + 3 * j

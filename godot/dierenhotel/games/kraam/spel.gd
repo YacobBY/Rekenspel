@@ -156,7 +156,12 @@ func definitie() -> Dictionary:
 		# the nearest FIXED garden piece (the ball at 120, 76) and dx/dz slide it
 		# onto the counter: (120 − 5, 76 − 18) = (115, 58).
 		"hotspot": {"obj": "bal", "dx": -5, "dz": -18, "icoon": "🎁",
-			"label": T_LABEL, "hoog": 14},
+			"label": T_LABEL, "hoog": 14, "rust": "rust_kr_toonbank"},
+		# The stall and its counter stay in the garden while nobody is
+		# shopping (owner, 2026-09-23: "Dan hangt elk spel aan iets wat je echt
+		# ziet"); the goods, the prices and the till come with a turn.
+		"modellen": Modellen.tabel(),
+		"rust": _rust(),
 		"unlock": unlock,
 		"wens": "souvenir",
 		"taak": {"id": "souvenir", "prio": 1, "icoon": "🎁",
@@ -331,6 +336,17 @@ func _koopt(id: String) -> bool:
 	return (O.get("keus", []) as Array).has(id)
 
 # ------------------------------------------------------------- de plekken
+
+## The stall and the counter where a turn puts them, for the registry to leave
+## standing between turns (`definitie().rust`).
+func _rust() -> Array:
+	var pl := plekken_van(_zone(), 1)
+	return [
+		{"id": "rust_kr_kraam", "model": "kraam_kraam",
+			"x": float(pl["kraam"]["x"]), "z": float(pl["kraam"]["z"])},
+		{"id": "rust_kr_toonbank", "model": "kraam_bank",
+			"x": float(pl["bank"]["x"]), "z": float(pl["bank"]["z"])},
+	]
 
 func _zone() -> Dictionary:
 	var r := Rooms.get_kamer(KAMER)

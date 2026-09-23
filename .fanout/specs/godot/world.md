@@ -134,12 +134,12 @@ movable **dingen**: `balielamp` (receptie 15, 105, y 14) and `kar` (keuken 48, 6
 
 | room | decor (model @ x, z [, y]) |
 |---|---|
-| receptie | `balie` @ 40,60 · `balie` @ 75,60 · `baliez` @ 15,58 · `baliez` @ 15,93 · `bel` @ 33,60 y14 · `kassa` @ 66,60 y14 · `boek` @ 15,75 y14 · `lamp` @ 15,105 y14 (→ ding `balielamp`) · `prikbord` @ 39,1 `ver` · `sleutelbordz` @ 1,84 `ver` · `plant` @ 105,18 · `plant` @ 108,81 |
+| receptie | `balie` @ 40,60 · `balie` @ 75,60 · `baliez` @ 15,58 · `baliez` @ 15,93 · `bel` @ 33,60 y14 · `kassa` @ 66,60 y14 · `boek` @ 15,75 y14 · `lamp` @ 15,105 y14 (→ ding `balielamp`) · `prikbord` @ 1,64 y14 `rot 1` `ver` (since 2026-09-23 on the left wall over the bench in the waiting corner: behind the desk the visible wall had no room for the task cards, which now hang round the board instead of across the room) · `sleutelbordz` @ 1,84 `ver` · `plant` @ 105,18 · `plant` @ 108,81 |
 | gang | `plant` @ 36,30 · `plant` @ 108,30 (along the FRONT edge since 2026-09-23: against the back wall they hid 37 % and 29 % of the bedroom doors) · `kist` @ 114,14 |
 | kamer1 | `plant` @ 107,8 (was 102,12: it hid the door's corner) · `mand` @ 93,99 |
 | kamer2 | `plant` @ 12,99 · `mand` @ 93,99 |
 | keuken | `kast` @ 33,6 · `zak` @ 66,18 · `kar` @ 48,66 (→ ding `kar`) · `plant` @ 108,93 |
-| tuin | the lawn behind the hotel (owner 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk dat lijkt gewoon op een huis"): `gevel` `{wand: x, hoog: 34, stoep: 8}` — the hotel's back wall with the kitchen door, `gevelraamz` @ 1,70 y9 `ver`, `luifelz` @ 1,40 y27 `ver`, `deurmatz` @ 5,40 · behind the back fence the pool (`uitzicht`, below) with `zwembadtrap` @ 31,−3 and `parasol` @ 66,0, seen through `zwembadpoort` @ 44,10 · `boom` @ 22,126 · `hok` @ 112,22 · `plant` @ 7,16 (closes the corner between wall and fence) · `tobbe` @ 32,94 · `bal` @ 120,76 · `kist` @ 12,84 · plus the generated back fence and grass tufts (below) |
+| tuin | the lawn behind the hotel (owner 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk dat lijkt gewoon op een huis"): `gevel` `{wand: x, hoog: 34, stoep: 8}` — the hotel's back wall with the kitchen door, `gevelraamz` @ 1,70 y9 `ver`, `luifelz` @ 1,40 y27 `ver`, `deurmatz` @ 5,40 · behind the back fence the pool (`uitzicht`, below) with `zwembadtrap` @ 31,−3 and `parasol` @ 66,0, seen through `zwembadpoort` @ 44,10 · `boom` @ 22,126 · `hok` @ 22,22 (the back corner against the hotel, where it also closes the gap between wall and fence; the hopscotch path starts in front of it) · `tobbe` @ 32,94 · `bal` @ 120,76 · `kist` @ 12,84 · plus the generated back fence and grass tufts (below), and the resting props of `hinkel` and `kraam` (§5.1) |
 | zwembad | `plant` @ 136,80 · `rozenboog` @ 4,66 (the gate back to the garden, 2026-09-23) with the garden beyond the fence: `boom` @ −22,46, `bloemstruik` @ −8,40 and −9,79 · one big `startblok` @ 14,28 (owner 2026-09-17: "Maak het startblok groter en doe 1 ipv 3"; the old `mat` entry plank is gone — "haal de oude houten plank weg") · plus the generated fence (the back fence is dropped behind the water) and grass tufts |
 | wasserij | `kast` @ 28,6 · `tobbe` @ 80,74 |
 
@@ -580,7 +580,13 @@ with random blinks (3.5 % per tick, `tril` or `kijk` for 1–4 ticks).
 `World.slaap(id, kamer, slot)`: if the animal is already in that room (or reduced motion is
 on) it lies down immediately; otherwise it walks (through doors if needed) to the bed's
 **standing place** `(sx, sz)` with `na: 'wacht'` and remembers `slaapDoel`. On arrival in
-that room the animal steps into the bed regardless of what `na` said.
+that room the animal steps into the bed regardless of what `na` said — since 2026-09-23 it
+**hops** in (owner: "een animatie dat het dier op het bed springt wanneer je een vrij bed
+kiest"): the hinkel's own jump arc from the floor at the standing place to the bed's own
+point, at tempo `BED_SPRONG_TEMPO = 0.7` and `BED_SPRONG_EXTRA = 4` voxels over the kind's
+`SPRING_HOOG`, landing on `MATRAS` with the usual squat, a `Snd.hup()` at take-off, and only
+then `inBed`. With reduced motion, and when it is already in the room (a load, a test),
+it still lies down at once.
 
 `inBed`: position = the bed's own `(x, z)`, `lift = −MATRAS·HG = −14` px (mattress top is
 `y = 7`), state `slaap`, pose `lig`, `face = −1` for a rotated bed (`bedz`) and `+1`
@@ -1061,7 +1067,9 @@ half-loaded.
 | `id` | yes | unique, equals the file name |
 | `naam` | yes in practice | what the child sees (used as the hotspot title) |
 | `kamer` | yes | the room the game lives in |
-| `hotspot` | optional | `{obj, icoon, label, hoog, dx, dz, blijf}` — the entry button |
+| `hotspot` | optional | `{obj, icoon, label, hoog, dx, dz, blijf, rust}` — the entry button; `rust` names the resting prop it hangs on |
+| `modellen` | optional | `{naam: builder}` — the game's own models, registered at the scan; the builders are STATIC (a function of the game's script, `Callable(get_script(), …)`), because the scanned instance is freed |
+| `rust` | optional | loose decor entries `{id, model, x, z, y?, params?}` that stand in the room whenever the game may be played and NO game runs (owner 2026-09-23: "Dan hangt elk spel aan iets wat je echt ziet"); owner `rust:<id>`, put down and taken away by `hersteek`, all of them cleared when any game starts |
 | `unlock(N, band)` | optional | may it be played? (`true` when absent; a throw counts as `true`) |
 | `wens` | optional | which wish it fulfils: a name or an array of names |
 | `taak` | optional | prikbord card `{id?, icoon, tekst (string or fn(state)), wanneer(state), kamer?, prio?}` |
@@ -1079,7 +1087,10 @@ Registering twice replaces the earlier definition (last wins).
 (`hotgame aan` while running), prio 7, and it follows its object every frame.
 The icon is removed while its own game is running (unless `hotspot.blijf`), when
 `unlock` is false, or when the object cannot be found — which is exactly why an entry
-button must hang on a **fixed** object, not on the game's own loose decor.
+button must hang on a **fixed** object, not on the game's own loose decor. It is placed
+`aan` the resting prop `hotspot.rust` while that stands (the first hopscotch stone, the
+stall's counter, the pile of washing), else on `hotspot.obj` when `|dx| + |dz| ≤ 8`, else
+on the band grid at its aim point.
 
 Currently registered games:
 
@@ -1092,9 +1103,9 @@ Currently registered games:
 | `meubels` | Het meubelboek | receptie | `boek` 📖 | N ≥ 3 | – | default `meubels` |
 | `zwembad` | Zwembad | zwembad | `mat` 🏊 | N ≥ 1 | `zwemmen` | `zwemles`, prio 1 |
 | `wekker` | Wekkerdienst | gang | fixed decor + offset ⏰ | N ≥ 1 | – | `wekker`, prio 3 |
-| `hinkel` | Hinkelpad | tuin | `hok` 🪨 | N ≥ 1 | `spelen` | prio 2 with a waiting guest, else 5 |
-| `was` | Wasmandtoren | wasserij | `tobbe` 🧺 | N ≥ 1 | – | `was`, prio 8 |
-| `kraam` | Souvenirkraam | tuin | `bal` 🎁 (offset) | N ≥ 1 | `souvenir` | `souvenir`, prio 1 |
+| `hinkel` | Hinkelpad | tuin | `hok` 🪨 (offset), resting on `rust_hk_steen0` — band 3's eleven plain stones | N ≥ 1 | `spelen` | prio 2 with a waiting guest, else 5 |
+| `was` | Wasmandtoren | wasserij | `tobbe` 🧺 (offset), resting on `rust_was_berg` — the pile at (60, 54) | N ≥ 1 | – | `was`, prio 8 |
+| `kraam` | Souvenirkraam | tuin | `bal` 🎁 (offset), resting on `rust_kr_toonbank` — the stall and its counter | N ≥ 1 | `souvenir` | `souvenir`, prio 1 |
 
 ### 5.2 Lifecycle
 
