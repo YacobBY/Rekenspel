@@ -541,7 +541,8 @@ func test_zonder_rustmodus_beweegt_het_wel() -> void:
 	var loopt := false
 	for id in _intro_dieren():
 		var d = World.dier(id)
-		if d != null and str(d.staat) == "loop":
+		# "komt": each kind's own arrival through the front door
+		if d != null and str(d.staat) in ["loop", "komt"]:
 			loopt = true
 	waar(loopt, "de eerste gast loopt naar binnen")
 	waar(intro.beweegt(), "en dat telt als beweging")

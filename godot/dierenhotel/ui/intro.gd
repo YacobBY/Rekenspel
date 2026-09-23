@@ -386,7 +386,8 @@ func beweegt() -> bool:
 		return true
 	for id in dieren():
 		var d = World.dier(id)
-		if d != null and str(d.staat) == "loop":
+		# "komt": coming in through the front door (`World.kom_binnen`)
+		if d != null and str(d.staat) in ["loop", "komt"]:
 			return true
 	return false
 
@@ -598,6 +599,12 @@ func _exit_tree() -> void:
 ## 2026-09-23: the receptie is getting a real front entrance on branch
 ## `binnenkomst`; point this at it and the intro's guests use it both ways.
 func _ingang() -> Vector2:
+	# the receptie's own front door (`Rooms.ingang`, the binnenkomst of
+	# 2026-09-23): the guests of the story come in and go out where every real
+	# guest does; the corridor door only when a room has no front door
+	var voor := Rooms.ingang(KAMER)
+	if not voor.is_empty():
+		return Vector2(float(voor.get("ix", 8.0)), float(voor.get("iz", 30.0)))
 	var dp := Rooms.deur(KAMER, INGANG_NAAR)
 	if dp.is_empty():
 		return Vector2(8, 30)
@@ -632,7 +639,10 @@ func _kom_binnen(i: int) -> void:
 		return
 	var ing := _ingang()
 	World.zet(id, KAMER, ing.x, ing.y, o)
-	World.ga(id, p.x, p.y, "wacht")
+	# each kind comes in its own way, through the front door, exactly as a
+	# guest the bell brings (`World.kom_binnen`)
+	if not World.kom_binnen(id, p.x, p.y, KAMER):
+		World.ga(id, p.x, p.y, "wacht")
 	Snd.hup()
 
 ## A page that was skipped past quickly still has all its guests.

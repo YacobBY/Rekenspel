@@ -549,10 +549,17 @@ func _vlak_van(s: Spot) -> Rect2:
 	if s._voorwerp.is_empty():
 		return Rect2()
 	var stuk := s._voorwerp
-	return World.vlak_van(str(stuk.get("model", stuk.get("n", ""))),
+	var model := str(stuk.get("model", stuk.get("n", "")))
+	# A bowl is drawn round `Art.KOM_ANKER` (scenes/kamer.gd), not round the
+	# corner of its model: measured without it its box lay some 88 × 70 units
+	# below-right of the drawn bowl, so "🍽 Leeg" hung beside the bowl and a drop
+	# on the drawn bowl missed (found by the voerkar branch, 2026-09-23).
+	var anker := Art.KOM_ANKER if (model == "kom" or str(stuk.get("soort", "")) == "bak") \
+		else Vector2.ZERO
+	return World.vlak_van(model,
 		float(stuk.get("x", 0.0)), float(stuk.get("z", 0.0)),
 		float(stuk.get("hoog", stuk.get("y", 0.0))), stuk.get("params", {}),
-		Vector2.ZERO, int(stuk.get("rot", 0)))
+		anker, int(stuk.get("rot", 0)))
 
 ## The thing a hotspot stands on: by name when it has one, otherwise the nearest
 ## thing in the room within VLAK_NABIJ voxels of its aim point.
