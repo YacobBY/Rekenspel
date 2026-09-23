@@ -754,6 +754,30 @@ de wand naar rechts tot het naast de kaart staat, als het anders de kaart raakt.
 kader toelaat, wolkje mag over de kop van de gast; past het niet tussen rij en
 sleutel, dan gaat het onder de sleutel staan.
 
+**E. `wand` — de eerste keus** (poort, eigenaar 2026-09-23: "ja" op "zal ik het
+sleutelspel ombouwen zodat de haakjes langs de muur hangen?").  De plaatjes hangen ÓP
+de muur van het sleutelbord, op één hoogte `h`, van boven de voorkant van het bord
+naar achteren: plaatje `i` op (1,5; `z0 − i·d`; `h`) aan de linkerwand, (`x0 + i·d`;
+1,5; `h`) aan de achterwand.  Een horizontale lijn op de muur loopt op het scherm
+schuin omhoog naar achteren, dus van links naar rechts lees je de getallen op
+volgorde.  `d = ceil(53 / 2k)` voxels (één voxel langs de muur is `2k` px opzij), en
+`h` is de laagste hoogte vanaf 6 waarop de hele rij vrij hangt: binnen het kader,
+het midden van elk plaatje op de muur, en niets geraakt — geen meubel of ander
+ding (schermrechthoek), niets vasts van een ander, en het bord (21 breed, 6..18
+hoog) en de deuren van deze muur (opening + latei) met hun ECHTE schuine vorm,
+want hun schermrechthoek is voor de helft lege muur.  De gasten tellen niet mee:
+die lopen.  Het begin `z0` is de voorkant van het bord, het midden, de achterkant
+of net erachter, in die volgorde.  De kaart zoekt dan een vrije plek bij de rij:
+boven het begin, rechts van het eind, onder het begin op de vloer vóór bord en
+bankje, of rechts onder het eind — nooit op een plaatje, het bord of de balie.  Een
+plaatje aan de muur heeft geen eigen voorwerp (`geen_vlak`).  Op een ruim LIGGEND
+kader (korte zijde ≥ 600, breder dan hoog) komt de kaart nooit in de rekenbalk
+(`balk: false`): daar zou de ophangkaart de balk in gaan en de vraagkaart niet, de
+wereld zou tussen twee stappen krimpen en de haakjes zouden van de muur naar een
+rij bovenin springen.  Staand gaan beide kaarten de balk in en hangt de rij hoog
+boven de gangdeur langs.  Op een telefoon passen vier tikdoelen niet langs één
+muur: daar gelden A–D.
+
 **D. `rechts`** (poort, eigenaar 2026-09-23: "helemaal niet relevant aan waar de
 tekst geplaatst is").  Duwen A-C de rij van het bord af — onder het bord, of meer
 dan twee banden van haar plek erboven — dan hangt de rij vlak boven het

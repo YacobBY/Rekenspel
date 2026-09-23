@@ -1291,6 +1291,10 @@ the aim point with height `o.hoog` (default 22 voxels).
 * `o.max` digits (default 2), `o.open` opens the keypad at once, `o.pad: false` means no
   keypad at all, `o.keuzes` replaces the answer box and keypad with one strip of buttons
   (`{id, icoon, tekst, kies(k, api)}`), `o.keuzeTitel` is its aria title.
+* **Port (2026-09-23):** `o.balk: false` keeps the card out of the maths bar
+  (`Ui.balk_kandidaat` skips it): it stays by its own thing.  For a game whose layout
+  hangs on one wall and must not jump when the world shrinks for the bar between two
+  steps — the key board on a wide landscape frame (games-a.md §4.4 `wand`).
 * Handle: `.regel(zin)`, `.som(tekst)`, `.zet(tekst)`, `.hulp(html)`, `.open()`,
   `.klaar()` (tick, keypad and strip away), `.weg()` (everything away), `.getal()`, `.id`.
 * `o.onOk(n, kaart)` is called on ✓ with the number or `null` when nothing was typed.

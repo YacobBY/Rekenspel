@@ -21,7 +21,13 @@ const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740),
 ## en paste niet meer boven de rij zonder tegen de bovenrand te komen; dan
 ## stapelt het spel, zoals het ook staand al deed.  Op beeld nagekeken: de kaart
 ## linksboven, de rij over de wand, de strook onderaan bij de vinger.
-const MODUS := {"(1024, 768)": "stapel", "(768, 1024)": "stapel",
+##
+## Sinds 2026-09-23 hangen de haakjes op beide tabletschermen ÓP de muur
+## (`wand`; eigenaar: "ja" op "zal ik het sleutelspel ombouwen zodat de haakjes
+## langs de muur hangen?"): van boven het sleutelbord schuin omhoog naar
+## achteren, boven de koffer en het bankje.  Op beeld nagekeken.  Een telefoon
+## is te klein voor vier tikdoelen langs één muur en houdt zijn opstelling.
+const MODUS := {"(1024, 768)": "wand", "(768, 1024)": "wand",
 	"(360, 740)": "stapel", "(740, 360)": "naast"}
 
 var _laag: Control = null
@@ -841,7 +847,7 @@ func test_de_vier_opstellingen() -> void:
 		if spel != null:
 			var lay: Dictionary = spel.debug()["opbouw"]
 			var modus := str(lay.get("modus", ""))
-			waar(["gewoon", "stapel", "naast", "krap"].has(modus),
+			waar(["gewoon", "stapel", "naast", "krap", "rechts", "wand"].has(modus),
 				"kader %s koos een opstelling: %s" % [str(kader), modus])
 			gezien[modus] = 1
 			var per_regel := int(lay.get("per_regel", 0))
@@ -861,10 +867,15 @@ func test_de_vier_opstellingen() -> void:
 
 ## De rij zelf: elk plaatje is een tikdoel, ze staan waterpas en op volgorde,
 ## niet op elkaar, en geen enkel plaatje is aan een meubelstuk blijven plakken.
-func _keur_rij(kader: Vector2, regels: int, per_regel: int) -> void:
+## Aan de muur (`wand`) loopt de rij schuin omhoog naar achteren: elk volgend
+## plaatje staat rechts van én hoger dan zijn buurman, in gelijke stappen, en
+## ze raken elkaar niet.
+func _keur_rij(kader: Vector2, regels: int, per_regel: int, wand := false) -> void:
 	var dbg := Hits.debug()
 	var vorige := -INF
 	var vorige_y := -INF
+	var vorige_r := Rect2()
+	var stap := Vector2.INF
 	var n := 0
 	for i in 8:
 		var id := "sl_h%d" % i
@@ -881,6 +892,22 @@ func _keur_rij(kader: Vector2, regels: int, per_regel: int) -> void:
 		var vlak: Rect2 = d["vlak"]
 		gelijk(maxf(0.0, vlak.size.x * vlak.size.y), 0.0,
 			"%s: %s plakt niet aan een meubelstuk" % [str(kader), id])
+		if wand:
+			if n > 0:
+				var nu := r.position - vorige_r.position
+				waar(nu.x > 0.0 and nu.y < 0.0,
+					"%s: %s hangt rechts van en hoger dan zijn buurman, langs de muur (%s)"
+						% [str(kader), id, str(nu)])
+				if stap != Vector2.INF:
+					waar(nu.distance_to(stap) <= 1.5,
+						"%s: %s hangt op dezelfde stap (%s tegen %s)" % [str(kader), id, str(nu), str(stap)])
+				stap = nu
+				var snij := r.intersection(vorige_r)
+				gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
+					"%s: %s raakt zijn buurman niet" % [str(kader), id])
+			vorige_r = r
+			n += 1
+			continue
 		if per_regel > 0 and n % per_regel == 0:
 			vorige = -INF          # nieuwe regel: weer van links af
 		else:
@@ -958,7 +985,8 @@ func test_dekking_is_nul_op_vier_schermen() -> void:
 		if spel != null:
 			var lay: Dictionary = spel.debug()["opbouw"]
 			modus = str(lay.get("modus", ""))
-			_keur_rij(kader.size, int(lay.get("regels", 1)), int(lay.get("per_regel", 0)))
+			_keur_rij(kader.size, int(lay.get("regels", 1)), int(lay.get("per_regel", 0)),
+				modus == "wand")
 			gelijk(modus, str(MODUS.get(str(maat), modus)),
 				"%s kiest de verwachte opstelling" % str(maat))
 		print("[probe] sleutels dekking scherm=", maat, " knoppen=", eigen,
@@ -969,5 +997,63 @@ func test_dekking_is_nul_op_vier_schermen() -> void:
 		vp.queue_free()
 		await boom.process_frame
 		Ui.registreer_lagen(null, null, null)
+	State.s = bewaard
+	Ui.set("_scherm", scherm_terug)
+
+
+## Eigenaar, 2026-09-23: "ja" op "zal ik het sleutelspel ombouwen zodat de
+## haakjes langs de muur hangen?".  Op een liggende tablet hangen de plaatjes in
+## BEIDE stappen aan de muur (`wand`), en ze blijven hangen waar ze hingen als
+## het kind het getal gekozen heeft: de ophangkaart gaat niet de rekenbalk in,
+## anders krimpt de wereld en springen de haakjes van de muur naar een rij
+## bovenin.
+func test_de_haakjes_blijven_aan_de_muur() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var scherm_terug = Ui.get("_scherm")
+	var boom := Engine.get_main_loop() as SceneTree
+	var vp := SubViewport.new()
+	vp.size = Vector2i(1024, 768)
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	boom.root.add_child(vp)
+	var shell = (load("res://scenes/main.tscn") as PackedScene).instantiate()
+	shell.set_meta("geen_start", true)
+	vp.add_child(shell)
+	for _f in 4:
+		await boom.process_frame
+	_wereld(5, 3)
+	Hotel.start()
+	for _f in 4:
+		await boom.process_frame
+	waar(Games.start(ID), "het spel start")
+	for _f in 4:
+		await boom.process_frame
+	var spel := _spel()
+	waar(spel != null, "het spel draait")
+	if spel != null:
+		gelijk(str(spel.debug()["opbouw"].get("modus", "")), "wand", "rekenstap: de rij hangt aan de muur")
+		var voor := {}
+		var dbg := Hits.debug()
+		for i in 5:
+			if dbg.has("sl_h%d" % i):
+				voor[i] = dbg["sl_h%d" % i]["rect"]
+		waar(voor.size() >= 4, "de rij staat er (%d plaatjes)" % voor.size())
+		# het goede getal: door naar de ophangstap
+		spel._op_getal(int(spel._sleutel_nu().get("nummer", 0)), null)
+		for _f in 6:
+			await boom.process_frame
+		gelijk(str(spel.debug()["stap"]), "hang", "nu hangen we de sleutel op")
+		gelijk(str(spel.debug()["opbouw"].get("modus", "")), "wand", "ophangstap: nog steeds aan de muur")
+		waar(Ui.balk_kaart() != "sl_kaart", "de ophangkaart staat niet in de rekenbalk")
+		dbg = Hits.debug()
+		for i in voor.keys():
+			var r: Rect2 = dbg["sl_h%d" % i]["rect"] if dbg.has("sl_h%d" % i) else Rect2()
+			waar(r.position.distance_to((voor[i] as Rect2).position) <= 1.0,
+				"plaatje %d blijft hangen waar het hing (%s, was %s)" % [i, str(r), str(voor[i])])
+	Games.stop()
+	Ui.naamplaten_leeg()
+	Hits.wis_alles()
+	vp.queue_free()
+	await boom.process_frame
+	Ui.registreer_lagen(null, null, null)
 	State.s = bewaard
 	Ui.set("_scherm", scherm_terug)

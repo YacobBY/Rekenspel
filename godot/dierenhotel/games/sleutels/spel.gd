@@ -42,6 +42,11 @@ const DIER_HOOG := 28.0           ## de gasten zijn 23-28 voxels hoog
 const GAT := 4.0                  ## lucht tussen kaart en rij (games-a.md §4.4)
 const KNOP := 48.0                ## een plaatje is een tikdoel
 const STAP_MIN := 53.0            ## minstens zoveel css-px tussen twee plaatjes
+const WAND_AF := 1.5              ## `wand`: zo ver staat een plaatje vóór de muur
+const BORD_ONDER := 6.0           ## het sleutelbord hangt van 6 ...
+const BORD_BOVEN := 18.0          ## ... tot 18 voxels hoog (`ArtDecor.sleutelbord`)
+const LATEI := 4.0                ## de latei boven een deuropening
+const GAT_WAND := 1.0             ## lucht rond bord en deur, in voxels
 const RAND := 6.0                 ## lucht tot de kaderrand (Hits.RAND)
 ## Het lage-kaderbreekpunt van architecture.md §4.5: onder deze hoogte klapt de
 ## schil zelf al in en heeft de kaart geen plek meer bóven de rij.
@@ -460,6 +465,19 @@ func _haak_plek(i: int, dx: float, y: float, schuif: float, per_regel := 0) -> D
 	return {"x": x, "z": _bord_som() - x, "y": y - float(regel) * _band_in_voxels()}
 
 
+## Een ruim LIGGEND kader (tablet, computer: de korte zijde minstens 600, breder
+## dan hoog): daar hangt de rij aan de muur (`wand`) en blijft de kaart bij het
+## bord in plaats van in de rekenbalk.  Zou ze tussen twee stappen de balk in
+## gaan — de vraag met haar vier knoppen past er niet in, de ophangkaart wél —
+## dan krimpt de wereld, past de rij niet meer tussen bord en deur en springen
+## de haakjes van de muur naar een rij bovenin.  Staand gaan beide kaarten de
+## balk in: de wereld is dan in beide stappen even groot, en naast de muurrij
+## is voor een zwevende kaart geen plek.
+func _ruim() -> bool:
+	var k: Vector2 = ctx.wereld.kader_rect().size
+	return UiThema.ruim_van(k) and k.x >= k.y
+
+
 ## Eén knoppenband (52 units) uitgedrukt in voxelhoogte.
 func _band_in_voxels() -> float:
 	var per: float = ctx.wereld.px_per_hoogte()
@@ -488,6 +506,15 @@ func _bodem(kader: Rect2) -> float:
 ##             op haar eigen hoogte;
 ##   `krap`    er past niets naast en niets boven elkaar: de rij gaat vóór en
 ##             zakt zo laag als het kader toelaat, de kaart neemt wat overblijft;
+##   `wand`    EERSTE KEUS (eigenaar, 2026-09-23: "ja" op "zal ik het
+##             sleutelspel ombouwen zodat de haakjes langs de muur hangen?"):
+##             de plaatjes hangen óp de muur van het sleutelbord, op één
+##             hoogte, van boven het bord verder naar achteren — boven de
+##             koffer en het bankje, vóór de deur of erboven.  Een horizontale
+##             lijn op de muur loopt op het scherm schuin omhoog naar achteren,
+##             dus van links naar rechts lees je de getallen op volgorde.  Alleen
+##             waar vier of vijf tikdoelen langs één muur passen (tablet,
+##             computer); op een telefoon niet, en dan de opstellingen hieronder;
 ##   `rechts`  de rij vlak boven het sleutelbord — dichter op elkaar als het
 ##             moet — en de kaart rechts naast de rij aan de wand.  Gekozen als
 ##             de andere opstellingen de rij van het bord af duwen (eigenaar,
@@ -532,6 +559,9 @@ func _opbouw(b: Dictionary) -> Dictionary:
 	# spel niet meer waar het aan toe is.
 	var werk := Rect2(kader.position, Vector2(kader.size.x,
 		maxf(1.0, bodem - kader.position.y)))
+	var wand := _opbouw_wand(n, k, kaart_maat, bord_vlak, werk, wolk_y, not in_balk)
+	if not wand.is_empty():
+		return wand
 	rij_py_nat = clampf(rij_py_nat, RAND + KNOP * 0.5,
 		maxf(RAND + KNOP * 0.5, bodem - RAND - KNOP * 0.5))
 	# de kaart hoort bij de rij en staat er normaal gesproken boven
@@ -625,6 +655,193 @@ func _opbouw(b: Dictionary) -> Dictionary:
 		"wolk_y": wolk_y, "kaart_y": _hoogte_voor(kaart_py), "kaart_py": kaart_py,
 		"kaart_maat": kaart_maat, "rij_py": rij_py, "n": n,
 		"per_regel": per_regel, "regels": regels}
+
+
+## De opstelling `wand` (zie `_opbouw`).  Eén voxel langs de muur is 2k px
+## opzij op het scherm en één voxel hoogte 2k px omhoog, dus een plaatje van 48
+## px is `48 / 2k` voxels groot en twee plaatjes staan `53 / 2k` voxels uit
+## elkaar.  Gezocht wordt de laagste hoogte boven het bord waarop de hele rij
+## vrij hangt — van geen meubel, geen ander ding, geen deur en niets vasts van
+## een ander iets afdekt en binnen het kader blijft — met het eerste plaatje
+## boven de voorkant van het bord, of iets verder naar achteren.  Daarna krijgt
+## de kaart een vrije plek bij de rij.  {} als dat niet lukt.
+func _opbouw_wand(n: int, k: float, kaart_maat: Vector2, bord_vlak: Rect2, werk: Rect2,
+		wolk_y: float, met_kaart: bool) -> Dictionary:
+	var r := Rooms.get_kamer(ctx.kamer)
+	if n <= 0 or bord_vlak.size.y <= 0.0 or k <= 0.001 or r == null:
+		return {}
+	var bx := float(_bord_plek.get("x", 0.0))
+	var bz := float(_bord_plek.get("z", 0.0))
+	var langs_z := bx <= bz          # het bord hangt aan de linkerwand x = 0
+	var bord_mid := bz if langs_z else bx
+	var lengte := float(r.d if langs_z else r.w)
+	# van links naar rechts op het scherm: naar achteren langs de linkerwand
+	# (z omlaag), van de hoek af langs de achterwand (x omhoog)
+	var richting := -1.0 if langs_z else 1.0
+	var half := (KNOP * 0.5) / (2.0 * k)
+	var stap := ceilf(STAP_MIN / (2.0 * k))
+	var bord_half := 10.5            # het sleutelbord is 21 voxels breed
+	# wat een plaatje niet mag raken: alles in de kamer, maar het bord en de
+	# deuren van DEZE muur met hun echte schuine vorm — hun schermrechthoek is
+	# voor de helft lege muur, en precies daar hangt de rij
+	var hindernissen := _wand_hindernissen(r, langs_z)
+	var begins: Array[float] = []
+	for b0 in [bord_mid - richting * (bord_half - half), bord_mid,
+			bord_mid + richting * (bord_half - half), bord_mid + richting * (bord_half + half + 1.0)]:
+		begins.append(float(b0))
+	var h := 6.0
+	# het midden van elk plaatje op de muur: op een kleine wereld (staand, met
+	# de rekenbalk) past de rij alleen hoog boven de deur langs
+	while h < float(r.wand) - 2.0:
+		for b0 in begins:
+			var rij := _wand_rij(n, b0, richting * stap, h, langs_z)
+			if rij.is_empty():
+				continue
+			var eerste: float = b0
+			var laatste: float = b0 + richting * stap * float(n - 1)
+			if minf(eerste, laatste) - half < 2.0 or maxf(eerste, laatste) + half > lengte - 2.0:
+				continue
+			var vrij := true
+			for pr in rij:
+				var rr: Rect2 = pr
+				if rr.position.x < werk.position.x + RAND or rr.end.x > werk.end.x - RAND \
+						or rr.position.y < werk.position.y + RAND or rr.end.y > werk.end.y - RAND \
+						or _raakt_vorm(rr.grow(GAT * 0.5), hindernissen):
+					vrij = false
+					break
+			if not vrij:
+				continue
+			var lay := {"modus": "wand", "langs_z": langs_z, "haak_0": b0,
+				"haak_stap": richting * stap, "haak_h": h, "haak_y": h, "dx": 0.0,
+				"schuif": 0.0, "wolk_y": wolk_y, "n": n, "per_regel": n, "regels": 1,
+				"rij_py": (rij[0] as Rect2).get_center().y, "kaart_maat": kaart_maat}
+			if not met_kaart:
+				lay["kaart_y"] = _hoogte_voor((rij[0] as Rect2).get_center().y)
+				lay["kaart_py"] = (rij[0] as Rect2).get_center().y
+				return lay
+			var kaart := _wand_kaart(rij, kaart_maat, bord_vlak, werk)
+			if kaart.size.x <= 0.0:
+				continue
+			lay["kaart_px"] = kaart.get_center().x
+			lay["kaart_py"] = kaart.get_center().y
+			lay["kaart_y"] = _hoogte_voor(kaart.get_center().y)
+			return lay
+		h += 1.5
+	return {}
+
+## Wat een `wand`-plaatje niet mag raken, als schermvormen: elk ding in de kamer
+## (vast decor, slots, los decor, dingen — de gasten niet, die lopen en staan
+## op de vloer) met zijn schermrechthoek, maar wat OP deze muur hangt of erin
+## zit — het sleutelbord zelf, de deuren — met zijn echte schuine vorm, en de
+## vaste kaarten van anderen.
+func _wand_hindernissen(r: Rooms.Kamer, langs_z: bool) -> Array[PackedVector2Array]:
+	var uit: Array[PackedVector2Array] = []
+	var stukken: Array = []
+	stukken.append_array(r.decor)
+	stukken.append_array(r.slots.values())
+	stukken.append_array(ctx.wereld.decor_lijst(ctx.kamer))
+	stukken.append_array(ctx.wereld.dingen(ctx.kamer))
+	for stuk in stukken:
+		if typeof(stuk) != TYPE_DICTIONARY:
+			continue
+		var sd: Dictionary = stuk
+		var model := str(sd.get("model", sd.get("n", "")))
+		if model.is_empty() or not Art.heeft_model(model):
+			continue
+		if model == "sleutelbordz" or model == "sleutelbord":
+			continue                    # zijn echte vorm staat hieronder
+		var v: Rect2 = ctx.wereld.vlak_van(model, float(sd.get("x", 0.0)), float(sd.get("z", 0.0)),
+			float(sd.get("hoog", sd.get("y", 0.0))), sd.get("params", {}))
+		if v.size.x > 0.0:
+			uit.append(_rect_vorm(v))
+	# het bord: 21 breed langs de muur, van 6 tot 18 hoog (`ArtDecor.sleutelbord`)
+	var bx := float(_bord_plek.get("x", 0.0))
+	var bz := float(_bord_plek.get("z", 0.0))
+	uit.append(_muurvorm(langs_z, (bz if langs_z else bx) - 10.5,
+		(bz if langs_z else bx) + 10.5, BORD_ONDER, BORD_BOVEN + GAT_WAND))
+	for dr in r.deuren:
+		var dl := str(dr.get("wand", "z")) == "z"     # een deur in de muur z = 0 loopt langs x
+		if dl == langs_z:
+			continue                    # een deur in de andere muur
+		var a := float(dr.get("at", 0))
+		var bb := a + float(dr.get("breed", 12))
+		uit.append(_muurvorm(langs_z, a - GAT_WAND, bb + GAT_WAND, 0.0,
+			float(Rooms.deur_hoog(r, dr)) + LATEI + GAT_WAND))
+	for v in _vaste_vlakken():
+		uit.append(_rect_vorm(v))
+	return uit
+
+## Een stuk muur als schermvorm: van `van` tot `tot` langs de muur, van `laag`
+## tot `hoog` omhoog.
+func _muurvorm(langs_z: bool, van: float, tot: float, laag: float, hoog: float) -> PackedVector2Array:
+	var hoeken := PackedVector2Array()
+	for p in [[van, laag], [tot, laag], [tot, hoog], [van, hoog]]:
+		var pos: float = p[0]
+		var y: float = p[1]
+		hoeken.append(ctx.wereld.mik_punt(0.0 if langs_z else pos, pos if langs_z else 0.0, y))
+	return hoeken
+
+static func _rect_vorm(v: Rect2) -> PackedVector2Array:
+	return PackedVector2Array([v.position, Vector2(v.end.x, v.position.y), v.end,
+		Vector2(v.position.x, v.end.y)])
+
+static func _raakt_vorm(r: Rect2, vormen: Array[PackedVector2Array]) -> bool:
+	var rv := _rect_vorm(r)
+	for v in vormen:
+		if not Geometry2D.intersect_polygons(rv, v).is_empty():
+			return true
+	return false
+
+## De schermrechthoeken van de plaatjes van een `wand`-rij.
+func _wand_rij(n: int, begin: float, stap: float, h: float, langs_z: bool) -> Array[Rect2]:
+	var uit: Array[Rect2] = []
+	for i in n:
+		var pos := begin + stap * float(i)
+		var p := {"x": WAND_AF, "z": pos, "y": h} if langs_z else {"x": pos, "z": WAND_AF, "y": h}
+		var m: Vector2 = ctx.wereld.mik_punt(float(p["x"]), float(p["z"]), float(p["y"]))
+		uit.append(Rect2(m - Vector2(KNOP, KNOP) * 0.5, Vector2(KNOP, KNOP)))
+	return uit
+
+## Een vrije plek voor de kaart bij een `wand`-rij: boven het begin van de rij,
+## rechts van het eind, onder het begin (op de vloer vóór bord en bankje), of
+## rechts onder het eind — de eerste die geen plaatje, niet het bord, niet de
+## balie en niets vasts raakt en binnen het kader blijft.
+func _wand_kaart(rij: Array[Rect2], maat: Vector2, bord_vlak: Rect2, werk: Rect2) -> Rect2:
+	var mijden: Array[Rect2] = [bord_vlak.grow(GAT)]
+	for pr in rij:
+		mijden.append(pr.grow(GAT))
+	mijden.append_array(World.vlakken_van_balie(ctx.kamer))
+	mijden.append_array(_vaste_vlakken())
+	var eerste: Rect2 = rij[0]
+	var laatste: Rect2 = rij[rij.size() - 1]
+	var links := minf(eerste.position.x, bord_vlak.position.x)
+	var plekken: Array[Rect2] = [
+		Rect2(Vector2(links, eerste.position.y - GAT - maat.y), maat),
+		Rect2(Vector2(laatste.end.x + GAT, laatste.get_center().y - maat.y * 0.5), maat),
+		Rect2(Vector2(links, maxf(eerste.end.y, bord_vlak.end.y) + GAT), maat),
+		Rect2(Vector2(laatste.end.x + GAT, laatste.end.y + GAT), maat),
+	]
+	for p in plekken:
+		var q := p
+		q.position.x = clampf(q.position.x, werk.position.x + RAND,
+			maxf(werk.position.x + RAND, werk.end.x - RAND - maat.x))
+		if q.position.y < werk.position.y + RAND or q.end.y > werk.end.y - RAND:
+			continue
+		if _raakt(q, mijden):
+			continue
+		return q
+	return Rect2()
+
+
+## Waar plaatje `i` hangt in de opstelling die er nu staat.
+func _haak_punt(i: int, lay: Dictionary) -> Dictionary:
+	if str(lay.get("modus", "")) == "wand":
+		var pos := float(lay["haak_0"]) + float(lay["haak_stap"]) * float(i)
+		if bool(lay.get("langs_z", true)):
+			return {"x": WAND_AF, "z": pos, "y": float(lay["haak_h"])}
+		return {"x": pos, "z": WAND_AF, "y": float(lay["haak_h"])}
+	return _haak_plek(i, float(lay.get("dx", 0.0)), float(lay.get("haak_y", 0.0)),
+		float(lay.get("schuif", 0.0)), int(lay.get("per_regel", 0)))
 
 
 ## De opstelling `rechts` (zie `_opbouw`): de rij vlak boven het sleutelbord,
@@ -819,7 +1036,7 @@ func _raakt(r: Rect2, vakken: Array[Rect2]) -> bool:
 
 ## Elke plaatrechthoek die op dit moment in de kamer staat: het vaste decor uit
 ## `Rooms`, het losse decor van de wereld en de gasten zelf.
-func _vlakken() -> Array[Rect2]:
+func _vlakken(met_gasten := true) -> Array[Rect2]:
 	var uit: Array[Rect2] = []
 	var r := Rooms.get_kamer(ctx.kamer)
 	var stukken: Array = []
@@ -839,6 +1056,8 @@ func _vlakken() -> Array[Rect2]:
 			float(s.get("hoog", s.get("y", 0.0))), s.get("params", {}))
 		if vlak.size.x > 0.0:
 			uit.append(vlak)
+	if not met_gasten:
+		return uit
 	for d in ctx.wereld.dieren(ctx.kamer):
 		var vlak: Rect2 = ctx.wereld.vlak_van_dier(d.id)
 		if vlak.size.x > 0.0:
@@ -940,6 +1159,7 @@ func _teken_kaart(b: Dictionary, s: Dictionary) -> void:
 		_kaart = ctx.ui.somkaart("sleutelbordz", _rij_tekst(b), {
 			"id": KAART, "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
 			"icoon": "🔑", "regel": "De rij is nu af", "titel": "De rij is nu af",
+			"balk": not _ruim(),
 		})
 		if _kaart != null:
 			_kaart.klaar()
@@ -956,6 +1176,7 @@ func _teken_kaart(b: Dictionary, s: Dictionary) -> void:
 		_kaart = ctx.ui.somkaart("sleutelbordz", som, {
 			"id": KAART, "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
 			"icoon": "🔑", "regel": vraag, "titel": vraag,
+			"balk": not _ruim(),
 			"regel2": VRAAG_WACHT % str(s.get("naam", "")),
 			"goed": nummer, "min": 1, "max": _cijfers(), "max_getal": _plafond(),
 			"liever": _buren_zichtbaar(_gat_nu()), "dier": gast,
@@ -966,6 +1187,7 @@ func _teken_kaart(b: Dictionary, s: Dictionary) -> void:
 		_kaart = ctx.ui.somkaart("sleutelbordz", _rij_tekst(b), {
 			"id": KAART, "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
 			"icoon": "🔑", "regel": titel, "titel": titel, "vak": true, "dier": gast,
+			"balk": not _ruim(),
 		})
 		if _kaart != null:
 			_kaart.zet(str(_gekozen() if _gekozen() > 0 else nummer))
@@ -1033,8 +1255,7 @@ func _teken_haken(b: Dictionary, lay: Dictionary) -> void:
 		var h: Dictionary = haken[i]
 		var leeg := _is_leeg(h)
 		var w := int(h.get("w", 0))
-		var plek := _haak_plek(i, float(lay["dx"]), float(lay["haak_y"]),
-			float(lay["schuif"]), int(lay.get("per_regel", 0)))
+		var plek := _haak_punt(i, lay)
 		var titel := ("hier hoort %d" % w if _spook else "leeg haakje") if leeg else _nr_tekst(w)
 		var id := "sl_h%d" % i
 		var idx := i
@@ -1052,6 +1273,10 @@ func _teken_haken(b: Dictionary, lay: Dictionary) -> void:
 			# band, en dan is de rekenrij geen rij meer.  Dat de rij van geen
 			# enkel voorwerp iets afdekt is de taak van `_opbouw`.
 			"kind": "drop", "drop": DROP, "data": {"i": idx}, "op": "midden",
+			# aan de muur hangt een plaatje vlak bij het bord, de koffer of het
+			# bankje: het hoort bij geen van die dingen, dus het tilt zich er
+			# ook niet van af
+			"geen_vlak": str(lay.get("modus", "")) == "wand",
 			"vast": true, "prio": 12, "titel": titel,
 			"icoon": "🔑" if not str(h.get("sleutel", "")).is_empty() else "",
 			"label": label,
@@ -1252,8 +1477,7 @@ func _tik_haak(i: int) -> void:
 	var h_nummer := int(h.get("w", 0))
 	var tekst := _verdieping(h_nummer) if str(_p.get("variant", "")) == "kamers" \
 		else str(h_nummer)
-	var h_punt := _haak_plek(i, float(_lay.get("dx", 0.0)), float(_lay.get("haak_y", 0.0)),
-		float(_lay.get("schuif", 0.0)), int(_lay.get("per_regel", 0)))
+	var h_punt := _haak_punt(i, _lay)
 	ctx.ui.wolk({"id": "sl_lees", "kamer": ctx.kamer, "hoog": 46.0, "prio": 13,
 		"x": float(h_punt.get("x", 0.0)), "z": float(h_punt.get("z", 0.0)),
 		"icoon": "🔑", "tekst": tekst, "klas": ""})

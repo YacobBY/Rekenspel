@@ -426,6 +426,8 @@ func balk_kandidaat() -> String:
 		if s == null:
 			weg.append(id)
 			continue
+		if (k as Kaart).geen_balk:
+			continue          # this card stays by its own thing (`balk: false`)
 		var prio := int(s.prio)
 		if prio >= beste_prio:
 			beste_prio = prio
@@ -803,6 +805,7 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 	kaart.kamer = o.get("kamer", World.kamer_nu())
 	kaart.door = o.get("door", "")
 	kaart.dier = _dier_van(obj, o)
+	kaart.geen_balk = not bool(o.get("balk", true))
 	var keuzes: Array = o.get("keuzes", [])
 	var vak := keuzes.is_empty()
 	if keuzes.is_empty() and o.has("goed"):
@@ -1022,6 +1025,10 @@ class Kaart extends RefCounted:
 	var on_ok: Callable
 	var dier := ""                ## the animal of this turn, "" when there is none (S5)
 	var pauze := false            ## true while a miss holds the strip shut (S5)
+	## `somkaart(..., {balk: false})`: never docked in the maths bar.  For a
+	## game whose whole layout hangs on one wall and must not jump when the
+	## world shrinks for the bar between two steps (the key board, 2026-09-23).
+	var geen_balk := false
 	var _getikt := ""            ## what the child chose, never what a game wrote
 
 	func _knoop() -> UiSomkaart:
