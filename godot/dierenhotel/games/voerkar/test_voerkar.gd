@@ -9,6 +9,11 @@ extends Proef
 ## aanmelding, één hele beurt per band, de lege keukenvloer, het herstel uit
 ## de savegame (nieuwe én oude vorm), een schone wereld na `stop()`, elke
 ## kindtekst letterlijk, en 0 % dekking in vier kaders.
+##
+## Tikken (eigenaar, 2026-09-23): tik op de kar = vast, tik op een deur = kar
+## en camera erdoor (de kar blijft vast), tik op het bakje = afleveren, tik op
+## de vaste kar = neerzetten, een deur zonder vaste kar neemt hem mee, en er
+## hangt nooit meer dan één wolkje bij de kar.
 
 const SPEL := "voerkar"
 const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024),
@@ -129,14 +134,87 @@ func _knop(id: String) -> BaseButton:
 		return null
 	return s.knoop as BaseButton
 
+## Een tik zoals een kind hem geeft: alleen op een knop die er echt staat.  Een
+## knop die `Hits` van het glas heeft gehaald (een hotelknop die het spel niet
+## leende, een knop in een andere kamer) kan een vinger niet raken.
 func _tik(id: String) -> bool:
 	var k := _knop(id)
-	if k == null:
-		fout("knop %s staat er niet" % id)
+	if k == null or not _zichtbaar(id):
+		fout("knop %s staat er niet (wel: %s)" % [id, str(_knoppen())])
 		return false
 	k.emit_signal("pressed")
 	Hits.plaats()
 	return true
+
+## Staat deze knop nu op het glas?
+func _zichtbaar(id: String) -> bool:
+	var s := Hits.spot(id)
+	return s != null and is_instance_valid(s.knoop) and s.zichtbaar \
+		and s.knoop.is_visible_in_tree()
+
+## Alles wat nu op het glas staat, voor een foutmelding die iets zegt.
+func _knoppen() -> Array[String]:
+	var uit: Array[String] = []
+	for id in Hits.lijst():
+		if _zichtbaar(id):
+			uit.append(id)
+	return uit
+
+## De wolkjes van de voerkar die nu in beeld hangen (informatie, geen knoppen).
+func _wolkjes() -> Array[String]:
+	var uit: Array[String] = []
+	for id in Hits.lijst():
+		var s := Hits.spot(id)
+		if s != null and s.door == SPEL and s.knoop is UiWolk and _zichtbaar(id):
+			uit.append(id)
+	return uit
+
+## De knoppen van de voerkar zelf die nu in beeld staan (geen wolkjes).
+func _eigen_knoppen() -> Array[String]:
+	var uit: Array[String] = []
+	for id in Hits.lijst():
+		var s := Hits.spot(id)
+		if s != null and s.door == SPEL and not (s.knoop is UiWolk) and _zichtbaar(id):
+			uit.append(id)
+	return uit
+
+## De geleende hotelknoppen die nu in beeld staan (deuren, het bakje).
+func _geleend() -> Array[String]:
+	var uit: Array[String] = []
+	for id in Hits.lijst():
+		var s := Hits.spot(id)
+		if s != null and s.geleend_door == SPEL and _zichtbaar(id):
+			uit.append(id)
+	return uit
+
+## Wacht tot het spel zichzelf gesloten heeft (het slotwolkje sluit na 2,6 s).
+func _wacht_dicht(max_s := 4.0) -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var t := 0.0
+	while t < max_s and Games.actief() == SPEL:
+		await boom.create_timer(0.05).timeout
+		t += 0.05
+
+## Wacht echte tijd, in stapjes, zodat de timers van het spel lopen.
+func _wacht(s: float) -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	await boom.create_timer(s).timeout
+	Hits.plaats()
+
+## Het bakje van een open kamer, als hotspot-id.
+func _bak_id(q: Dictionary) -> String:
+	return "bak_%s_%s" % [str(q["kamer"]), str(q["slot"])]
+
+## Is deze kamer nog open (daar wacht iemand op zijn koekjes)?
+func _open(spel: Node, kamer: String) -> Dictionary:
+	for q in spel.open_kamers():
+		if str(q["kamer"]) == kamer:
+			return q
+	return {}
+
+## Draagt het bordje van deze deur een 👉?
+func _wijst(deur_id: String) -> bool:
+	return _tekst(deur_id).begins_with("👉")
 
 func _tekst(id: String) -> String:
 	var k := _knop(id)
@@ -231,19 +309,25 @@ func test_kindteksten_staan_er_verbatim() -> void:
 			"Klaar", "de kar is klaar",
 			"Opnieuw", "alles opnieuw verdelen",
 			"Els helpt", "buurvrouw Els doet het voor",
-			"nog %d %s", "de voerkar: nog %d %s",
-			"kar is leeg", "de voerkar is leeg",
-			"Sleep de kar naar een deur", "Sleep de kar hierheen",
-			"Breng %d koekjes naar elke gast", "Alle bakjes vol!",
+			"de voerkar: nog %d %s",
+			"Pak de kar", "Je duwt de kar",
+			"Breng %d koekjes naar elke gast", "Tik op de kar", "Tik op een deur", "Tik op het bakje",
+			"Alle bakjes vol!",
 			"koekjes", "koekjes elk",
 			"🔄", "🛒", "🍪", "🫙", "🩺", "🛏", "👉", "✅", "😋"]:
 		waar(bron.contains(zin), 'games-a.md §7.7: "%s" staat in de bron' % zin)
+	# tikken, niet slepen (eigenaar, 2026-09-23): geen enkele zin vraagt nog
+	# om te slepen, en de oude knop- en wolkteksten van de kar zijn weg
+	for weg in ["Sleep de kar", "\"kar is leeg\"", "\"nog %d %s\""]:
+		waar(not bron.contains(weg), 'de oude tekst %s is weg' % weg)
 	# elk kindwoord moet ook een glyph hebben in het meegeleverde font
 	var mist: Array[String] = []
 	for zin in ["🍪 Verdeel 17 koekjes over 5 gasten", "🫙 Ieder evenveel, de rest in de pot",
 			"🩺 Iedereen 4, rest in de pot", "🛒 Klaar", "🩺 Els helpt", "🛏 nog geen gasten",
-			"👉 Sleep de kar naar een deur", "✅ Alle bakjes vol!", "😋 4 koekjes elk",
-			"🐶 Boef 12 · 8 eraf", "🐱 🐰 🦆 🐾", "🛒 nog 2 kamers"]:
+			"🛒 Pak de kar", "🛒 Je duwt de kar ☝", "🍪 Breng 4 koekjes naar elke gast",
+			"👉 Tik op de kar", "👉 Tik op een deur", "👉 Tik op het bakje", "👉 🚪 Gang",
+			"✅ Alle bakjes vol!", "😋 4 koekjes elk",
+			"🐶 Boef 12 · 8 eraf", "🐱 🐰 🦆 🐾", "🛒 de voerkar: nog 2 kamers"]:
 		for c in Ui.mist_tekens(zin):
 			if not mist.has(c):
 				mist.append(c)
@@ -278,6 +362,24 @@ func _keur_regel(zin: String, wat: String) -> void:
 	waar(woorden <= 8 and zin.length() <= 40,
 		"%s: \"%s\" = %d woorden, %d tekens" % [wat, zin, woorden, zin.length()])
 
+## De zinnen van het rondje (tikken, 2026-09-23) houden zich aan dezelfde regel,
+## met het grootste getal dat `Sommen.deel` per gast ooit geeft.
+func test_de_zinnen_bij_de_kar_passen_binnen_f4() -> void:
+	_op()
+	var spel = load("res://games/voerkar/spel.gd").new()
+	var per_max := 0
+	for band in [3, 4, 5]:
+		for n in range(1, 7):
+			for dag in range(1, 8):
+				per_max = maxi(per_max, int(Sommen.deel(n, band, dag)["k"]))
+	for zin in [spel.T_PAK_KAR, spel.T_DUW_KAR, spel.T_BRENG % per_max,
+			spel.T_TIK_KAR, spel.T_TIK_DEUR, spel.T_TIK_BAK, spel.T_ALLE_VOL,
+			spel.T_KAR_TITEL % [6, spel.T_KAMERS]]:
+		_keur_regel(zin, "de kar")
+		gelijk(str(Ui.mist_tekens(zin)), "[]", "elk teken van \"%s\" zit in het font" % zin)
+	spel.free()
+	_af()
+
 # ------------------------------------------------------------- hele beurten
 
 func test_beurt_band_3() -> void:
@@ -289,9 +391,11 @@ func test_beurt_band_4() -> void:
 func test_beurt_band_5() -> void:
 	await _hele_beurt(5, 7, 5)
 
-## Eén hele beurt in de vorm van V2: de som komt uit `Sommen.deel`, de kar
-## vertrekt vol (beslissing "doorduwen") en het rondje rijdt elke kamer af;
-## bij de laatste levering gaat de rest in de snoeppot en sluit de lus.
+## Eén hele beurt, gespeeld zoals een kind hem speelt: alleen tikken op wat er
+## staat.  De som komt uit `Sommen.deel`, de kar vertrekt vol (beslissing
+## "doorduwen"): tik op de kar, volg de deuren met een 👉, tik op het bakje waar
+## de kar staat, en bij de laatste levering gaat de rest in de snoeppot en
+## sluit de lus.  Bij elke stap hangt er hoogstens één wolkje in beeld.
 func _hele_beurt(band: int, n: int, dag: int) -> void:
 	_op()
 	var spel := _start(n, band, dag, mini(n, 6))
@@ -311,57 +415,249 @@ func _hele_beurt(band: int, n: int, dag: int) -> void:
 	gelijk(World.decor_lijst("keuken").size(), 0, "band %d: geen los decor in de keuken" % band)
 	for id in ["vk_zak", "vk_klaar", "vk_opnieuw", "vk___pot"]:
 		waar(Hits.spot(id) == null, "band %d: %s is weg met de vul-fase" % [band, id])
-	# het rondje: de kar zegt hoeveel kamers er nog open zijn
 	var open: Array = spel.open_kamers()
 	waar(open.size() >= 1, "band %d: er is minstens één kamer met een bakje" % band)
-	gelijk(_tekst("karhot"), "🛒 nog %d %s" % [open.size(), "kamer" if open.size() == 1 else "kamers"],
-		"band %d: de kar telt de kamers" % band)
-	gelijk(_tekst("vk_duw"), "🛒 Breng %d koekjes naar elke gast" % int(som["k"]),
-		"band %d: de kar zegt wat er nu moet" % band)
+	# de keuken: de kar zegt wat een tik doet, het ene wolkje zegt de opdracht
+	gelijk(_tekst("karhot"), "🛒 Pak de kar", "band %d: de kar is een knop die zegt wat hij doet" % band)
+	gelijk(_titel("karhot"), "de voerkar: nog %d %s" % [open.size(), "kamer" if open.size() == 1 else "kamers"],
+		"band %d: de uitleg telt de kamers" % band)
+	gelijk(_tekst("vk_zeg"), "🍪 Breng %d koekjes naar elke gast" % int(som["k"]),
+		"band %d: de opdracht met het getal erin" % band)
+	gelijk(str(_wolkjes()), '["vk_zeg"]', "band %d: één wolkje bij de kar" % band)
 	var sterren_voor := int(State.s["sterren"])
 	var pot_voor := int(State.s["snoeppot"])
-	var boom := Engine.get_main_loop() as SceneTree
+	_tik("karhot")
+	waar(spel.mee(), "band %d: de kar is vast" % band)
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "band %d: en de knop zegt het" % band)
 	var ronden := 0
-	while not spel.open_kamers().is_empty() and ronden < 8:
+	while not spel.open_kamers().is_empty() and ronden < 16:
 		ronden += 1
-		var q: Dictionary = spel.open_kamers()[0]
-		var kamer := str(q["kamer"])
-		# eerst zonder kar: het bakje vraagt om de kar
-		if str(World.ding("kar").get("kamer", "")) != kamer:
-			spel.lever(kamer, str(q["slot"]))
-			gelijk(_tekst("vk_hier"), "🛒 Sleep de kar hierheen",
-				"band %d: zonder kar wijst het bakje de weg" % band)
-			waar(not spel.K["geleverd"].has(kamer), "band %d: en er is niets geleverd" % band)
-			spel.duw_naar(kamer)
-			Hits.plaats()
-		gelijk(str(World.ding("kar").get("kamer", "")), kamer, "band %d: de kar staat in %s" % [band, kamer])
-		var kar_voor := int(spel.K["op_kar"])
-		var hier := 0
-		for gg in g:
-			if str(gg.get("kamer", "")) == kamer:
-				hier += 1
-		waar(spel.lever(kamer, str(q["slot"])), "band %d: afleveren in %s lukt" % [band, kamer])
-		Hits.plaats()
-		gelijk(World.bak_stand(kamer, str(q["slot"])), 4, "band %d: het bakje is vol" % band)
-		gelijk(int(spel.K["op_kar"]), kar_voor - int(som["k"]) * hier,
-			"band %d: de kar draagt %d * %d minder" % [band, int(som["k"]), hier])
-		for gg in g:
-			if str(gg.get("kamer", "")) == kamer:
-				waar(bool(gg.get("gegeten", false)), "band %d: %s heeft gegeten" % [band, gg["naam"]])
-				gelijk(str(gg.get("behoefte", "")), "spelen", "band %d: en wil nu spelen" % band)
-		gelijk(_tekst("vk_smul"), "😋 %d %s" % [int(som["k"]), "koekjes elk" if hier > 1 else "koekjes"],
-			"band %d: het smulwolkje telt per dier" % band)
+		var nu := World.kamer_nu()
+		gelijk(str(World.ding("kar").get("kamer", "")), nu, "band %d: de kar staat waar het kind kijkt" % band)
+		var q := _open(spel, nu)
+		if q.is_empty():
+			# onderweg: tik op een deur met een 👉.  Net gevoerd?  Dan hangt het
+			# smulwolkje er nog en wacht dat van de kar; het kind tikt meteen door.
+			if _zichtbaar("vk_smul"):
+				waar(not _zichtbaar("vk_zeg"), "band %d: tijdens het smullen geen tweede wolkje" % band)
+			else:
+				gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "band %d: %s zegt de volgende stap" % [band, nu])
+			var wijs: Array = spel.wijs_deuren()
+			waar(not wijs.is_empty(), "band %d: in %s wijst een deur de weg" % [band, nu])
+			if wijs.is_empty():
+				break
+			var deur := "deur_%s_%s" % [nu, str(wijs[0])]
+			waar(_wijst(deur), "band %d: het bordje van %s draagt een 👉 (%s)" % [band, deur, _tekst(deur)])
+			if not _tik(deur):
+				break
+			gelijk(World.kamer_nu(), str(wijs[0]), "band %d: de camera ging mee door de deur" % band)
+			waar(spel.mee(), "band %d: en de kar is nog steeds vast" % band)
+		else:
+			# de kar staat bij hongerige gasten: tik op het bakje
+			var kamer := nu
+			gelijk(_tekst("vk_zeg"), "👉 Tik op het bakje", "band %d: %s zegt: het bakje" % [band, kamer])
+			var bak := _bak_id(q)
+			waar(_zichtbaar(bak), "band %d: het bakje van %s is nu een knop" % [band, kamer])
+			for dr in spel.wijs_deuren():
+				fout("band %d: in een hongerige kamer wijst geen deur (%s)" % [band, str(dr)])
+			var kar_voor := int(spel.K["op_kar"])
+			var hier := 0
+			for gg in g:
+				if str(gg.get("kamer", "")) == kamer:
+					hier += 1
+			if not _tik(bak):
+				break
+			waar(spel.K["geleverd"].has(kamer), "band %d: afleveren in %s lukt" % [band, kamer])
+			gelijk(World.bak_stand(kamer, str(q["slot"])), 4, "band %d: het bakje is vol" % band)
+			gelijk(int(spel.K["op_kar"]), kar_voor - int(som["k"]) * hier,
+				"band %d: de kar draagt %d * %d minder" % [band, int(som["k"]), hier])
+			for gg in g:
+				if str(gg.get("kamer", "")) == kamer:
+					waar(bool(gg.get("gegeten", false)), "band %d: %s heeft gegeten" % [band, gg["naam"]])
+					gelijk(str(gg.get("behoefte", "")), "spelen", "band %d: en wil nu spelen" % band)
+			gelijk(_tekst("vk_smul"), "😋 %d %s" % [int(som["k"]), "koekjes elk" if hier > 1 else "koekjes"],
+				"band %d: het smulwolkje telt per dier" % band)
+			waar(not _zichtbaar(bak), "band %d: het volle bakje is geen knop meer" % band)
+			if not spel.open_kamers().is_empty():
+				gelijk(str(_wolkjes()), '["vk_smul"]',
+					"band %d: tijdens het smullen wacht het wolkje van de kar" % band)
+		if not spel.open_kamers().is_empty():
+			waar(_wolkjes().size() <= 1, "band %d: hoogstens één wolkje in %s (%s)" % [band,
+				World.kamer_nu(), str(_wolkjes())])
+	waar(spel.open_kamers().is_empty(), "band %d: elke kamer is bediend (%d stappen)" % [band, ronden])
 	# de lus is rond: de rest van de kar gaat in de snoeppot, één ster voor het
 	# meedoen
 	gelijk(int(spel.K["op_kar"]), int(som["r"]), "band %d: de kar draagt de rest" % band)
 	gelijk(int(State.s["sterren"]), sterren_voor + 1, "band %d: één ster voor het meedoen" % band)
 	gelijk(int(State.s["snoeppot"]), pot_voor + int(som["r"]), "band %d: de rest ging in de snoeppot" % band)
 	waar(Hotel.taak_af("voer") or true, "het taakje mag afgevinkt zijn")
-	gelijk(_tekst("vk_af"), "✅ Alle bakjes vol!", "band %d: alles rond" % band)
-	_tik("vk_af")
-	await boom.process_frame
+	gelijk(_tekst("vk_zeg"), "✅ Alle bakjes vol!", "band %d: alles rond" % band)
+	# niets meer om aan te tikken: geen kar-knop, geen geleende deur of bakje
+	gelijk(str(_eigen_knoppen()), "[]", "band %d: aan het eind is er geen knop van de kar meer" % band)
+	gelijk(str(_geleend()), "[]", "band %d: en geen geleende deur of bakje" % band)
+	await _wacht_dicht()
 	gelijk(Games.actief(), "", "band %d: het spel sluit zichzelf" % band)
 	gelijk(State.s["kar"], null, "band %d: de kar is opgeruimd" % band)
+	_af()
+
+# ---------------------------------------------------------------- tikken
+
+## Tik op de kar: je hebt hem vast (eigenaar, 2026-09-23).  De knop wordt
+## `🛒 Je duwt de kar`, ingedrukt en met de ☝ van "in je hand"; de deur op weg
+## naar de gasten krijgt een 👉 en de andere deuren niet; het ene wolkje zegt
+## wat er nu moet.
+func test_een_tik_op_de_kar_pakt_hem() -> void:
+	_op()
+	var spel := _start(2, 3, 1, 2)
+	waar(spel != null, "het spel draait")
+	if spel == null:
+		_af()
+		return
+	waar(not spel.mee(), "de kar staat eerst gewoon in de keuken")
+	var b := Ui.bron_van("karhot")
+	waar(b != null and b.toggle_mode and not b.button_pressed, "de kar is een schakelaar die uit staat")
+	gelijk(_tekst("karhot"), "🛒 Pak de kar", "en zegt wat een tik doet")
+	for deur in ["deur_keuken_gang", "deur_keuken_tuin", "deur_keuken_wasserij"]:
+		waar(_zichtbaar(deur), "%s is een knop" % deur)
+		waar(not _wijst(deur), "%s wijst nog niet" % deur)
+	_tik("karhot")
+	waar(spel.mee(), "na een tik heb je de kar vast")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "de knop zegt het")
+	b = Ui.bron_van("karhot")
+	waar(b != null and b.button_pressed, "en staat ingedrukt")
+	if b != null:
+		gelijk(b.hand, 1, "met de ☝ van 'in je hand'")
+		gelijk(b.aantal, int(spel.K["op_kar"]), "het pilletje telt de koekjes op de kar")
+	gelijk(spel.wijs_deuren(), ["gang"], "beide kamers liggen achter de gang")
+	gelijk(_tekst("deur_keuken_gang"), "👉 🚪 Gang", "die deur wijst de weg")
+	waar(not _wijst("deur_keuken_tuin"), "de tuin is geen weg naar de gasten")
+	waar(not _wijst("deur_keuken_wasserij"), "de wasserij ook niet")
+	gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "het wolkje zegt de volgende stap")
+	gelijk(str(_wolkjes()), '["vk_zeg"]', "één wolkje")
+	_af()
+
+## Tik op een deur: kar én camera gaan erdoor en de kar blijft vast, ook in de
+## volgende kamer.  In een kamer met hongerige gasten is het bakje de knop;
+## een tik erop vult het, de dieren smullen (dan hangt alleen hún wolkje), en
+## daarna zegt de kar weer de volgende stap.
+func test_een_tik_op_een_deur_neemt_kar_en_camera_mee() -> void:
+	_op()
+	# drie gasten: twee in kamer1, één in kamer2
+	var spel := _start(3, 3, 1, 3)
+	waar(spel != null, "het spel draait")
+	if spel == null:
+		_af()
+		return
+	_tik("karhot")
+	_tik("deur_keuken_gang")
+	gelijk(World.kamer_nu(), "gang", "de camera ging mee")
+	gelijk(str(World.ding("kar").get("kamer", "")), "gang", "en de kar ook")
+	waar(spel.mee(), "de kar is nog vast")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "en de knop zegt het nog")
+	waar(_zichtbaar("karhot"), "de kar is ook in de gang een knop")
+	for kamer in ["kamer1", "kamer2"]:
+		waar(_wijst("deur_gang_%s" % kamer), "de deur naar %s wijst (%s)" % [kamer,
+			_tekst("deur_gang_%s" % kamer)])
+	waar(not _wijst("deur_gang_keuken"), "terug naar de keuken wijst niet")
+	waar(not _wijst("deur_gang_receptie"), "de receptie ook niet")
+	gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "het wolkje zegt het weer")
+	_tik("deur_gang_kamer1")
+	gelijk(World.kamer_nu(), "kamer1", "door naar kamer1")
+	gelijk(str(World.ding("kar").get("kamer", "")), "kamer1", "met de kar")
+	waar(spel.mee(), "nog steeds vast")
+	var q := _open(spel, "kamer1")
+	waar(not q.is_empty(), "in kamer1 wacht iemand op koekjes")
+	if q.is_empty():
+		_af()
+		return
+	waar(_zichtbaar(_bak_id(q)), "het bakje is nu een knop")
+	gelijk(_tekst("vk_zeg"), "👉 Tik op het bakje", "en het wolkje zegt het")
+	waar(not _wijst("deur_kamer1_gang"), "hier wijst geen deur: eerst het bakje")
+	gelijk(str(_wolkjes()), '["vk_zeg"]', "één wolkje")
+	_tik(_bak_id(q))
+	waar(spel.K["geleverd"].has("kamer1"), "het bakje is gevuld")
+	gelijk(World.bak_stand("kamer1", str(q["slot"])), 4, "tot de rand")
+	gelijk(str(_wolkjes()), '["vk_smul"]', "tijdens het smullen hangt alleen het smulwolkje")
+	waar(not _zichtbaar(_bak_id(q)), "het volle bakje is geen knop meer")
+	waar(spel.mee(), "de kar is nog vast")
+	waar(_wijst("deur_kamer1_gang"), "en de deur naar de gang wijst naar kamer2")
+	await _wacht(float(spel.SMUL_MS) + 0.3)
+	gelijk(str(_wolkjes()), '["vk_zeg"]', "na het smullen hangt het wolkje van de kar er weer")
+	gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "met de volgende stap")
+	_af()
+
+## Tik op de kar die je vast hebt: je zet hem neer.  De knop zegt weer
+## `🛒 Pak de kar`, de 👉's gaan van de deuren af en het wolkje zegt weer de
+## opdracht.  Neergezet naast een hongerig bakje blijft dat bakje een knop: de
+## kar staat er toch.
+func test_een_tik_op_de_vaste_kar_zet_hem_neer() -> void:
+	_op()
+	var spel := _start(2, 3, 1, 2)
+	waar(spel != null, "het spel draait")
+	if spel == null:
+		_af()
+		return
+	_tik("karhot")
+	waar(spel.mee(), "vast")
+	_tik("karhot")
+	waar(not spel.mee(), "weer neergezet")
+	gelijk(_tekst("karhot"), "🛒 Pak de kar", "de knop zegt weer wat een tik doet")
+	var b := Ui.bron_van("karhot")
+	waar(b != null and not b.button_pressed, "en staat niet meer ingedrukt")
+	if b != null:
+		gelijk(b.hand, 0, "zonder ☝")
+	for deur in ["deur_keuken_gang", "deur_keuken_tuin", "deur_keuken_wasserij"]:
+		waar(not _wijst(deur), "%s wijst niet meer" % deur)
+	gelijk(_tekst("vk_zeg"), "👉 Tik op de kar",
+		"de opdracht is gelezen: het wolkje zegt kort wat nu")
+	# naar kamer1 en daar neerzetten
+	_tik("karhot")
+	_tik("deur_keuken_gang")
+	_tik("deur_gang_kamer1")
+	_tik("karhot")
+	waar(not spel.mee(), "in kamer1 neergezet")
+	var q := _open(spel, "kamer1")
+	waar(not q.is_empty() and _zichtbaar(_bak_id(q)), "het bakje naast de kar blijft een knop")
+	gelijk(_tekst("vk_zeg"), "👉 Tik op het bakje", "en het wolkje zegt het")
+	if not q.is_empty():
+		_tik(_bak_id(q))
+		waar(spel.K["geleverd"].has("kamer1"), "vullen gaat ook met de kar neergezet")
+	_af()
+
+## Een deur waar het kind op tikt zonder de kar vast te hebben neemt de kar
+## gewoon mee: geen dode tik en geen "nee" om te lezen.  Daarna is de kar vast.
+func test_een_deur_zonder_vaste_kar_neemt_hem_mee() -> void:
+	_op()
+	var spel := _start(2, 3, 1, 2)
+	waar(spel != null, "het spel draait")
+	if spel == null:
+		_af()
+		return
+	waar(not spel.mee(), "de kar is niet vast")
+	_tik("deur_keuken_gang")
+	gelijk(World.kamer_nu(), "gang", "de camera gaat door de deur")
+	gelijk(str(World.ding("kar").get("kamer", "")), "gang", "en de kar gaat mee")
+	waar(spel.mee(), "en is nu vast")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "de knop zegt het")
+	waar(_wijst("deur_gang_kamer1"), "en de deuren wijzen de weg")
+	_af()
+
+## Na `stop()` zijn de deurbordjes weer van het hotel: geen 👉 meer, en een tik
+## doet weer wat het hotel wil (geen kar meer duwen).
+func test_na_stop_wijst_geen_deur_meer() -> void:
+	_op()
+	var spel := _start(2, 3, 1, 2)
+	waar(spel != null, "het spel draait")
+	if spel == null:
+		_af()
+		return
+	_tik("karhot")
+	waar(_wijst("deur_keuken_gang"), "de gangdeur wijst")
+	Games.stop()
+	Hits.plaats()
+	gelijk(_tekst("deur_keuken_gang"), "🚪 Gang", "het bordje is weer gewoon")
+	var s := Hits.spot("deur_keuken_gang")
+	waar(s != null and s.geleend_door == "", "en de deur is weer van het hotel")
 	_af()
 
 # --------------------------------------------------------- de kar komt thuis
@@ -373,7 +669,6 @@ func _hele_beurt(band: int, n: int, dag: int) -> void:
 ## knop terug op zijn thuisplek.
 func test_kar_staat_na_de_ronde_weer_in_de_keuken() -> void:
 	_op()
-	var boom := Engine.get_main_loop() as SceneTree
 	var spel := _start(3, 3, 1, 3)
 	waar(spel != null, "het spel draait")
 	if spel == null:
@@ -393,8 +688,9 @@ func test_kar_staat_na_de_ronde_weer_in_de_keuken() -> void:
 	waar(ronden >= 1, "de kar heeft de keuken verlaten")
 	var laatste := World.kamer_nu()
 	waar(laatste != "keuken", "en het kind kijkt naar de kamer van het laatste bakje")
-	_tik("vk_af")
-	await boom.process_frame
+	# het slotwolkje is informatie, geen knop: het spel sluit zelf na 2,6 s
+	gelijk(_tekst("vk_zeg"), "✅ Alle bakjes vol!", "alles rond")
+	await _wacht_dicht()
 	gelijk(Games.actief(), "", "het spel sluit zichzelf")
 	gelijk(World.kamer_nu(), laatste, "de camera blijft waar het kind keek")
 	var kar := World.ding("kar")
@@ -438,7 +734,12 @@ func test_els_blijft_en_de_ronde_straft_niet() -> void:
 		"zonder de kar in de kamer gaat er niets af")
 	gelijk(int(spel.K["missers"]), 0, "en er is geen misser geteld")
 	gelijk(int(State.s["sterren"]), sterren_voor, "er is geen ster bij of af")
-	gelijk(_tekst("vk_hier"), "🛒 Sleep de kar hierheen", "het bakje wijst alleen de weg")
+	waar(not spel.K["geleverd"].has(str(q["kamer"])), "en er is niets geleverd")
+	# daar is het bakje ook geen knop: het wolkje van de kar zegt gewoon verder
+	# wat er nu moet
+	waar(not _zichtbaar(_bak_id(q)), "een bakje zonder kar erbij is geen knop")
+	gelijk(_tekst("vk_zeg"), "🍪 Breng %d koekjes naar elke gast" % int(spel.K["per"]),
+		"het wolkje blijft de opdracht zeggen")
 	# Els' knop komt pas bij twee missers; in V2 zijn die in de keuken niet
 	# meer te verdienen, dus de stand wordt gezet en het rondje hertekend
 	gelijk(_knop("vk_els"), null, "zonder missers is er geen Els")
@@ -452,6 +753,12 @@ func test_els_blijft_en_de_ronde_straft_niet() -> void:
 	gelijk(int(spel.K["spook"]), 1, "Els doet het voor")
 	waar(State.gezien("voerkar_els"), "en dat wordt onthouden")
 	waar(_knop("vk_els") != null, "Els blijft staan zolang er twee pogingen op zitten")
+	# haar tik laat iets zien: het ene wolkje zegt haar zin, tot de volgende tik
+	gelijk(_tekst("vk_zeg"), "🩺 Iedereen %d, rest in de pot" % int(spel.K["per"]),
+		"Els zegt het in het wolkje van de kar")
+	gelijk(str(_wolkjes()), '["vk_zeg"]', "en er komt geen tweede wolkje bij")
+	_tik("karhot")
+	gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "de volgende tik zegt weer de volgende stap")
 	_af()
 
 ## S5, open punt 2026-09-20: de voerkar geeft het dier van de beurt door met
@@ -619,8 +926,11 @@ func test_stop_laat_de_wereld_schoon() -> void:
 # --------------------------------------------------------- knoppen en dekking
 
 ## De harde regel van architecture.md §4.3/§12.2: geen knop van dit spel dekt
-## ook maar één voorwerp af, in vier kaders.  Het drukste beeld dat de ronde
-## kent: de kar, het duw-wolkje en Els met haar hulpknop ernaast.
+## ook maar één voorwerp af, in vier kaders.  Drie beelden van de ronde, elk
+## met Els erbij (het drukste dat de ronde kent): de keuken bij de start (de
+## kar, het opdrachtwolkje, Els), de keuken met de kar vast (de gangdeur draagt
+## dan een 👉 en is breder), en kamer1 met de kar naast het hongerige bakje —
+## het beeld waar de eigenaar drie witte vakjes zag.
 func test_dekking_nul_in_vier_kaders() -> void:
 	var boom := Engine.get_main_loop() as SceneTree
 	_onthoud()
@@ -655,36 +965,37 @@ func test_dekking_nul_in_vier_kaders() -> void:
 		waar(_knop("karhot") != null, "%s: de kar is een knop" % str(maat))
 		waar(_knop("vk_els") != null, "%s: Els staat er na twee pogingen" % str(maat))
 		var kader: Control = shell.get_node("Scherm/Kolom/Middenrij/Kaderdoos/Kader")
-		var dbg := Hits.debug()
-		var eigen := 0
-		for id in dbg.keys():
-			var s := Hits.spot(id)
-			if s == null or s.door != SPEL:
-				continue
-			eigen += 1
-			var d: Dictionary = dbg[id]
-			var r: Rect2 = d["rect"]
-			waar(not bool(d["krap"]), "%s: %s vond een echte plek" % [str(maat), id])
-			waar(r.position.x >= 0.0 and r.position.y >= 0.0
-				and r.end.x <= kader.size.x + 0.01 and r.end.y <= kader.size.y + 0.01,
-				"%s: %s staat binnen het kader %s" % [str(maat), id, str(kader.size)])
-			if s.kind != "tag" and s.kind != "naam":
-				waar(r.size.x >= 44.0 and r.size.y >= 44.0,
-					"%s: %s is een tikdoel (%s)" % [str(maat), id, str(r.size)])
-			# een vaste kaart (en haar strook) mag over de wereld staan; een
-			# knop nooit — die twee zijn de enige uitzondering (§4.3)
-			if int(d["laag"]) == Hits.Laag.VAST:
-				continue
-			var aan := str(d.get("op", "")) == "aan"     # a hotel button ON its own thing
-			waar(aan or Hits.dekking(id) <= 0.0, "%s: %s dekt zijn voorwerp niet af" % [str(maat), id])
-			for ander in dbg.keys():
-				var v: Rect2 = dbg[ander]["vlak"]
-				if v.size.x <= 0.0 or (aan and v.is_equal_approx(d["vlak"])):
-					continue
-				var snij := r.intersection(v)
-				gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
-					"%s: %s dekt het voorwerp van %s af" % [str(maat), id, ander])
-		waar(eigen >= 3, "%s: %d knoppen van de voerkar in beeld" % [str(maat), eigen])
+		_keur_dekking(kader, "%s keuken" % str(maat))
+		# de kar vast: de gangdeur draagt een 👉
+		_tik("karhot")
+		for _f in 2:
+			await boom.process_frame
+		waar(_wijst("deur_keuken_gang"), "%s: de gangdeur wijst" % str(maat))
+		_keur_dekking(kader, "%s keuken, kar vast" % str(maat))
+		# en door naar kamer1, naast het bakje
+		_tik("deur_keuken_gang")
+		for _f in 2:
+			await boom.process_frame
+		_tik("deur_gang_kamer1")
+		for _f in 3:
+			await boom.process_frame
+		gelijk(World.kamer_nu(), "kamer1", "%s: de kar staat in kamer1" % str(maat))
+		var q := _open(spel, "kamer1")
+		waar(not q.is_empty() and _zichtbaar(_bak_id(q)), "%s: het bakje is een knop" % str(maat))
+		gelijk(_tekst("vk_zeg"), "👉 Tik op het bakje", "%s: het ene wolkje" % str(maat))
+		_keur_dekking(kader, "%s kamer1" % str(maat))
+		# gevoerd en neergezet (de tik ruimt het smulwolkje op), en weer vast
+		_tik(_bak_id(q))
+		_tik("karhot")
+		for _f in 2:
+			await boom.process_frame
+		gelijk(_tekst("vk_zeg"), "👉 Tik op de kar", "%s: neergezet na het voeren" % str(maat))
+		_keur_dekking(kader, "%s kamer1, gevoerd, neergezet" % str(maat))
+		_tik("karhot")
+		for _f in 2:
+			await boom.process_frame
+		gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "%s: weer vast" % str(maat))
+		_keur_dekking(kader, "%s kamer1, gevoerd, vast" % str(maat))
 		Games.stop()
 		Hits.wis_alles()
 		World.decor_wis_alles()
@@ -696,6 +1007,40 @@ func test_dekking_nul_in_vier_kaders() -> void:
 	State.s = _bewaard
 	_bewaard = {}
 	Rooms.herstel()
+
+## Elke knop en elk wolkje van de voerkar in dit beeld: een echte plek, binnen
+## het kader, groot genoeg voor een vinger, en over geen enkel voorwerp heen.
+func _keur_dekking(kader: Control, wat: String) -> void:
+	var dbg := Hits.debug()
+	var eigen := 0
+	for id in dbg.keys():
+		var s := Hits.spot(id)
+		if s == null or s.door != SPEL:
+			continue
+		eigen += 1
+		var d: Dictionary = dbg[id]
+		var r: Rect2 = d["rect"]
+		waar(not bool(d["krap"]), "%s: %s vond een echte plek" % [wat, id])
+		waar(r.position.x >= 0.0 and r.position.y >= 0.0
+			and r.end.x <= kader.size.x + 0.01 and r.end.y <= kader.size.y + 0.01,
+			"%s: %s staat binnen het kader %s" % [wat, id, str(kader.size)])
+		if s.kind != "tag" and s.kind != "naam":
+			waar(r.size.x >= 44.0 and r.size.y >= 44.0,
+				"%s: %s is een tikdoel (%s)" % [wat, id, str(r.size)])
+		# een vaste kaart (en haar strook) mag over de wereld staan; een
+		# knop nooit — die twee zijn de enige uitzondering (§4.3)
+		if int(d["laag"]) == Hits.Laag.VAST:
+			continue
+		var aan := str(d.get("op", "")) == "aan"     # a hotel button ON its own thing
+		waar(aan or Hits.dekking(id) <= 0.0, "%s: %s dekt zijn voorwerp niet af" % [wat, id])
+		for ander in dbg.keys():
+			var v: Rect2 = dbg[ander]["vlak"]
+			if v.size.x <= 0.0 or (aan and v.is_equal_approx(d["vlak"])):
+				continue
+			var snij := r.intersection(v)
+			gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
+				"%s: %s dekt het voorwerp van %s af" % [wat, id, ander])
+	waar(eigen >= 3, "%s: %d knoppen van de voerkar in beeld" % [wat, eigen])
 
 # ---------------------------------------------------------------- slepen
 
@@ -751,6 +1096,73 @@ func test_slepen_de_kar_door_de_deur() -> void:
 	gelijk(str(World.ding("kar").get("kamer", "")), str(pad[1]),
 		"de kar is naar %s geduwd" % str(pad[1]))
 	gelijk(World.kamer_nu(), str(pad[1]), "en de camera ging mee")
+	# wie de kar door een deur sleept, duwt hem: hij is daarna vast
+	waar(spel.mee(), "na de sleep is de kar vast")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "en de knop zegt het")
+	await _ruim_op(vp)
+
+## Firefox meet `movementX` van een vinger vanaf de laatste plek van de muis: na
+## één muisbeweging in de sessie krijgt het eerste trillinkje van een tik een
+## `relative` van honderden eenheden (browserproef 2026-09-23: -553, -367 bij een
+## vinger die 1 eenheid bewoog).  Godot telt die `relative` op en begon dan een
+## sleep: de tik op de kar was weg.  De kar start zijn sleep nu zelf, gemeten aan
+## de echte afstand tot het indrukpunt, dus deze tik blijft een tik.
+func test_een_trillende_tik_op_de_kar_blijft_een_tik() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	_onthoud()
+	var vp := SubViewport.new()
+	vp.size = Vector2i(1024, 768)
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	vp.gui_embed_subwindows = true
+	boom.root.add_child(vp)
+	var shell = load("res://scenes/main.tscn").instantiate()
+	shell.set_meta("geen_start", true)
+	vp.add_child(shell)
+	for _f in 4:
+		await boom.process_frame
+	_gasten(2, 2)
+	Hotel.start()
+	World.naar("keuken")
+	for _f in 3:
+		await boom.process_frame
+	Games.start(SPEL)
+	for _f in 4:
+		await boom.process_frame
+	var spel := _spel()
+	var kar := Hits.spot("karhot")
+	if spel == null or kar == null:
+		fout("het spel draait niet of de kar is geen knop")
+		await _ruim_op(vp)
+		return
+	waar(not spel.mee(), "de kar staat nog")
+	var p: Vector2 = (kar.knoop as Control).get_global_rect().get_center()
+	var mb := InputEventMouseButton.new()
+	mb.button_index = MOUSE_BUTTON_LEFT
+	mb.pressed = true
+	mb.position = p
+	mb.global_position = p
+	vp.push_input(mb)
+	await boom.process_frame
+	# de vinger trilt één eenheid, maar Firefox meldt hem honderden eenheden ver
+	var mm := InputEventMouseMotion.new()
+	mm.position = p + Vector2(1, 0)
+	mm.global_position = mm.position
+	mm.relative = Vector2(-553, -367)
+	mm.button_mask = MOUSE_BUTTON_MASK_LEFT
+	vp.push_input(mm)
+	await boom.process_frame
+	waar(not Hits.sleept(), "een trillinkje is geen sleep")
+	var los := InputEventMouseButton.new()
+	los.button_index = MOUSE_BUTTON_LEFT
+	los.pressed = false
+	los.position = p + Vector2(1, 0)
+	los.global_position = los.position
+	vp.push_input(los)
+	for _f in 3:
+		await boom.process_frame
+	waar(spel.mee(), "de tik pakte de kar")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "en de knop zegt het")
+	gelijk(str(World.ding("kar").get("kamer", "")), "keuken", "de kar ging nergens heen")
 	await _ruim_op(vp)
 
 ## Eén sleep door de echte invoerlaag: indrukken, in stapjes bewegen, loslaten.

@@ -1401,7 +1401,9 @@ Meervoud via `mv(n, enk, meerv)`, net als bij bedden.
 Twee fasen. **Vullen** in de keuken: op de voerkast hangt één sommenkaartje met
 de opdracht in twee gewone zinnen; uit de zak komen koekjes die je over de
 bakjes op de vloer verdeelt, met de rest in de snoeppot. **Het rondje**: zodra
-de kar klopt duw (sleep) je hem door het hotel en vul je de bakjes in de kamers.
+de kar klopt duw je hem door het hotel en vul je de bakjes in de kamers — met
+**tikken** (tik op de kar, dan op een deur; eigenaar 2026-09-23), slepen mag
+er nog bij (§7.6).
 
 Meespelende gasten: alle gasten met een bed. Geen gasten → wolkje 🛏
 `"nog geen gasten"` en na **1800 ms** sluiten.
@@ -1551,17 +1553,40 @@ neer; het kind ziet zijn eigen verdeling terug.
 
 ### 7.6 Beurtverloop — het rondje
 
+**Tikken is de weg** (eigenaar, 2026-09-23: *"Zorg dat je op de kar kan klikken
+en daarna op een deur en zo de kar mee kan nemen"*, en *"heel veel textboxen die
+allemaal klikbaar lijken"*). Wat iets doet is een knop (`ctx.hotspots.bron` /
+`maak` / een geleende hotelknop); wat alleen vertelt is een wolkje
+(`ctx.ui.wolk`, zonder `tik`) — een wolkje doet niets als je erop tikt.
+
 * Open kamers = kamers met een gast en een bakje, waar nog niet geleverd is.
-* **De kar** is zelf een knop (`karhot`, `volg()` loopt mee), html
-  `🛒 nog <n> kamer(s)` of `🛒 kar is leeg`, klas `hotbron hotwolk`, prio 11.
-  Sleepbaar naar `[data-drop="deur"]` (naar die kamer duwen, `Snd.kar()`) en
-  `[data-drop="bak"]` (afleveren). Eén tik-afhandelaar (`aan` → `hoeDan()`), de
-  sleep heeft géén `onTap`.
-* **Tik op de kar** → wolkje 👉 `"Sleep de kar naar een deur"`, hoog 44.
-* Zolang de kar vol is leent het spel de bakje-knoppen van het hotel
-  (`hotspots.pak('bak_<kamer>_<slot>', …)`): tikken betekent dan "hier afleveren".
-* **Afleveren in een kamer waar de kar niet staat** → wolkje bij het bakje
-  🛒 `"Sleep de kar hierheen"`, klas `hulp`, hoog 26.
+* **De kar** is zelf een knop (`karhot`, een `bron`, `volg()` loopt mee, prio 11,
+  klas `hotbron hotwolk`, `op: "aan"` met `obj: "kar"`: de knop hangt óp de kar
+  als die groot genoeg is, anders er vlak onder of boven — wie op de kar tikt of
+  sleept raakt de knop). Hij zegt wat een tik doet:
+  * niet vast: `🛒 Pak de kar`;
+  * **vast** ("in je hand"): `🛒 Je duwt de kar`, de knop is een schakelaar die
+    ingedrukt staat (de thema-kleur `pressed`) en draagt de ☝ van de bron
+    (`hand: 1`);
+  * het pilletje telt de koekjes op de kar (`aantal = op_kar`); de uitleg
+    (`titel`) is `de voerkar: nog <n> kamer(s)`.
+  Letters: `Ui.maten.wereld` (zoals de deurbordjes).
+* **Tik op de kar** → vast, of — als hij al vast was — weer neergezet.
+* **Tik op een deur** (alle deuren van de kamer zijn geleend,
+  `hotspots.pak('deur_<kamer>_<naar>', …)`) → kar én camera gaan door die deur
+  (`duw_naar`, `Snd.kar()`), de kar staat naast het bakje van de nieuwe kamer, en
+  **de kar blijft vast**. Een deur waar het kind op tikt zonder de kar vast te
+  hebben **neemt de kar gewoon mee** (en dan is hij vast): nooit een dode tik en
+  geen "nee" om te lezen.
+* **De 👉-bordjes**: zolang de kar vast is krijgen de deuren die de eerste stap
+  zijn van het kortste pad naar een open kamer een 👉 voor hun bordje
+  (`👉 🚪 Gang`); in een open kamer wijst geen deur (daar is het bakje het doel).
+  Andere deuren werken ook, zonder 👉. Na `stop()` bouwt `Hotel.render()` de
+  bordjes weer zonder 👉.
+* **Het bakje** is alleen een knop waar vullen nu kan: de kar staat in die kamer
+  en de kamer is open — vast of neergezet maakt niet uit, de kar staat ernaast.
+  Dan wordt `bak_<kamer>_<slot>` geleend: tik = afleveren. Elders, en na het
+  vullen, is het bakje geen knop (het hotel verbergt wat het spel niet leende).
 * **Afleveren** (`lever`): alle koekjes van de gasten in die kamer worden opgeteld
   en op 0 gezet, `geleverd[kamer] = samen`, het bakje in de wereld gaat op
   niveau 4, elke gast krijgt `gegeten = true`, `behoefte = 'spelen'`,
@@ -1569,12 +1594,37 @@ neer; het kind ziet zijn eigen verdeling terug.
   Daarna — ná het opnieuw tekenen, want dat begint met `wisAlles()` — het
   wolkje 😋 + `per` + `"koekjes"` (of `"koekjes elk"` als er twee gasten in die
   kamer liggen, zodat het getal niet als kamertotaal wordt gelezen), klas `goed`,
-  na **2600 ms** weg.
-* **De eerste keer** verschijnt bij de kar: 🛒 `"Breng <per> koekjes naar elke gast"`,
-  hoog 30, prio 10.
-* **Alles rond**: wolkje ✅ `"Alle bakjes vol!"`, hoog 22, klas `goed`, prio 12;
-  tikken sluit meteen, anders na **2600 ms**. `klaarMetRondje()` zet
-  `state.kar = null` en sluit.
+  prio 10 (onder de kar), icoon op maat `icoon`, na **2600 ms** weg. Staat de kar
+  niet in die kamer, dan gebeurt er niets (daar is het bakje ook geen knop).
+* **Eén wolkje tegelijk**, `vk_zeg`, bij de kar (prio 10, hoog 30, icoon op maat
+  `icoon` zodat het één band hoog blijft op 740 × 360). Het zegt de volgende stap:
+  1. wat Els net zei (`🩺 Iedereen <per>, rest in de pot`), tot de volgende tik;
+  2. de kar staat in een open kamer → `👉 Tik op het bakje` — dit wolkje hangt
+     bij het bakje (hoog 26) en houdt het bakje vrij zoals het **getekend** wordt
+     (`World.vlak_van("kom", x, z, 0, {}, Art.KOM_ANKER)`);
+  3. de kar is vast → `👉 Tik op een deur`;
+  4. de allereerste keer (de kar is deze beurt nog nooit vast geweest) de
+     opdracht met het getal: `🍪 Breng <per> koekjes naar elke gast` (het oude
+     duw-wolkje, nu de eerste instructie; de kar zegt `Pak de kar`);
+  5. daarna, met de kar neergezet: `👉 Tik op de kar` (de lange zin vond op
+     740 × 360 in een volle slaapkamer geen plek).
+  Zolang het smulwolkje in beeld hangt wacht `vk_zeg`; na de 2600 ms komt het
+  terug met de volgende stap.
+* **Alles rond**: geen kar-knop meer en geen geleende deur of bakje; alleen
+  `vk_zeg` = ✅ `"Alle bakjes vol!"`, hoog 22, klas `goed`, prio 12, naast het
+  laatste smulwolkje. Het is een wolkje: tikken doet niets; na **2600 ms**
+  sluit het spel. `klaarMetRondje()` zet `state.kar = null`, de kar rijdt terug
+  naar de keuken (zonder de camera) en sluit.
+* **Slepen** blijft erbij: de lading is `{sleep: "deur"}`; hij gaat door een
+  deur (`[data-drop="deur"]`, `val = duw_naar`) of op het bakje waar vullen kan
+  (het vangvlak van het geleende bakje krijgt `drop: "deur"`, `val = lever`).
+  Wie sleept, duwt: daarna is de kar vast. De sleep start **het spel zelf**
+  (`force_drag`) zodra de vinger **10 eenheden van het indrukpunt** is, gemeten
+  aan de echte plek; de `bron` heeft zelf geen `sleep`. Reden (browserproef,
+  Firefox 156): Godot start een sleep op de opgetelde `relative`, de web-export
+  haalt die uit `PointerEvent.movementX`, en Firefox meet dat voor een vinger
+  vanaf de laatste muisplek — na één muisbeweging werd elke trillende tik op de
+  kar een sleep die nergens landde.
 
 ### 7.7 Alle kinderteksten van voerkar
 
@@ -1586,10 +1636,14 @@ neer; het kind ziet zijn eigen verdeling terug.
 `8 erbij` / `8 eraf`; `hier hoort 4 in`;
 `🛒 Klaar` (`de kar is klaar`); `↩ Opnieuw` (`alles opnieuw verdelen`);
 `🩺 Els helpt` (`buurvrouw Els doet het voor`);
-`🛒 nog 2 kamers` / `de voerkar: nog 1 kamer`; `kar is leeg` / `de voerkar is leeg`;
-`Sleep de kar naar een deur`; `Sleep de kar hierheen`;
-`Breng 4 koekjes naar elke gast`; `Alle bakjes vol!`;
-`koekjes` / `koekjes elk`.
+`de voerkar: nog 1 kamer` / `de voerkar: nog 2 kamers` (de uitleg bij de kar);
+`🛒 Pak de kar`; `🛒 Je duwt de kar`;
+`🍪 Breng 4 koekjes naar elke gast`; `👉 Tik op de kar`; `👉 Tik op een deur`;
+`👉 Tik op het bakje`;
+`✅ Alle bakjes vol!`; `koekjes` / `koekjes elk`; op een deurbordje `👉` vóór het
+pictogram van de kamer.
+*Vervallen 2026-09-23 (tikken):* `🛒 nog 2 kamers` (op de kar), `kar is leeg` /
+`de voerkar is leeg`, `Sleep de kar naar een deur`, `Sleep de kar hierheen`.
 
 ---
 

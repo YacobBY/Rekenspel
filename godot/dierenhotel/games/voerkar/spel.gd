@@ -10,9 +10,26 @@ extends MiniGame
 ## route door de echte som-poort (`_som_kaart`/`_op_som`), waar
 ## `op_kar = per * n` uit het antwoord van het kind valt.
 ##
-## Bindend en ongewijzigd: de getallen (`Sommen.Voerkar.*`), elke kindtekst,
-## de hulpladder (Els vanaf twee missers, en ze blijft staan), nooit straffen
-## (alleen `zacht()`), één ster voor het meedoen, en de kar die thuis komt.
+## Bindend en ongewijzigd: de getallen (`Sommen.Voerkar.*`), de hulpladder
+## (Els vanaf twee missers, en ze blijft staan), nooit straffen (alleen
+## `zacht()`), één ster voor het meedoen, en de kar die thuis komt.
+##
+## TIKKEN (eigenaar, 2026-09-23: "Zorg dat je op de kar kan klikken en daarna
+## op een deur en zo de kar mee kan nemen").  Slepen was de enige weg, en alleen
+## het labeltje NAAST de kar was sleepbaar — wie de getekende kar zelf pakte,
+## greep in het niets.  Nu is tikken de weg, hangt de knop óp de kar en blijft
+## slepen erbij (`_kar_invoer`):
+##   * tik op de kar → je hebt hem vast: de knop wordt `🛒 Je duwt de kar`
+##     (ingedrukt, met ☝) en de deuren op weg naar een hongerige kamer krijgen
+##     een 👉 op hun bordje;
+##   * tik op een deur → kar én camera gaan erdoor, en je houdt de kar vast;
+##     een deur zonder vastgepakte kar neemt hem ook mee (geen dode tik, geen
+##     "nee" om te lezen);
+##   * tik op de vastgepakte kar → je zet hem neer (de 👉's gaan weg);
+##   * het bakje is alleen een knop waar vullen nu kan: de kar staat in die
+##     kamer en daar wacht nog iemand op zijn koekjes (vast of niet vast).
+## Eén wolkje tegelijk, altijd `vk_zeg` bij de kar: de volgende stap in één
+## zin.  Wat iets doet is een knop, wat alleen vertelt is een wolkje.
 
 # --------------------------------------------------------------- vaste maten
 
@@ -48,15 +65,18 @@ const T_OPNIEUW := "Opnieuw"
 const T_OPNIEUW_TITEL := "alles opnieuw verdelen"
 const T_ELS := "Els helpt"
 const T_ELS_TITEL := "buurvrouw Els doet het voor"
-const T_KAR_NOG := "nog %d %s"
 const T_KAMER := "kamer"
 const T_KAMERS := "kamers"
 const T_KAR_TITEL := "de voerkar: nog %d %s"
-const T_KAR_LEEG := "kar is leeg"
-const T_KAR_LEEG_TITEL := "de voerkar is leeg"
-const T_SLEEP_DEUR := "Sleep de kar naar een deur"
-const T_SLEEP_HIER := "Sleep de kar hierheen"
+## De kar is een knop die zegt wat hij doet, en dan wat hij is (tikken, 2026-09-23).
+const T_PAK_KAR := "Pak de kar"
+const T_DUW_KAR := "Je duwt de kar"
+## Het ene wolkje bij de kar: de eerste zin is de opdracht met het getal erin
+## (het oude duw-wolkje, zo komt er geen tweede bij), daarna de volgende tik.
 const T_BRENG := "Breng %d koekjes naar elke gast"
+const T_TIK_KAR := "Tik op de kar"
+const T_TIK_DEUR := "Tik op een deur"
+const T_TIK_BAK := "Tik op het bakje"
 const T_ALLE_VOL := "Alle bakjes vol!"
 const T_KOEKJES := "koekjes"
 const T_KOEKJES_ELK := "koekjes elk"
@@ -82,6 +102,16 @@ const ICO_OPNIEUW_TERUG := "🔄"
 ## bakje net zo werkt als slepen op een deur.
 const SLEEP_KAR := "deur"
 
+## Zo ver (eenheden) moet een vinger of muis van het indrukpunt af zijn eer een
+## druk op de kar een sleep wordt; daaronder is het een tik (zie `_kar_invoer`).
+const SLEEP_AF := 10.0
+
+## Het ene wolkje van de kar.  Elke zin die bij de kar hoort gebruikt dit id,
+## dus er kan er nooit een tweede naast komen te hangen.
+const ZEG := "vk_zeg"
+## De meta op een geleend deurbordje: staat er nu een 👉 op?
+const WIJS_META := "vk_wijs"
+
 # --------------------------------------------------------------- toestand
 
 var K: Dictionary = {}            ## state.kar; de vorm van V2 (PLAN.md §7):
@@ -89,6 +119,21 @@ var K: Dictionary = {}            ## state.kar; de vorm van V2 (PLAN.md §7):
 ## `stap` is "som" (de poort die V3 bouwt) of "duwen" (het rondje).
 var _kaart = null                 ## Ui.Kaart
 var _sluit_bezig := false
+## Heeft het kind de kar vast?  Niet in de save: na een herlaad of een nieuwe
+## start staat de kar thuis in de keuken, en daar is hij neergezet.
+var _mee := false
+## Had het kind de kar deze beurt al eens vast?  Dan is de opdracht gelezen en
+## zegt een neergezette kar kort `👉 Tik op de kar`.
+var _ooit_mee := false
+## Wat Els net zei: het wolkje toont het tot de volgende tik.
+var _hint := ""
+## Het smulwolkje hangt 2,6 s bij de dieren van deze kamer; zolang wacht het
+## wolkje van de kar (één wolkje tegelijk).  `_smul_nr` hoort bij de laatste
+## levering, zodat een oud wachtje een nieuw smulwolkje niet weghaalt.
+var _smul_kamer := ""
+var _smul_nr := 0
+## Waar de kar werd ingedrukt (lokaal op de knop), of INF als er niets vast zit.
+var _druk_op := Vector2.INF
 
 # ------------------------------------------------------------- aanmelding
 
@@ -141,6 +186,10 @@ func _geen_gasten() -> void:
 ## (games-a.md §7.6).  De camera blijft waar hij is; alleen de kar gaat naar huis.
 func stop() -> void:
 	_kaart = null
+	_mee = false
+	_ooit_mee = false
+	_hint = ""
+	_smul_kamer = ""
 	if ctx != null:
 		ctx.hotspots.laat()
 		_bewaar_kar()
@@ -149,12 +198,16 @@ func stop() -> void:
 
 ## Zolang het rondje loopt zijn de bakjes en de deuren van het hotel even van
 ## de voerkar.  `Hotel.render()` bouwt die knoppen opnieuw op (bij elke
-## levering, bij elke kamerwissel), dus het lenen wordt elk beeld opnieuw
-## bevestigd.
+## levering, bij elke kamerwissel, als een bakje leeg raakt), dus het lenen —
+## en de 👉 op de deurbordjes — wordt elk beeld opnieuw bevestigd.
 func _process(_dt: float) -> void:
 	if not actief or K.is_empty() or str(K.get("stap", "")) != "duwen":
 		return
 	_leen_doelen()
+
+## Heeft het kind de kar nu vast?  (Voor de tests en de browserproef.)
+func mee() -> bool:
+	return _mee
 
 # ------------------------------------------------------- gasten en toestand
 
@@ -268,7 +321,7 @@ func _meld_probe(fase: String) -> void:
 			if pad.size() > 1:
 				deur = "deur_%s_%s" % [nu, str(pad[1])]
 		print("[probe] vk volgende=", deur, " doel=", doel, " hier=", nu,
-			" open=", open.size())
+			" open=", open.size(), " mee=", _mee, " wijs=", wijs_deuren())
 	print("[probe] vk ", fase, " T=", int(K["T"]), " per=", int(K["per"]),
 		" rest=", int(K["rest"]), " op_kar=", int(K["op_kar"]),
 		" pot=", int(K["pot"]), " stap=", str(K["stap"]),
@@ -370,7 +423,8 @@ func _tik_els(_s = null) -> void:
 ## Els doet het voor: haar doelgetal komt op de kaart te staan (games-a.md
 ## §7.5).  De knop overleeft de sloop van de vul-fase en hangt nu bij het
 ## rondje mee (PLAN.md V2: "Els blijft"); haar spookgetal ziet het kind weer
-## zodra V3 de kaart de poort laat zijn.
+## zodra V3 de kaart de poort laat zijn.  Tot dan zegt ze het in het wolkje
+## van de kar, zodat haar tik iets laat zien (tot de volgende tik).
 func hulp() -> void:
 	if K.is_empty() or str(K.get("stap", "")) != "duwen":
 		return
@@ -378,6 +432,7 @@ func hulp() -> void:
 	_bewaar_kar()
 	ctx.state.zet_gezien("voerkar_els")
 	ctx.snd.brief()
+	_hint = T_ELS_ZIN % int(K["per"])
 	_rondje()
 
 # -------------------------------------------------------------- het rondje
@@ -408,30 +463,24 @@ func _rondje() -> void:
 		return
 	ctx.hotspots.wis_alles()
 	var open := open_kamers()
-	_kar_hotspot(open.size())
-	_leen_doelen()
 	if open.is_empty():
-		ctx.ui.wolk({"id": "vk_af", "kamer": World.kamer_nu(),
+		# Alles rond: niets meer om aan te tikken — geen kar-knop, geen geleende
+		# deur of bakje — alleen het slotwolkje, en na 2,6 s gaat het spel dicht.
+		# Een wolkje doet niets als je erop tikt (Ui.wolk = informatie).
+		_mee = false
+		_hint = ""
+		ctx.ui.wolk({"id": ZEG, "kamer": World.kamer_nu(),
 			"x": _kar_x(), "z": _kar_z(), "hoog": 22.0, "icoon": ICO_VOL,
 			"tekst": T_ALLE_VOL, "klas": "goed", "prio": 12,
-			"volg": _volg_kar(22.0), "tik": _klaar_met_rondje})
+			"volg": _volg_kar(22.0)})
+		_zeg_maat()
 		_sluit_straks()
-	elif (K["geleverd"] as Dictionary).is_empty():
-		ctx.ui.wolk({"id": "vk_duw", "kamer": World.kamer_nu(),
-			"x": _kar_x(), "z": _kar_z(), "hoog": 30.0, "icoon": ICO_KAR,
-			"tekst": T_BRENG % int(K["per"]), "prio": 10, "volg": _volg_kar(30.0)})
-		# Op een liggend telefoonkader (740 x 360: 5 banden van 52, negen
-		# kolommen van 56) is de wolk van 55 hoog twee banden breed en ligt
-		# er geen vrij blok van vijf kolommen bij de kar: de deuren van de
-		# keuken en de kar zelf kruisen elke band die raakt.  Met het icoon
-		# op `icoon` in plaats van `icoon_wolk` wordt de bubbel ±51 hoog —
-		# één band — en past hij bovenin, waar alleen de wasserijdeur een
-		# kolom raakt.  Zonder deze maat is de duwknop daar altijd `krap`
-		# en dekt hij het kozijn van de tuin (0 %-regel, architectuur §4.3).
-		var duw := Hits.spot("vk_duw")
-		if duw != null and duw.knoop is UiWolk:
-			(duw.knoop as UiWolk).icoon_label.add_theme_font_size_override(
-				"font_size", int(Ui.maten.get("icoon", 23)))
+		ctx.wereld.vuil()
+		_meld_probe("rondje")
+		return
+	_kar_hotspot(open.size())
+	_leen_doelen()
+	_zeg()
 	if int(K["missers"]) >= 2:
 		# Els blijft: haar knop is uit `_knoppen_neer` verhuisd naar de
 		# tekenlaag van het rondje en hangt nu naast de kar mee (PLAN.md V2).
@@ -443,6 +492,117 @@ func _rondje() -> void:
 		_verf("vk_els", UiThema.WOLK_HULP)
 	ctx.wereld.vuil()
 	_meld_probe("rondje")
+
+## Het ene wolkje bij de kar: de volgende stap, in één zin.
+##   * wat Els net zei, tot de volgende tik;
+##   * de kar staat in een kamer waar nog iemand op zijn koekjes wacht →
+##     👉 "Tik op het bakje" (vast of niet: het bakje staat ernaast);
+##   * de kar is vast → 👉 "Tik op een deur" (de goede deuren dragen een 👉);
+##   * de allereerste keer de opdracht zelf, met het getal: 🍪 "Breng 4 koekjes
+##     naar elke gast" — de knop van de kar zegt er "Pak de kar" bij;
+##   * daarna, met de kar neergezet, kort 👉 "Tik op de kar" (de lange zin vond
+##     op 740 x 360 in een volle slaapkamer geen plek).
+## Zolang de dieren in deze kamer smullen hangt hun wolkje er al; dan wacht dit
+## er een tel mee (`_smul_weg` zet het terug).
+func _zeg() -> void:
+	if not actief or K.is_empty():
+		return
+	if _smul_hier():
+		ctx.ui.wolk_weg(ZEG)
+		return
+	var icoon := ICO_WIJS
+	var tekst := ""
+	var klas := ""
+	var bak := {}
+	if not _hint.is_empty():
+		icoon = ICO_ELS
+		tekst = _hint.trim_prefix(ICO_ELS + " ")
+		klas = "hulp"
+	elif _kar_bij_honger():
+		tekst = T_TIK_BAK
+		bak = _bak_hier()
+	elif _mee:
+		tekst = T_TIK_DEUR
+	elif _ooit_mee:
+		tekst = T_TIK_KAR
+	else:
+		icoon = ICO_KOEK
+		tekst = T_BRENG % int(K["per"])
+	var o := {"id": ZEG, "kamer": World.kamer_nu(),
+		"x": _kar_x(), "z": _kar_z(), "hoog": 30.0, "icoon": icoon,
+		"tekst": tekst, "klas": klas, "prio": 10, "volg": _volg_kar(30.0)}
+	if not bak.is_empty():
+		# "Tik op het bakje" hangt bij het bakje zelf, niet bij de kar: de zin
+		# staat dan naast het ding waar hij over gaat (het oude "hierheen"-
+		# wolkje stond daar ook, hoog 26).  Nog steeds het ene wolkje.
+		o["x"] = float(bak.get("x", _kar_x()))
+		o["z"] = float(bak.get("z", _kar_z()))
+		o["hoog"] = 26.0
+		o["volg"] = _volg_bak(float(o["x"]), float(o["z"]), 26.0)
+	ctx.ui.wolk(o)
+	_zeg_maat()
+
+## Op een liggend telefoonkader (740 x 360: 5 banden van 52, negen kolommen
+## van 56) is een wolk van 55 hoog twee banden breed en ligt er geen vrij blok
+## van vijf kolommen bij de kar: de deuren van de keuken en de kar zelf kruisen
+## elke band die raakt.  Met het icoon op `icoon` in plaats van `icoon_wolk`
+## wordt de bubbel ±51 hoog — één band — en past hij bovenin, waar alleen de
+## wasserijdeur een kolom raakt.  Zonder deze maat staat het wolkje daar
+## `krap` en dekt het het kozijn van de tuin (0 %-regel, architectuur §4.3).
+func _zeg_maat(id := ZEG) -> void:
+	var w := Hits.spot(id)
+	if w != null and w.knoop is UiWolk:
+		(w.knoop as UiWolk).icoon_label.add_theme_font_size_override(
+			"font_size", int(Ui.maten.get("icoon", 23)))
+
+## Smullen de dieren in de kamer die in beeld is?
+func _smul_hier() -> bool:
+	return not _smul_kamer.is_empty() and _smul_kamer == World.kamer_nu() \
+		and Hits.spot("vk_smul") != null
+
+## Het wolkje bij het bakje houdt het bakje vrij zoals het GETEKEND wordt.  De
+## kamer tekent een bak met zijn anker `Art.KOM_ANKER` (scenes/kamer.gd), maar
+## `Hits` meet de bakknop van het hotel zonder dat anker: zijn vlak ligt een
+## flink stuk rechtsonder het bakje (op 1536 x 760 zo'n 88 x 70 eenheden).  Met
+## dat vlak zou het wolkje het echte bakje afdekken; dit vlak klopt wel.  Elke
+## plaatsing opnieuw, want de camera schuift na een deur nog even.
+func _volg_bak(x: float, z: float, hoog: float) -> Callable:
+	var kamer := World.kamer_nu()
+	return func() -> Dictionary:
+		return {"x": x, "z": z, "y": hoog, "kamer": kamer,
+			"vlak": World.vlak_van("kom", x, z, 0.0, {}, Art.KOM_ANKER)}
+
+## Het bak-slot van de open kamer waar de kar nu staat, of {}.
+func _bak_hier() -> Dictionary:
+	var nu := World.kamer_nu()
+	for q in open_kamers():
+		if str(q["kamer"]) == nu:
+			return ctx.wereld.slot(nu, str(q["slot"]))
+	return {}
+
+## Staat de kar in beeld in een kamer die nog koekjes krijgt?
+func _kar_bij_honger() -> bool:
+	var nu := World.kamer_nu()
+	if str(ctx.wereld.ding("kar").get("kamer", "")) != nu:
+		return false
+	for q in open_kamers():
+		if str(q["kamer"]) == nu:
+			return true
+	return false
+
+## De deuren van deze kamer die op weg zijn naar een kamer waar nog iemand op
+## zijn koekjes wacht: de eerste stap van het kortste pad naar elke open kamer,
+## als kamer-id's.  Leeg als die kamer hier is — dan is het bakje het doel.
+func wijs_deuren() -> Array:
+	var uit: Array = []
+	if K.is_empty() or _kar_bij_honger():
+		return uit
+	var nu := World.kamer_nu()
+	for q in open_kamers():
+		var pad: Array = ctx.wereld.pad(nu, str(q["kamer"]))
+		if pad.size() > 1 and not uit.has(str(pad[1])):
+			uit.append(str(pad[1]))
+	return uit
 
 func _kar_x() -> float:
 	return float(ctx.wereld.ding("kar").get("x", 48.0))
@@ -459,76 +619,157 @@ func _volg_kar(hoog: float = 16.0) -> Callable:
 			"kamer": str(q["kamer"]),
 			"vlak": World.vlak_van(str(q["model"]), float(q["x"]), float(q["z"]), 0.0)}
 
-## De kar is zelf een knop: sleep hem naar een deur (of op een bakje) en tik
-## hem aan om te horen hoe dat moet.
+## De kar is zelf een knop, en hij zegt wat een tik doet: `🛒 Pak de kar`, of —
+## vastgepakt — `🛒 Je duwt de kar`, ingedrukt (de thema-kleur van een
+## ingedrukte knop) en met de ☝ van de bron ("in je hand", world.md §5.6).  Het
+## pilletje telt de koekjes op de kar.  Slepen kan nog steeds (`_kar_invoer`),
+## maar hoeft nooit.
 func _kar_hotspot(open_n: int) -> void:
 	var kar: Dictionary = ctx.wereld.ding("kar")
 	if kar.is_empty():
 		return
 	var woord := T_KAMER if open_n == 1 else T_KAMERS
-	var tekst := (T_KAR_NOG % [open_n, woord]) if open_n > 0 else T_KAR_LEEG
-	var titel := (T_KAR_TITEL % [open_n, woord]) if open_n > 0 else T_KAR_LEEG_TITEL
 	ctx.hotspots.bron("kar", {
 		"id": "karhot", "kamer": str(kar["kamer"]),
 		"x": float(kar["x"]), "z": float(kar["z"]), "hoog": 16.0,
-		"icoon": ICO_KAR, "aantal": int(K["op_kar"]), "hand": 0, "prio": 11,
-		"klas": "hotbron hotwolk", "titel": titel, "sleep": SLEEP_KAR,
-		"tik": _tik_kar, "volg": _volg_kar(16.0),
+		"icoon": ICO_KAR, "aantal": int(K["op_kar"]), "hand": 1 if _mee else 0,
+		"prio": 11, "klas": "hotbron hotwolk", "titel": T_KAR_TITEL % [open_n, woord],
+		# geen eigen sleep: `_kar_invoer` start hem, gemeten aan de echte afstand
+		"sleep": "", "tik": _tik_kar, "volg": _volg_kar(16.0),
+		# OP de kar, zoals de bel op de balie en de buidel in de kraam: wie op
+		# de kar zelf tikt of sleept, raakt de knop.  Naast de kar (de oude
+		# plek) greep een vinger op de getekende kar in het niets.
+		"op": "aan", "obj": "kar",
 	})
 	var b := Ui.bron_van("karhot")
 	if b != null:
-		b.text = "%s %s" % [ICO_KAR, tekst]
-		b.add_theme_font_size_override("font_size", int(Ui.maten.get("klein", 13)))
+		b.text = "%s %s" % [ICO_KAR, T_DUW_KAR if _mee else T_PAK_KAR]
+		# de letters van de wereld, zoals de deurbordjes (op een telefoon `klein`)
+		b.add_theme_font_size_override("font_size",
+			int(Ui.maten.get("wereld", Ui.maten.get("klein", 13))))
+		# een schakelaar: Godot tekent hem ingedrukt zolang je de kar vast hebt
+		b.toggle_mode = true
+		b.set_pressed_no_signal(_mee)
+		b.gui_input.connect(_kar_invoer.bind(b))
+	_druk_op = Vector2.INF
 
+## Slepen, gemeten aan waar de vinger IS.  Godot begint een sleep zodra de
+## opgetelde `relative` van de muisbewegingen 10 eenheden haalt, en de web-export
+## haalt die uit `PointerEvent.movementX`.  Firefox meet dat voor een VINGER
+## vanaf de laatste plek van de MUIS: is de muis in die sessie ooit bewogen, dan
+## is het eerste trillinkje van een tik al honderden eenheden, en werd elke tik op
+## de kar een sleep die nergens landde — de tik was weg (browserproef, Firefox
+## 156, 2026-09-23).  Daarom start de kar zijn sleep niet zelf (`sleep` leeg, dus
+## `UiBron._get_drag_data` geeft niets) en doet dit spel het pas als de vinger
+## echt `SLEEP_AF` van het indrukpunt is: een tik blijft een tik, een sleep een
+## sleep.  De lading en het spookje zijn die van `UiBron` (40 eenheden boven de
+## vinger), dus de deuren en het bakje vangen hem zoals altijd.
+func _kar_invoer(ev: InputEvent, b: Control) -> void:
+	if not actief or K.is_empty() or not is_instance_valid(b):
+		return
+	var mb := ev as InputEventMouseButton
+	if mb != null:
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			_druk_op = mb.position if mb.pressed else Vector2.INF
+		return
+	var mm := ev as InputEventMouseMotion
+	if mm == null or _druk_op == Vector2.INF or (mm.button_mask & MOUSE_BUTTON_MASK_LEFT) == 0:
+		return
+	if mm.position.distance_to(_druk_op) <= SLEEP_AF or b.get_viewport().gui_is_dragging():
+		return
+	_druk_op = Vector2.INF
+	b.force_drag({"sleep": SLEEP_KAR, "bron": str(b.name)}, _sleep_spook(b))
+
+## Het spookje dat met de vinger meegaat: de tekst van de kar, 40 eenheden boven
+## de vinger zodat het kind ziet waar hij heen gaat (architecture.md §10).
+func _sleep_spook(b: Control) -> Control:
+	var spook := Control.new()
+	var l := Label.new()
+	l.text = str(b.get("text"))
+	l.add_theme_font_size_override("font_size", b.get_theme_font_size("font_size"))
+	spook.add_child(l)
+	var m := l.get_combined_minimum_size()
+	l.position = Vector2(-m.x * 0.5, -m.y * 0.5 - UiBron.HEF)
+	return spook
+
+## Tik op de kar: pakken, of weer neerzetten.
 func _tik_kar(_s = null) -> void:
+	if K.is_empty() or open_kamers().is_empty():
+		return
+	_mee = not _mee
+	_ooit_mee = true
+	_hint = ""
 	if OS.has_feature("web"):
-		print("[probe] vk tik_kar")
-	hoe_dan()
-
-func hoe_dan() -> void:
-	ctx.ui.wolk({"id": "vk_hoe", "kamer": World.kamer_nu(),
-		"x": _kar_x(), "z": _kar_z(), "hoog": 44.0, "icoon": ICO_WIJS,
-		"tekst": T_SLEEP_DEUR, "prio": 11, "volg": _volg_kar(44.0)})
-	ctx.wereld.vuil()
+		print("[probe] vk tik_kar mee=", _mee)
+	_rondje()
 
 ## De deuren en de bakjes van het hotel doen tijdens het rondje het werk van de
-## voerkar: tikken op een bakje levert af, slepen van de kar duwt hem door een
-## deur of levert af.  `Hits.leen` ruilt alleen `aan`; de sleep-afhandelaar
-## zetten we er zelf op (zie "Contract gaps" in het rapport).
+## voerkar.  Een deur duwt de kar erdoor (tik of sleep); de deuren op weg naar
+## een hongerige kamer krijgen een 👉 zolang je de kar vast hebt.  Het bakje is
+## alleen een knop waar vullen nu kan — de kar staat erbij en de kamer is nog
+## open — en een bakje dat niet geleend is haalt `Hits` weg zolang het spel
+## voorrang heeft.  `Hits.leen` ruilt alleen `aan`; de sleep-afhandelaar zetten
+## we er zelf op (zie "Contract gaps" in het rapport).
 func _leen_doelen() -> void:
-	for q in kamers_met_gast():
-		var id := "bak_%s_%s" % [str(q["kamer"]), str(q["slot"])]
-		var s := Hits.spot(id)
-		if s == null:
-			continue
-		if s.geleend_door != ctx.id:
-			ctx.hotspots.pak(id, _tik_bak)
-		s.val = _val_lever
-		if s.vangvlak != null and is_instance_valid(s.vangvlak):
-			s.vangvlak.drop = SLEEP_KAR
-			s.vangvlak.val = _val_lever
-	var r := Rooms.get_kamer(World.kamer_nu())
+	if K.is_empty() or open_kamers().is_empty():
+		return
+	var nu := World.kamer_nu()
+	if _kar_bij_honger():
+		for q in open_kamers():
+			if str(q["kamer"]) != nu:
+				continue
+			var id := "bak_%s_%s" % [nu, str(q["slot"])]
+			var s := Hits.spot(id)
+			if s == null:
+				continue
+			if s.geleend_door != ctx.id:
+				ctx.hotspots.pak(id, _tik_bak)
+			s.val = _val_lever
+			if s.vangvlak != null and is_instance_valid(s.vangvlak):
+				s.vangvlak.drop = SLEEP_KAR
+				s.vangvlak.val = _val_lever
+	var r := Rooms.get_kamer(nu)
 	if r == null:
 		return
+	var wijs := wijs_deuren() if _mee else []
 	for dr in r.deuren:
-		var id := "deur_%s_%s" % [World.kamer_nu(), str(dr.get("naar", ""))]
+		var naar := str(dr.get("naar", ""))
+		var id := "deur_%s_%s" % [nu, naar]
 		var s := Hits.spot(id)
 		if s == null:
 			continue
 		# Borrowed as well: only a borrowed hotel button stays on screen while a
-		# game runs, and a tap on the door now pushes the trolley through it —
-		# the same thing the drag does, for a finger that cannot drag yet.
+		# game runs, and a tap on the door pushes the trolley through it — the
+		# same thing the drag does, for a finger that cannot drag.
 		if s.geleend_door != ctx.id:
 			ctx.hotspots.pak(id, _tik_deur)
 		s.val = _val_duw
 		if s.vangvlak != null and is_instance_valid(s.vangvlak):
 			s.vangvlak.val = _val_duw
+		_wijs_deur(s, naar, wijs.has(naar))
+
+## Een 👉 voor het bordje van een geleende deur, of weer niet.  Het bordje is
+## van het hotel en wordt bij elke `Hotel.render()` nieuw gebouwd, dus de meta
+## op de knop onthoudt wat er nu op staat; alleen een verandering schrijft.
+func _wijs_deur(s, naar: String, aan: bool) -> void:
+	if s == null or not is_instance_valid(s.knoop) or not s.knoop.has_method("zet_label"):
+		return
+	if bool(s.knoop.get_meta(WIJS_META, false)) == aan:
+		return
+	var doel := Rooms.get_kamer(naar)
+	if doel == null:
+		return
+	var icoon := str(doel.icoon)
+	s.knoop.zet_label(("%s %s" % [ICO_WIJS, icoon]) if aan else icoon, str(doel.naam))
+	s.knoop.set_meta(WIJS_META, aan)
 
 func _tik_bak(s = null) -> void:
 	if s == null:
 		return
 	lever(str(s.data.get("kamer", "")), str(s.data.get("slot", "")))
 
+## Een tik op een deur duwt de kar erdoor, ook als het kind hem nog niet had
+## gepakt: dan neemt het de kar gewoon mee (nooit een dode tik).
 func _tik_deur(s = null) -> void:
 	if s == null:
 		return
@@ -542,11 +783,14 @@ func _val_duw(_lading: Dictionary, data: Dictionary) -> void:
 		print("[probe] vk val_duw=", data)
 	duw_naar(str(data.get("naar", "")))
 
-## De kar door een deur duwen: hij verhuist naar die kamer en de camera gaat mee.
+## De kar door een deur duwen: hij verhuist naar die kamer, de camera gaat mee,
+## en wie duwt heeft de kar vast — ook in de volgende kamer.
 func duw_naar(kamer_id: String) -> void:
 	if kamer_id.is_empty() or not Rooms.bestaat(kamer_id) or K.is_empty():
 		return
-	ctx.ui.wolk_weg("vk_hoe")
+	_mee = true
+	_ooit_mee = true
+	_hint = ""
 	var plek := _kar_plek(kamer_id)
 	ctx.wereld.ding_zet("kar", {"kamer": kamer_id, "x": plek.x, "z": plek.y})
 	ctx.wereld.naar(kamer_id)
@@ -574,18 +818,14 @@ func _kar_plek(kamer_id: String) -> Vector2:
 ## bij de laatste levering gaat wat hij over heeft in de snoeppot — dat is de
 ## `rest` van de deling — en daar sluit de lus: één ster voor het meedoen en
 ## de band wordt gevoed zoals altijd.
+##
+## Staat de kar er niet, dan gebeurt er niets: daar is het bakje ook geen knop
+## (`_leen_doelen`), dus een kind kan hier alleen met een oude sleep komen.
 func lever(kamer_id: String, slot_id: String) -> bool:
 	if K.is_empty() or kamer_id.is_empty():
 		return false
 	var kar: Dictionary = ctx.wereld.ding("kar")
 	if kar.is_empty() or str(kar.get("kamer", "")) != kamer_id:
-		var sl: Dictionary = ctx.wereld.slot(kamer_id, slot_id)
-		ctx.ui.wolk({"id": "vk_hier", "kamer": kamer_id,
-			"x": float(sl.get("sx", sl.get("x", _kar_x()))),
-			"z": float(sl.get("sz", sl.get("z", _kar_z()))),
-			"hoog": 26.0, "icoon": ICO_KAR, "tekst": T_SLEEP_HIER,
-			"klas": "hulp", "prio": 11})
-		ctx.wereld.vuil()
 		return false
 	var hier: Array = []
 	for g in deelnemers():
@@ -603,12 +843,15 @@ func lever(kamer_id: String, slot_id: String) -> bool:
 		g["blij"] = false
 		ids.append(id)
 	K["geleverd"][kamer_id] = samen
-	ctx.ui.wolk_weg("vk_hier")
-	ctx.ui.wolk_weg("vk_hoe")
+	_hint = ""
 	ctx.wereld.set_bak(kamer_id, slot_id, 4)
 	ctx.wereld.feest(ids)
 	ctx.snd.plop(3)
 	_bewaar_kar()
+	# het smulwolkje komt zo; tot het weg is wacht het wolkje van de kar
+	_smul_kamer = kamer_id
+	_smul_nr += 1
+	var nr := _smul_nr
 	Hotel.render()
 	_rondje()
 	# every bowl in the hotel is full: the loop closes here — the rest of the
@@ -626,8 +869,15 @@ func lever(kamer_id: String, slot_id: String) -> bool:
 	ctx.ui.wolk({"id": "vk_smul", "kamer": kamer_id, "hoog": 54.0,
 		"icoon": ICO_SMUL, "getal": int(K["per"]),
 		"tekst": T_KOEKJES_ELK if hier.size() > 1 else T_KOEKJES,
-		"klas": "goed", "prio": 12, "volg": _volg_dier(str(hier[0]["id"]), 54.0)})
-	_smul_weg()
+		"klas": "goed", "prio": 10, "volg": _volg_dier(str(hier[0]["id"]), 54.0)})
+	# dezelfde maat als het wolkje van de kar: één band hoog, anders vindt het
+	# op 740 x 360 in een volle slaapkamer geen plek (`krap`).  Prio 10, onder de
+	# kar (11): de knop die iets doet kiest zijn plek eerst, het wolkje dat
+	# alleen vertelt schuift op.
+	_zeg_maat("vk_smul")
+	if not open_kamers().is_empty():
+		ctx.ui.wolk_weg(ZEG)
+	_smul_weg(nr)
 	ctx.wereld.vuil()
 	return true
 
@@ -639,10 +889,18 @@ func _volg_dier(id: String, hoog: float) -> Callable:
 		return {"x": d.x, "z": d.z, "y": hoog, "kamer": d.kamer,
 			"vlak": World.vlak_van_dier(id)}
 
-func _smul_weg() -> void:
+## Na 2,6 s is het smullen gezien: het wolkje gaat weg en het wolkje van de kar
+## komt terug met de volgende stap.  Alleen het wachtje van de laatste levering
+## ruimt op.
+func _smul_weg(nr: int) -> void:
 	if not await na(SMUL_MS):
 		return
+	if nr != _smul_nr:
+		return
+	_smul_kamer = ""
 	ctx.ui.wolk_weg("vk_smul")
+	if not K.is_empty() and not open_kamers().is_empty():
+		_zeg()
 	ctx.wereld.vuil()
 
 func _sluit_straks() -> void:
@@ -665,6 +923,6 @@ func _klaar_met_rondje(_s = null) -> void:
 	ctx.data().erase("kar")
 	K = {}
 	State.bewaar()
-	ctx.ui.wolk_weg("vk_af")
+	ctx.ui.wolk_weg(ZEG)
 	ctx.wereld.ding_thuis_zet("kar")
 	ctx.sluit()
