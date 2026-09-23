@@ -1615,6 +1615,51 @@ into `vrij`.  The reception bell sounds `Snd.ding()`, a struck bell of its own (
 attack, E6 with a shimmer 3.5 Hz above it and the 2.76×/5.40× overtones of a metal cup,
 about a second of ring); `Snd.bel()` keeps the HTML's reference sound.
 
+**The intro of a fresh game** (Godot port only; owner, 2026-09-23: "Maak ook een leuke
+intro voor de game", together with "laat niet het prikbord zien als start. De
+gebruiker moet gewoon op de bel drukken"). `ui/intro.gd` (`UiIntro`), started by
+`scenes/main.gd`:
+
+* **When** — a FRESH game only: boot with no save at all (right after the fresh game is
+  saved), and after `Nieuw spel`. Never after `Verder spelen`: a child who comes back is
+  not held up. The flow decides this; the save has no field for it.
+* **Where** — laid over the whole shell as its last child (over the chrome, the room
+  bar, the sheets and the toasts), in the receptie. It closes the prikbord that
+  `Hotel.start()` opens on a morning round: the first thing to do is the bell. While
+  pages 1–5 run, the hotel's own buttons step aside with `Hits.voorrang("intro")` — the
+  mechanism of a running game — and the name plates stay; the last page gives the
+  buttons back. It never writes the save.
+* **The six pages**, one sentence each (§7.2, verbatim), and what the world does:
+  1. welcome — sparkles at the door and the bell, `tover`;
+  2. you are the boss — sparkles along the desk, `ster`;
+  3. guests — the first three guests of the waiting list (Boef, Muis, Wolkje on a fresh
+     list) appear at the receptie's entry and walk to three spots, 0.45 s apart, `deur`
+     and `hup`. The entry point lives in one function (`_ingang()`, now the inner point
+     of the door to the `gang`) so a new front entrance only changes that line;
+  4. wishes — a bubble over each: `🛏 bed`, `🍪 eten`, `🧶 spelen` (the plates make way,
+     so each bubble hangs over its own animal), `plop`;
+  5. sums help — the bubbles turn mint with `✓`, the guests are happy, `hoera`;
+  6. the bell — the guests walk out through the entry without plates, the hotel dims
+     except a round light on the bell and its button, with a pulsing ring and a bouncing
+     arrow; the sentence names the guest the bell will bring (`intro_bel(naam)`), `dag`.
+* **Input** — a tap anywhere is the next page, and so is `Verder ▸`; `Overslaan ▸▸` is on
+  every page and ends it at once; a fresh page ignores taps for 0.35 s (a double tap is
+  one page). The last page has no `Verder`: a tap in the light presses the REAL bell
+  button (same sound, same `[probe] tik`, `Hotel.bel()`) and the intro closes; a tap
+  beside it closes it without ringing. Enter = next, Escape = skip.
+* **Layout** — a card at the bottom of the screen, at most 640 units wide, sentence in
+  30/26/22 px by the screen's short side (≥ 600 / ≥ 420 / less), at most two lines and
+  balanced; on a landscape screen under 450 units high one row at the top over the
+  chrome, at most 820 wide. Buttons ≥ 48 × 48. On the last page the card never covers
+  the light (it moves to the other edge).
+* **Reduced motion** — the same six pages as still pictures: the guests are put on
+  their spots and hold still, no sparkles, no pulse, no bounce, no fades; on the last
+  page they are gone at once instead of walking out.
+* **Probe lines** — `[probe] intro stap=<i>/<n>`, `[probe] introknop <Koverslaan|Kverder>=<rect>`,
+  `[probe] intro bel=<rect>`, `[probe] intro=klaar hoe=<overslaan|bel|tik|klaar>`, and
+  `[probe] intro=stap <i>/<n>` or `intro=geen` before `[probe] klaar`. `tools/probe.js`
+  taps `Koverslaan` first on a fresh boot.
+
 ### 6.3 Room navigation
 
 * **Room bar** (`#kamerbalk`): one chip per room in `Rooms.lijst()` order — icon + name +
@@ -1777,6 +1822,18 @@ backdrop closes it. Toasts (`toast(msg, kind)`) live 2600 ms, are never clickabl
 `Er staan nog dieren in de Kwispelsteeg! 🐾` ·
 `Je oude opvang staat nog op deze tablet: <gasten>. Neem je ze mee naar het hotel? Ze krijgen dan een echt bed.` ·
 `Ja, verhuizen naar het hotel ▸` · toast `🛏 Geef iedereen een bed`
+
+The intro of a fresh game (§6.2), one page each, in this order:
+`👋 Welkom in het Dierenhotel!` ·
+`👑 Jij bent de baas van het hotel!` ·
+`🐾 Kijk, daar komen de gasten!` ·
+`✨ Elk dier heeft een wens.` ·
+`➕ Met sommen help je de dieren!` ·
+`🔔 Druk op de bel voor <naam>!` (the first guest of the waiting list; `🔔 Druk op de bel
+voor je gast!` when the list is empty) · buttons `Verder ▸` (title `Volgende plaatje`) and
+`Overslaan ▸▸` (title `Sla het verhaaltje over`). Every sentence keeps HOTEL.md §9 counted
+as `Ui.keur_regel` counts — at most 8 words with the pictogram as one of them, at most 40
+characters.
 
 ### 7.3 Map sheet
 

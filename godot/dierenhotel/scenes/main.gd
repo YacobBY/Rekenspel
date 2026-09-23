@@ -47,6 +47,8 @@ var _geluid_klaar := false
 var _bak_repaint := false         ## a bowl repaint is already queued (V5)
 var _compact := false
 var _telefoon := false
+## The intro of a fresh game while it is on the glass, or null (ui/intro.gd).
+var intro: UiIntro = null
 
 func _ready() -> void:
 	Ui.registreer_lagen(knoplaag, naamlaag, toastlaag, bladlaag, vanglaag, balklaag)
@@ -118,6 +120,11 @@ func _schildert_bak() -> void:
 ## world.md §6.2: read the save, always start a living world behind the sheet,
 ## and only then ask.  Nothing is written before the child answered
 ## (architecture.md §9), so looking at the start screen cannot destroy a save.
+##
+## A FRESH game — no save at all, or `Nieuw spel` — begins with the intro
+## (ui/intro.gd); `Verder spelen` never does: a child who comes back is not held
+## up by a story it has already seen.  The flow decides this, the save carries
+## no field for it.
 func _begin() -> void:
 	_opslag_uit_url()
 	var had_save := State.lees()
@@ -129,6 +136,7 @@ func _begin() -> void:
 		State.start_gekozen()
 		_volg_geluid()
 		_meld_stand("vers")
+		_intro_start()
 		return
 	var verder := func() -> void:
 		State.s = bewaard
@@ -145,6 +153,7 @@ func _begin() -> void:
 		Hotel.start()
 		_ververs_chroom()
 		_meld_stand("nieuw")
+		_intro_start()
 		_meld_knoppen()
 	print("[probe] opslag= dag=", int(bewaard.get("dag", 1)),
 		" sterren=", int(bewaard.get("sterren", 0)),
@@ -161,6 +170,43 @@ func _begin() -> void:
 			{"id": "verder", "tekst": UiTekst.START_VERDER, "groot": true, "aan": verder},
 			{"id": "nieuw", "tekst": UiTekst.START_NIEUW, "aan": nieuw},
 		]})
+
+# ------------------------------------------------------------------- intro
+
+## Lay the intro over the whole shell — over the chrome, the room bar, the
+## sheets and the toasts: it is the last child of the shell on purpose.
+func _intro_start() -> void:
+	if intro_loopt():
+		intro.sluit("weg")          # tidies up NOW, before the new one takes the stage
+	intro = UiIntro.new()
+	add_child(intro)
+	intro.stap_veranderd.connect(_intro_stap)
+	intro.klaar.connect(_intro_klaar)
+	intro.begin()
+
+func intro_loopt() -> bool:
+	return intro != null and is_instance_valid(intro) and not intro.is_dicht()
+
+## One `[probe]` line per page, and where its two buttons are, so the browser
+## probe can skip the intro before it goes looking for the hotel's buttons.
+func _intro_stap(stap: int, aantal: int) -> void:
+	print("[probe] intro stap=%d/%d" % [stap + 1, aantal])
+	await _na_plaatsing()
+	if not intro_loopt():
+		return
+	for k in [intro.knop_overslaan(), intro.knop_verder()]:
+		var b := k as Control
+		if b != null and b.is_visible_in_tree():
+			print("[probe] introknop ", b.name, "=", b.get_global_rect())
+	if intro.gat().size.x > 0.0:
+		print("[probe] intro bel=", intro.gat())
+
+func _intro_klaar(hoe: String) -> void:
+	print("[probe] intro=klaar hoe=", hoe)
+	intro = null
+	# the hotel's own buttons are back on the glass (the intro had them step
+	# aside), and a probe steers on the newest lines
+	_meld_knoppen()
 
 # ------------------------------------------------------------------ chroom
 
@@ -525,6 +571,15 @@ func _meld_later() -> void:
 			chroom.prikbord_knop, chroom.avond_knop]:
 		print("[probe] chroomknop ", k.name, "=", k.get_global_rect())
 	await _meld_knoppen()
+	# a fresh game is under the intro: say so, and where its buttons are
+	if intro_loopt():
+		print("[probe] intro=stap %d/%d" % [intro.stap() + 1, intro.aantal()])
+		for k in [intro.knop_overslaan(), intro.knop_verder()]:
+			var b := k as Control
+			if b != null and b.is_visible_in_tree():
+				print("[probe] introknop ", b.name, "=", b.get_global_rect())
+	else:
+		print("[probe] intro=geen")
 	print("[probe] klaar")
 
 ## Wait until the hotspots that were just created have really been placed.

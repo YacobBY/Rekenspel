@@ -7,6 +7,9 @@
 // scenes/main.gd prints (W3 owns those names, this file follows them):
 //
 //   boot      the engine boots and the shell reports         -> "[probe] klaar"
+//             (the first boot has no save, so it is a fresh game under the intro:
+//              its "[probe] introknop Koverslaan=" button is tapped first, and the
+//              hotel's buttons are read from the lines after "[probe] intro=klaar")
 //   hotel     the hotel is on screen and has buttons         -> "[probe] kamers=" + "[probe] knop <id>="
 //   tik       one finger tap = exactly one press             -> "[probe] tik=<n> id=<id>", n >= 1
 //   kaart     that press opened a card, sheet or game        -> "[probe] spel=" / "vb_som=" /
@@ -40,7 +43,12 @@ const path = require('path');
 const STANDAARD_URL = 'http://127.0.0.1:8642/index.html';
 const STAPPEN = ['boot', 'hotel', 'tik', 'kaart', 'herlaad', 'blad', 'verder'];
 // Buttons that are known to open something; the rest is tried in reported order.
-const VOORKEUR = ['prikbord', 'bel'];
+// The bell first: it is the child's first job since 2026-09-23 ("De gebruiker moet
+// gewoon op de bel drukken"), and the check-in it starts is what a reload has to
+// bring back.  With the board first, the board opened for real once the intro had
+// closed it, and after the reload a morning save opened it again over the world
+// tap of the `verder` step.
+const VOORKEUR = ['bel', 'prikbord'];
 
 function hulp() {
   console.log(`gebruik: node tools/probe.js [url] [opties]
@@ -222,9 +230,28 @@ function opVoorkeur(knoppen) {
     await page.screenshot({ path: `${uit}/${p.naam}-1-boot.png` });
     zet('boot', klaar, klaar ? '' : '"[probe] klaar" bleef uit');
 
-    // ---- hotel ----------------------------------------------------------
+    // ---- intro: a fresh game (no save yet) starts under the intro of
+    // ui/intro.gd, which lies over every button of the hotel and hides them.
+    // Skip it with its own button; the shell reports the hotel's buttons again
+    // once it is gone ("[probe] intro=klaar", then "[probe] knop <id>="), and
+    // from then on the probe steers on those lines.
     const bootRegels = logs.filter(l => l.includes('[probe]'));
-    const knoppen = knoppenUit(bootRegels);
+    let knopRegels = bootRegels;
+    const introKnop = laatste(bootRegels, '[probe] introknop Koverslaan=');
+    if (introKnop) {
+      const v = vlakVan(introKnop);
+      const n0 = logs.length;
+      if (v) await page.touchscreen.tap(v.x + v.w / 2, v.y + v.h / 2);
+      for (let i = 0; i < 40 && !logs.slice(n0).some(l => l.includes('[probe] intro=klaar')); i++) {
+        await page.waitForTimeout(100);
+      }
+      await page.waitForTimeout(700);        // the button lines follow two frames later
+      knopRegels = logs.slice(n0).filter(l => l.includes('[probe]'));
+      await page.screenshot({ path: `${uit}/${p.naam}-1b-na-intro.png` });
+    }
+
+    // ---- hotel ----------------------------------------------------------
+    const knoppen = knoppenUit(knopRegels);
     const kamers = laatste(bootRegels, '[probe] kamers=');
     zet('hotel', !!kamers && knoppen.length > 0,
       !kamers ? 'geen "[probe] kamers=" regel' : (knoppen.length ? '' : 'geen enkele "[probe] knop <id>=" regel'));
@@ -336,12 +363,17 @@ function opVoorkeur(knoppen) {
       // "Verder spelen" restores a SAVED day, so the hotel lays its buttons out
       // again; the shell reprints them and the confirming tap uses that fresh
       // rectangle instead of the one from the boot block.
-      const vers = knoppenUit(logs.slice(voorKnop)).find(k => k.id === wereldKnop.id);
-      const mikpunt = midden((vers || wereldKnop).vlak);
+      // The restored day may not HAVE the boot block's button any more: a
+      // check-in that was half done hides the bell. So the confirming tap goes
+      // to the first preferred button that the shell reported after the choice.
+      const versLijst = knoppenUit(logs.slice(voorKnop));
+      const vers = versLijst.find(k => k.id === wereldKnop.id) || opVoorkeur(versLijst)[0];
+      const bevestig = vers || wereldKnop;
+      const mikpunt = midden(bevestig.vlak);
       const r = await tikOp(mikpunt, 1200);
       verderPunt = doel; verderPogingen = 1;
       zet('verder', r.tikken.length >= 1,
-        r.tikken.length >= 1 ? `blad-knop ${bladknoppen[0].id}, daarna reageerde ${wereldKnop.id} weer`
+        r.tikken.length >= 1 ? `blad-knop ${bladknoppen[0].id}, daarna reageerde ${bevestig.id} weer`
           + (vers ? ' (verse plek)' : '')
           : `blad-knop ${bladknoppen[0].id} aangetikt, maar de wereld bleef stil`);
     } else if (!scan) {
