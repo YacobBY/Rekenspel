@@ -72,9 +72,12 @@ func _bouw(keuzes: Array, kader_breed: float, mt: Dictionary, balk: bool) -> voi
 	rij.name = "Rij"
 	rij.add_theme_constant_override("separation", 6 if balk else 4)
 	add_child(rij)
-	# In the bar the compact wording is the default: the bar is narrow and the
-	# long word would push the strip out of its block.
-	_vul(rij, keuzes, balk, mt)
+	# The long words first, in the bar too: "⬇ weinig" and "⬆ over" read as
+	# half an answer next to "Genoeg?", and a tablet's bar has room for "te
+	# weinig" and "blijft over" (owner, 2026-09-23: the scoop question was not
+	# clear).  The measurement below still takes the short words the moment the
+	# long strip does not fit its block.
+	_vul(rij, keuzes, false, mt)
 	# The width the short-word choice is measured against: the whole bar in
 	# `hoog`, the right-hand block in `laag` — never the whole frame (B4).
 	var meet := kader_breed
@@ -172,17 +175,5 @@ func _vul(rij: HBoxContainer, keuzes: Array, kort: bool, mt: Dictionary) -> void
 ## and pressed tints are the theme's own, rebuilt here because the margin has
 ## to travel with the box that carries it.
 static func _balk_stijlen(rand: int) -> Dictionary:
-	var basis := UiThema.vulling(UiThema.vlak(UiThema.KAART, 14, 2, UiThema.WIT), rand, rand)
-	var over := basis.duplicate() as StyleBoxFlat
-	over.bg_color = over.bg_color.lerp(UiThema.ZON, 0.35)
-	var druk := basis.duplicate() as StyleBoxFlat
-	druk.bg_color = druk.bg_color.lerp(UiThema.PERZIK, 0.55)
-	druk.content_margin_top = basis.content_margin_top + 2
-	druk.content_margin_bottom = maxf(0.0, basis.content_margin_bottom - 2)
-	return {
-		"normal": basis,
-		"hover": over,
-		"pressed": druk,
-		"hover_pressed": druk,
-		"focus": UiThema.vlak(Color(0, 0, 0, 0), 14, 2, UiThema.PERZIK_D),
-	}
+	# the same pressable key as every answer button in the room (UiThema)
+	return UiThema.knop_staten(UiThema.vulling(UiThema.knop_vlak(UiThema.WIT, 14), rand, rand))

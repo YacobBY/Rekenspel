@@ -35,6 +35,7 @@ const VAK_ONDER := Color("#EAF1F8")
 const VAK_GOED := Color("#D8F3E4")
 const KAART_AF := Color("#EAFBF3")
 const WOLK := Color("#FFFDF6")
+const WOLK_INFO := Color("#FFF6E3")   ## a bubble that only speaks: warm paper, not a key
 const WOLK_GOED := Color("#E4F7EC")
 const WOLK_HULP := Color("#FFF8E7")
 const SCHERM_WAAS := Color(0.29, 0.231, 0.2, 0.333)   ## #4a3b3355
@@ -225,6 +226,41 @@ static func vlak(kleur: Color, ronding: int, rand := 0, rand_kleur := WIT, schad
 		sb.shadow_offset = Vector2(0, 2)
 	return sb
 
+## What you can press looks pressable, what only speaks does not (owner,
+## 2026-09-23: "heel veel textboxen die allemaal klikbaar lijken dan is het
+## niet meer duidelijk welke nou interactie hebben en welke niet").  Every
+## button in the world stands on a warm border with a thicker key edge at the
+## bottom and a small shadow, and pressing it pushes the edge in; a bubble that
+## only says something is flat, see-through and does not react (`UiWolk`).
+const KNOP_RAND := Color("#E2BE8E")   ## the border and the key edge of a button
+const KNOP_LIP := 5                    ## the key edge, in units
+
+static func knop_vlak(kleur: Color, ronding: int, lip := KNOP_LIP) -> StyleBoxFlat:
+	var sb := vlak(kleur, ronding, 2, KNOP_RAND)
+	sb.border_width_bottom = lip
+	sb.shadow_color = SCHADUW_KL
+	sb.shadow_size = 3
+	sb.shadow_offset = Vector2(0, 2)
+	return sb
+
+## The states of a button in the world, from its normal box: a warmer face
+## under the finger, and pressed the key edge goes down and the face with it.
+static func knop_staten(sb: StyleBoxFlat) -> Dictionary:
+	var over := sb.duplicate() as StyleBoxFlat
+	over.bg_color = over.bg_color.lerp(ZON, 0.35)
+	var druk := sb.duplicate() as StyleBoxFlat
+	druk.bg_color = druk.bg_color.lerp(PERZIK, 0.55)
+	druk.border_width_bottom = 2
+	druk.shadow_size = 1
+	druk.shadow_offset = Vector2(0, 1)
+	if sb.content_margin_top >= 0.0:
+		druk.content_margin_top = sb.content_margin_top + 2
+	if sb.content_margin_bottom >= 0.0:
+		druk.content_margin_bottom = maxf(0.0, sb.content_margin_bottom - 2)
+	return {"normal": sb, "hover": over, "pressed": druk, "hover_pressed": druk,
+		"disabled": sb,
+		"focus": vlak(Color(0, 0, 0, 0), int(sb.corner_radius_top_left), 2, PERZIK_D)}
+
 static func vulling(sb: StyleBoxFlat, links: int, boven: int, rechts := -1, onder := -1) -> StyleBoxFlat:
 	sb.content_margin_left = links
 	sb.content_margin_top = boven
@@ -270,9 +306,11 @@ static func bouw(basis: int, ruim := false) -> Theme:
 
 	_variant(t, "KnopGroot", "Button", vulling(vlak(PERZIK, 18, 2, WIT), 16, 12), mt["knop_groot"], vet)
 	_variant(t, "KnopActief", "Button", vulling(vlak(ZON, 18, 2, PERZIK_D), 16, 12), mt["knop_groot"], vet)
-	_variant(t, "Hotknop", "Button", vulling(vlak(KAART, 16, 2, WIT), 8, 6), mt["wereld"], vet)
+	_variant(t, "Hotknop", "Button", vulling(knop_vlak(WIT, 16), 8, 6), mt["wereld"], vet)
+	_knop_staten_in(t, "Hotknop")
 	_variant(t, "Padtoets", "Button", vulling(vlak(WIT, 12, 2, KURK), 4, 2), mt["toets"], vet)
-	_variant(t, "Keuzeknop", "Button", vulling(vlak(KAART, 14, 2, WIT), 8, 6), mt["wereld"], vet)
+	_variant(t, "Keuzeknop", "Button", vulling(knop_vlak(WIT, 14), 8, 6), mt["wereld"], vet)
+	_knop_staten_in(t, "Keuzeknop")
 
 	var chip_sb := vulling(vlak(KAART, 14, 2, WIT), 6, 4)
 	_variant(t, "Kamerchip", "Button", chip_sb, mt["klein"], vet)
@@ -307,6 +345,13 @@ static func bouw(basis: int, ruim := false) -> Theme:
 	t.set_color("font_color", "TooltipLabel", INKT)
 	t.set_font_size("font_size", "TooltipLabel", mt["klein"])
 	return t
+
+## A world button's own states instead of the tints `_variant` makes: the key
+## edge goes down when it is pressed.
+static func _knop_staten_in(t: Theme, naam: String) -> void:
+	var staten := knop_staten(t.get_stylebox("normal", naam) as StyleBoxFlat)
+	for toestand in staten:
+		t.set_stylebox(toestand, naam, staten[toestand])
 
 static func _variant(t: Theme, naam: String, basis_type: String, sb: StyleBoxFlat,
 		maat: int, vet: FontFile) -> void:

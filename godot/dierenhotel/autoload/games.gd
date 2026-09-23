@@ -143,9 +143,13 @@ func start(id: String) -> bool:
 	for ander in _defs.keys():
 		if ander != id:
 			World.decor_wis_eigenaar(ander)
-	Hotel.render()
+	# the camera first, THEN the hotel's buttons: drawn the other way round they
+	# were the buttons of the room the child came from, and a game started from
+	# elsewhere found no door of its own room to borrow (the voerkar's doors)
 	if World.kamer_nu() != _actieve_kamer:
 		World.naar(_actieve_kamer)
+		State.s["kamerNu"] = _actieve_kamer
+	Hotel.render()
 	_knoop = _scenes[id].instantiate()
 	if _knoop == null:
 		_actief = ""

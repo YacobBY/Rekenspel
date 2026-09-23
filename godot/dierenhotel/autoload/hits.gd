@@ -20,6 +20,8 @@ const TAG_IN := 0.1         ## a number tag may cover a tenth of its object
 const GROOT := 3.0          ## `op: "aan"`: an object this many button areas big may carry the button
 const KRAP := 2             ## the hard frame edge: nothing goes past it
 const KLEEF := 5            ## css-px between a card and its choice strip
+const PAAR_BANDEN := 6      ## how many bands a card may step to find room for its strip
+const PAAR_SCHUIF := 40.0   ## how far the frame edge may slide a strip along its card
 
 enum Laag {VAST = 0, SPEL = 1, HOTEL = 2, WENS = 3}
 
@@ -33,6 +35,9 @@ var _geplaatst: Array[Rect2] = []  ## the rectangles already handed out this pas
 var _vakken: Array[Rect2] = []     ## object boxes in view; a button avoids all of them
 var _mijd_balie_nu := false        ## while placing a hotel element: the desk is a box too
 var _kaart_vrij: Array[Rect2] = [] ## boxes a fixed card may not cover either (the desk)
+var _strook_van: Dictionary = {}   ## card id -> the answer strip glued to it, this pass
+var _strook_plek: Dictionary = {}  ## card id -> the place its pair kept for the strip
+var _paar_cache: Dictionary = {}   ## card id -> the last pair, while nothing changed
 var _laatste: Dictionary = {}   ## id -> {rect, vlak, dekking, op, laag, prio, krap, gestapeld}
 ## The maths bar of PLAN.md §3.1 as a wall.  The paper is walled off before
 ## anything chooses a place, so no band, no button and no loose card may end up
@@ -57,6 +62,7 @@ class Spot extends RefCounted:
 	var kleef_aan: String = ""     ## glue my top edge under the rect of this id
 	var kind: String = "btn"       ## btn | drop | tag | naam | ...
 	var geen_vlak := false         ## sits ON its object on purpose (a dial tag): no lift-off
+	var paar := true               ## a card placed together with its answer strip (`paar: false`: its game plans that)
 	var op: String = "auto"        ## auto | boven | onder | midden | rand
 	var prio: int = 5
 	var vast := false
@@ -94,6 +100,7 @@ func maak(o: Dictionary) -> String:
 	s.y = o.get("y", 0.0)
 	s.kind = o.get("kind", "btn")
 	s.geen_vlak = bool(o.get("geen_vlak", false))
+	s.paar = bool(o.get("paar", true))
 	s.op = o.get("op", "auto")
 	s.prio = o.get("prio", 5)
 	s.vast = o.get("vast", false)
@@ -405,6 +412,12 @@ func plaats() -> void:
 			s.zichtbaar = false
 			continue
 		geteld += 1
+	# which card carries which answer strip: the two are placed as a pair
+	_strook_van.clear()
+	_strook_plek.clear()
+	for s in lijstje:
+		if s.zichtbaar and s.kind == "keuzes" and s.kleef_aan != "":
+			_strook_van[s.kleef_aan] = s
 	# every object still in view is a box that a button must stay off
 	for s in lijstje:
 		if s.zichtbaar and s.vlak_nu.size.x > 0.0 and s.vlak_nu.size.y > 0.0:
@@ -676,6 +689,10 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 		_reserveer(r, kader)
 		return {"rect": r, "op": op, "krap": false, "gestapeld": false}
 	if op == "midden":
+		if s.kind == "kaart" and s.paar and _strook_van.has(s.id):
+			var paar := _plaats_kaart_paar(s, _strook_van[s.id], mik, maat, kader)
+			if not paar.is_empty():
+				return paar
 		return _plaats_midden(mik, maat, kader, s.vlak_nu, s.kind == "kaart" or s.kind == "wolk")
 	if op == "aan":
 		# AT its own thing (owner, 2026-09-14): the thing stays visible, the
@@ -778,6 +795,10 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 			return {"rect": beste, "op": "aan", "krap": false, "gestapeld": false}
 		op = "onder"
 	if s.kleef_aan != "":
+		# its card was placed as a pair: this place is already kept for it
+		var gehouden: Rect2 = _strook_plek.get(s.kleef_aan, Rect2())
+		if gehouden.size.x > 0.0 and gehouden.size.is_equal_approx(maat):
+			return {"rect": gehouden, "op": "kleef", "krap": false, "gestapeld": false}
 		var aan: Dictionary = _laatste.get(s.kleef_aan, {})
 		if not aan.is_empty():
 			var kr: Rect2 = aan["rect"]
@@ -907,6 +928,140 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 
 ## On the aim point, clamped into the frame, lifted clear of anything already
 ## placed and of its own object.
+## A card and its answer strip are placed as ONE pair (owner, 2026-09-23: "de
+## text van opdrachten staat soms ver van waar ik kan klikken voor
+## antwoorden").  A card may float over the room, but its strip may not cover a
+## thing — and under the check-in card stands the desk, so the strip fell back
+## on the foot of the frame while the card stayed up at the guest, the width of
+## the room away.  Now the card takes the first place, in the order the single
+## card always chose (`_plaats_midden`), at which its strip fits right beside
+## it — under, over, left or right, clear of every placed element and every
+## object box.  Where the strip fitted before, nothing moves.  That place of the
+## strip is kept for it (`_strook_plek`) and handed over when its turn comes.
+## When no such pair fits anywhere, card and strip go down TOGETHER onto the
+## foot of the frame, the strip at the bottom and the card straight over it.
+## Empty: not even that fits — then the single rules apply.
+func _plaats_kaart_paar(s: Spot, strook: Spot, mik: Vector2, maat: Vector2, kader: Rect2) -> Dictionary:
+	var ms := _maat_van(strook)
+	if ms.x <= 0.0 or ms.y <= 0.0:
+		return {}
+	var eigen := s.vlak_nu
+	# The search tries up to a few hundred rectangles; every frame runs a
+	# placement pass, so the pair is kept while its inputs stay the same and
+	# both rectangles are still free.
+	var sleutel := [mik.round(), maat, ms, kader.size, eigen, _geplaatst.size(),
+		_vakken.size(), _kaart_vrij.size()]
+	var vorig: Dictionary = _paar_cache.get(s.id, {})
+	if not vorig.is_empty() and vorig["sleutel"] == sleutel:
+		var kv: Rect2 = vorig["kaart"]
+		var sv: Rect2 = vorig["strook"]
+		# a guest walks: a box can slide under the kept strip without the
+		# count of boxes changing, so the strip is checked against them again
+		# (not on the foot, where the pair never asked the boxes)
+		var voet := bool(vorig["voet"])
+		if not _bezet_voor(kv, Rect2(), true) and not _botst(sv) \
+				and (voet or _vak_kosten(sv) <= 0.0):
+			return _houd_paar(s, kv, sv, kader, voet)
+	# Near its own place first, then further away, and only when no place in
+	# the room fits the pair, both on the foot of the frame: the question stays
+	# with its guest (the check-in) as long as there is room for its answers.
+	# A game that plans card and row itself says `paar: false` (the key board).
+	var gevonden := _eerste_paar(_kaart_plekken(mik, maat, kader, eigen), ms, kader, eigen)
+	if gevonden.is_empty():
+		gevonden = _voet_paar(maat, ms, kader)
+	if gevonden.is_empty():
+		_paar_cache.erase(s.id)
+		return {}
+	gevonden["sleutel"] = sleutel
+	_paar_cache[s.id] = gevonden
+	return _houd_paar(s, gevonden["kaart"], gevonden["strook"], kader, bool(gevonden["voet"]))
+
+func _eerste_paar(kandidaten: Array[Rect2], ms: Vector2, kader: Rect2, eigen: Rect2) -> Dictionary:
+	for kr in kandidaten:
+		if _bezet_voor(kr, eigen, true):
+			continue
+		var sr := _strook_bij(kr, ms, kader)
+		if sr.size.x > 0.0:
+			return {"kaart": kr, "strook": sr, "voet": false}
+	return {}
+
+## The strip on the bottom of the frame and the card straight over it.
+func _voet_paar(maat: Vector2, ms: Vector2, kader: Rect2) -> Dictionary:
+	var sv := _klem(Rect2(Vector2(kader.size.x * 0.5 - ms.x * 0.5,
+		kader.size.y - RAND - ms.y), ms), kader)
+	var kv := _klem(Rect2(Vector2(kader.size.x * 0.5 - maat.x * 0.5,
+		sv.position.y - KLEEF - maat.y), maat), kader)
+	if _raakt(kv, sv) or _botst(sv) or _botst(kv):
+		return {}
+	return {"kaart": kv, "strook": sv, "voet": true}
+
+func _houd_paar(s: Spot, kr: Rect2, sr: Rect2, kader: Rect2, voet: bool) -> Dictionary:
+	_reserveer(kr, kader)
+	_reserveer(sr, kader)
+	_strook_plek[s.id] = sr
+	return {"rect": kr, "op": "midden", "krap": false, "gestapeld": voet}
+
+## Where a card may stand, in the order `_plaats_midden` prefers: beside its
+## own thing when its aim point lies on that thing (nearest first), on its aim
+## point, then whole bands up and down (up first, as `_wijk_omhoog` steps) —
+## and after all of those the same places shifted sideways by two and four
+## columns, for a strip that needs the room beside a wall.
+func _kaart_plekken(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2) -> Array[Rect2]:
+	var r0 := _klem(Rect2(mik - maat * 0.5, maat), kader)
+	var uit: Array[Rect2] = []
+	var heeft_eigen := eigen.size.x > 0.0 and eigen.size.y > 0.0
+	if heeft_eigen and _raakt(r0, eigen):
+		var hart_y := clampf(mik.y, eigen.position.y + maat.y * 0.5, eigen.end.y - maat.y * 0.5) \
+			if eigen.size.y >= maat.y else eigen.get_center().y
+		var naast: Array[Rect2] = [
+			_klem(Rect2(Vector2(mik.x - maat.x * 0.5, eigen.end.y + GAT), maat), kader),
+			_klem(Rect2(Vector2(mik.x - maat.x * 0.5, eigen.position.y - GAT - maat.y), maat), kader),
+			_klem(Rect2(Vector2(eigen.end.x + GAT, hart_y - maat.y * 0.5), maat), kader),
+			_klem(Rect2(Vector2(eigen.position.x - GAT - maat.x, hart_y - maat.y * 0.5), maat), kader),
+		]
+		naast.sort_custom(func(a: Rect2, b: Rect2) -> bool:
+			return (a.get_center() - mik).length() < (b.get_center() - mik).length())
+		uit.append_array(naast)
+	var kolom: Array[Rect2] = [r0]
+	for stap in range(1, mini(PAAR_BANDEN, maxi(2, int(kader.size.y / RIJ))) + 1):
+		for dy in [-stap * RIJ, stap * RIJ]:
+			var r := Rect2(Vector2(r0.position.x, r0.position.y + dy), maat)
+			if r.position.y >= KRAP and r.end.y <= kader.size.y - KRAP:
+				kolom.append(r)
+	uit.append_array(kolom)
+	for dx in [-2 * KOL, 2 * KOL, -4 * KOL, 4 * KOL]:
+		for r in kolom:
+			var zij := Rect2(Vector2(r.position.x + dx, r.position.y), maat)
+			if zij.position.x >= KRAP and zij.end.x <= kader.size.x - KRAP:
+				uit.append(zij)
+	return uit
+
+## The strip's place right beside a card, the same four sides and in the same
+## order as the glued strip always tried (the `kleef_aan` rule in `_kies_plek`),
+## clear of the card, of everything placed and of every object box.  A clamp at
+## the frame edge may slide it a little, never off its side of the card.
+func _strook_bij(kr: Rect2, ms: Vector2, kader: Rect2) -> Rect2:
+	var mx := kr.position.x + kr.size.x * 0.5 - ms.x * 0.5
+	var hy := kr.get_center().y - ms.y * 0.5
+	var zijden: Array[Rect2] = [
+		Rect2(Vector2(mx, kr.end.y + KLEEF), ms),
+		Rect2(Vector2(mx, kr.position.y - KLEEF - ms.y), ms),
+		Rect2(Vector2(kr.end.x + KLEEF, hy), ms),
+		Rect2(Vector2(kr.position.x - KLEEF - ms.x, hy), ms),
+		Rect2(Vector2(kr.end.x + KLEEF, kr.position.y), ms),
+		Rect2(Vector2(kr.end.x + KLEEF, kr.end.y - ms.y), ms),
+		Rect2(Vector2(kr.position.x - KLEEF - ms.x, kr.position.y), ms),
+		Rect2(Vector2(kr.position.x - KLEEF - ms.x, kr.end.y - ms.y), ms),
+	]
+	for z in zijden:
+		var r := _klem(z, kader)
+		if (r.position - z.position).length() > PAAR_SCHUIF:
+			continue
+		if _raakt(r, kr) or _botst(r) or _vak_kosten(r) > 0.0:
+			continue
+		return r
+	return Rect2()
+
 func _plaats_midden(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2, mijd_balie := true) -> Dictionary:
 	# A fixed card or cloud gives way to the counter as well (V1 finding 4); a
 	# game's own plates that HANG on the desk (the key board's hooks) do not, or

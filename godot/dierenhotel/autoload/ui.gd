@@ -428,6 +428,15 @@ func balk_kandidaat() -> String:
 			continue
 		if (k as Kaart).geen_balk:
 			continue          # this card stays by its own thing (`balk: false`)
+		# The LOW bar (a phone on its side, a short laptop window) has room for
+		# one line of words.  A card whose second line carries half of the
+		# question lost it there — the check-in asked "te weinig, precies of
+		# blijft over?" without "📦 In de kast: 40 scheppen. Genoeg?" (owner,
+		# 2026-09-23).  Such a card stays in the room, its strip beside it.
+		if balk_vorm() == "laag":
+			var kn := (k as Kaart)._knoop()
+			if kn != null and kn.heeft_regel2():
+				continue
 		var prio := int(s.prio)
 		if prio >= beste_prio:
 			beste_prio = prio
@@ -609,8 +618,16 @@ func toast(tekst: String, soort: String = "") -> void:
 	# Under 450 units of height the toast moves to the top of the frame, out of
 	# the way of the card and its strip (art-sound-rules.md §16.8).
 	var boven := band.size.y < 450.0
-	doos.position = band.position + Vector2(band.size.x * 0.5 - maat.x * 0.5,
-		12.0 if boven else band.size.y - maat.y - 18.0)
+	var y := 12.0 if boven else band.size.y - maat.y - 18.0
+	# With the maths bar on, the bottom of the frame IS the sum and its answers:
+	# "Precies! 🎉" lay over the middle button right when the next question came
+	# (2026-09-23).  The toast stands just above the paper, over the room.
+	if not boven and balk_aan():
+		var papier := balk_rect()
+		if papier.size.y > 0.0:
+			var boven_papier := papier.position.y - World.kader_rect().position.y
+			y = minf(y, boven_papier - maat.y - 10.0)
+	doos.position = band.position + Vector2(band.size.x * 0.5 - maat.x * 0.5, maxf(12.0, y))
 	_toast = doos
 	_toast_tijd = TOAST_MS / 1000.0
 
@@ -710,6 +727,9 @@ func prikbord_blad(kaarten: Array, berichten: Array, kies: Callable, stil := fal
 func wolk(o: Dictionary) -> String:
 	var id: String = o.get("id", "wolk%d" % Time.get_ticks_msec())
 	var tik: Callable = o.get("tik", Callable())
+	# a bubble with its own `tik` DOES something and looks pressable; one
+	# without only speaks (UiWolk.actie, owner 2026-09-23)
+	var actie := tik.is_valid()
 	var getal = o.get("getal", null)
 	var zin := ("%s %s %s" % [str(o.get("icoon", "")),
 		"" if getal == null else str(getal), str(o.get("tekst", ""))]).strip_edges()
@@ -733,6 +753,7 @@ func wolk(o: Dictionary) -> String:
 		"op": o.get("op", "auto"),
 		"vlak": o.get("vlak", Rect2()), "aan": tik,
 		"voortgang": o.get("voortgang", null), "knop": o.get("knop", ""),
+		"actie": actie,
 	})
 
 func wolk_weg(id: String) -> void:
@@ -821,6 +842,7 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 		"vlak": o.get("vlak", _vlak_van(plek, kaart.kamer)),
 		"x": plek.get("x", 0.0), "z": plek.get("z", 0.0), "y": o.get("hoog", 22.0),
 		"op": "midden", "vast": true, "prio": o.get("prio", 14),
+		"paar": bool(o.get("paar", true)),
 		"door": kaart.door, "titel": o.get("titel", ""),
 		"icoon": o.get("icoon", ""), "regel": o.get("regel", ""),
 		"regel2": o.get("regel2", ""), "som": som,

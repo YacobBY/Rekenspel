@@ -29,6 +29,43 @@ func _af() -> void:
 		_laag.queue_free()
 		_laag = null
 
+# ------------------------------------------------- knop of mededeling
+
+## What you can press looks pressable, what only speaks does not (owner,
+## 2026-09-23: "heel veel textboxen die allemaal klikbaar lijken dan is het niet
+## meer duidelijk welke nou interactie hebben en welke niet").  A bubble without
+## its own `tik` is flat, lets a tap through and takes no focus; a bubble with a
+## `tik` and every hotel button stand on a key edge that goes down when pressed.
+func test_knop_en_mededeling_zien_er_anders_uit() -> void:
+	_op(Vector2(1000, 648))
+	Ui.wolk({"id": "zeg", "kamer": World.kamer_nu(), "x": 20.0, "z": 20.0,
+		"icoon": "🛒", "tekst": "Breng 4 koekjes naar elke gast"})
+	Ui.wolk({"id": "doe", "kamer": World.kamer_nu(), "x": 40.0, "z": 20.0,
+		"icoon": "🐶", "tekst": "Boef komt eraan", "tik": func(_s) -> void: pass})
+	var zeg := Hits.spot("zeg").knoop as UiWolk
+	gelijk(zeg.actie, false, "een mededeling doet niets")
+	gelijk(zeg.mouse_filter, Control.MOUSE_FILTER_IGNORE, "een tik gaat er dwars doorheen")
+	gelijk(zeg.focus_mode, Control.FOCUS_NONE, "en ze krijgt geen focus")
+	var plat := zeg.get_theme_stylebox("normal") as StyleBoxFlat
+	gelijk(plat.border_width_bottom, 0, "plat: geen rand")
+	gelijk(plat.shadow_size, 0, "en geen schaduw")
+	gelijk(zeg.get_theme_stylebox("pressed"), plat, "ingedrukt ziet ze er net zo uit")
+	var doe := Hits.spot("doe").knoop as UiWolk
+	gelijk(doe.actie, true, "een wolk met een tik doet iets")
+	gelijk(doe.mouse_filter, Control.MOUSE_FILTER_STOP, "en vangt de tik")
+	var sleutel := doe.get_theme_stylebox("normal") as StyleBoxFlat
+	waar(sleutel.border_width_bottom >= UiThema.KNOP_LIP, "ze staat op een drukrand")
+	waar((doe.get_theme_stylebox("pressed") as StyleBoxFlat).border_width_bottom
+		< sleutel.border_width_bottom, "die ingedrukt zakt")
+	var hotknop := Ui.thema.get_stylebox("normal", "Hotknop") as StyleBoxFlat
+	waar(hotknop.border_width_bottom >= UiThema.KNOP_LIP, "een hotelknop staat op dezelfde rand")
+	waar(hotknop.shadow_size > 0, "met een schaduwtje")
+	waar((Ui.thema.get_stylebox("pressed", "Hotknop") as StyleBoxFlat).border_width_bottom
+		< hotknop.border_width_bottom, "en zakt als je drukt")
+	var antwoord := Ui.thema.get_stylebox("normal", "Keuzeknop") as StyleBoxFlat
+	waar(antwoord.border_width_bottom >= UiThema.KNOP_LIP, "een antwoordknop ook")
+	_af()
+
 # --------------------------------------------------------------- F4: de zin
 
 ## HOTEL.md §9 / architecture.md §1.1 F4: one plain Dutch sentence, at most

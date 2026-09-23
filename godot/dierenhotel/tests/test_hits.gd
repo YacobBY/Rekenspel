@@ -172,6 +172,52 @@ func test_antwoordstrook_kleeft_aan_de_kaart() -> void:
 		kaart.weg()
 		_af()
 
+## The card and its answers are ONE pair (owner, 2026-09-23: "de text van
+## opdrachten staat soms ver van waar ik kan klikken voor antwoorden").  A wide
+## thing right under the card — the desk under the check-in card — used to push
+## the strip onto the foot of the frame while the card stayed up: the width of
+## the room between the question and its buttons.  Now the strip hangs against
+## its card on every frame, on a side where it covers no thing.
+func test_kaart_en_antwoorden_staan_samen() -> void:
+	for kader in MATEN + KADERS:
+		_op(kader)
+		var mik := World.mik_punt(24.0, 20.0, 22.0)
+		var bureau := Rect2(Vector2(maxf(0.0, mik.x - 320.0), mik.y + 70.0),
+			Vector2(640.0, 150.0))
+		Hits.maak({"id": "bureau", "door": "test", "kamer": World.kamer_nu(),
+			"x": 24.0, "z": 20.0, "y": 4.0, "icoon": "🛎️", "label": "Balie",
+			"vlak": bureau, "op": "aan"})
+		var kaart := Ui.somkaart({"x": 24.0, "z": 20.0}, "4 × 5", {
+			"id": "pr", "door": "test", "kamer": World.kamer_nu(), "goed": 20,
+			"balk": false, "icoon": "🥄", "regel": "Voer voor 4 dagen: elke dag 5 scheppen",
+			"regel2": "📦 In de kast: 40 scheppen. Genoeg?"})
+		Hits.plaats()
+		var dbg := Hits.debug()
+		var wat := "kader %s" % str(kader)
+		waar(dbg.has("pr") and dbg.has("pr_keuzes"), "%s: kaart en strook staan er" % wat)
+		if dbg.has("pr") and dbg.has("pr_keuzes"):
+			var kr: Rect2 = dbg["pr"]["rect"]
+			var sr: Rect2 = dbg["pr_keuzes"]["rect"]
+			waar(_tegen(kr, sr), "%s: de strook %s hangt tegen de kaart %s" % [wat, str(sr), str(kr)])
+			gelijk(str(dbg["pr_keuzes"]["op"]), "kleef", "%s: aan de kaart, niet op de voet" % wat)
+			var hart := kr.get_center().y
+			if not (hart > bureau.position.y and hart < bureau.end.y):
+				waar(sr.intersection(bureau).get_area() <= 0.0,
+					"%s: en de strook ligt niet op de balie" % wat)
+		kaart.weg()
+		_af()
+
+## Two rectangles side by side: at most a few units apart on one axis and
+## sharing a stretch of the other.
+func _tegen(a: Rect2, b: Rect2) -> bool:
+	var gat_x := maxf(b.position.x - a.end.x, a.position.x - b.end.x)
+	var gat_y := maxf(b.position.y - a.end.y, a.position.y - b.end.y)
+	var boven_elkaar := gat_y >= -0.5 and gat_y <= Hits.KLEEF + 1.0 \
+		and minf(a.end.x, b.end.x) - maxf(a.position.x, b.position.x) > 8.0
+	var naast_elkaar := gat_x >= -0.5 and gat_x <= Hits.KLEEF + 1.0 \
+		and minf(a.end.y, b.end.y) - maxf(a.position.y, b.position.y) > 8.0
+	return boven_elkaar or naast_elkaar
+
 ## HOTEL.md §9: the sum hangs ABOVE the bowl and the guest stays whole.  A fixed
 ## card is one of the two things allowed over the world, but never over the
 ## object it belongs to — it lifts itself in whole bands until it is clear.

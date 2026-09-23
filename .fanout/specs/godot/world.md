@@ -1354,6 +1354,22 @@ The card lifts itself if its own pad would cover it: measured after one draw, at
 lifting by `ceil(overlap / (2k))` height steps.
 The choice strip hangs at `hoog − round(((cardHeight/2) + (stripHeight/2) + 5) / (2k))`
 height steps, i.e. glued under the card at any scale.
+**Port (owner 2026-09-23: "de text van opdrachten staat soms ver van waar ik kan klikken
+voor antwoorden"):** a floating card and its strip are placed as ONE pair (`Hits`): the card
+takes the first place in its usual order (on its aim point, beside its own thing, whole
+bands up and down, then two and four columns sideways) at which its strip fits right beside
+it — under, over, right or left, `KLEEF` apart, clear of every placed element and object
+box — and that place is kept for the strip.  Where the strip fitted before nothing moves.
+When no such pair fits, both go down together onto the foot of the frame, the strip at the
+bottom and the card straight over it.  A game that plans its card, its own row and its
+strip as one layout says `somkaart(…, {paar: false})` and keeps the single-card rule: the
+key board plans its hook row around where the card stands (`sleutels` `_kaart_rect`), and a
+card moved by the pair broke that row in two on a phone.  The low bar (`vorm laag`) has room for one line of
+words, so a card with a second line (`regel2`) is not docked there: it floats with its
+strip (the check-in lost "📦 In de kast: … Genoeg?" in the low bar).  In the bar the strip
+tries its long words first ("te weinig", "blijft over") and takes the short ones only when
+the long strip does not fit its block.  A toast stands just above the bar while the bar is
+on, never over the answers.
 
 A card, its pad and its choice strip are **fixed**: they never give way, everything else
 gives way to them. Use at most one at a time.
@@ -1365,6 +1381,15 @@ gives way to them. Use at most one at a time.
   default prio 9. Without `tik` a tap reads the text aloud (`Ui.spreek`, Dutch
   `nl-NL`, rate 0.95, pitch 1.05; silently does nothing when unsupported).
   It follows its animal, also into another room.
+  **Port (owner 2026-09-23: "heel veel textboxen die allemaal klikbaar lijken dan is het
+  niet meer duidelijk welke nou interactie hebben en welke niet"):** what you can press
+  looks pressable, what only speaks does not.  Every button in the world (`Hotknop`,
+  `Keuzeknop`, a source, the game bar) stands on a warm border (`UiThema.KNOP_RAND`) with a
+  thicker key edge at the bottom (`KNOP_LIP` 5) and a small shadow, and pressing it pushes
+  the edge in (`UiThema.knop_staten`).  A bubble WITH its own `tik` (`UiWolk.actie`: the
+  "komt eraan" bubble with `👀 Volg`, a wish, "Alle bakjes vol!") wears the same key; a
+  bubble without one is flat warm paper (`WOLK_INFO`, 90 % opaque, no border, no shadow),
+  the same in every state, takes no focus and lets a tap through (`MOUSE_FILTER_IGNORE`).
 * `Ui.bron(obj, {icoon, aantal, hand, klas, prio, titel, tik, sleep})` — a drag source with
   a counter and a "in your hand" badge; `zet(aantal, hand)`, `weg()`. One tap delivers
   exactly once (the browser's follow-up click is swallowed).
@@ -1489,7 +1514,14 @@ On boot: read the v7 save (or, failing that, the v5 shelter), always start a fre
 pending desk guest back at (45, 93), show the world, jump the camera to `kamerNu`;
 then build the tasks, render, subscribe to the layout bus, and finally: a half-finished
 check-in is repainted (it comes first), otherwise the prikbord opens when the round is
-`ochtend`.
+`ochtend`.  **Port (owner 2026-09-23: "laat niet het prikbord zien als start. De gebruiker
+moet gewoon op de bel drukken"):** the board never opens by itself — not at the start and
+not on a new morning (`Hotel.morgen()` ends in the receptie); it waits behind its button
+with its badge.  While the round is `ochtend` the bell button pulses (`puls: -1`, a gentle
+breath of ±9 % with a rest, nothing in reduced motion) until the check-in turns the round
+into `vrij`.  The reception bell sounds `Snd.ding()`, a struck bell of its own (a 3 ms
+attack, E6 with a shimmer 3.5 Hz above it and the 2.76×/5.40× overtones of a metal cup,
+about a second of ring); `Snd.bel()` keeps the HTML's reference sound.
 
 ### 6.3 Room navigation
 
@@ -1654,9 +1686,12 @@ toast `🛎️ Er staat al iemand` · toast `<naam> staat aan de balie! 🔔`
 
 ### 7.5 Check-in
 
-`De gasten eten <n> schep|scheppen per dag` · `<naam> eet <n> erbij. Samen?` ·
-`Elke dag <n> schep|scheppen, <n> dag|dagen lang` · `📦 In huis: <n> schep|scheppen. Genoeg?` ·
-choice title `is er genoeg eten?` · `te weinig` `precies` `blijft over` ·
+**Port (owner 2026-09-23: "De manier om voer scheppen te tellen is ook niet heel
+duidelijk ... die niet veel langer is"):** `Elke dag eten de gasten <n> schep|scheppen` ·
+`<naam> wil er <n> bij. Hoeveel samen?` · `Voer voor <n> dag|dagen: elke dag <n> schep|scheppen` ·
+`📦 In de kast: <n> schep|scheppen. Genoeg?` · choice title `is er genoeg voer?` (the HTML
+had `De gasten eten … per dag` · `<naam> eet <n> erbij. Samen?` · `Elke dag …, … lang` ·
+`📦 In huis: …` · `is er genoeg eten?`) · `te weinig` `precies` `blijft over` ·
 `Kies een bed` · `Alles bezet` · `welterusten` ·
 toasts: `👆 Tik eerst een getal` · `Precies! 🎉` · `🥄 Tel ze samen` · `Goed gerekend! 🎉` ·
 `🥄 <dagen> × <nieuw> = <product>` · `<naam> slaapt hier. 💤` · `🛏 Bel eerst een gast` ·
@@ -1666,7 +1701,12 @@ toasts: `👆 Tik eerst een getal` · `Precies! 🎉` · `🥄 Tel ze samen` · 
 
 Wish bubbles: `🍪 eten` `🛏 bed` `🛁 bad` `🧶 spelen` `🏊 zwemmen` `🎁 souvenir`
 (title `<naam> wil eten` / `wil een bed` / `wil in de tobbe` / `wil spelen` /
-`wil zwemmen` / `wil een souvenir`; tapping toasts that same sentence plus the icon).
+`wil zwemmen` / `wil een souvenir`).  **Port (owner 2026-09-23: "Als ik eten druk gebeurt
+er niks dat zou me naar de keuken moeten brengen"):** a tap takes you where the wish comes
+true (`Hotel.wens_tik`), doing what its card on the board does: 🍪 with food in his bowl →
+his room, where the bowl pulses (`WIJS_S` 4 s); 🍪 with an empty bowl → the keuken with the
+voerkar open; 🧶 → his room, where the play basket pulses; a wish a game fulfils (`wens` in
+its definition, or `WENS_SPEL`) → that game in its room.  The HTML toasted the sentence.
 Toasts: `Smakelijk eten! 😋` · `🍪 Vul eerst de voerkar` · `🍽 Hier slaapt niemand` ·
 `🧶 Straks samen spelen` · `<naam> speelt met het balletje! 🧶` ·
 `Ze spelen allemaal met het balletje! 🧶`

@@ -433,6 +433,30 @@ func test_kort_kader_laat_de_kaart_drijven() -> void:
 		waar(not dbg["k1"]["krap"], "%s: niet krap" % wat)
 		_af()
 
+## The LOW bar has room for one line of words.  A card whose second line holds
+## half of the question does not go into it — there the check-in lost "📦 In de
+## kast: 40 scheppen. Genoeg?" and its strip asked about nothing (owner,
+## 2026-09-23) — it stays in the room with its strip beside it.  A card with one
+## line still docks.
+func test_lage_balk_neemt_geen_tweede_regel() -> void:
+	var kader := Vector2(700, 430)
+	_op(kader)
+	gelijk(UiThema.balk_vorm(kader), "laag", "een laag kader")
+	var een := _kaart("een")
+	Hits.plaats()
+	gelijk(Ui.balk_kaart(), "een", "een kaart met één regel gaat de lage balk in")
+	een.weg()
+	Hits.plaats()
+	var twee := Ui.somkaart({"x": 20.0, "z": 20.0}, "4 × 5", {
+		"id": "twee", "regel": "Voer voor 4 dagen: elke dag 5 scheppen",
+		"regel2": "📦 In de kast: 40 scheppen. Genoeg?", "goed": 20, "door": "test"})
+	Hits.plaats()
+	waar(Ui.balk_kaart() != "twee", "een kaart met twee regels blijft uit de lage balk")
+	var knoop := Hits.spot("twee").knoop as UiSomkaart
+	waar(knoop != null and knoop.regel2_label.visible, "en haar tweede regel staat erop")
+	twee.weg()
+	_af()
+
 ## `World.zet_balk` is the door for everything that is not a card: it
 ## rescales, it emits, and it does nothing at all when nothing changed.
 func test_zet_balk_om_gerescaleerd_te_worden() -> void:

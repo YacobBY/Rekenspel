@@ -1205,6 +1205,10 @@ func _teken_kaart(b: Dictionary, s: Dictionary) -> void:
 			"id": KAART, "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
 			"icoon": "🔑", "regel": "De rij is nu af", "titel": "De rij is nu af",
 			"balk": not _ruim(),
+			# the board plans card, hooks and strip as one layout of its own
+			# (`_opbouw`); the pair rule of `Hits` would move the card out of the
+			# place the hook row was planned around (world.md §5.5)
+			"paar": false,
 		})
 		if _kaart != null:
 			_kaart.klaar()
@@ -1222,6 +1226,10 @@ func _teken_kaart(b: Dictionary, s: Dictionary) -> void:
 			"id": KAART, "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
 			"icoon": "🔑", "regel": vraag, "titel": vraag,
 			"balk": not _ruim(),
+			# the board plans card, hooks and strip as one layout of its own
+			# (`_opbouw`); the pair rule of `Hits` would move the card out of the
+			# place the hook row was planned around (world.md §5.5)
+			"paar": false,
 			"regel2": VRAAG_WACHT % str(s.get("naam", "")),
 			"goed": nummer, "min": 1, "max": _cijfers(), "max_getal": _plafond(),
 			"liever": _buren_zichtbaar(_gat_nu()), "dier": gast,
@@ -1233,6 +1241,10 @@ func _teken_kaart(b: Dictionary, s: Dictionary) -> void:
 			"id": KAART, "kamer": ctx.kamer, "hoog": _hoog(0.775), "pad": false,
 			"icoon": "🔑", "regel": titel, "titel": titel, "vak": true, "dier": gast,
 			"balk": not _ruim(),
+			# the board plans card, hooks and strip as one layout of its own
+			# (`_opbouw`); the pair rule of `Hits` would move the card out of the
+			# place the hook row was planned around (world.md §5.5)
+			"paar": false,
 		})
 		if _kaart != null:
 			_kaart.zet(str(_gekozen() if _gekozen() > 0 else nummer))

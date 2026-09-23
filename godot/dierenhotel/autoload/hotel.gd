@@ -98,12 +98,13 @@ func start() -> void:
 	herstel_wereld()
 	bouw_taken(true)
 	render()
+	# No board at the start (owner, 2026-09-23: "laat niet het prikbord zien
+	# als start. De gebruiker moet gewoon op de bel drukken"): the morning is
+	# the pulsing bell; the board stays behind its button, with its badge.
 	if Econ.rekening_bezig():
 		Econ.herstel_rekening()          # a bill that was half counted
 	elif State.s["checkin"] != null:
 		paint_checkin()                  # a half-finished check-in goes first
-	elif str(State.s["ronde"]) == "ochtend":
-		prikbord()
 
 ## Put every guest back where the save says it was.
 func herstel_wereld() -> void:
@@ -530,8 +531,9 @@ func morgen() -> void:
 	World.zet_ding("balielamp", {"model": "lamp"})
 	State.herbereken()
 	Snd.dag()
+	# a new morning is the receptie with its pulsing bell, not the board
+	# (owner, 2026-09-23); the day's news waits on the board behind its button
 	naar_kamer("receptie")
-	prikbord()
 	State.bewaar()
 	dag_veranderd.emit(int(State.s["dag"]))
 
@@ -575,7 +577,7 @@ func bel() -> void:
 	g["blij"] = false
 	State.s["nieuweGast"] = g
 	init_checkin(g)
-	Snd.bel()
+	Snd.ding()
 	World.sync(alle_dieren())
 	var dp := Rooms.deur("receptie", "gang")
 	World.zet(str(g["id"]), "receptie", dp.get("ix", 60), dp.get("iz", 60))
@@ -641,7 +643,10 @@ func paint_checkin() -> void:
 	var volg := _volg_balieplek(str(g["id"]))
 	if int(v["stap"]) == 1:
 		# two short lines: what goes out every day, and what this guest eats
-		# on top of it — plus the question itself
+		# on top of it — plus the question itself.  Worded as a child counts
+		# (owner, 2026-09-23: "De manier om voer scheppen te tellen is ook niet
+		# heel duidelijk"): the same "Elke dag" as the second question, and the
+		# question asked in words instead of a bare "Samen?".
 		var op_ok := func(n, _k) -> void:
 			v["invoer"] = "" if n == null else str(n)
 			antwoord1()
@@ -650,13 +655,16 @@ func paint_checkin() -> void:
 			"goed": int(v["nieuw"]), "liever": [int(v["samen"]), int(v["extra"]),
 				int(v["samen"]) + int(v["extra"]) + 1],
 			"max": 2, "hoog": _ci_hoog(), "icoon": "🥄", "volg": volg,
-			"regel": "De gasten eten %s per dag" % scheppen(int(v["samen"])),
-			"regel2": "%s eet %d erbij. Samen?" % [g["naam"], int(v["extra"])],
+			"regel": "Elke dag eten de gasten %s" % scheppen(int(v["samen"])),
+			"regel2": "%s wil er %d bij. Hoeveel samen?" % [g["naam"], int(v["extra"])],
 			"on_ok": op_ok})
 		if int(v["fouten1"]) > 0:
 			_ci_kaart.hulp("%s + %s" % [scoopjes(int(v["samen"])), scoopjes(int(v["extra"]))])
 	elif int(v["stap"]) == 2:
-		# after a slip the product is written out on the card itself
+		# after a slip the product is written out on the card itself.  The first
+		# line says what the food is FOR (the days until the next delivery),
+		# the second where it is: "in de kast" is a place a child can picture,
+		# "in huis" was not (owner, 2026-09-23)
 		var tot := int(v["dagen"]) * int(v["nieuw"])
 		var som := "%d × %d" % [int(v["dagen"]), int(v["nieuw"])]
 		if int(v["fouten2"]) > 0:
@@ -664,9 +672,9 @@ func paint_checkin() -> void:
 		_ci_kaart = Ui.somkaart(plek, som, {
 			"id": "ci_som", "door": CHECKIN, "kamer": "receptie", "pad": false,
 			"hoog": _ci_hoog(), "icoon": "🥄", "volg": volg,
-			"regel": "Elke dag %s, %s lang" % [scheppen(int(v["nieuw"])), dagen(int(v["dagen"]))],
-			"regel2": "📦 In huis: %s. Genoeg?" % scheppen(int(v["voorraad"])),
-			"keuze_titel": "is er genoeg eten?",
+			"regel": "Voer voor %s: elke dag %s" % [dagen(int(v["dagen"])), scheppen(int(v["nieuw"]))],
+			"regel2": "📦 In de kast: %s. Genoeg?" % scheppen(int(v["voorraad"])),
+			"keuze_titel": "is er genoeg voer?",
 			"keuzes": _checkin_keuzes()})
 	else:
 		var vrij := State.bed_vrij()
@@ -1323,9 +1331,14 @@ func hotspots() -> void:
 		if bp.is_empty() or not (vrij or spel):
 			Hits.weg("bel")
 		else:
+			# In the morning the bell is THE thing to do, and it says so: it
+			# pulses until a guest is checked in (owner, 2026-09-23: "laat niet
+			# het prikbord zien als start. De gebruiker moet gewoon op de bel
+			# drukken").  -1: for as long as this button stands.
 			Hits.maak({"id": "bel", "door": EIGENAAR, "kamer": "receptie",
 				"x": bp["x"], "z": bp["z"], "y": 20, "icoon": "🔔", "label": "Bel",
 				"op": "aan", "badge": "!",
+				"puls": -1.0 if (str(State.s["ronde"]) == "ochtend" and not spel) else 0.0,
 				"titel": "Bel voor de volgende gast", "klas": "hotbel vrij", "prio": 10,
 				"aan": func(_s): bel()})
 		var pp := decor_plek("receptie", "prikbord")
@@ -1378,6 +1391,7 @@ func hotspots() -> void:
 			Hits.maak({"id": "mand_%s" % nu, "door": EIGENAAR, "kamer": nu,
 				"x": mp["x"], "z": mp["z"], "y": 8, "icoon": "🧶", "label": "Speelmand",
 				"op": "aan", "titel": "De speelmand", "badge": str(wil) if wil > 0 else "", "prio": 7,
+				"puls": _puls_van("mand_%s" % nu),
 				"aan": func(_s): tik_mand(nu)})
 	for slot in _slots(nu, "bak"):
 		var sid := str(slot.get("id", ""))
@@ -1407,6 +1421,7 @@ func hotspots() -> void:
 			"titel": "Er ligt eten in het bakje" if niveau > 0 else "Het bakje is nog leeg",
 			"kind": "drop", "drop": "bak", "data": {"kamer": nu, "slot": sid},
 			"klas": "hotbak vol" if niveau > 0 else "hotbak", "prio": 7, "op": "aan",
+			"puls": _puls_van("bak_%s_%s" % [nu, sid]),
 			"aan": func(_s): tik_bak(nu, sid)})
 	_wens_wolken(nu)
 
@@ -1449,7 +1464,74 @@ func _wens_wolken(nu: String) -> void:
 		Ui.wolk({"id": "wens_" + id, "door": EIGENAAR, "kamer": nu, "hoog": hoog,
 			"icoon": bh["icoon"], "tekst": wens_woord(b), "titel": zin,
 			"klas": "hotwens", "prio": 6, "volg": _volg_dier(id, hoog),
-			"tik": func(): Ui.toast("%s. %s" % [zin, bh["icoon"]], "kind")})
+			"tik": func(_s): wens_tik(id)})
+
+# ------------------------------------------------------------ een wens volgen
+
+## A tap on a wish takes you where it can come true (owner, 2026-09-23:
+## "Wanneer boef nu eten wil weet ik niet waar ik naar toe moet. Als ik eten druk
+## gebeurt er niks dat zou me naar de keuken moeten brengen").  It does what the
+## card of that wish on the board does: a wish a game fulfils opens that game in
+## its room — the voerkar in the keuken for 🍪 while his bowl is empty, the tub,
+## the pool, the stall — and a wish the hotel fulfils itself takes you to the
+## thing to tap there, his bowl with food in it or the play basket, which then
+## pulses for a moment (`WIJS_S`).  A tap used to toast the wish once more.
+const WIJS_S := 4.0
+var _wijs := {"id": "", "tot": 0}   ## the hotel button a tapped wish points at
+
+func wens_tik(gast_id: String) -> void:
+	var g := gast_bij_id(gast_id)
+	if g.is_empty():
+		return
+	var b := str(g.get("behoefte", ""))
+	var kamer := str(g.get("kamer", ""))
+	if b == "eten" and not kamer.is_empty():
+		for slot in _slots(kamer, "bak"):
+			var sid := str(slot.get("id", ""))
+			if not bool(slot.get("tijdelijk", false)) and _bak_stand(kamer, sid) > 0:
+				_ga_en_wijs(kamer, "bak_%s_%s" % [kamer, sid])
+				return
+		if _speelbaar("voerkar") and Games.speelbaar_nu("voerkar"):
+			doe_taak({"kamer": "keuken", "actie": "game:voerkar"})
+		else:
+			naar_kamer("keuken")
+		return
+	if b == "spelen" and not kamer.is_empty():
+		_ga_en_wijs(kamer, "mand_%s" % kamer)
+		return
+	var spel := _spel_voor_wens(b)
+	if not spel.is_empty():
+		doe_taak({"kamer": str(Games.definitie(spel).get("kamer", "")), "actie": "game:" + spel})
+		return
+	var p := plek_van_behoefte(g)
+	if not str(p.get("kamer", "")).is_empty():
+		naar_kamer(str(p["kamer"]))
+
+## The game that fulfils this wish and can be played right now, or "".
+func _spel_voor_wens(b: String) -> String:
+	var vast := str(WENS_SPEL.get(b, ""))
+	if not vast.is_empty() and _speelbaar(vast) and Games.speelbaar_nu(vast):
+		return vast
+	for id in Games.lijst():
+		if _spel_wil(Games.definitie(id), b) and _speelbaar(id) and Games.speelbaar_nu(id):
+			return str(id)
+	return ""
+
+## To that room, and the button of the thing pulses there for a moment.
+func _ga_en_wijs(kamer: String, knop_id: String) -> void:
+	_wijs = {"id": knop_id, "tot": Time.get_ticks_msec() + int(WIJS_S * 1000.0)}
+	if World.kamer_nu() != kamer:
+		naar_kamer(kamer)
+	else:
+		hotspots()
+
+## How long a hotel button pulses: `WIJS_S` for the one a tapped wish points
+## at, while that lasts; 0 for every other one.
+func _puls_van(knop_id: String) -> float:
+	if str(_wijs["id"]) != knop_id:
+		return 0.0
+	var rest := (int(_wijs["tot"]) - Time.get_ticks_msec()) / 1000.0
+	return rest if rest > 0.1 else 0.0
 
 # ---------------------------------------------------------------- bakjes
 

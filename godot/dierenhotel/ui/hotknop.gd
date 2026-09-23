@@ -9,11 +9,50 @@ extends Button
 var badge_label: Label = null
 var _icoon := ""
 var _label := ""
+## `puls`: the button asks to be pressed — the bell in the morning, the thing a
+## tapped wish points at (owner, 2026-09-23).  Seconds; -1 for as long as it
+## stands, 0 not at all.
+var puls := 0.0
+var _puls_tw: Tween = null
 
 func _ready() -> void:
 	pressed.connect(_op_getikt)
+	# the pulse grows from the middle, whatever size `Hits` hands the button
+	resized.connect(func() -> void: pivot_offset = size * 0.5)
+	if not is_zero_approx(puls):
+		_start_puls()
+
+## A gentle breath, a little bigger and back, with a rest in between — never a
+## blink.  Nothing moves in reduced motion (the `!` badge still says it).
+func _start_puls() -> void:
+	if Ui.rust_modus() or DisplayServer.get_name() == "headless" or not is_inside_tree():
+		return
+	_stop_puls()
+	pivot_offset = size * 0.5
+	_puls_tw = create_tween().set_loops()
+	_puls_tw.tween_property(self, "scale", Vector2(1.09, 1.09), 0.45) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_puls_tw.tween_property(self, "scale", Vector2.ONE, 0.45) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_puls_tw.tween_interval(0.5)
+	if puls > 0.0:
+		get_tree().create_timer(puls).timeout.connect(_stop_puls)
+
+func _stop_puls() -> void:
+	if _puls_tw != null:
+		_puls_tw.kill()
+		_puls_tw = null
+	if is_inside_tree():
+		scale = Vector2.ONE
+
+## Whether the button is asking to be pressed right now (for the tests, which
+## run headless and so never see the movement itself).
+func pulseert() -> bool:
+	return not is_zero_approx(puls)
 
 func _op_getikt() -> void:
+	_stop_puls()
+	puls = 0.0
 	if not Ui.rust_modus() and DisplayServer.get_name() != "headless" and is_inside_tree():
 		pivot_offset = size * 0.5
 		scale = Vector2(0.92, 0.92)
@@ -31,6 +70,7 @@ func bouw(o: Dictionary, mt: Dictionary, tap: int) -> void:
 	add_theme_font_size_override("font_size", mt["wereld"])
 	focus_mode = Control.FOCUS_ALL
 	zet_badge(o.get("badge", null))
+	puls = float(o.get("puls", 0.0))
 
 ## `badge` is the waiting-guest counter; `null` or 0 hides it.
 func zet_badge(n: Variant) -> void:

@@ -35,6 +35,7 @@ const LENGTE := {
 	"tover": 0.80, "dag": 0.40, "brief": 0.35, "hoera": 1.15, "bel": 0.40,
 	"deur": 0.20, "kar": 0.30, "munt": 0.20, "ster": 0.40, "plons": 0.30,
 	"au": 0.30, "klok": 0.60, "hup": 0.12,
+	"ding": 1.70,
 }
 ## The four that use `papier()`: fresh noise per call, never cached (§15.4).
 const RUIS := ["brief", "deur", "kar", "plons"]
@@ -240,6 +241,22 @@ func _noot(uit: PackedFloat32Array, f: float, naar: float, duur: float,
 		if k >= 0 and k < uit.size():
 			uit[k] += v * g * MEESTER
 
+## A struck partial for `ding`: a 3 ms attack (a hammer, not a bow — `_noot`
+## always fades in over up to 35 ms) and an exponential ring that is 60 dB down
+## at `duur`.
+func _slag(uit: PackedFloat32Array, f: float, duur: float, top: float, wacht: float) -> void:
+	var n := int(duur * SR)
+	var start := int(wacht * SR)
+	var aanzet := 0.003
+	var fase := 0.0
+	for i in n:
+		var t := float(i) / SR
+		fase += TAU * f / SR
+		var g := top * (t / aanzet if t < aanzet else exp(-6.9 * (t - aanzet) / maxf(0.01, duur - aanzet)))
+		var k := start + i
+		if k >= 0 and k < uit.size():
+			uit[k] += sin(fase) * g * MEESTER
+
 ## `papier(duur, freq, top, wacht)` — white noise with a linear fade through a
 ## bandpass filter.  The filter is the RBJ constant-0-dB-peak biquad, which is
 ## exactly what a WebAudio `BiquadFilterNode` of type 'bandpass' is.
@@ -397,6 +414,13 @@ func hoera() -> void:
 func bel() -> void:
 	_speel("bel", _bouw.bind("bel"))
 
+## DING — de receptiebel waar het kind op drukt (eigenaar, 2026-09-23: "geef
+## de bel een ding geluid").  Geen noot uit de tabel van de HTML (die `bel` blijft
+## zoals hij is, met zijn referentie-export): een aangeslagen belletje, met de
+## boventonen van een klein metalen belletje en een lange, zachte naklank.
+func ding() -> void:
+	_speel("ding", _bouw.bind("ding"))
+
 ## een deur die opengaat en weer dichtvalt
 func deur() -> void:
 	_speel("deur", _bouw.bind("deur"), true)
@@ -474,6 +498,15 @@ func _bouw(naam: String, hand := 0) -> PackedFloat32Array:
 		"bel":
 			_noot(b, 1046, 0, 0.34, "sine", 0.42, 0.0)
 			_noot(b, 1568, 0, 0.28, "sine", 0.20, 0.04)
+		"ding":
+			# a small struck bell: the ring, a second one 3.5 Hz above it that
+			# makes it shimmer, the inharmonic overtones of a metal cup (2.76x,
+			# 5.40x) that die first, and a click of the hammer
+			_slag(b, 1318.5, 1.60, 0.46, 0.0)
+			_slag(b, 1322.0, 1.30, 0.16, 0.0)
+			_slag(b, 3639.1, 0.50, 0.13, 0.0)
+			_slag(b, 7119.9, 0.16, 0.05, 0.0)
+			_slag(b, 2637.0, 0.05, 0.06, 0.0)
 		"deur":
 			_noot(b, 250, 190, 0.11, "sine", 0.26, 0.0)
 			_papier(b, 0.09, 520, 0.22, 0.06)

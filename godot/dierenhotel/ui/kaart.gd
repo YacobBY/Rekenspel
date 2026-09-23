@@ -368,6 +368,11 @@ func zet_regel(regel: String) -> void:
 		regel_label.text = _zin(icoon, regel)
 	_maat_balk = Vector2.ZERO
 
+## Does the card carry a second line of words?  The low maths bar has room
+## for one line only, so `Ui.balk_kandidaat()` asks this before it docks a card.
+func heeft_regel2() -> bool:
+	return not _regel2.is_empty()
+
 func zet_regel2(regel: String) -> void:
 	_regel2 = regel
 	if regel2_label != null:

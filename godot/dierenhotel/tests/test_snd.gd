@@ -268,6 +268,30 @@ func test_zacht_is_geen_zoemer() -> void:
 	waar(m["piek"] < 0.06, "zacht blijft zacht (%.4f)" % m["piek"])
 	waar(not Snd.is_ruis("zacht"), "zacht gebruikt geen ruis")
 
+## DING (owner, 2026-09-23: "geef de bel een ding geluid"): the reception bell
+## is a struck bell — there within a few milliseconds, ringing on for most of a
+## second, as soft as the other sounds, and the same every time.  Not one of the
+## eighteen of the HTML table: `bel` keeps its reference export.
+func test_de_receptiebel_zegt_ding() -> void:
+	waar(Snd.has_method("ding"), "Snd.ding() bestaat")
+	waar(not Snd.namen().has("ding"), "ding staat niet in de tabel van de HTML")
+	var buf := Snd.monster("ding")
+	gelijk(buf.size(), int(float(Snd.LENGTE["ding"]) * Snd.SR) + 64, "zo lang als LENGTE zegt")
+	var m := _meet(buf)
+	var db := _db(m["piek"])
+	waar(db > -26.0 and db < -14.0, "hoorbaar maar nooit hard (%.1f dBFS)" % db)
+	waar(m["ms"] >= 800, "hij klinkt na (%d ms)" % m["ms"])
+	waar(m["ms"] < int(1000.0 * float(Snd.LENGTE["ding"])), "en past in zijn buffer")
+	var piek_op := 0
+	for i in buf.size():
+		if absf(buf[i]) >= m["piek"] * 0.999:
+			piek_op = i
+			break
+	waar(piek_op < int(0.03 * Snd.SR),
+		"aangeslagen, niet gestreken: de piek na %d ms" % int(1000.0 * piek_op / Snd.SR))
+	waar(Snd.monster("ding") == buf, "twee keer precies hetzelfde")
+	waar(not Snd.is_ruis("ding"), "zonder ruis")
+
 ## The hall clock never strikes twice within 120 ms (architecture.md §6.5).
 func test_klok_wordt_geknepen() -> void:
 	var vers = load("res://autoload/snd.gd").new()

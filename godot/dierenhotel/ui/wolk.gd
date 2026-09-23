@@ -26,21 +26,38 @@ var getal_label: Label
 var zeg_label: Label
 var balk: ProgressBar = null    ## only on a "komt eraan" bubble (`voortgang`)
 var knop_label: Label = null    ## the "👀 Volg" pill of a bubble a tap acts on (`knop`)
+## Does a tap DO something (a real `tik`)?  Then the bubble looks pressable, like
+## every button in the world; otherwise it only speaks: flat, a little
+## see-through, and a tap goes straight through it (owner, 2026-09-23: "heel
+## veel textboxen die allemaal klikbaar lijken").
+var actie := false
 var _doos: MarginContainer
 var _smal := false
 
 func bouw(o: Dictionary, mt: Dictionary, smal: bool) -> void:
 	var soort := str(o.get("klas", ""))
-	var kleur := UiThema.WOLK
+	var kleur := UiThema.WOLK_INFO if not bool(o.get("actie", false)) else UiThema.WIT
 	if soort.contains("goed"):
 		kleur = UiThema.WOLK_GOED
 	elif soort.contains("hulp"):
 		kleur = UiThema.WOLK_HULP
 	text = ""
 	clip_text = false
-	focus_mode = Control.FOCUS_ALL
-	for staat in ["normal", "hover", "pressed", "disabled", "focus"]:
-		add_theme_stylebox_override(staat, _vel(kleur, staat))
+	actie = bool(o.get("actie", false))
+	if actie:
+		var sb := UiThema.knop_vlak(kleur, 20)
+		sb.corner_radius_bottom_left = 6
+		var staten := UiThema.knop_staten(sb)
+		for staat in staten:
+			add_theme_stylebox_override(staat, staten[staat])
+		focus_mode = Control.FOCUS_ALL
+		mouse_filter = Control.MOUSE_FILTER_STOP
+	else:
+		var vlak := _vel_info(kleur)
+		for staat in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+			add_theme_stylebox_override(staat, vlak)
+		focus_mode = Control.FOCUS_NONE
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	_doos = MarginContainer.new()
 	_doos.name = "Doos"
@@ -176,23 +193,14 @@ func _regel(naam: String, tekst: String, maat: int) -> Label:
 	l.visible = not tekst.is_empty()
 	return l
 
-## The bubble shape: a rounded panel with the little tail corner bottom-left.
-func _vel(kleur: Color, staat: String) -> StyleBoxFlat:
+## A bubble that only speaks: flat, a little see-through, no edge and no
+## shadow, with the little tail corner bottom-left — nothing about it says
+## "press me", because there is nothing to press.
+func _vel_info(kleur: Color) -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = kleur.lightened(0.06) if staat == "hover" else kleur
-	if staat == "pressed":
-		sb.bg_color = kleur.darkened(0.06)
+	sb.bg_color = Color(kleur, 0.9)
 	sb.corner_radius_top_left = 20
 	sb.corner_radius_top_right = 20
 	sb.corner_radius_bottom_right = 20
 	sb.corner_radius_bottom_left = 6
-	sb.set_border_width_all(2)
-	sb.border_color = UiThema.INKT if staat == "focus" else UiThema.WIT
-	sb.shadow_color = UiThema.SCHADUW_KL
-	sb.shadow_size = 4
-	sb.shadow_offset = Vector2(0, 2)
-	if staat == "pressed":
-		sb.shadow_size = 1
-		sb.shadow_offset = Vector2(0, 1)
 	return sb
-
