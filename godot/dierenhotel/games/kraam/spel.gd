@@ -361,12 +361,21 @@ func _sch() -> Dictionary:
 ## pixels so it holds in portrait and in landscape (§5.4).  The whole stall zone
 ## is only ~108 px wide in portrait and one button is already 84 px, so two
 ## buttons cannot stand beside each other inside it.
+##
+## `u_px` is measured from the COUNTER's own screen column, not from the
+## middle of the garden: since the garden was rebuilt the stall stands at its
+## right side, and 60 px left of the garden's middle put the coins and the ✔
+## on the open lawn a quarter of the screen away from the counter they are
+## paid on (owner, 2026-09-23: "helemaal niet relevant aan waar de tekst
+## geplaatst is").
 func _op_gras(u_px: float, d_px: float = 0.0) -> Dictionary:
 	var s := _sch()
 	var z := _zone()
 	var d := float(int(z["x1"]) + int(z["z1"]) - 22)
 	d += roundf(d_px / maxf(1.0, float(s["pxPerVoxelY"])))
-	var ver := roundf(u_px / maxf(1.0, float(s["pxPerVoxelX"])))
+	var bank: Dictionary = _plekken(1)["bank"]
+	var kolom := float(bank["x"]) - float(bank["z"])
+	var ver := kolom + roundf(u_px / maxf(1.0, float(s["pxPerVoxelX"])))
 	return _pt(roundf((d + ver) * 0.5), roundf((d - ver) * 0.5))
 
 ## One point in the garden, always inside the fence.  A pair of voxel

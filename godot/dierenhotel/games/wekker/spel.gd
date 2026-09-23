@@ -31,6 +31,8 @@ const KAMER := "gang"
 const MODEL := "wekker_klok"      ## §13 Q-X1-11: een spelmodel heet <spel>_<naam>
 const DECOR := "klok"
 const HAAK_TERUG := {"n": "kist", "x": 114, "z": 14}
+const RUST_KLOK := "rust_wk_klok"   ## de klok aan de muur zolang er niet gespeeld wordt
+const RUST_UUR := 7                 ## ... en hij wijst het wekkertijdstip van het hotel
 
 ## Plek van de klok: aan de wand z = 0, tussen twee deuren.
 const KX := 48.0
@@ -109,6 +111,13 @@ func definitie() -> Dictionary:
 	# de klok is los decor.  De knop hangt dus aan een vast stuk in de gang en
 	# schuift met dx/dz naar de klok — en die plek komt uit `Rooms`, zodat het
 	# icoontje meeschuift als de kist ooit verhuist.
+	#
+	# ... en zolang er niet gespeeld wordt HANGT die klok er ook (eigenaar,
+	# 2026-09-23: "Dan hangt elk spel aan iets wat je echt ziet"; en "⏰ Wekker"
+	# hing tot dan op het pootjesschilderij, alsof dat de wekker was).  Het
+	# register zet `rust_wk_klok` neer zolang er geen spel loopt en het
+	# icoontje hangt eraan (`hotspot.rust`); bij de start maakt hij plaats
+	# voor de klok van de beurt.
 	var haak := _haak_plek()
 	return {
 		"naam": T_NAAM,
@@ -118,7 +127,11 @@ func definitie() -> Dictionary:
 			"dx": int(KX) - int(haak["x"]),
 			"dz": int(KZ) - int(haak["z"]),
 			"hoog": 26, "icoon": T_ICOON, "label": T_LABEL,
+			"rust": RUST_KLOK,
 		},
+		"modellen": {MODEL: Callable(get_script(), "_klok_model")},
+		"rust": [{"id": RUST_KLOK, "model": MODEL, "x": KX, "z": KZ, "ver": true,
+			"params": {"uur": RUST_UUR, "min": 0}}],
 		"unlock": func(n: int, _band: int) -> bool: return n >= 1,
 		"stub": false,
 		"taak": {
@@ -607,9 +620,22 @@ func _hang_kaart() -> void:
 	var klok: Rect2 = ctx.wereld.vlak_van(MODEL, KX, KZ, 0.0, klok_params())
 	if klok.size.y <= 0.0:
 		return
+	# the card's HONEST height: its own Control minimum is a tower of one word
+	# per line until its labels are laid out at their width (B4), and with
+	# that tower the card was hung far under the floor and landed on the foot
+	# of the frame, 290 units from the clock (owner, 2026-09-23)
 	var kh: float = s.knoop.get_combined_minimum_size().y
+	if s.knoop is UiSomkaart:
+		var eerlijk := Ui.kaart_mat(s.knoop as UiSomkaart)
+		if eerlijk.y > 0.0:
+			kh = eerlijk.y
 	var vloer: float = ctx.wereld.mik_punt(KX, KZ, 0.0).y
-	s.y = (vloer - (klok.end.y + float(Hits.GAT) + kh * 0.5)) / hoog
+	# between the clock and the card the clock's own time ("10 uur") keeps its
+	# place, one band of the button grid: the tag steps down in whole bands
+	# off the clock face, and without that room the card pushed it under
+	# itself — and the answer strip, which glues under the card, went to the
+	# foot of the frame
+	s.y = (vloer - (klok.end.y + float(Hits.GAT) + float(Hits.RIJ) + kh * 0.5)) / hoog
 
 ## Het wekkerkaartje bij het dier: in zijn eigen kamer te zien.  Hetzelfde id
 ## werkt hetzelfde wolkje bij, dus er wordt niets afgebroken en opnieuw gebouwd.

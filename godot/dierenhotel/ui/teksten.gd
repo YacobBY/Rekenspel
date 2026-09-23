@@ -57,6 +57,21 @@ const KAART_TITEL := "🗺️ De plattegrond"
 const KAART_HINT := "Tik op een ruimte om er naartoe te gaan."
 const SLUITEN := "Sluiten"
 
+# ------------------------------------------------------------ §7.7 prikbord
+## The board is a sheet (owner, 2026-09-23); its cards are the hotel's own
+## strings, this is only what the sheet says around them.
+const BORD_HINT := "Tik op een taakje om erheen te gaan."
+
+## Where a task card is done, under its sentence: "in de keuken", "in kamer 1",
+## "bij het zwembad" — a room with a number has no article, and the pool is a
+## place you stand next to, not in.
+static func in_kamer(kamer_id: String, naam: String) -> String:
+	if kamer_id == "zwembad":
+		return "bij het zwembad"
+	if naam.to_lower().begins_with("kamer"):
+		return "in " + naam.to_lower()
+	return "in de " + naam.to_lower()
+
 # ------------------------------------------------------------- §7.4 deuren
 ## `Ga naar <kamernaam>` — the title of a door hotspot.
 static func ga_naar(kamer_naam: String) -> String:

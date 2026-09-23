@@ -1114,3 +1114,149 @@ func test_hotelknoppen_wijken_voor_een_spel() -> void:
 	for id in ["h_deur", "h_bel", "h_wens", "h_tag", "spel_ander", "s_knop"]:
 		waar(Hits.spot(id).knoop.visible, "na het spel staat %s er weer" % id)
 	_af()
+
+## Owner, 2026-09-23: "wekker zetten is bijvoorbeeld helemaal niet relevant aan
+## waar de tekst geplaatst is. Dit gebeurt vaak over het hele spel".  In every
+## room, on every screen: a door's sign hangs ON that door, and every other
+## button that belongs to a thing (`op: aan`) touches that thing — none drifts
+## off onto the furniture next to it.  Before, "Keuken" stood on the chest in
+## the corridor, "Receptie" on the ball pit, "Sleutels" on the plant.
+func test_elk_bordje_op_zijn_deur_en_elke_knop_aan_zijn_ding() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var boom := Engine.get_main_loop() as SceneTree
+	for maat in SCHERMEN:
+		var h: Dictionary = await _hotel_op(maat)
+		var deuren := 0
+		var op_deur := 0
+		var telefoon: bool = mini(maat.x, maat.y) < 400
+		for kamer in Rooms.lijst():
+			Hotel.naar_kamer(kamer)
+			for _f in 3:
+				await boom.process_frame
+			var dbg := Hits.debug()
+			for id in dbg.keys():
+				var s = Hits.spot(id)
+				var d: Dictionary = dbg[id]
+				var r: Rect2 = d["rect"]
+				var vlak: Rect2 = d["vlak"]
+				if s == null or vlak.size.x <= 0.0 or str(s.op) != "aan":
+					continue
+				var gat_x := maxf(0.0, maxf(vlak.position.x - r.end.x, r.position.x - vlak.end.x))
+				var gat_y := maxf(0.0, maxf(vlak.position.y - r.end.y, r.position.y - vlak.end.y))
+				if s.klas.contains("hotdeur"):
+					# on the door; on a phone the doors of the corridor stand
+					# closer together than two signs are wide, and then one
+					# hangs right over its door instead
+					deuren += 1
+					var snij := r.intersection(vlak)
+					if snij.size.x > 0.0 and snij.size.y > 0.0:
+						op_deur += 1
+					waar((snij.size.x > 0.0 and snij.size.y > 0.0)
+						or (gat_x <= Hits.GAT + 1.0 and gat_y <= Hits.GAT + 1.0),
+						"%s %s: het bordje %s hangt op of aan zijn deur (%s, deur %s)"
+							% [str(maat), kamer, id, str(r), str(vlak)])
+					continue
+				# touching its thing; on a phone, where the bands fill up, at
+				# most one band away from it
+				var mag := Hits.GAT + 1.0 if not telefoon else float(Hits.RIJ) + Hits.GAT
+				waar(gat_x <= mag and gat_y <= mag,
+					"%s %s: %s staat bij zijn ding (gat %.0f, %.0f; knop %s, ding %s)"
+						% [str(maat), kamer, id, gat_x, gat_y, str(r), str(vlak)])
+		waar(deuren >= 15, "%s: alle deuren gemeten (%d)" % [str(maat), deuren])
+		if not telefoon:
+			gelijk(op_deur, deuren, "%s: elk bordje hangt óp zijn deur" % str(maat))
+		await _hotel_af(h)
+	State.s = bewaard
+
+## Owner, 2026-09-23: "Plaatjes als [de receptie met het open bord] zijn veel te
+## druk in iconen. en wekker zetten is bijvoorbeeld helemaal niet relevant aan
+## waar de tekst geplaatst is".  The board is a sheet now: its cards stand on
+## the cork, each with its room under it, and NOTHING of the board hangs in the
+## receptie.  A tap on a card closes the sheet and goes to that card's room.
+func test_het_prikbord_is_een_blad() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var boom := Engine.get_main_loop() as SceneTree
+	var h: Dictionary = await _hotel_op(Vector2i(1024, 768))
+	State.s["taken"] = []
+	Hotel.bord_dicht()
+	for i in 2:
+		(State.s["gasten"] as Array).append({"id": "pb%d" % i, "naam": "Pb%d" % i,
+			"kind": "hond", "soort": "puppy", "scoops": 1, "kamer": "kamer1",
+			"bed": "bed%d" % (i + 1), "behoefte": "spelen", "blij": false})
+	Hotel.prikbord()
+	for _f in 3:
+		await boom.process_frame
+	waar(Hotel.bord_is_open(), "het bord staat open")
+	waar(Ui.blad_open_nu(), "als blad")
+	var bord := Ui.huidig_blad().find_child("Prikbord", true, false)
+	waar(bord is UiPrikbordBlad, "met het prikbord erop")
+	var taken: Array = State.s["taken"]
+	waar(not taken.is_empty(), "er staan taakjes klaar (%d)" % taken.size())
+	var notes := 0
+	var met_kamer := 0
+	if bord != null:
+		for k in bord.get_children():
+			if k is Button:
+				notes += 1
+				var waar_l := k.get_node_or_null("Waar") as Label
+				if waar_l != null and waar_l.text.begins_with("in ") or \
+						(waar_l != null and waar_l.text.begins_with("bij ")):
+					met_kamer += 1
+	gelijk(notes, taken.size(), "elk taakje is een briefje op het bord")
+	gelijk(met_kamer, taken.size(), "en elk briefje zegt in welke kamer het is")
+	for id in Hits.lijst():
+		var s = Hits.spot(id)
+		waar(s == null or s.door != Hotel.BORD,
+			"niets van het bord hangt in de kamer (%s)" % id)
+	# a tap on a card: the sheet closes and we go to its room
+	var eerste: Dictionary = taken[0]
+	if bord != null:
+		for k in bord.get_children():
+			if k is Button:
+				(k as Button).pressed.emit()
+				break
+	for _f in 3:
+		await boom.process_frame
+	waar(not Hotel.bord_is_open(), "het bord gaat dicht na een tik")
+	waar(not Ui.blad_open_nu(), "en het blad ook")
+	if not str(eerste.get("kamer", "")).is_empty() and not str(eerste.get("actie", "")).begins_with("game:"):
+		gelijk(World.kamer_nu(), str(eerste["kamer"]), "en we staan in de kamer van het taakje")
+	Games.stop()
+	await _hotel_af(h)
+	State.s = bewaard
+
+## The guest who checks in stands AT the desk, and the question hangs by it:
+## it used to wait by the bench in the far corner while its card hung at the
+## other end of the desk (owner, 2026-09-23).
+func test_de_gast_checkt_in_aan_de_balie() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var boom := Engine.get_main_loop() as SceneTree
+	var h: Dictionary = await _hotel_op(Vector2i(1024, 768))
+	var ui_rust := Ui.rust_modus()
+	Ui.zet_rust_modus(true)                 # a walk is a teleport: no waiting
+	Hotel.bel()
+	for _f in 4:
+		await boom.process_frame
+	var g = State.s["nieuweGast"]
+	waar(g != null, "er staat een gast aan de balie")
+	if g != null:
+		var d = World.dier(str(g["id"]))
+		var r = Rooms.get_kamer("receptie")
+		waar(d != null, "de gast is er")
+		if d != null:
+			waar(d.x >= float(r.balie["x0"]) and d.x <= float(r.balie["x1"]),
+				"hij staat vóór de balie, niet ernaast (x %.0f)" % d.x)
+			waar(d.z > float(r.balie["z1"]) and d.z <= float(r.balie["z1"]) + 25.0,
+				"vlak voor de balie (z %.0f)" % d.z)
+			var dbg := Hits.debug()
+			waar(dbg.has("ci_som"), "de vraag hangt er")
+			if dbg.has("ci_som"):
+				var kaart: Rect2 = dbg["ci_som"]["rect"]
+				var dier := World.vlak_van_dier(str(g["id"]))
+				var af := maxf(0.0, maxf(dier.position.y - kaart.end.y, kaart.position.y - dier.end.y))
+				waar(af <= float(Hits.RIJ),
+					"de vraag hangt bij de gast (%.0f eenheden, kaart %s, gast %s)"
+						% [af, str(kaart), str(dier)])
+	Ui.zet_rust_modus(ui_rust)
+	await _hotel_af(h)
+	State.s = bewaard

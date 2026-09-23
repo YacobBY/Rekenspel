@@ -221,3 +221,58 @@ func test_ctx_stempelt_de_eigenaar() -> void:
 	for id in ["ps1", "ps2", "ps3"]:
 		waar(Hits.spot(id) == null, "%s is weg na wis_alles()" % id)
 	_af()
+
+## Every game whose entry hangs on a resting prop (`hotspot.rust`) leaves that
+## prop standing while no game runs, the entry hangs ON it, it goes the moment
+## any game starts and comes back when it stops (owner, 2026-09-23: "Dan hangt
+## elk spel aan iets wat je echt ziet").  The wekker's clock and the bedden
+## blanket chest joined the stones, the stall and the pile of washing: before
+## them "⏰ Wekker" hung on the paw poster and "🛏 Bedden" on the play basket,
+## next to that basket's own "Speelmand".
+func test_elk_spel_hangt_aan_zijn_eigen_rustspul() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	_op()
+	State.nieuw_spel()
+	for i in 5:
+		(State.s["gasten"] as Array).append({"id": "rg%d" % i, "naam": "Rust%d" % i,
+			"kind": "hond", "soort": "puppy", "scoops": 1, "kamer": "kamer1",
+			"bed": "bed1" if i == 0 else "", "behoefte": "eten"})
+	var met_rust: Array[String] = []
+	for id in Games.lijst():
+		var def := Games.definitie(id)
+		var hs: Dictionary = def.get("hotspot", {})
+		if str(hs.get("rust", "")).is_empty():
+			continue
+		met_rust.append(id)
+	for moet in ["hinkel", "kraam", "was", "wekker", "bedden"]:
+		waar(met_rust.has(moet), "%s hangt aan een rustspul" % moet)
+	Games.hersteek()
+	for id in met_rust:
+		var def := Games.definitie(id)
+		var sid := str((def["hotspot"] as Dictionary)["rust"])
+		var kamer := str(def.get("kamer", ""))
+		if not Games.ontgrendeld(id):
+			continue
+		waar(not World.decor_plek(sid, kamer).is_empty(),
+			"%s: %s staat in %s zolang er niet gespeeld wordt" % [id, sid, kamer])
+		var eigen := false
+		for stuk in (def.get("rust", []) as Array):
+			if str((stuk as Dictionary).get("id", "")) == sid:
+				eigen = true
+		waar(eigen, "%s: het ding waar de ingang aan hangt is een van zijn eigen rustspullen" % id)
+	# a game starts: every resting prop goes, the game's own things come
+	waar(Games.start("wekker"), "de wekker start")
+	for id in met_rust:
+		var def := Games.definitie(id)
+		for stuk in (def.get("rust", []) as Array):
+			var sid := str((stuk as Dictionary).get("id", ""))
+			waar(World.decor_plek(sid, str(def.get("kamer", ""))).is_empty(),
+				"%s: %s is weg zolang er een spel loopt" % [id, sid])
+	Games.stop()
+	waar(not World.decor_plek("rust_wk_klok", "gang").is_empty(),
+		"na het spel hangt de klok weer in de gang")
+	waar(not World.decor_plek("rust_bd_kist", "kamer1").is_empty(),
+		"en staat de dekenkist weer tussen de bedden")
+	State.s = bewaard
+	Games.hersteek()
+	_af()

@@ -508,6 +508,41 @@ func vlak_van_balie(kamer_id: String = "") -> Rect2:
 		vak = vak.expand(mik_punt(hoek[0], hoek[1], BALIE_HOOG))
 	return vak
 
+## The desk as the button layer keeps off it: the plate of every piece that
+## stands on the `Kamer.balie` footprint — the two desk halves and the bell,
+## till, flowers, book and lamp on top — instead of the one box round the
+## whole footprint.  The desk runs diagonally across the screen, so that box
+## is mostly FLOOR: the whole strip in front of the counter, where a guest
+## checks in, was off limits, and the check-in card, the family bubbles and the
+## bill's hints were pushed out into the room far from the counter (owner,
+## 2026-09-23: "helemaal niet relevant aan waar de tekst geplaatst is").
+func vlakken_van_balie(kamer_id: String = "") -> Array[Rect2]:
+	var uit: Array[Rect2] = []
+	var k := kamer_id if kamer_id != "" else _kamer_nu
+	var r := Rooms.get_kamer(k)
+	if r == null or (r.balie as Dictionary).is_empty():
+		return uit
+	var x0 := float(r.balie["x0"])
+	var x1 := float(r.balie["x1"])
+	var z0 := float(r.balie["z0"])
+	var z1 := float(r.balie["z1"])
+	var stukken: Array = []
+	stukken.append_array(r.decor)
+	stukken.append_array(dingen(k))      # the desk lamp is a movable thing
+	for stuk in stukken:
+		var x := float(stuk.get("x", 0.0))
+		var z := float(stuk.get("z", 0.0))
+		if x < x0 or x > x1 or z < z0 or z > z1:
+			continue
+		var model := str(stuk.get("model", stuk.get("n", "")))
+		if model.is_empty() or not Art.heeft_model(model):
+			continue
+		var v := vlak_van(model, x, z, float(stuk.get("y", 0.0)), stuk.get("params", {}),
+			Vector2.ZERO, int(stuk.get("rot", 0)))
+		if v.size.x > 0.0 and v.size.y > 0.0:
+			uit.append(v)
+	return uit
+
 ## The rectangle of one guest, from its own plate — used by the hotspot layer.
 func vlak_van_dier(id: String) -> Rect2:
 	var d: Dier = _dieren.get(id)

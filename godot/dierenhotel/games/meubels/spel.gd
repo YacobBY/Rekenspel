@@ -379,14 +379,16 @@ func _kassa_teken() -> void:
 	var bank := Rooms.plek("receptie", 0.55, 0.75)
 	ctx.ui.wolk({"id": "mb_munten", "kamer": "receptie",
 		"x": float(bank["x"]), "z": float(bank["z"]), "hoog": 10.0, "prio": 11,
+		"op": "aan", "obj": "mb_toonbank",
 		"icoon": "🪙", "getal": _munt_rij(munten), "tekst": "",
 		"klas": "hotbron", "titel": T_OP_TAFEL})
 
 	# en de buidel waar ze uit komen: het AANTAL munten staat erop, niet hun
 	# waarde — dat is precies de vergissing die de strook ook aanbiedt.
-	var buidel := Rooms.plek("receptie", 0.075, 0.875)
+	var buidel := _buidel_plek()
 	ctx.hotspots.bron({"x": float(buidel["x"]), "z": float(buidel["z"])}, {
 		"id": "mb_buidel", "kamer": "receptie", "hoog": 10.0, "prio": 10,
+		"op": "aan", "obj": "mb_geldbuidel",
 		"icoon": "💰", "label": "", "aantal": munten.size(), "hand": 0,
 		"titel": T_BUIDEL % munten.size(), "sleep": "",
 		"tik": func(_s) -> void:
@@ -1068,9 +1070,10 @@ func _betaal_teken() -> void:
 	# er nog van hebt.  Tikken pakt de volgende muntsoort.
 	var soort := int(_bet["soort"])
 	if soort > 0:
-		var buidel := Rooms.plek("receptie", 0.075, 0.875)
+		var buidel := _buidel_plek()
 		ctx.hotspots.bron({"x": float(buidel["x"]), "z": float(buidel["z"])}, {
 			"id": "mb_buidel", "kamer": "receptie", "hoog": 10.0, "prio": 10,
+			"op": "aan", "obj": "mb_geldbuidel",
 			# `UiBron` tekent alleen het pictogram, geen label: de waarde van de
 			# munt gaat er dus IN, zodat het kind ziet wat het in zijn hand heeft
 			# (HOTEL.md §9: een pictogram staat altijd bij zijn getal).
@@ -1081,8 +1084,11 @@ func _betaal_teken() -> void:
 			"tik": func(_s) -> void: _volgende_soort()})
 
 	# klaar met tellen, en een munt terugpakken
-	var ok_plek := Rooms.plek("receptie", 0.95, 0.25)
-	var terug_plek := Rooms.plek("receptie", 0.375, 0.975)
+	# both stand AT the counter they are about: "klaar" on its right, the way
+	# back in front of it (they stood at the far end of the desk and in the
+	# front corner, owner 2026-09-23)
+	var ok_plek := Rooms.plek("receptie", 0.75, 0.77)
+	var terug_plek := Rooms.plek("receptie", 0.55, 0.92)
 	if stap != "som":
 		ctx.hotspots.maak({"id": "mb_ok", "kamer": "receptie",
 			"x": float(ok_plek["x"]), "z": float(ok_plek["z"]), "y": 8.0,
@@ -1150,11 +1156,18 @@ func _vak_max() -> int:
 func _meer_knop() -> bool:
 	return World.kader_rect().size.y >= 340.0
 
+## Waar de geldbuidel ligt: links naast de toonbank, zodat de munten uit de
+## buidel zichtbaar naar de toonbank gaan.  Hij lag in de hoek linksvoor, een
+## halve kamer van de toonbank vandaan (eigenaar, 2026-09-23: "helemaal niet
+## relevant aan waar de tekst geplaatst is").
+func _buidel_plek() -> Dictionary:
+	return Rooms.plek("receptie", 0.37, 0.8)
+
 ## De toonbank en de buidel zijn echte voorwerpen, zodat het vangvlak van een
 ## sleepdoel de vereniging van knop en voorwerp is (architecture.md §10).
 func _decor_betaal() -> void:
 	var bank := Rooms.plek("receptie", 0.55, 0.75)
-	var buidel := Rooms.plek("receptie", 0.075, 0.875)
+	var buidel := _buidel_plek()
 	ctx.wereld.decor("receptie", {"id": "mb_toonbank", "model": "meubels_toonbank",
 		"x": float(bank["x"]), "z": float(bank["z"]), "door": ctx.id})
 	ctx.wereld.decor("receptie", {"id": "mb_geldbuidel", "model": "meubels_buidel",

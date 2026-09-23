@@ -216,6 +216,20 @@ func kaart_mat(k: UiSomkaart) -> Vector2:
 	var m := k.get_combined_minimum_size()
 	if hulp != null:
 		hulp.visible = was
+	# A help line is as wide as its words, up to the card's own widest: a
+	# card narrower than its help line wraps it, draws a line taller than the
+	# place it was given, and the answer strip glued under it covers the end
+	# of the help ("klopt" on the alarm card, 2026-09-23) — and a card that
+	# grows a line per step is what K3 forbade.  The words are measured by the
+	# font, never by the Label's own minimum (its longest word, B4).
+	if hulp != null and was and not hulp.text.is_empty():
+		var f := hulp.get_theme_font("font")
+		var sb := k.get_theme_stylebox("panel")
+		if f != null:
+			var zij := 0.0 if sb == null else sb.get_margin(SIDE_LEFT) + sb.get_margin(SIDE_RIGHT)
+			var nodig := f.get_string_size(hulp.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+				hulp.get_theme_font_size("font_size")).x + zij + 2.0
+			m.x = maxf(m.x, minf(nodig, k.breed_max()))
 	# The height comes from the theme at the card's own width, not from the
 	# Control: a wrapping label left laid out at a width of one (the state a
 	# released bar card is in) would answer a tower here (B4).
@@ -647,11 +661,45 @@ func blad_open(o: Dictionary) -> UiBlad:
 
 func blad_dicht() -> void:
 	if _blad != null and is_instance_valid(_blad):
+		# the sheet that goes gives up its name at once: it fades out (or is
+		# freed at the end of the frame) and the next one must be `Blad` —
+		# the shell and the tests find the sheet on screen by that name, and
+		# the prikbord that opens behind the start screen would otherwise have
+		# left the start screen called `@Blad@2`
+		_blad.name = "BladWeg"
 		_blad.sluit()
 	_blad = null
 
 func blad_open_nu() -> bool:
 	return _blad != null and is_instance_valid(_blad)
+
+## The sheet on screen, or null.
+func huidig_blad() -> UiBlad:
+	return _blad if _blad != null and is_instance_valid(_blad) else null
+
+## Close `b` only if it is still the sheet on screen: the board closing must
+## never take the letter sheet with it that opened on top of it.
+func blad_dicht_als(b: UiBlad) -> void:
+	if b != null and _blad == b:
+		blad_dicht()
+
+## The prikbord as a sheet (world.md §3.7, owner 2026-09-23): the cards on a
+## piece of cork, each naming its room, instead of bubbles spread round the
+## receptie.  `kaarten` are the hotel's cards — or its one `leeg` card —,
+## `kies(q)` is what a tapped card does.  `stil`: rebuilt with new content, not
+## opened anew, so it does not pop in again.
+func prikbord_blad(kaarten: Array, berichten: Array, kies: Callable, stil := false) -> UiBlad:
+	if bladlaag == null:
+		return null
+	var bord := UiPrikbordBlad.new()
+	bord.bouw(kaarten, berichten, maten)
+	var leeg := kaarten.size() == 1 and bool((kaarten[0] as Dictionary).get("leeg", false))
+	var b := blad_open({"titel": UiTekst.PRIKBORD, "hint": "" if leeg else UiTekst.BORD_HINT,
+		"inhoud": [bord], "knoppen": [{"id": "sluit", "tekst": UiTekst.SLUITEN}],
+		"stil": stil})
+	bord.taak_gekozen.connect(func(q: Dictionary) -> void: kies.call(q))
+	bord.leeg_getikt.connect(blad_dicht)
+	return b
 
 # ------------------------------------------------------ wereldprimitieven
 
@@ -678,6 +726,9 @@ func wolk(o: Dictionary) -> String:
 		"titel": o.get("titel", zin),
 		"klas": "hotwolk " + str(o.get("klas", "")), "prio": o.get("prio", 9),
 		"door": o.get("door", ""), "volg": o.get("volg", Callable()),
+		# `aan`: a bubble that says what lies ON a thing hangs at that thing,
+		# like a button (the coins on the meubels counter)
+		"op": o.get("op", "auto"),
 		"vlak": o.get("vlak", Rect2()), "aan": tik,
 		"voortgang": o.get("voortgang", null),
 	})
@@ -715,6 +766,9 @@ func bron(obj: Variant, o: Dictionary) -> String:
 		"door": o.get("door", ""), "aan": o.get("tik", Callable()),
 		"drop": o.get("drop", ""), "sleep": o.get("sleep", ""), "data": o.get("data", {}),
 		"vlak": o.get("vlak", Rect2()), "volg": o.get("volg", Callable()),
+		# a source that IS a thing in the room (the purse) hangs at it like a
+		# button does (`op: "aan"` with its `obj`)
+		"op": o.get("op", "auto"), "obj": o.get("obj", ""),
 	})
 	return id
 

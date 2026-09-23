@@ -63,10 +63,12 @@ const KAART := {"receptie": [1, 2], "gang": [2, 2], "kamer1": [2, 1],
 
 const EIGENAAR := "hotel"
 const BORD := "bord"
+const BORD_LEEG := "Speel lekker rond"
 const AVOND := "avond"
 const CHECKIN := "checkin"
 
 var _bord_open := false
+var _bord_blad = null          ## the open board sheet (UiBlad), or null
 var _dag_bericht: Array = []
 var _prikbord: HotelPrikbord = null
 var _ci_kaart = null
@@ -116,7 +118,7 @@ func herstel_wereld() -> void:
 	var nieuw = State.s["nieuweGast"]
 	if nieuw != null:
 		nieuw["waar"] = "receptie"
-		var np := _plek(0.375, 0.775)
+		var np := _balieplek()
 		World.zet(str(nieuw["id"]), "receptie", np.get("x", 0.0), np.get("z", 0.0))
 	World.naar(str(State.s["kamerNu"]))
 
@@ -572,8 +574,8 @@ func bel() -> void:
 	World.sync(alle_dieren())
 	var dp := Rooms.deur("receptie", "gang")
 	World.zet(str(g["id"]), "receptie", dp.get("ix", 60), dp.get("iz", 60))
-	var w := _wachtplek()
-	World.ga(str(g["id"]), w.get("x", 24), w.get("z", 114), "wacht")
+	var w := _balieplek()
+	World.ga(str(g["id"]), w.get("x", 66), w.get("z", 44), "wacht")
 	naar_kamer("receptie")
 	paint_checkin()
 	State.bewaar()
@@ -624,7 +626,14 @@ func paint_checkin() -> void:
 	checkin_veranderd.emit()
 	if not scherm_klaar():
 		return
-	var plek := _plek(0.875, 0.25)
+	# The question hangs at the guest who is asking it, where it stands at the
+	# desk (HOTEL.md §9: a card hangs on its object or animal).  It used to
+	# hang at the far end of the desk while the guest waited by the bench in
+	# the other corner (owner, 2026-09-23: "helemaal niet relevant aan waar de
+	# tekst geplaatst is").  It keeps the guest's box free at that spot — not
+	# the guest itself, or the card would walk in with it from the door.
+	var plek := _balieplek()
+	var volg := _volg_balieplek(str(g["id"]))
 	if int(v["stap"]) == 1:
 		# two short lines: what goes out every day, and what this guest eats
 		# on top of it — plus the question itself
@@ -635,7 +644,7 @@ func paint_checkin() -> void:
 			"id": "ci_som", "door": CHECKIN, "kamer": "receptie",
 			"goed": int(v["nieuw"]), "liever": [int(v["samen"]), int(v["extra"]),
 				int(v["samen"]) + int(v["extra"]) + 1],
-			"max": 2, "hoog": _ci_hoog(), "icoon": "🥄",
+			"max": 2, "hoog": _ci_hoog(), "icoon": "🥄", "volg": volg,
 			"regel": "De gasten eten %s per dag" % scheppen(int(v["samen"])),
 			"regel2": "%s eet %d erbij. Samen?" % [g["naam"], int(v["extra"])],
 			"on_ok": op_ok})
@@ -649,7 +658,7 @@ func paint_checkin() -> void:
 			som += " = %d" % tot
 		_ci_kaart = Ui.somkaart(plek, som, {
 			"id": "ci_som", "door": CHECKIN, "kamer": "receptie", "pad": false,
-			"hoog": _ci_hoog(), "icoon": "🥄",
+			"hoog": _ci_hoog(), "icoon": "🥄", "volg": volg,
 			"regel": "Elke dag %s, %s lang" % [scheppen(int(v["nieuw"])), dagen(int(v["dagen"]))],
 			"regel2": "📦 In huis: %s. Genoeg?" % scheppen(int(v["voorraad"])),
 			"keuze_titel": "is er genoeg eten?",
@@ -665,10 +674,17 @@ func paint_checkin() -> void:
 			"tik": naar_bed})
 		if not vrij.is_empty() and World.kamer_nu() != str(vrij["kamer"]):
 			var doel = Rooms.get_kamer(str(vrij["kamer"]))
-			var wp := _plek(0.775, 0.05)
-			if doel != null:
-				Ui.wolk({"id": "ci_wijs", "door": CHECKIN, "kamer": "receptie",
-					"x": wp.get("x", 0), "z": wp.get("z", 0), "hoog": _ci_hoog(),
+			# "🛏️ Kamer 1" hangs at the door the way to that room starts with
+			# — the corridor door — and not on the wall behind the desk where
+			# it used to float (owner, 2026-09-23)
+			var weg := Rooms.pad(World.kamer_nu(), str(vrij["kamer"]))
+			var eerste := str(weg[1]) if weg.size() > 1 else str(vrij["kamer"])
+			var dp := Rooms.deur(World.kamer_nu(), eerste)
+			if doel != null and not dp.is_empty():
+				var nu := World.kamer_nu()
+				Ui.wolk({"id": "ci_wijs", "door": CHECKIN, "kamer": nu,
+					"x": dp.get("x", 0), "z": dp.get("z", 0), "hoog": 9,
+					"volg": _volg_deur(nu, eerste),
 					"icoon": doel.icoon, "tekst": doel.naam, "prio": 10,
 					"tik": naar_bed})
 	World.vuil()
@@ -968,7 +984,6 @@ func doe_taak(q: Dictionary) -> void:
 func prikbord() -> void:
 	bouw_taken()
 	_bord_open = true
-	naar_kamer("receptie")
 	toon_bord()
 	bord_veranderd.emit()
 
@@ -977,12 +992,17 @@ func bord_open() -> void:
 	prikbord()
 
 ## The bell, a card, the evening round and every game that starts close the
-## board — otherwise the task cards sit over the game's own buttons.
+## board — and so does the child, with `Sluiten` or a tap beside the sheet.
 func bord_dicht() -> bool:
 	if not _bord_open:
 		return false
 	_bord_open = false
 	Hits.wis_eigenaar(BORD)
+	if _bord_blad != null:
+		var blad = _bord_blad
+		_bord_blad = null             # it is us closing it, not the child
+		if is_instance_valid(blad):
+			Ui.blad_dicht_als(blad)
 	World.vuil()
 	bord_veranderd.emit()
 	return true
@@ -990,51 +1010,53 @@ func bord_dicht() -> bool:
 func bord_is_open() -> bool:
 	return _bord_open
 
+## The sheet the board was waiting for has closed; `Ui` forgets it only after
+## this signal, so the board opens one step later.
+func _na_ander_blad() -> void:
+	toon_bord.call_deferred()
+
 func prikbord_tik() -> void:
 	if _bord_open:
 		bord_dicht()
 		return
 	prikbord()
 
-## Up to three cards at the prikbord, and under them at most two day messages.
+## The board is a sheet: today's cards pinned on cork, each naming its room,
+## and under them at most two day messages (world.md §3.7).
+##
+## OWNER, 2026-09-23: "Plaatjes als [de receptie met het open bord] zijn veel te
+## druk in iconen. en wekker zetten is bijvoorbeeld helemaal niet relevant aan
+## waar de tekst geplaatst is".  The cards used to be bubbles in the receptie,
+## hung round the little board wherever the band grid had room, and a card is
+## about a room somewhere else in the hotel — "⏰ Wekker zetten" on the floor by
+## the corridor door read as if that door were the clock.  So nothing of the
+## board hangs in the world any more; the 📋 button on the board and its badge
+## stay.  Built again (`stil`, no pop-in) when a card changes while it is open.
 func toon_bord() -> void:
 	Hits.wis_eigenaar(BORD)
 	if not _bord_open or not scherm_klaar():
 		return
-	var t: Array = State.s["taken"]
-	if t.is_empty():
-		var pp := decor_plek("receptie", "prikbord")
-		Ui.wolk({"id": "bord_leeg", "door": BORD, "kamer": "receptie",
-			"x": pp.get("x", 0), "z": pp.get("z", 0), "hoog": 26,
-			"icoon": "🐾", "tekst": "Speel lekker rond", "prio": 10})
+	# Another sheet is up — the start screen that must be answered first, a
+	# letter — and the board never pushes it away: it opens when that one
+	# closes.
+	var ander := Ui.huidig_blad()
+	if ander != null and ander != _bord_blad:
+		if not ander.gesloten.is_connected(_na_ander_blad):
+			ander.gesloten.connect(_na_ander_blad, CONNECT_ONE_SHOT)
 		return
-	var pp := decor_plek("receptie", "prikbord")
-	for i in t.size():
-		var q: Dictionary = t[i]
-		Ui.wolk({"id": "bord_%d" % i, "door": BORD, "kamer": "receptie",
-			# the card is pinned on the notice board, so that is the thing it
-			# must not cover and the rect `Hits.dekking` measures (V1 finding 5).
-			# All three aim AT the board and the band grid hangs them round it
-			# (owner, 2026-09-23: at the board, not across the room on the
-			# diagonal they used to lie on).  That needs free wall round the
-			# board, which is why it hangs over the bench in the waiting corner.
-			"obj": "prikbord",
-			"x": pp.get("x", 0), "z": pp.get("z", 0), "hoog": 22, "prio": 10,
-			"icoon": "✅" if q.get("klaar", false) else str(q["icoon"]),
-			"tekst": str(q["tekst"]),
-			"tik": func(): doe_taak(q)})
-	for i in mini(2, _dag_bericht.size()):
-		var bericht: Dictionary = _dag_bericht[i]
-		var p := _plek(0.375, 0.5)
-		var id := "dag_%d" % i
-		var weg := func() -> void:
-			Ui.wolk_weg(id)
-			World.vuil()
-		Ui.wolk({"id": id, "door": BORD, "kamer": "receptie",
-			"x": p.get("x", 0), "z": p.get("z", 0),
-			"hoog": Rooms.hoogte("receptie", 0.375 + i * 0.15), "prio": 9,
-			"icoon": str(bericht["icoon"]), "tekst": str(bericht["tekst"]),
-			"tik": weg})
+	var kaarten: Array = (State.s["taken"] as Array).duplicate()
+	if kaarten.is_empty():
+		kaarten = [{"id": "leeg", "leeg": true, "icoon": "🐾", "tekst": BORD_LEEG}]
+	var stil := _bord_blad != null
+	_bord_blad = null                 # replaced, not closed by the child
+	var blad = Ui.prikbord_blad(kaarten, _dag_bericht.slice(0, 2), doe_taak, stil)
+	_bord_blad = blad
+	if blad == null:
+		return
+	blad.gesloten.connect(func() -> void:
+		if _bord_blad == blad:        # the child closed it
+			_bord_blad = null
+			bord_dicht())
 
 # ------------------------------------------------------------- de avondronde
 
@@ -1064,7 +1086,10 @@ func toon_avond() -> void:
 		for i in mini(3, uit.size()):
 			var g: Dictionary = uit[i]
 			Ui.wolk({"id": "av_" + str(g["id"]), "door": AVOND, "kamer": "receptie",
-				"x": 8 + i * 24, "z": 60 - i * 6, "hoog": 16, "prio": 11,
+				# the family waits AT the desk, where its animal comes to be
+				# checked out — not in the middle of the floor
+				"x": _balieplek(i).get("x", 66), "z": _balieplek(i).get("z", 44),
+				"hoog": 0, "prio": 11,
 				"icoon": "👪", "tekst": str(g["naam"]),
 				"tik": func(): reken_af(str(g["id"]))})
 	else:
@@ -1086,7 +1111,7 @@ func reken_af(id: String) -> void:
 	Hits.wis_eigenaar(AVOND)
 	if str(g.get("waar", "")) != "receptie":
 		g["waar"] = "receptie"
-		var w := _wachtplek()
+		var w := _balieplek()
 		World.reis(str(g["id"]), "receptie",
 			{"x": w.get("x", 24), "z": w.get("z", 114), "na": "wacht"})
 	var fam: String = State.FAMILIES[posmod(int(State.s["famIdx"]), State.FAMILIES.size())]
@@ -1390,6 +1415,20 @@ func _volg_dier(id: String, hoog: float = 54.0) -> Callable:
 		return {"x": d.x, "z": d.z, "y": hoog, "kamer": d.kamer,
 				"vlak": World.vlak_van_dier(id), "d": d.x + d.z + 0.6}
 
+## The check-in card's anchor: the guest's spot at the desk, with the box the
+## guest will have THERE, so the card leaves room for it and does not follow
+## it in from the corridor door.
+func _volg_balieplek(id: String) -> Callable:
+	return func() -> Dictionary:
+		var p := _balieplek()
+		var vak := Rect2()
+		var d = World.dier(id)
+		if d != null:
+			vak = World.vlak_van(d.model, float(p["x"]), float(p["z"]), 0.0, d.params,
+				Art.DIER_ANKER)
+		return {"x": p["x"], "z": p["z"], "y": float(_ci_hoog()), "kamer": "receptie",
+			"vlak": vak}
+
 ## The same for a door: its rectangle moves with the camera, so it is measured
 ## every pass instead of once at creation.
 func _volg_deur(kamer_id: String, naar: String) -> Callable:
@@ -1399,8 +1438,23 @@ func _volg_deur(kamer_id: String, naar: String) -> Callable:
 func _plek(fx: float, fz: float) -> Dictionary:
 	return Rooms.plek("receptie", fx, fz)
 
-func _wachtplek() -> Dictionary:
-	return _plek(0.2, 0.95)
+## Where a guest stands AT the desk: on the floor in front of the counter — the
+## first in front of its middle, by the till, the next ones beside it.  The
+## check-in and the bill both happen here and the family that comes to fetch
+## its animal waits here (owner, 2026-09-23: the guest "at the desk" waited by
+## the bench in the far corner while its card hung at the desk).  From the
+## `Kamer.balie` footprint, so a desk that moves takes its spot along.
+const BALIE_VOOR := 17          ## voxels in front of the desk's front edge
+const BALIE_NAAST := 20         ## between two guests at the desk
+
+func _balieplek(i: int = 0) -> Dictionary:
+	var r = Rooms.get_kamer("receptie")
+	if r == null or (r.balie as Dictionary).is_empty():
+		return _plek(0.55, 0.37)
+	var mid := (float(r.balie["x0"]) + float(r.balie["x1"])) * 0.5
+	var stap: float = float([0, 1, -1][posmod(i, 3)] * BALIE_NAAST)
+	return {"kamer": "receptie", "x": JsGetal.rond(mid + stap),
+		"z": int(r.balie["z1"]) + BALIE_VOOR + posmod(i, 3) * 2}
 
 # ---- the few places where the hotel reaches into `Rooms` and `World`.  They
 #      live together here, so a rename on that side is one edit on this one.

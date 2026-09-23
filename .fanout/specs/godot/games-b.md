@@ -693,6 +693,12 @@ hij met `dx`/`dz` naar de klok geschoven. Die kistplek wordt uit `rooms.js`
 gelezen (eerste decorstuk met de naam `kist`, anders het eerste decorstuk,
 anders (114, 14)), zodat het icoontje meeschuift als de kist ooit verhuist.
 
+**Poort (eigenaar 2026-09-23: "Dan hangt elk spel aan iets wat je echt ziet").**
+Zolang er niet gespeeld wordt hangt de klok er ook: `definitie().rust` =
+`rust_wk_klok` (het model `wekker_klok` op 7 uur, `modellen` meldt de statische
+bouwer aan), en `hotspot.rust` hangt het icoontje eraan.  Daarvoor hing "⏰
+Wekker" op het pootjesschilderij, alsof dat de wekker was.
+
 ### 2.3 Het rekenen per band
 
 **Het doeluur** komt uit de bevroren generator `State.sommen.klok(band)`, die
@@ -850,6 +856,16 @@ weg. Zodra het spel stopt staan de deurknoppen weer waar ze willen.
 
 Eén sommenkaart, `id 'wk_som'`, `hoog: 3`, `icoon '⏰'`, `pad: false`, verankerd
 aan het losse decorstuk `klok` (`World.mik('klok')` vindt los decor wél).
+
+**Poort (2026-09-23).** `_hang_kaart()` hangt de kaart onder de klok met haar
+EERLIJKE hoogte (`Ui.kaart_mat`): de eigen minimummaat van een kaart is een toren
+van één woord per regel zolang de labels niet op hun breedte staan, en daarmee
+hing de kaart ver onder de vloer en viel ze op de onderrand, 290 eenheden van de
+klok.  Tussen klok en kaart blijft één band vrij voor het tijdplaatje van de klok
+(`wk_tijd`, "10 uur"); zonder die ruimte duwde de kaart het plaatje onder zich en
+ging de knoppenstrook, die onder de kaart kleeft, naar de voet van het kader.  Een
+kaart met een hulpregel is zo breed als die regel, tot haar eigen maximum, zodat
+de hulp op één regel blijft en de kaart over de stappen even hoog (K3).
 
 **De zin** (`zinZet`), met `naam` = de gast en `wil = tijdWoord(doelU, doelM)`:
 

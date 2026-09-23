@@ -70,6 +70,13 @@ func _ready() -> void:
 ## `o` is the somkaart option dictionary; `smal` is true below a 360 unit frame.
 ## `balk` renders the card for the maths bar (B4): no panel, no ruled lines,
 ## the bar's own big sizes and the bar's own width.
+var _breed_max := float(BREED)
+
+## The widest this card may get where it stands now (floating: its own cap in
+## the frame; in the bar: the bar's width).
+func breed_max() -> float:
+	return _breed_max
+
 func bouw(o: Dictionary, mt: Dictionary, smal: bool) -> void:
 	_o = o
 	_mt = mt
@@ -131,6 +138,7 @@ func _bouw(balk: bool) -> void:
 		# width after the bar lets go — `Hits` would pin it and place the
 		# card outside the frame (B4).
 		custom_minimum_size = Vector2.ZERO
+	_breed_max = float(breed)
 	if balk:
 		# The bar paints the paper; the card adds nothing but its text.
 		var kaal := StyleBoxFlat.new()

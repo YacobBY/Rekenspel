@@ -32,6 +32,9 @@ const VRAAG_REGEL := "Hoeveel bedden heb je nodig?"    ## 5 woorden / 28 tekens
 const HULP_BEDJE := "nog een bedje erbij"              ## 4 woorden / 19 tekens
 
 const KAMER := "kamer1"          ## waar het icoontje hangt
+const RUST_KIST := "rust_bd_kist" ## de dekenkist tussen de bedden, als er niet gespeeld wordt
+const KIST_X := 32
+const KIST_Z := 51
 const MAX_RIJEN := 3
 const MAX_PER_RIJ := 10
 const MAX_CAP := 6
@@ -70,10 +73,15 @@ func definitie() -> Dictionary:
 	return {
 		"naam": "Bedden op rij",
 		"kamer": KAMER,
-		# de dekenkist: de speelmand in de hoek, ver van de bedden en van de
-		# deur af, zodat geen enkele knop een andere afdekt
+		# De dekenkist staat tussen de twee bedden zolang er niet gespeeld
+		# wordt, en het icoontje hangt eraan (eigenaar, 2026-09-23: "Bedden"
+		# hing aan de speelmand, naast "Speelmand" van die mand zelf — twee
+		# namen op één ding).  Het register zet hem neer en haalt hem weg bij
+		# de start, zodat de vrije vakken voor nieuwe bedden dezelfde blijven.
+		# Zonder kist (nog op slot) valt het terug op de mand.
 		"hotspot": {"obj": "mand", "icoon": "🛏", "label": "Bedden",
-			"hoog": 14, "dx": -4, "dz": -4},
+			"hoog": 14, "dx": -4, "dz": -4, "rust": RUST_KIST},
+		"rust": [{"id": RUST_KIST, "model": "dekenkist", "x": KIST_X, "z": KIST_Z}],
 		"unlock": func(n: int, _band: int) -> bool: return n >= 1,
 		"stub": false,
 		"taak": {"id": "bedden", "icoon": "🛏", "tekst": "Zet de bedden op rij",

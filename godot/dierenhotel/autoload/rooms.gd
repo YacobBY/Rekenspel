@@ -554,10 +554,13 @@ func _bouw_kamers() -> void:
 			{"n": "bloemen", "x": 72, "z": 20, "y": 14, "d": 11.5},
 			{"n": "boek", "x": 84, "z": 20, "y": 14},
 			{"n": "lamp", "x": 99, "z": 20, "y": 14, "sleutel": "balielamp"},
-			# the notice board hangs over the bench in the waiting corner, turned
-			# onto the left wall (owner, 2026-09-23: the task cards stay AT the
-			# board — behind the desk the visible wall had no room for them)
-			{"n": "prikbord", "x": 1, "z": 64, "y": 14, "rot": 1, "ver": true},
+			# The notice board hangs on the back wall again, left of the desk.
+			# For a day it hung over the bench to give its task cards room
+			# round it; the cards are a sheet now (owner, 2026-09-23: "wekker
+			# zetten is ... helemaal niet relevant aan waar de tekst geplaatst
+			# is"), and over the bench it pushed the key board's "Sleutels" off
+			# its board and onto the bench.
+			{"n": "prikbord", "x": 12, "z": 1, "ver": true},
 			{"n": "klok", "x": 70, "z": 1, "y": 36, "ver": true},
 			{"n": "poster_poot", "x": 112, "z": 1, "y": 32, "ver": true},
 			{"n": "sleutelbordz", "x": 1, "z": 84, "ver": true},

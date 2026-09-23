@@ -298,16 +298,17 @@ All fractional constants used by the world:
 
 | constant | call | value in receptie (120 × 120) |
 |---|---|---|
-| check-in card / bill card `CI_PLEK`, `WERKPLEK` | `plek('receptie', 0.875, 0.25)` | (105, 30) |
+| check-in card / bill card `CI_PLEK`, `WERKPLEK` | `plek('receptie', 0.875, 0.25)` | (105, 30) — **port:** the check-in card hangs at the guest's `BALIEPLEK` (owner 2026-09-23) |
 | its height `CI_HOOG`, `WERKHOOG` | `hoogte('receptie', 0.2)` | 24 |
 | counter `TOONBANK` | `plek('receptie', 0.15, 0.5)` | (18, 60) |
 | its height `TOONHOOG` | `hoogte('receptie', 0.225)` | 27 |
-| guest waiting spot `WACHTPLEK` | `plek('receptie', 0.2, 0.95)` | (24, 114) |
+| guest waiting spot `WACHTPLEK` | `plek('receptie', 0.2, 0.95)` | (24, 114) — **port:** unused; see `BALIEPLEK` |
+| **port:** guest at the desk `BALIEPLEK(i)` | x = middle of `Kamer.balie` + `[0, +20, −20][i % 3]`, z = `balie.z1` + 17 + 2·(i % 3) | (65, 44), (85, 46), (45, 48) |
 | "needs a bed" spot | `plek('receptie', 0.375, 0.775)` | (45, 93) |
 | "klaar met tellen" button | `plek('receptie', 0.775, 0.275)`, `hoogte(0.175)` | (93, 33), y 21 |
-| room hint during check-in | `plek('receptie', 0.775, 0.05)` | (93, 6) |
-| task cards `i = 0,1,2` | `plek('receptie', 0.075 + i·0.325, 0.025 + i·0.325)` | (9, 3), (48, 42), (87, 81) |
-| day messages `i = 0,1` | `plek('receptie', 0.375, 0.5)`, `hoogte(0.375 + i·0.15)` | (45, 60), y 45 / 63 |
+| room hint during check-in | `plek('receptie', 0.775, 0.05)` | (93, 6) — **port:** at the door the way to that room starts with |
+| task cards `i = 0,1,2` | `plek('receptie', 0.075 + i·0.325, 0.025 + i·0.325)` | (9, 3), (48, 42), (87, 81) — **port:** on the prikbord sheet, no place in the room (§3.7) |
+| day messages `i = 0,1` | `plek('receptie', 0.375, 0.5)`, `hoogte(0.375 + i·0.15)` | (45, 60), y 45 / 63 — **port:** on the prikbord sheet |
 | ghost coins `i = 0..5` | `plek('receptie', 0.5 + (i%3)·0.1875, 0.875 + (i>2 ? 0.075 : 0))` | (60,105) (83,105) (105,105) (60,114) (83,114) (105,114) |
 | trolley rest spots (`RUST.kar`) | keuken `plek(0.4, 0.579)` = (48, 66) · gang literal (60, 20) · kamer1/kamer2 `plek(0.579,0.579)` = (66, 66) · receptie `plek(0.7,0.3)` = (84, 36) · zwembad `plek(0.5,0.8)` = (72, 70) · wasserij `plek(0.45,0.6)` = (45, 54) | |
 
@@ -729,6 +730,10 @@ the ordinary morning bubble.
   build the check-in; `Snd.bel()`; place the guest at the gang door of the receptie and
   walk it to `WACHTPLEK` (24, 114) with `na: 'wacht'`; go to the receptie; paint;
   toast `<naam> staat aan de balie! 🔔`.
+  **Port (owner 2026-09-23):** the guest walks to `BALIEPLEK(0)`, on the floor in front of
+  the desk — `WACHTPLEK` is the far corner by the bench, and the guest "at the desk" waited
+  there while its card hung at the desk.  The bill (§3.5) walks the guest to the same spot,
+  and a reload puts a pending guest there.
 
 **Check-in state** (`state.checkin`): `{gastId, samen, extra, nieuw: samen+extra,
 dagen: state.levering, voorraad: state.scoops, stap: 1, fouten1: 0, fouten2: 0, invoer: '',
@@ -736,7 +741,9 @@ keuze: null, weg: false, t0}` where `samen = Σ scoops of the current guests` an
 `extra = the new guest's scoops`.
 
 **Step 1 — "Samen?"** One sum card at (105, 30), height 24 (lifted when the frame is under
-300 px high, by `ceil(20/(2k))` height steps), icon 🥄, with two lines:
+300 px high, by `ceil(20/(2k))` height steps), icon 🥄, with two lines — **port:** the card
+aims at `BALIEPLEK(0)` and keeps the box the guest has THERE free (`volg` returns that box),
+so it hangs by the guest without walking in with it from the door:
 
 > `De gasten eten <n> schep|scheppen per dag`
 > `<naam> eet <extra> erbij. Samen?`
@@ -764,7 +771,9 @@ The frozen comparison is `vergelijk(v)`: `dagen · nieuw > voorraad` → `'meer'
 
 **Step 3 — the bed.** A bubble over the guest: icon 🛏, text `Kies een bed` (or
 `Alles bezet`), tapping it travels to the room of the first free bed. When that room is not
-in view, a second bubble at (93, 6) shows that room's icon and name and travels there too.
+in view, a second bubble at (93, 6) shows that room's icon and name and travels there too —
+**port:** that bubble hangs at the door the way to that room starts with (`Rooms.pad`), the
+corridor door from the receptie, not on the wall behind the desk.
 Tapping a free bed calls `wijsBed`: set `kamer`/`bed`, move the guest from `nieuweGast` into
 `gasten`, recompute the band, `World.slaap`, `behoefte = 'eten'`, clear the check-in,
 `Snd.tover()`, **one star** (`Econ.sterren(1, 'checkin')`), tick off the `bed` task, flip
@@ -908,7 +917,24 @@ Tapping a card: close the board, round → `vrij`, travel to its room, then run 
 The board opens with the prikbord hotspot or the `📋 Prikbord` button and closes when the
 bell rings, a card is tapped, the evening round starts or any game starts.
 
-**Card layout.** Up to three bubbles at (9, 3), (48, 42) and (87, 81), height 22, prio 10,
+**Port (owner 2026-09-23): the board is a sheet.** "Plaatjes als [de receptie met het open
+bord] zijn veel te druk in iconen. en wekker zetten is bijvoorbeeld helemaal niet relevant
+aan waar de tekst geplaatst is".  A card is about a room somewhere else in the hotel, so no
+place in the receptie is its right place: `Hotel.toon_bord()` opens `Ui.prikbord_blad()`
+(`ui/prikbordblad.gd`) — title `📋 Prikbord`, hint `Tik op een taakje om erheen te gaan.`,
+the cards as paper notes on cork (pictogram, the task in bold, under it where it is done:
+`in de keuken`, `in kamer 1`, `bij het zwembad`; a done card ✅ on mint), under the cork at
+most two day messages, and `Sluiten`.  With no cards: one note `🐾 Speel lekker rond` that
+closes the sheet.  Below a 450 unit screen the notes stand side by side.  Nothing of the
+board hangs in the room any more; the 📋 button on the board and its badge stay.  A tapped
+note runs `doe_taak` (the sheet closes, round → `vrij`, travel, action); `Sluiten` or a tap
+beside the sheet closes the board.  The board opens wherever the child is (it no longer
+travels to the receptie first), it never replaces another sheet — behind the start screen
+it waits until that one closes — and a card that changes while it is open rebuilds it
+without the pop-in (`stil`).  The notice board itself hangs on the back wall again, left of
+the desk, at (12, 1).
+
+**Card layout (HTML).** Up to three bubbles at (9, 3), (48, 42) and (87, 81), height 22, prio 10,
 each `icoon` (or ✅ when done) + the task text. With no tasks at all, one bubble at the
 prikbord: `🐾 Speel lekker rond`. Under them, up to two day messages at (45, 60), heights
 45 and 63, prio 9, which disappear when tapped.
@@ -1089,20 +1115,22 @@ The icon is removed while its own game is running (unless `hotspot.blijf`), when
 `unlock` is false, or when the object cannot be found — which is exactly why an entry
 button must hang on a **fixed** object, not on the game's own loose decor. It is placed
 `aan` the resting prop `hotspot.rust` while that stands (the first hopscotch stone, the
-stall's counter, the pile of washing), else on `hotspot.obj` when `|dx| + |dz| ≤ 8`, else
-on the band grid at its aim point.
+stall's counter, the pile of washing, the corridor clock, the blanket chest), else on
+`hotspot.obj` when `|dx| + |dz| ≤ 8`, else on the band grid at its aim point.  Before the
+clock and the chest, "⏰ Wekker" hung on the paw poster and "🛏 Bedden" on the play basket,
+next to that basket's own "Speelmand" — two names on one thing (owner 2026-09-23).
 
 Currently registered games:
 
 | id | naam | kamer | hotspot obj (icoon) | unlock | wens | taak |
 |---|---|---|---|---|---|---|
 | `voerkar` | De voerkar | keuken | `kar` 🛒 | N ≥ 1 | – | (hotel task `voer`) |
-| `bedden` | Bedden op rij | kamer1 | `mand` 🛏 | N ≥ 1 | – | default `bedden` |
+| `bedden` | Bedden op rij | kamer1 | `mand` 🛏, resting on `rust_bd_kist` — the blanket chest between the beds (`dekenkist`, art/decor_slaapkamer.gd) | N ≥ 1 | – | default `bedden` |
 | `sleutels` | Het sleutelbord | receptie | `sleutelbordz` 🔑 | N ≥ 2 | – | default `sleutels` |
 | `tobbe` | Tobbe-tijd | tuin | `tobbe` 🛁 | N ≥ 1 | (`bad` via `WENS_SPEL`) | `bad`, prio 1 |
 | `meubels` | Het meubelboek | receptie | `boek` 📖 | N ≥ 3 | – | default `meubels` |
 | `zwembad` | Zwembad | zwembad | `mat` 🏊 | N ≥ 1 | `zwemmen` | `zwemles`, prio 1 |
-| `wekker` | Wekkerdienst | gang | fixed decor + offset ⏰ | N ≥ 1 | – | `wekker`, prio 3 |
+| `wekker` | Wekkerdienst | gang | fixed decor + offset ⏰, resting on `rust_wk_klok` — the corridor clock itself at 7 o'clock | N ≥ 1 | – | `wekker`, prio 3 |
 | `hinkel` | Hinkelpad | tuin | `hok` 🪨 (offset), resting on `rust_hk_steen0` — band 3's eleven plain stones | N ≥ 1 | `spelen` | prio 2 with a waiting guest, else 5 |
 | `was` | Wasmandtoren | wasserij | `tobbe` 🧺 (offset), resting on `rust_was_berg` — the pile at (60, 54) | N ≥ 1 | – | `was`, prio 8 |
 | `kraam` | Souvenirkraam | tuin | `bal` 🎁 (offset), resting on `rust_kr_toonbank` — the stall and its counter | N ≥ 1 | `souvenir` | `souvenir`, prio 1 |
@@ -1224,6 +1252,27 @@ Every frame, `Hits.plaats(kamer, projectie)` does:
 Measurements (button width/height, frame size) are cached and only re-measured after
 `Hits.hermeet()` (called from `World.meet()`) or when the button's HTML changes; a button
 measured while hidden (0 × 0) is measured again next frame instead of caching the zero.
+
+**Port rules for `op: "aan"` (owner 2026-09-23: "Dit gebeurt vaak over het hele spel").**
+A button that belongs to a thing tries, in order: ON the thing when it is big (the board),
+right under it, right over it, and beside it (right, left) level with its middle — all
+centred on the thing as it is DRAWN, not on its aim point (a bowl's plate stands well
+right of its slot point).  Each place must touch no placed element and no other button's
+thing; of those, the first that hides nothing of any OTHER thing in the room wins
+(fixed decor, slots, movable things, loose decor, guests — a share of at least 15 % of that
+thing counts), else the one that hides the least.  So "Sleutels" hangs over its key board
+and not on the plant in front of it.  A **door** carries its sign ON itself: in the middle
+of the opening, else at its foot inside the opening, and only then in front of or above it;
+on its own door nothing next to the opening counts.  In front of a door is where the
+furniture stands (the bench, the chest, the ball pit, the ironing board); the opening is
+kept clear of furniture (test_rooms).  An `aan` button chooses afresh every pass, also
+after it once fell back on a band.  The desk the cards keep off is its pieces (the two
+halves and what stands on them, `World.vlakken_van_balie`), not the box round the diagonal
+desk, which was mostly the floor in front of the counter.  A fixed card (`midden`) that
+would lie on its OWN thing steps beside it — under, over, right, left, the nearest free —
+instead of climbing whole bands away; a card that only meets another element keeps its
+column.  `Ui.wolk` and `Ui.bron` pass `op` and `obj` on, so a bubble or a source that is
+about a thing can hang `aan` it (the coins on the meubels counter, the purse).
 
 Fallback sizes are 56 × 48 px. `Hits.debug()` reports per spot: id, room, owner, depth,
 z-index, visibility, position, size, `op`, anchor, object height `vh`, `weg`, the catch
@@ -1352,7 +1401,7 @@ check-in is repainted (it comes first), otherwise the prikbord opens when the ro
   each showing icon, name and the waiting badge, and a `Sluiten` button.
 * `Hotel.naarKamer(id)` = `World.naar(id)` + `state.kamerNu = id` + `Snd.deur()` +
   `render()`.
-* **Door hotspots**: one per door of the room in view, at the door point, `y = 9`, icon and
+* **Door hotspots** (**port:** the sign hangs ON its door, prio 11 — §5.4 port rules): one per door of the room in view, at the door point, `y = 9`, icon and
   label of the target room, title `Ga naar <naam>`, badge `wachtIn(target)`, class
   `hotdeur`, prio 8, and a drop target `deur` with `data = {naar, kamer}` — that is how the
   food trolley is pushed into the corridor.
@@ -1503,6 +1552,8 @@ Toasts: `Smakelijk eten! 😋` · `🍪 Vul eerst de voerkar` · `🍽 Hier slaa
 
 `Bel een gast` · `Nog een bed vrij` · `<naam> wil een bed` · `Vul de voerkar` ·
 `Reken af: <naam>` · `<naam> wil spelen` · `Speel lekker rond` ·
+sheet (port, owner 2026-09-23) `📋 Prikbord` · `Tik op een taakje om erheen te gaan.` ·
+under a card `in de <kamer>` · `in kamer 1` / `in kamer 2` · `bij het zwembad` · `Sluiten` ·
 day messages `voer: <n> 🥄` · `Els bracht 10 🥄` · `<naam> gaat naar huis`
 (game cards: `<naam> wil in bad` / `Tobbe-tijd` · `Zet de bedden op rij` ·
 `Hang de sleutels op` · `Koop iets moois` · plus the golf-3 cards from their own files)

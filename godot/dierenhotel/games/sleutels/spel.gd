@@ -487,7 +487,14 @@ func _bodem(kader: Rect2) -> float:
 ##   `naast`   liggende telefoon: de kaart uiterst links, de rij rechts ernaast
 ##             op haar eigen hoogte;
 ##   `krap`    er past niets naast en niets boven elkaar: de rij gaat vóór en
-##             zakt zo laag als het kader toelaat, de kaart neemt wat overblijft.
+##             zakt zo laag als het kader toelaat, de kaart neemt wat overblijft;
+##   `rechts`  de rij vlak boven het sleutelbord — dichter op elkaar als het
+##             moet — en de kaart rechts naast de rij aan de wand.  Gekozen als
+##             de andere opstellingen de rij van het bord af duwen (eigenaar,
+##             2026-09-23: "helemaal niet relevant aan waar de tekst geplaatst
+##             is"): aan de linkerwand van de receptie nam de kaart boven het
+##             bord de muur in die de rij nodig had, en de rij zakte op het kleed
+##             midden in de kamer.
 ##
 ## De drempels zijn geen ronde getallen maar de vraag zelf: past de kaart nog
 ## bóven de rij (`kort`), en past ze ernáást (`smal`)?  Alles rekent in
@@ -603,10 +610,75 @@ func _opbouw(b: Dictionary) -> Dictionary:
 			and (in_balk or is_equal_approx(kaart_py, kaart_py_nat)) \
 			and is_equal_approx(dx, basis) and is_zero_approx(schuif) and regels == 1:
 		modus = "gewoon"
+	# Is de rij van het bord af geduwd — onder het bord, of meer dan twee
+	# banden van haar plek erboven?  Dan hangt ze liever vlak boven het bord
+	# met de kaart ernaast (`rechts`), of, staat de kaart in de balk, gewoon
+	# vlak boven het bord met kleinere stappen.
+	if bord_vlak.size.y > 0.0 and not kort and modus != "gewoon":
+		var boven_bord := bord_vlak.position.y - GAT - KNOP * 0.5
+		if rij_py - KNOP * 0.5 > bord_vlak.end.y or absf(rij_py - boven_bord) > 2.0 * float(Hits.RIJ):
+			var r := _opbouw_rechts(n, basis, dx_min, k, kaart_maat, bord_vlak, werk,
+				wolk_y, not in_balk)
+			if not r.is_empty():
+				return r
 	return {"modus": modus, "haak_y": _hoogte_voor(rij_py), "dx": dx, "schuif": schuif,
 		"wolk_y": wolk_y, "kaart_y": _hoogte_voor(kaart_py), "kaart_py": kaart_py,
 		"kaart_maat": kaart_maat, "rij_py": rij_py, "n": n,
 		"per_regel": per_regel, "regels": regels}
+
+
+## De opstelling `rechts` (zie `_opbouw`): de rij vlak boven het sleutelbord,
+## of één of twee banden hoger — nooit lager, want lager is de vloer — met de
+## gewone stap en anders met de kleinste; de kaart rechts naast de rij, op
+## dezelfde hoogte, binnen het kader.  `met_kaart` is false als de kaart in de
+## rekenbalk staat: dan hoeft er naast de rij niets te passen.  {} als het niet
+## past.
+func _opbouw_rechts(n: int, basis: float, dx_min: float, k: float, kaart_maat: Vector2,
+		bord_vlak: Rect2, werk: Rect2, wolk_y: float, met_kaart: bool) -> Dictionary:
+	if n <= 0:
+		return {}
+	var vakken := _vlakken()
+	vakken.append_array(_vaste_vlakken())
+	var boven_bord := bord_vlak.position.y - GAT - KNOP * 0.5
+	for dx in [maxf(basis, dx_min), dx_min]:
+		var schuif := _pas_schuif(dx, 0.0, n, werk, k, RAND)
+		for stap in 3:
+			var py := boven_bord - float(stap) * float(Hits.RIJ)
+			if py - KNOP * 0.5 < RAND:
+				break
+			var rij := _rij_vlak(py, dx, schuif, n, 1)
+			if rij.end.x > werk.end.x - RAND or _raakt(rij, vakken):
+				continue
+			if not met_kaart:
+				return {"modus": "gewoon", "haak_y": _hoogte_voor(py), "dx": dx,
+					"schuif": schuif, "wolk_y": wolk_y, "kaart_y": _hoogte_voor(py),
+					"kaart_py": py, "kaart_maat": kaart_maat, "rij_py": py, "n": n,
+					"per_regel": n, "regels": 1}
+			# de kaart mijdt de rij, het bord en de balie (die mag een kaart
+			# nooit afdekken, `Hits._kaart_vrij`): eerst rechts naast de rij op
+			# haar hoogte, anders vlak onder de rij rechts van het bord
+			var mijden: Array[Rect2] = [rij.grow(GAT), bord_vlak.grow(GAT)]
+			mijden.append_array(World.vlakken_van_balie(ctx.kamer))
+			var plekken: Array[Vector2] = [
+				Vector2(rij.end.x + GAT + kaart_maat.x * 0.5, py),
+				Vector2(maxf(bord_vlak.end.x + GAT + kaart_maat.x * 0.5, rij.get_center().x),
+					rij.end.y + GAT + kaart_maat.y * 0.5),
+			]
+			for kp in plekken:
+				var kx := kp.x
+				var ky := clampf(kp.y, werk.position.y + RAND + kaart_maat.y * 0.5,
+					werk.end.y - RAND - kaart_maat.y * 0.5)
+				if kx + kaart_maat.x * 0.5 > werk.end.x - RAND:
+					continue
+				var kaart_r := Rect2(Vector2(kx - kaart_maat.x * 0.5,
+					ky - kaart_maat.y * 0.5), kaart_maat)
+				if _raakt(kaart_r, mijden):
+					continue
+				return {"modus": "rechts", "haak_y": _hoogte_voor(py), "dx": dx,
+					"schuif": schuif, "wolk_y": wolk_y, "kaart_y": _hoogte_voor(ky),
+					"kaart_py": ky, "kaart_px": kx, "kaart_maat": kaart_maat,
+					"rij_py": py, "n": n, "per_regel": n, "regels": 1}
+	return {}
 
 
 ## Hoeveel plaatjes er op één regel passen.  Onder de vijf tikdoelen breed
@@ -937,6 +1009,16 @@ func _verzet_kaart(lay: Dictionary) -> void:
 	if spot == null:
 		return
 	spot.y = float(lay.get("kaart_y", spot.y))
+	# `rechts`: de kaart schuift over de diepte van het bord naar rechts, tot
+	# naast de rij — één stap (x+1, z−1) is 4k px, en de diepte blijft gelijk
+	if lay.has("kaart_px"):
+		var k: float = float(ctx.wereld.schaal().get("k", 1.0))
+		var bx := float(_bord_plek.get("x", 0.0))
+		var bz := float(_bord_plek.get("z", 0.0))
+		var nu := _px_van({"x": bx, "z": bz, "y": 0.0})
+		var sch := (float(lay["kaart_px"]) - nu) / maxf(0.001, 4.0 * k)
+		spot.x = bx + sch
+		spot.z = bz - sch
 
 
 ## De nummerplaatjes aan de wand: sleepdoelen met hun getal erop.  K1: het

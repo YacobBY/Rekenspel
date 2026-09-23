@@ -35,7 +35,8 @@ const ROOS := Color("#F19FB5")      ## the heart in the picture
 
 ## Every model name this file provides, in a fixed order.
 const NAMEN: Array[String] = ["nachtkastje", "raam", "raamz", "schilderij",
-	"schilderijz", "blokken", "speelgoedkist", "staande_lamp", "boekenplank"]
+	"schilderijz", "blokken", "speelgoedkist", "staande_lamp", "boekenplank",
+	"dekenkist"]
 
 # ------------------------------------------------------------------ op de vloer
 
@@ -89,6 +90,22 @@ static func speelgoedkist(_p := {}) -> Array:
 	ArtVorm.verf(v, -3, -1, 10, 12, 2, 2, KUSSEN)
 	ArtVorm.bx(v, 2, 8, -1, 5, 5, 5, LILA)
 	ArtVorm.verf(v, 3, 5, 10, 11, 3, 3, PAPIER)
+	return v
+
+## The blanket chest the `bedden` game takes its little beds out of (games-a.md
+## §3), with a folded blanket and a pillow on its lid, so it reads as bedding and
+## not as one more toy box (owner, 2026-09-23: "Bedden" hung on the play basket,
+## next to that basket's own "Speelmand").  Footprint 13 x 9, 14 tall.
+static func dekenkist(_p := {}) -> Array:
+	var v: Array = []
+	ArtVorm.bx(v, -6, 0, -4, 13, 8, 9, LILA)
+	ArtVorm.verf(v, -6, 6, 0, 0, -4, 4, LILA_D)       # the plinth
+	ArtVorm.verf(v, -6, 6, 6, 6, -4, 4, LILA_D)       # the edge of the lid
+	ArtVorm.verf(v, -1, 1, 3, 5, 4, 4, GOUD)          # the clasp, front
+	ArtVorm.verf(v, 6, 6, 3, 5, -1, 1, GOUD)          # ... and on the side
+	ArtVorm.bx(v, -5, 8, -3, 11, 3, 7, DEKEN)         # the folded blanket
+	ArtVorm.verf(v, -5, 5, 9, 9, -3, 3, ArtDecor.DEKEN_D)
+	ArtVorm.bx(v, -4, 11, -2, 6, 3, 5, KUSSEN)        # and a pillow on top
 	return v
 
 ## Floor lamp with a pastel shade.  Footprint 9 x 9, 22 tall.
@@ -160,4 +177,5 @@ static func tabel() -> Dictionary:
 		"speelgoedkist": Callable(ArtDecorSlaapkamer, "speelgoedkist"),
 		"staande_lamp": Callable(ArtDecorSlaapkamer, "staande_lamp"),
 		"boekenplank": Callable(ArtDecorSlaapkamer, "boekenplank"),
+		"dekenkist": Callable(ArtDecorSlaapkamer, "dekenkist"),
 	}

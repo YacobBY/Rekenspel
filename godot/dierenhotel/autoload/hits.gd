@@ -327,11 +327,13 @@ func plaats() -> void:
 			for cel in _cellen_van(balk, kader):
 				_bezet[cel] = true
 	# The counter is the one piece of world a card may not hide: the bell, the
-	# till, the book and the lamp all stand on it (V1 finding 4).
+	# till, the book and the lamp all stand on it (V1 finding 4).  Piece by
+	# piece, not the one box round the diagonal desk: that box is mostly the
+	# floor in front of the counter, and everything that belongs AT the counter
+	# — the check-in card, the families, the bill's hints — was pushed away
+	# from it (owner, 2026-09-23).
 	_kaart_vrij.clear()
-	var balie := World.vlak_van_balie()
-	if balie.size.x > 0.0 and balie.size.y > 0.0:
-		_kaart_vrij.append(balie)
+	_kaart_vrij.append_array(World.vlakken_van_balie())
 	var lijstje: Array[Spot] = []
 	for id in _volgorde.duplicate():
 		var s: Spot = _spots[id]
@@ -407,6 +409,7 @@ func plaats() -> void:
 	for s in lijstje:
 		if s.zichtbaar and s.vlak_nu.size.x > 0.0 and s.vlak_nu.size.y > 0.0:
 			_vakken.append(s.vlak_nu)
+	_verzamel_dingen(World.kamer_nu())
 	# place front-most first inside each layer
 	var rijen := maxi(1, int((kader.size.y - 2 * RAND) / RIJ))
 	var kolommen := maxi(1, int((kader.size.x - 2 * RAND) / KOL))
@@ -453,6 +456,12 @@ func _blijf_staan(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2) -> Diction
 	if l.is_empty() or not l.has("mik"):
 		return {}
 	var op := str(l["op"])
+	# A button that hangs ON its thing asks for its own place again every pass,
+	# also when it had to fall back on a band once: the check-in card that
+	# walked past the board pushed "Prikbord" onto the floor, and the rule
+	# below kept it there after the card had gone (owner, 2026-09-23).
+	if s.op == "aan":
+		return {}
 	# `balk` is in this list because its place is the bar, and the bar moves:
 	# a card that kept last frame's rectangle would keep standing where the
 	# paper used to be after the paper shrank or went away.
@@ -692,15 +701,38 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 		# first task card 191 units along the wall (owner, 2026-09-23).
 		var groot := not deur and (s.klas.contains("hotbord")
 			or vlak.size.x * vlak.size.y >= GROOT * maat.x * maat.y)
-		var x0 := mik.x - maat.x * 0.5
+		# Centred on the thing as it is DRAWN, not on its aim point: a bowl's
+		# plate stands well to the right of its slot point, and "Leeg" hung
+		# beside the bowl instead of under it (owner, 2026-09-23).
+		var x0 := (vlak.get_center().x if vlak.size.x > 0.0 else mik.x) - maat.x * 0.5
 		var kandidaten: Array[Rect2] = []
 		var op_eigen: Array[bool] = []     ## this candidate may stand on its own thing
+		if deur and vlak.size.y > 0.0:
+			# A door carries its sign ON itself, in the middle of the opening
+			# (owner, 2026-09-23: "wekker zetten is bijvoorbeeld helemaal niet
+			# relevant aan waar de tekst geplaatst is ... Dit gebeurt vaak over
+			# het hele spel").  In front of the door is exactly where the
+			# furniture stands — the bench in the receptie, the chest in the
+			# corridor, the ball pit, the ironing board — and a sign on that
+			# read as ITS name.  The opening itself is kept clear of furniture
+			# (test_rooms: no fixed piece hides more than 3 % of a door), so
+			# nothing but the door is ever under the sign.  The floor seen
+			# through the door stays visible under it.
+			var hart_x := vlak.get_center().x - maat.x * 0.5
+			kandidaten.append(Rect2(Vector2(hart_x, vlak.get_center().y - maat.y * 0.5), maat))
+			op_eigen.append(true)
 		if groot:
 			# The board carries its 📋 in its middle, not on its aim point at the
 			# top edge: there the button straddled the band right over the board,
 			# the one band its first task card (55 high, two bands) can stand in.
 			var hart := vlak.get_center().y if s.klas.contains("hotbord") else mik.y
 			kandidaten.append(Rect2(Vector2(x0, hart - maat.y * 0.5), maat))
+			op_eigen.append(true)
+		if deur and vlak.size.y > 0.0:
+			# still on the door, at its foot, when the middle of a tall door
+			# has a picture of the corridor wall in it (the gang's clock)
+			var hart_x := vlak.get_center().x - maat.x * 0.5
+			kandidaten.append(Rect2(Vector2(hart_x, voet - GAT - maat.y), maat))
 			op_eigen.append(true)
 		kandidaten.append(Rect2(Vector2(x0, voet + GAT), maat))
 		op_eigen.append(false)
@@ -709,6 +741,20 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 			op_eigen.append(true)
 		kandidaten.append(Rect2(Vector2(x0, top - GAT - maat.y), maat))
 		op_eigen.append(false)
+		if vlak.size.y > 0.0 and not deur:
+			# beside it, level with its middle: for a thing with something else
+			# right under it and right over it (the key board behind its plant)
+			var hart_y := vlak.get_center().y - maat.y * 0.5
+			kandidaten.append(Rect2(Vector2(vlak.end.x + GAT, hart_y), maat))
+			op_eigen.append(false)
+			kandidaten.append(Rect2(Vector2(vlak.position.x - GAT - maat.x, hart_y), maat))
+			op_eigen.append(false)
+		# The first place that hides nothing of another thing wins; failing
+		# that, the one that hides the least (`_vreemd_kosten`).  Before this a
+		# button took the first place free of other BUTTONS and landed on the
+		# plant in front of the key board, and "Sleutels" read as the plant.
+		var beste := Rect2()
+		var beste_kosten := INF
 		for i in kandidaten.size():
 			var r := _klem(kandidaten[i], kader)
 			var eigen_mag := op_eigen[i]
@@ -718,8 +764,18 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 				continue
 			if not eigen_mag and _dekking(r, vlak) > 0.0:
 				continue
-			_reserveer(r, kader)
-			return {"rect": r, "op": "aan", "krap": false, "gestapeld": false}
+			# ON its own door a sign is that door's sign, whatever stands next
+			# to the opening (the fence posts round the pool gate): only other
+			# buttons and their things keep it off
+			var kosten := 0.0 if (deur and eigen_mag) else _vreemd_kosten(r, vlak, deur)
+			if kosten < beste_kosten:
+				beste = r
+				beste_kosten = kosten
+			if kosten <= 0.0:
+				break
+		if beste_kosten < INF:
+			_reserveer(beste, kader)
+			return {"rect": beste, "op": "aan", "krap": false, "gestapeld": false}
 		op = "onder"
 	if s.kleef_aan != "":
 		var aan: Dictionary = _laatste.get(s.kleef_aan, {})
@@ -855,10 +911,53 @@ func _plaats_midden(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2, mij
 	# A fixed card or cloud gives way to the counter as well (V1 finding 4); a
 	# game's own plates that HANG on the desk (the key board's hooks) do not, or
 	# the row would be torn apart band by band (I2, sleutels).
-	var r := _wijk_omhoog(_klem(Rect2(mik - maat * 0.5, maat), kader), kader, eigen, mijd_balie)
+	var r := _klem(Rect2(mik - maat * 0.5, maat), kader)
+	# A card that would lie ON its own thing steps beside it — under it, over
+	# it, right or left of it, the nearest free one — instead of climbing whole
+	# bands away from it: under a big thing near the top of the frame the band
+	# stepping ends a whole screen lower, where the card says nothing about its
+	# thing (owner, 2026-09-23: "helemaal niet relevant aan waar de tekst
+	# geplaatst is").  Only when it is its OWN thing that is in the way: a card
+	# that merely meets another element keeps the old column, which the key
+	# board works its hook row out from.
+	if eigen.size.x > 0.0 and eigen.size.y > 0.0 and _raakt(r, eigen):
+		var naast := _naast_eigen(mik, maat, kader, eigen, mijd_balie)
+		if naast.size.x > 0.0:
+			_reserveer(naast, kader)
+			return {"rect": naast, "op": "midden", "krap": false, "gestapeld": false}
+	r = _wijk_omhoog(r, kader, eigen, mijd_balie)
 	var krap := _botst(r)
 	_reserveer(r, kader)
 	return {"rect": r, "op": "midden", "krap": krap, "gestapeld": false}
+
+func _raakt(a: Rect2, b: Rect2) -> bool:
+	var snij := a.intersection(b)
+	return snij.size.x > 0.001 and snij.size.y > 0.001
+
+## The free place right beside a card's own thing that is nearest to where the
+## card wanted to be: under it, over it, to its right or to its left, each with
+## GAT of air and inside the frame.  Empty when all four are taken.
+func _naast_eigen(mik: Vector2, maat: Vector2, kader: Rect2, eigen: Rect2,
+		mijd_balie: bool) -> Rect2:
+	var hart_y := clampf(mik.y, eigen.position.y + maat.y * 0.5, eigen.end.y - maat.y * 0.5) \
+		if eigen.size.y >= maat.y else eigen.get_center().y
+	var plekken: Array[Rect2] = [
+		Rect2(Vector2(mik.x - maat.x * 0.5, eigen.end.y + GAT), maat),
+		Rect2(Vector2(mik.x - maat.x * 0.5, eigen.position.y - GAT - maat.y), maat),
+		Rect2(Vector2(eigen.end.x + GAT, hart_y - maat.y * 0.5), maat),
+		Rect2(Vector2(eigen.position.x - GAT - maat.x, hart_y - maat.y * 0.5), maat),
+	]
+	var beste := Rect2()
+	var beste_af := INF
+	for p in plekken:
+		var r := _klem(p, kader)
+		if _raakt(r, eigen) or _bezet_voor(r, eigen, mijd_balie):
+			continue
+		var af := (r.get_center() - mik).length()
+		if af < beste_af:
+			beste = r
+			beste_af = af
+	return beste
 
 ## A fixed card lifts itself off whatever is already on screen (its own keypad,
 ## in practice), in whole bands, upwards first and then downwards.  The test is
@@ -1014,6 +1113,70 @@ func _cellen_vrij(rij: int, kol: int, breed: int, hoog: int) -> bool:
 			if _bezet.has("%d|%d" % [rij + j, kol + i]):
 				return false
 	return true
+
+## The boxes of every THING in the room in view — fixed decor, slots, the
+## movable things, loose decor and the guests — whether it has a button or not.
+## `_vakken` only knows the things that carry a button; this is what a button
+## hanging ON its thing looks at, so that it does not stand on the thing next
+## to it instead.
+var _dingen_vak: Array[Rect2] = []
+
+func _verzamel_dingen(kamer: String) -> void:
+	_dingen_vak.clear()
+	var bronnen: Array = []
+	var r := Rooms.get_kamer(kamer)
+	if r != null:
+		bronnen.append_array(r.decor)
+		bronnen.append_array(r.slots.values())
+	bronnen.append_array(World.dingen(kamer))
+	bronnen.append_array(World.decor_lijst(kamer))
+	for stuk in bronnen:
+		if not _bruikbaar(stuk):
+			continue
+		var v := World.vlak_van(str(stuk.get("model", stuk.get("n", ""))),
+			float(stuk.get("x", 0.0)), float(stuk.get("z", 0.0)),
+			float(stuk.get("hoog", stuk.get("y", 0.0))), stuk.get("params", {}),
+			Vector2.ZERO, int(stuk.get("rot", 0)))
+		if v.size.x > 0.0 and v.size.y > 0.0:
+			_dingen_vak.append(v)
+	for d in World.dieren(kamer):
+		var v := World.vlak_van_dier(d.id)
+		if v.size.x > 0.0 and v.size.y > 0.0:
+			_dingen_vak.append(v)
+
+## A button may lie over a small part of something big — the front of the desk
+## under the bell, the ball pit's rim — without anybody reading it as that
+## thing's name.  From this share of a thing on, it does.
+const VREEMD_DEEL := 0.15
+
+## How much of OTHER things this rectangle hides: the sum of the shares it
+## covers of every thing that is not `eigen`, counting only a share of at least
+## VREEMD_DEEL.  0 = it stands on nothing but its own thing and the floor.
+func _vreemd_kosten(r: Rect2, eigen: Rect2, deur := false) -> float:
+	var som := 0.0
+	for v in _dingen_vak:
+		if eigen.size.x > 0.0 and v.is_equal_approx(eigen):
+			continue
+		# for a door, a thing that lies mostly INSIDE its opening is the door:
+		# the pool gate and the rose arch are what the way out looks like.  Not
+		# for anything else — the last hopscotch stone lies inside the stall's
+		# box on screen and is not the stall.
+		if deur and eigen.size.x > 0.0 and _deel(v, eigen) >= 0.5:
+			continue
+		var snij := r.intersection(v)
+		if snij.size.x <= 0.0 or snij.size.y <= 0.0:
+			continue
+		var deel := (snij.size.x * snij.size.y) / maxf(1.0, v.size.x * v.size.y)
+		if deel >= VREEMD_DEEL:
+			som += deel
+	return som
+
+## The share of `v` that lies inside `binnen`.
+static func _deel(v: Rect2, binnen: Rect2) -> float:
+	var snij := v.intersection(binnen)
+	if snij.size.x <= 0.0 or snij.size.y <= 0.0:
+		return 0.0
+	return (snij.size.x * snij.size.y) / maxf(1.0, v.size.x * v.size.y)
 
 ## How much of the world this rectangle would cover.  0 = it covers nothing.
 func _vak_kosten(r: Rect2, eigen := Rect2()) -> float:

@@ -58,7 +58,10 @@ func bouw(o: Dictionary, mt: Dictionary, kader: Vector2) -> void:
 	_paneel.custom_minimum_size = Vector2(breed, 0)
 	midden.add_child(_paneel)
 
-	if not Ui.rust_modus() and DisplayServer.get_name() != "headless" and not Engine.is_editor_hint():
+	# `stil`: the same sheet built again with new content (the prikbord after a
+	# card was ticked) does not pop in a second time.
+	if not bool(o.get("stil", false)) and not Ui.rust_modus() \
+			and DisplayServer.get_name() != "headless" and not Engine.is_editor_hint():
 		waas.modulate.a = 0.0
 		_paneel.pivot_offset = Vector2(breed * 0.5, 120.0)
 		_paneel.scale = Vector2(0.92, 0.92)

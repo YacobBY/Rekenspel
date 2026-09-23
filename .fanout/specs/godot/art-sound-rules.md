@@ -497,6 +497,13 @@ old `poort` is no longer placed anywhere; the model stays in the base set.
 The doors themselves are not models: `scenes/vloer.gd` draws every opening with a view of
 the room behind it, and the kitchen's back door with its open leaf — see world.md §1.4.
 
+**The blanket chest** (`dekenkist`, `art/decor_slaapkamer.gd`, owner 2026-09-23): the chest
+the `bedden` game takes its little beds out of, standing between the two beds of kamer 1
+as that game's resting prop (`rust_bd_kist`, world.md §5.1) — lilac with a darker plinth
+and lid edge, a gold clasp on the front and the side, a folded light-blue blanket with a
+darker fold and a white pillow on top; footprint 13 × 9, 14 tall.  Before it, "🛏 Bedden"
+hung on the play basket next to that basket's own "Speelmand".
+
 The grass tufts of the garden are laid out by a seeded PRNG (`prng(90210)`, 30
 attempts) that keeps 22 voxels' Manhattan distance from the five large props and
 4 voxels' margin from the reserved zones (`hinkel`, `kraam`). **Reproduce the PRNG

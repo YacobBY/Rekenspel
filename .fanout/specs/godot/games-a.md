@@ -754,6 +754,18 @@ de wand naar rechts tot het naast de kaart staat, als het anders de kaart raakt.
 kader toelaat, wolkje mag over de kop van de gast; past het niet tussen rij en
 sleutel, dan gaat het onder de sleutel staan.
 
+**D. `rechts`** (poort, eigenaar 2026-09-23: "helemaal niet relevant aan waar de
+tekst geplaatst is").  Duwen A-C de rij van het bord af — onder het bord, of meer
+dan twee banden van haar plek erboven — dan hangt de rij vlak boven het
+sleutelbord of één of twee banden hoger (nooit lager: lager is de vloer), met de
+gewone stap en anders met de kleinste, en de kaart rechts naast de rij op haar
+hoogte, anders vlak onder de rij rechts van het bord; ze mijdt de rij, het bord
+en de balie.  Staat de kaart in de rekenbalk, dan is het `gewoon` met die rij.
+Aanleiding: aan de linkerwand van de receptie nam de kaart boven het bord de muur
+in die de rij nodig had, en terwijl de gast nog achterin stond zakte de rij op het
+kleed midden in de kamer.  De kaart schuift daarvoor over de diepte van het bord
+(`(x+1, z-1)` = `4k` px naar rechts).
+
 Schuiven langs de wand: `(x+1, z-1)` verplaatst een knop `4k` px naar rechts;
 `schuifVoor(px) = ceil(px / (4k))`. Hoogte terugrekenen:
 `hoogteVoor(som, py) = (som - (py - py0)/k) / 2`, naar beneden (`laag`) of boven
