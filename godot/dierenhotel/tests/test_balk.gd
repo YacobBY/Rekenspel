@@ -617,16 +617,17 @@ func _staat_op_de_lijnen(k: UiSomkaart, lijnen: PackedFloat32Array, wat: String)
 	return rijen
 
 ## Where the web build really puts the foot of the letters, read off its own
-## pixels on 2026-09-22 (`tools/speel.js` at 1280×640@2 with the card floating
-## and at 1024×768@2 with it in the bar, two pixels per unit): the foot of
-## "Elke", "In huis" and "4" below the top of the row that holds it.  A row
+## pixels (`tools/speel.js`, two pixels per unit): at 1024×768@2 with the card
+## in the bar (2026-09-22), and at 1280×640@2 with it floating — 21 for the sum
+## that day, 18 for the sentence since the world's letters grew (2026-09-23).
+## The foot of "Elke", "In huis" and "4" below the top of its row.  A row
 ## is as tall as the whole font chain and the text is centred in it, so "row
 ## top + ascent" lands 2 to 4 units too high — the first try of this fix did
 ## exactly that, and its line cut through the foot of every letter while a
 ## test built on the same formula stayed green.  These numbers are the truth
 ## that formula has to meet.
 func test_de_voet_staat_waar_de_webbouw_hem_tekent() -> void:
-	for geval in [["los", 14, 17.0, 21, 25.5], ["balk", 22, 26.5, 34, 41.0]]:
+	for geval in [["los", 18, 22.0, 21, 25.5], ["balk", 22, 26.5, 34, 41.0]]:
 		_op(Vector2(990, 637))
 		var kaart := _inchecken("ci")
 		if geval[0] == "los":

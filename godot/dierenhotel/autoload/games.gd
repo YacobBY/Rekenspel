@@ -16,6 +16,7 @@ signal spel_gestopt(id: String)
 const MAP := "res://games"
 
 const KORT_KADER := 450         ## below this frame height other games' icons hide while one runs
+const DUWTJE := 8.0             ## voxels (|dx| + |dz|): an entry this close still hangs ON its object
 var _defs: Dictionary = {}      ## id -> definitie
 var _scenes: Dictionary = {}    ## id -> PackedScene
 var _ctx: Dictionary = {}       ## id -> SpelCtx
@@ -204,13 +205,23 @@ func hersteek() -> void:
 			return {"x": float(p.get("x", 0.0)) + float(hs.get("dx", 0)),
 				"z": float(p.get("z", 0.0)) + float(hs.get("dz", 0)),
 				"y": y, "kamer": World.kamer_nu()}
-		Hits.maak({
+		var o := {
 			"id": knop_id, "door": EIGENAAR, "kamer": nu, "x": x, "z": z, "y": y,
 			"icoon": str(hs.get("icoon", "")), "label": str(hs.get("label", def.get("naam", id))),
 			"titel": str(def.get("naam", id)), "prio": 7, "op": "aan",
 			"klas": "hotgame aan" if _actief == id else "hotgame",
 			"volg": volg, "aan": func(_s) -> void: start(id),
-		})
+		}
+		# An icon nudged a few voxels off its object still hangs ON that object,
+		# so it names it: `Hits` looks for a thing within two voxels of the aim
+		# point only, and the speelmand's 🛏 (4 + 4) and the sleutelbord's 🔑
+		# (6) found nothing there, lost their object and floated off onto the
+		# band grid — "Bedden" in the middle of kamer 1 (owner, 2026-09-23).
+		# An icon moved FAR from its object (the laundry pile, the hopscotch
+		# path, the stall) stands where the game will be, not at the object.
+		if absf(float(hs.get("dx", 0))) + absf(float(hs.get("dz", 0))) <= DUWTJE:
+			o["obj"] = str(hs.get("obj", ""))
+		Hits.maak(o)
 
 ## The object an entry button hangs on: a loose thing first (the trolley, the
 ## desk lamp), then whatever `World.mik` finds (slots, fixed decor, the running

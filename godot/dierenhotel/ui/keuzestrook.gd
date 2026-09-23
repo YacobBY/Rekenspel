@@ -151,7 +151,7 @@ func _vul(rij: HBoxContainer, keuzes: Array, kort: bool, mt: Dictionary) -> void
 				b.add_theme_stylebox_override(toestand, stijlen[toestand])
 		else:
 			b.custom_minimum_size = Vector2(UiThema.HOT, UiThema.HOT)
-			b.add_theme_font_size_override("font_size", mt["klein"])
+			b.add_theme_font_size_override("font_size", mt["wereld"])
 		b.clip_text = false
 		var kies: Callable = keuze.get("kies", Callable())
 		var id := str(keuze.get("id", ""))

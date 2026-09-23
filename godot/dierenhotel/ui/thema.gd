@@ -73,12 +73,24 @@ static func laad_font(vet := false) -> FontFile:
 
 ## art-sound-rules.md §12.2, in px, against a base of 18 (17 below 520 units).
 ## Every value is floored at 12 px here, once, instead of in twenty call sites.
-static func maten(basis: int) -> Dictionary:
+## `ruim`: the frame has room for the world's bigger words (`ruim_van`).
+static func maten(basis: int, ruim := false) -> Dictionary:
 	var m := func(rem: float) -> int:
 		return maxi(VLOER, int(round(rem * basis)))
 	return {
 		"basis": maxi(VLOER, basis),
 		"klein": clampi(int(round(0.75 * basis)), VLOER, 14),   ## the floor clamp
+		## The words IN the world — button labels, bubbles, the answer strip,
+		## the sentence of a floating card — at the base size instead of
+		## `klein` wherever the frame has room.  The owner, 2026-09-23: "de
+		## tekst is er klein".  §12.2 caps child-facing text at 14 px because
+		## the prototype's world was a small canvas; on a tablet or a desktop
+		## the world fills a big frame and its labels stayed 14 in it.  On a
+		## phone-sized frame they stay `klein`: the games' layouts there are cut
+		## to those sizes, and at 18 the hopscotch card covered its own guest
+		## and the key card its own board.  The chrome keeps its sizes.
+		"wereld": clampi(basis, VLOER, 18) if ruim
+			else clampi(int(round(0.75 * basis)), VLOER, 14),
 		"h1": m.call(1.32), "h2": m.call(1.2),
 		"knop": m.call(1.05), "knop_groot": m.call(1.2),
 		"logo": m.call(1.05), "ronde": m.call(0.82), "badge": m.call(0.9),
@@ -92,6 +104,13 @@ static func maten(basis: int) -> Dictionary:
 ## world.md §6.5 / art-sound-rules.md §16.9: the base font drops below 520 units.
 static func basis_van(breedte: float) -> int:
 	return 17 if breedte < 520.0 else 18
+
+## Room for the world's bigger words: a frame whose SHORT side is at least
+## `RUIM` units — a tablet either way up, a desktop window.  Every phone the
+## suite draws stays under it (short sides 289 to 360).
+const RUIM := 600.0
+static func ruim_van(kader: Vector2) -> bool:
+	return minf(kader.x, kader.y) >= RUIM
 
 ## A tap target is 48; 44 is allowed **only below a 360 px screen**, never at
 ## exactly 360 (art-sound-rules.md §16.5: `@media (max-width:359px)` drops to 44
@@ -214,11 +233,11 @@ static func vulling(sb: StyleBoxFlat, links: int, boven: int, rechts := -1, onde
 	return sb
 
 ## The whole theme.  Rebuilt when the breakpoint moves, never per frame.
-static func bouw(basis: int) -> Theme:
+static func bouw(basis: int, ruim := false) -> Theme:
 	var t := Theme.new()
 	var gewoon := laad_font(false)
 	var vet := laad_font(true)
-	var mt := maten(basis)
+	var mt := maten(basis, ruim)
 	if gewoon != null:
 		t.default_font = gewoon
 	t.default_font_size = mt["basis"]
@@ -251,9 +270,9 @@ static func bouw(basis: int) -> Theme:
 
 	_variant(t, "KnopGroot", "Button", vulling(vlak(PERZIK, 18, 2, WIT), 16, 12), mt["knop_groot"], vet)
 	_variant(t, "KnopActief", "Button", vulling(vlak(ZON, 18, 2, PERZIK_D), 16, 12), mt["knop_groot"], vet)
-	_variant(t, "Hotknop", "Button", vulling(vlak(KAART, 16, 2, WIT), 8, 6), mt["klein"], vet)
+	_variant(t, "Hotknop", "Button", vulling(vlak(KAART, 16, 2, WIT), 8, 6), mt["wereld"], vet)
 	_variant(t, "Padtoets", "Button", vulling(vlak(WIT, 12, 2, KURK), 4, 2), mt["toets"], vet)
-	_variant(t, "Keuzeknop", "Button", vulling(vlak(KAART, 14, 2, WIT), 8, 6), mt["klein"], vet)
+	_variant(t, "Keuzeknop", "Button", vulling(vlak(KAART, 14, 2, WIT), 8, 6), mt["wereld"], vet)
 
 	var chip_sb := vulling(vlak(KAART, 14, 2, WIT), 6, 4)
 	_variant(t, "Kamerchip", "Button", chip_sb, mt["klein"], vet)
@@ -265,7 +284,7 @@ static func bouw(basis: int) -> Theme:
 	t.set_stylebox("hover_pressed", "Kamerchip", chip_in)
 
 	_variant(t, "Badge", "Button", vulling(vlak(KAART, 999, 2, WIT), 9, 4), mt["badge"], vet)
-	_variant(t, "Kaartknop", "Button", vulling(vlak(KURK, 14, 2, WIT), 10, 8), mt["klein"], vet)
+	_variant(t, "Kaartknop", "Button", vulling(vlak(KURK, 14, 2, WIT), 10, 8), mt["wereld"], vet)
 
 	t.set_type_variation("Logo", "Label")
 	t.set_font_size("font_size", "Logo", mt["logo"])

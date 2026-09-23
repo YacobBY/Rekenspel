@@ -1204,11 +1204,16 @@ func hotspots() -> void:
 		var naar := str(dp["naar"])
 		# The door opening is its object (I1 finding 5): the button hangs beside
 		# the hole instead of over it, and `Hits.dekking` measures something.
+		# `prio` 11, above the bell, the board and its task cards (10): a door
+		# sign has one right place, in front of its door, and the cards the
+		# board spreads over the room float anyway — the third one used to take
+		# the floor in front of the receptie's gang door and push the sign up
+		# onto the wall (owner, 2026-09-23).
 		Hits.maak({"id": "deur_%s_%s" % [nu, naar], "door": EIGENAAR, "kamer": nu,
 			"x": dp.get("x", 0), "z": dp.get("z", 0), "y": 9,
 			"icoon": doel.icoon, "label": doel.naam,
 			"titel": "Ga naar %s" % doel.naam,
-			"badge": str(w) if w > 0 else "", "klas": "hotdeur", "prio": 8, "op": "aan",
+			"badge": str(w) if w > 0 else "", "klas": "hotdeur", "prio": 11, "op": "aan",
 			"kind": "drop", "drop": "deur", "data": {"naar": naar, "kamer": nu},
 			"volg": _volg_deur(nu, naar),
 			"aan": func(_s): naar_kamer(naar)})
@@ -1230,7 +1235,7 @@ func hotspots() -> void:
 			Hits.maak({"id": "prikbord", "door": EIGENAAR, "kamer": "receptie",
 				"x": pp["x"], "z": pp["z"], "y": 22, "icoon": "📋", "op": "aan",
 				"label": "Prikbord", "badge": str(open) if open > 0 else "",
-				"titel": "Het prikbord met de taakjes", "prio": 10,
+				"titel": "Het prikbord met de taakjes", "prio": 10, "klas": "hotbord",
 				"aan": func(_s): prikbord_tik()})
 		var lp := decor_plek("receptie", "balielamp")
 		if avond_klaar() and not lp.is_empty():

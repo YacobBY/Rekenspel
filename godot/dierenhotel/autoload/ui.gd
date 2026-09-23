@@ -38,6 +38,7 @@ var balklaag: UiRekenbalk = null ## the maths bar of PLAN.md §3.1, UNDER the bu
 var thema: Theme = null
 var maten: Dictionary = {}
 var _basis := 18
+var _ruim := false   ## the frame has room for the world's bigger words
 var _tap := UiThema.HOT
 var _toast_tijd := 0.0
 var _toast: Control = null
@@ -425,10 +426,11 @@ var _balk_volgorde: Array[String] = []
 
 # ------------------------------------------------------------------- thema
 
-func _bouw_thema(basis: int) -> void:
+func _bouw_thema(basis: int, ruim := false) -> void:
 	_basis = basis
-	maten = UiThema.maten(basis)
-	thema = UiThema.bouw(basis)
+	_ruim = ruim
+	maten = UiThema.maten(basis, ruim)
+	thema = UiThema.bouw(basis, ruim)
 	var venster := get_window()
 	if venster != null:
 		venster.theme = thema
@@ -479,11 +481,12 @@ func _op_kader_veranderd(rect: Rect2, _schaal: Dictionary) -> void:
 ##     measured on the window and not on the world frame.
 func _herzie_maten(rect: Rect2) -> void:
 	var basis := UiThema.basis_van(rect.size.x)
+	var ruim := UiThema.ruim_van(rect.size)
 	var kort := scherm_maat()
 	var tap := UiThema.tap_van(minf(kort.x, kort.y))
-	var anders := basis != _basis or tap != _tap
-	if basis != _basis:
-		_bouw_thema(basis)
+	var anders := basis != _basis or ruim != _ruim or tap != _tap
+	if basis != _basis or ruim != _ruim:
+		_bouw_thema(basis, ruim)
 	_tap = tap
 	if anders:
 		thema_veranderd.emit()

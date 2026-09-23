@@ -12,7 +12,7 @@ extends PanelContainer
 
 signal ok_getikt()
 
-const BREED := 290       ## the card's own maximum, in units
+const BREED := 290       ## the card's maximum at 14 px letters; it widens with them
 const BREED_KLEIN := 170 ## below a 360 unit frame (art §16.6)
 const ONDER := 0.5       ## a ruled line lies this far under its baseline
 
@@ -91,7 +91,19 @@ func zet_balk_stand(aan: bool) -> void:
 
 func _bouw(balk: bool) -> void:
 	in_balk = balk
-	_balk = UiThema.balk_maten(World.kader_rect().size) if balk else {}
+	var kader := World.kader_rect().size
+	_balk = UiThema.balk_maten(kader) if balk else {}
+	# The sentence is written at the world's size, not at the 14 px of the
+	# chrome's little labels (owner, 2026-09-23: "de tekst is er klein").  The
+	# bar has room of its own and goes bigger still; a floating card shares
+	# the room with everything in it, and at the bar's 22/34 the key card grew
+	# to 437 units and covered the counter it must leave free (V1 finding 4).
+	var zin_grootte := int(_mt["wereld"])
+	var som_grootte := int(_mt["somlijn"]) if not _smal \
+		else maxi(UiThema.VLOER, int(_mt["somlijn"]) - 4)
+	if balk:
+		zin_grootte = int(_balk["zin"])
+		som_grootte = int(_balk["som"])
 	# A rebuild drops the children the previous stand made.
 	for kind in get_children():
 		remove_child(kind)
@@ -108,8 +120,11 @@ func _bouw(balk: bool) -> void:
 			breed = w * UiThema.BALK_LAAG_LINKS
 		custom_minimum_size = Vector2(breed, 0)
 	else:
-		if _smal:
-			breed = clampi(int(World.kader_rect().size.x) - 24, BREED_KLEIN, BREED)
+		# BREED was measured for 14 px letters; the card widens with them, so
+		# the sentence that fitted on one line still does (I2), and never past
+		# the frame.
+		var ruim := maxi(BREED, int(round(float(BREED) * float(zin_grootte) / 14.0)))
+		breed = ruim if kader.x < 1.0 else clampi(int(kader.x) - 24, BREED_KLEIN, ruim)
 		# A floating card carries no width of its own: the sentence line sets
 		# it (HEAD behaviour).  Clearing the bar's pinned width here is what
 		# stops a card that docked at the bar width from floating on at that
@@ -131,13 +146,8 @@ func _bouw(balk: bool) -> void:
 	kolom.sort_children.connect(_lijnen_verschoven)
 	add_child(kolom)
 
-	var zin_grootte := int(_mt["klein"])
-	var som_grootte := int(_mt["somlijn"])
-	var vak_grootte := int(_mt["somvak"])
-	if balk:
-		zin_grootte = int(_balk["zin"])
-		som_grootte = int(_balk["som"])
-		vak_grootte = int(_balk["som"])
+	var vak_grootte := som_grootte if balk else (int(_mt["somvak"]) if not _smal
+		else maxi(UiThema.VLOER, int(_mt["somvak"]) - 4))
 
 	regel_label = Label.new()
 	regel_label.name = "Regel"
@@ -181,8 +191,7 @@ func _bouw(balk: bool) -> void:
 	som_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	# In the bar the somlijn never shrinks: that shrink bought room for a
 	# keypad that no longer exists (B4).
-	som_label.add_theme_font_size_override("font_size", som_grootte if balk
-		else (_mt["somlijn"] if not _smal else maxi(UiThema.VLOER, int(_mt["somlijn"]) - 4)))
+	som_label.add_theme_font_size_override("font_size", som_grootte)
 	som_label.add_theme_color_override("font_color", UiThema.INKT)
 	# No empty ruled line left behind: a card without a sum shows no sum line
 	# (B4 — was band 3, the was end-card, the zwembad start card).
@@ -194,11 +203,10 @@ func _bouw(balk: bool) -> void:
 	vak_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vak_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	if balk:
-		vak_label.custom_minimum_size = Vector2(40, int(_balk["som"]) + 4)
+		vak_label.custom_minimum_size = Vector2(40, som_grootte + 4)
 	else:
 		vak_label.custom_minimum_size = Vector2(32, 32) if _smal else Vector2(40, 34)
-	vak_label.add_theme_font_size_override("font_size", vak_grootte if balk
-		else (_mt["somvak"] if not _smal else maxi(UiThema.VLOER, int(_mt["somvak"]) - 4)))
+	vak_label.add_theme_font_size_override("font_size", vak_grootte)
 	vak_label.add_theme_color_override("font_color", UiThema.INKT)
 	# the box shows the number the child tapped; a strip of WORDS needs no box
 	vak_label.visible = bool(_o.get("vak", (_o.get("keuzes", []) as Array).is_empty()))

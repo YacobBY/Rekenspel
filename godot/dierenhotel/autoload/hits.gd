@@ -673,16 +673,44 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 		# thing (the notice board, GROOT button areas or more) may carry the
 		# button on itself, centred on the aim point.  Anything else placed and
 		# every other object box stay clear — otherwise the bands decide.
-		var groot := vlak.size.x * vlak.size.y >= GROOT * maat.x * maat.y
+		#
+		# A DOOR is a way out, not a thing to use: its sign stands on the floor
+		# straight in front of it, in every room, so a child finds every exit
+		# the same way (owner, 2026-09-23: the buttons stood "op plekken die niet
+		# consistent zijn").  Never ON the door as its first choice — a door
+		# drawn big near the camera passed the GROOT test meant for the notice
+		# board (gang → keuken) — but on the foot of its own door before ABOVE
+		# it: a sign on the door still reads as that door, one over its lintel
+		# read as the wall (keuken → wasserij, with the trolley's box right
+		# under the threshold).
+		var deur := s.klas.contains("hotdeur")
+		# The notice board carries its button by name, not by arithmetic: it
+		# is the thing that rule was written for, and it passed GROOT by a
+		# hair (13520 against 12960) until the world's letters grew and the
+		# 📋 button with them — then it moved above the board and pushed the
+		# first task card 191 units along the wall (owner, 2026-09-23).
+		var groot := not deur and (s.klas.contains("hotbord")
+			or vlak.size.x * vlak.size.y >= GROOT * maat.x * maat.y)
 		var x0 := mik.x - maat.x * 0.5
 		var kandidaten: Array[Rect2] = []
+		var op_eigen: Array[bool] = []     ## this candidate may stand on its own thing
 		if groot:
-			kandidaten.append(Rect2(Vector2(x0, mik.y - maat.y * 0.5), maat))
+			# The board carries its 📋 in its middle, not on its aim point at the
+			# top edge: there the button straddled the band right over the board,
+			# the one band its first task card (55 high, two bands) can stand in.
+			var hart := vlak.get_center().y if s.klas.contains("hotbord") else mik.y
+			kandidaten.append(Rect2(Vector2(x0, hart - maat.y * 0.5), maat))
+			op_eigen.append(true)
 		kandidaten.append(Rect2(Vector2(x0, voet + GAT), maat))
+		op_eigen.append(false)
+		if deur:
+			kandidaten.append(Rect2(Vector2(x0, voet - GAT - maat.y), maat))
+			op_eigen.append(true)
 		kandidaten.append(Rect2(Vector2(x0, top - GAT - maat.y), maat))
+		op_eigen.append(false)
 		for i in kandidaten.size():
 			var r := _klem(kandidaten[i], kader)
-			var eigen_mag := groot and i == 0
+			var eigen_mag := op_eigen[i]
 			if _botst(r):
 				continue
 			if _vak_kosten(r, vlak if eigen_mag else Rect2()) > 0.0:

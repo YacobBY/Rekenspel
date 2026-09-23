@@ -87,7 +87,7 @@ func bouw(o: Dictionary, mt: Dictionary, smal: bool) -> void:
 		mt["getal"])
 	rij.add_child(getal_label)
 
-	zeg_label = _regel("Zeg", str(o.get("tekst", "")), mt["klein"])
+	zeg_label = _regel("Zeg", str(o.get("tekst", "")), mt["wereld"])
 	zeg_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	zeg_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	rij.add_child(zeg_label)

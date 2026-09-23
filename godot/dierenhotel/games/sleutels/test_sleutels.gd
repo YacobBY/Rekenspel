@@ -15,7 +15,13 @@ const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740),
 	Vector2i(740, 360)]
 ## De opstelling die elk van die vier schermen hoort te kiezen, gemeten op de
 ## echte schil.  Drift hierin is een echte verandering, geen detail.
-const MODUS := {"(1024, 768)": "gewoon", "(768, 1024)": "stapel",
+##
+## 1024×768 was `gewoon` tot 2026-09-23.  Toen kreeg de wereld op een ruim kader
+## grotere letters (eigenaar: "de tekst is er klein"), de vraagkaart werd hoger
+## en paste niet meer boven de rij zonder tegen de bovenrand te komen; dan
+## stapelt het spel, zoals het ook staand al deed.  Op beeld nagekeken: de kaart
+## linksboven, de rij over de wand, de strook onderaan bij de vinger.
+const MODUS := {"(1024, 768)": "stapel", "(768, 1024)": "stapel",
 	"(360, 740)": "stapel", "(740, 360)": "naast"}
 
 var _laag: Control = null

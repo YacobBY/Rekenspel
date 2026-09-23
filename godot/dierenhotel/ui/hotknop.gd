@@ -28,7 +28,7 @@ func bouw(o: Dictionary, mt: Dictionary, tap: int) -> void:
 	tooltip_text = str(o.get("titel", _label))
 	custom_minimum_size = Vector2(tap, tap)
 	clip_text = false
-	add_theme_font_size_override("font_size", mt["klein"])
+	add_theme_font_size_override("font_size", mt["wereld"])
 	focus_mode = Control.FOCUS_ALL
 	zet_badge(o.get("badge", null))
 
