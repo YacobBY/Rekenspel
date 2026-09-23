@@ -481,7 +481,8 @@ func test_geen_meubel_voor_een_deur() -> void:
 			waar(dekking <= DEUR_DEKKING_MAX, "%s -> %s: %d %% van de deur zit achter een meubel"
 				% [id, dr["naar"], roundi(dekking * 100.0)])
 
-func _deur_dekking(r: Rooms.Kamer, dr: Dictionary) -> float:
+## `extra`: more pieces to hold against the opening, as [model, x, z, y, params].
+func _deur_dekking(r: Rooms.Kamer, dr: Dictionary, extra: Array = []) -> float:
 	var g := 2
 	var a := float(dr["at"])
 	var b := a + float(dr["breed"])
@@ -510,6 +511,7 @@ func _deur_dekking(r: Rooms.Kamer, dr: Dictionary) -> float:
 		var m := String(r.slots[sid].get("model", ""))
 		if m != "" and Art.heeft_model(m):
 			stukken.append([m, float(r.slots[sid]["x"]), float(r.slots[sid]["z"]), 0.0, {}])
+	stukken.append_array(extra)
 	var bedekt := {}
 	for st in stukken:
 		var p = Art.plaat(st[0], g, st[4])
@@ -527,6 +529,98 @@ func _deur_dekking(r: Rooms.Kamer, dr: Dictionary) -> float:
 
 func _px(x: float, z: float, y: float, g: int) -> Vector2:
 	return Vector2((x - z) * Art.S * g, (x + z) * (Art.S / 2.0) * g - y * Art.HG * g)
+
+# ------------------------------------------------------------ de voordeur
+
+## OWNER, 2026-09-23: the guests "komen momenteel vanuit de gang binnen ipv
+## ingang".  The receptie has a front door of its own, in the one free stretch
+## of wall in view — the back wall right of the desk (the left wall carries the
+## corridor door, the bench, the key board and the playroom door) — and it is
+## NOT a door of the graph: no path, no door button, no chip and no cell on the
+## map lead through it (world.md §1.2).  No other room has one.
+func test_de_receptie_heeft_een_voordeur_buiten_de_deurgraaf() -> void:
+	var r := Rooms.get_kamer("receptie")
+	var ing := Rooms.ingang("receptie")
+	waar(not ing.is_empty(), "de receptie heeft een voordeur")
+	if ing.is_empty():
+		return
+	gelijk(str(r.ingang.get("wand", "")), "z", "in de achterwand rechts")
+	var a := float(r.ingang["at"])
+	var b := a + float(r.ingang["breed"])
+	gelijk(float(r.ingang["breed"]), 12.0, "zo breed als elke deur")
+	waar(a > float(r.balie["x1"]), "voorbij het eind van de balie (%.0f > %.0f)" % [a, float(r.balie["x1"])])
+	waar(b <= float(r.w) - 2.0, "binnen de wand, met zijn kozijn")
+	gelijk(float(ing["x"]), (a + b) / 2.0, "het deurpunt in het midden van de opening")
+	gelijk(float(ing["z"]), 0.0, "in de wand")
+	gelijk(float(ing["ix"]), (a + b) / 2.0, "de stap binnen")
+	gelijk(float(ing["iz"]), 8.0, "acht voxels de kamer in, als bij elke deur")
+	gelijk(float(ing["dz"]), 3.0, "de drempel, waar een gast verschijnt")
+	# it is not a door of the graph: the door pairs, points and paths stay as
+	# they were, and outside is no room
+	gelijk(r.deuren.size(), 2, "de receptie houdt twee deuren")
+	gelijk(r.deur_punten.size(), 2, "en twee deurpunten, dus twee deurknoppen")
+	for dr in r.deuren:
+		waar(str(dr["wand"]) != "z" or float(dr["at"]) + float(dr["breed"]) <= a - 2.0
+			or float(dr["at"]) >= b + 2.0,
+			"de voordeur valt niet samen met de deur naar %s" % dr["naar"])
+	gelijk(Rooms.lijst().size(), ORDE.size(), "buiten is geen kamer")
+	gelijk(UiPlattegrond.KAART.size(), ORDE.size(), "en heeft geen vak op de plattegrond")
+	for van in ORDE:
+		for naar in ORDE:
+			for stap in Rooms.pad(van, naar):
+				waar(ORDE.has(stap), "%s -> %s loopt alleen door kamers" % [van, naar])
+	for id in Rooms.lijst():
+		if id != "receptie":
+			waar(Rooms.ingang(id).is_empty(), "%s heeft geen voordeur" % id)
+	# the door hangs on the wall over its opening, the mat lies before it
+	var deur := _stuk(r, "voordeur")
+	waar(not deur.is_empty() and bool(deur.get("ver", false)) and bool(deur.get("ingang", false)),
+		"de voordeur hangt aan de wand en weet dat zij de ingang is")
+	gelijk(float(deur.get("x", 0)), (a + b) / 2.0, "midden over de opening")
+	var mat := _stuk(r, "welkomsmat")
+	waar(not mat.is_empty(), "er ligt een welkomstmat")
+	gelijk(float(mat.get("x", 0)), (a + b) / 2.0, "voor de deur")
+	waar(float(mat.get("z", 0)) <= float(ing["iz"]), "vlak voor de deur")
+	# the whole door is in the strip of wall that is always in view
+	waar(Rooms.deur_hoog(r, r.ingang) + 2 <= int(World.WAND_ZICHT / Art.HG),
+		"de deur met haar kozijn blijft altijd in beeld, ook in een laag kader")
+	# no guest wanders onto the mat, no bought plant stands on it
+	for p in r.plekken:
+		waar(absf(p[0] - float(ing["ix"])) + absf(p[1] - float(ing["iz"])) >= 14.0,
+			"loopplek (%s, %s) blijft van de voordeur af" % [p[0], p[1]])
+	waar(not Rooms.vrij_vak("receptie", float(ing["ix"]), float(ing["iz"])), "geen meubel op de mat")
+
+## Nothing stands in front of the front door either (the same 3 % as for every
+## door, `test_geen_meubel_voor_een_deur`) — the desk lamp included, which is a
+## movable thing and not in the decor list.
+func test_niets_staat_voor_de_voordeur() -> void:
+	var r := Rooms.get_kamer("receptie")
+	var extra: Array = []
+	for ding in World.dingen("receptie"):
+		extra.append([String(ding["model"]), float(ding["x"]), float(ding["z"]),
+			float(ding.get("hoog", 0.0)), {}])
+	var dekking := _deur_dekking(r, r.ingang, extra)
+	waar(dekking <= DEUR_DEKKING_MAX, "%d %% van de voordeur zit achter een meubel"
+		% roundi(dekking * 100.0))
+
+## No walk in the receptie crosses the counter, and neither does the way in from
+## the front door: to every spot at the desk it goes round the desk's end, each
+## leg a straight line in front of it (`WereldBinnenkomst.route`).
+func test_de_weg_van_de_voordeur_gaat_om_de_balie() -> void:
+	var r := Rooms.get_kamer("receptie")
+	var b: Dictionary = r.balie
+	var ing := Rooms.ingang("receptie")
+	for i in 3:
+		var p := Hotel._balieplek(i)
+		var doel := Vector2(float(p["x"]), float(p["z"]))
+		var weg := WereldBinnenkomst.route(r, ing, doel)
+		gelijk(weg[0], Vector2(float(ing["dx"]), float(ing["dz"])), "plek %d: vanaf de drempel" % i)
+		gelijk(weg[weg.size() - 1], doel, "plek %d: tot aan de balie" % i)
+		for j in weg.size() - 1:
+			waar(not _kruist(b, weg[j], weg[j + 1]), "plek %d: stuk %d (%s -> %s) blijft voor de balie"
+				% [i, j, str(weg[j]), str(weg[j + 1])])
+			var q: Vector2 = weg[j + 1]
+			waar(q.x > 0.0 and q.y > 0.0 and q.x < r.w and q.y < r.d, "plek %d: binnen de kamer" % i)
 
 ## OWNER, 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk dat
 ## lijkt gewoon op een huis".  The garden is the lawn behind the hotel: its left

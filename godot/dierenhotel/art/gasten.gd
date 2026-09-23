@@ -57,6 +57,29 @@ const POSE := {
 ## Only these nine decide the canvas size of a card sprite.
 const POSE_NAMEN := ["rust", "tril", "hap1", "hap2", "blijA", "blijB", "sip", "snuif", "loopA"]
 
+## The frames of the arrival through the front door (owner, 2026-09-23: "een
+## leuke animatie wanneer ze binnenkomen dat per dier anders is";
+## art-sound-rules.md §5.2).  The cat slinks in low and stretches at the desk,
+## the goose waddles in flapping its wings.  They are NOT in `POSE`: the
+## fifteen there are the HTML's, each held against its golden plate, and these
+## have no HTML original.  Same keys, plus two that only they use:
+##   `buk`     the front sinks this many voxels at the nose while the rear
+##             stays up (`bukken`, the mirror of `zitten`) — a stretch;
+##   `vleugel` the goose's wings: 1 half raised, 2 raised high over the back.
+const POSE_EXTRA := {
+	"sluipA":   {"hx": 1, "hy": -2, "oor": "vooruit", "staart": "laag", "mond": 0, "oog": -1, "stap": 1, "zit": 0, "lig": 0, "buk": 2},
+	"sluipB":   {"hx": 1, "hy": -2, "oor": "vooruit", "staart": "laag", "mond": 0, "oog": -1, "stap": 2, "zit": 0, "lig": 0, "buk": 2},
+	"strek":    {"hx": 2, "hy": -2, "oor": "rust", "staart": "l", "mond": 1, "oog": 1, "stap": 0, "zit": 0, "lig": 0, "buk": 6},
+	"fladder":  {"hx": 0, "hy": 1, "oor": "perk", "staart": "r", "mond": 1, "oog": 0, "stap": 0, "zit": 0, "lig": 0, "vleugel": 2},
+	"fladderA": {"hx": 1, "hy": 0, "oor": "rust", "staart": "l", "mond": 0, "oog": 0, "stap": 1, "zit": 0, "lig": 0, "vleugel": 2},
+	"fladderB": {"hx": 1, "hy": 0, "oor": "rust", "staart": "r", "mond": 0, "oog": 0, "stap": 2, "zit": 0, "lig": 0, "vleugel": 1},
+}
+
+## One pose by name: the HTML's fifteen first, then the arrival's; an unknown
+## name is `rust`, as it always was.
+static func pose_van(naam: String) -> Dictionary:
+	return POSE.get(naam, POSE_EXTRA.get(naam, POSE["rust"]))
+
 const POOT := 7                     ## the bottom layers that `liggen` squashes
 const KOM_CX := 29.5
 const KOM_CZ := 7.5
@@ -261,11 +284,24 @@ static func gans(p: Dictionary) -> Array:
 	ArtVorm.bx(v, 9 + gs, 1, 4, 2, 7, 2, C["e"])
 	ArtVorm.bx(v, 9 - gs, 1, 10, 2, 7, 2, C["e"])
 	ArtVorm.ell(v, 10, 10.5, 7.5, 6.2, 4.6, 5.2, C["b"], {"e": 3.0, "ymin": 5})
-	var wy := 11.5 if p["oor"] == "perk" else (9.5 if p["oor"] == "hang" else 10.5)
-	ArtVorm.ell(v, 10, wy, 2.0, 4.6, 3.0, 1.5, C["b"], {"e": 3.0})
-	ArtVorm.ell(v, 10, wy, 13.0, 4.6, 3.0, 1.5, C["b"], {"e": 3.0})
-	ArtVorm.verf(v, 8, 13, wy - 1, wy - 1, 1, 2, C["d"])
-	ArtVorm.verf(v, 8, 13, wy - 1, wy - 1, 13, 14, C["d"])
+	var vleugel := int(p.get("vleugel", 0))
+	if vleugel > 0:
+		# flapping (the arrival, POSE_EXTRA): the wings rise over the back and
+		# spread a voxel wider, their dark feather tips on top
+		var hy_v := 14.0 if vleugel == 1 else 18.5
+		var uit := 1.2 if vleugel == 1 else 0.0
+		var ry := 3.2 if vleugel == 1 else 3.8
+		ArtVorm.ell(v, 9.5, hy_v, uit, 4.6, ry, 1.4, C["b"], {"e": 3.0})
+		ArtVorm.ell(v, 9.5, hy_v, 15.0 - uit, 4.6, ry, 1.4, C["b"], {"e": 3.0})
+		var top := JsGetal.rond(hy_v + ry - 1.0)
+		ArtVorm.verf(v, 5, 14, top, top + 2, -2, 2, C["d"])
+		ArtVorm.verf(v, 5, 14, top, top + 2, 13, 17, C["d"])
+	else:
+		var wy := 11.5 if p["oor"] == "perk" else (9.5 if p["oor"] == "hang" else 10.5)
+		ArtVorm.ell(v, 10, wy, 2.0, 4.6, 3.0, 1.5, C["b"], {"e": 3.0})
+		ArtVorm.ell(v, 10, wy, 13.0, 4.6, 3.0, 1.5, C["b"], {"e": 3.0})
+		ArtVorm.verf(v, 8, 13, wy - 1, wy - 1, 1, 2, C["d"])
+		ArtVorm.verf(v, 8, 13, wy - 1, wy - 1, 13, 14, C["d"])
 	ArtVorm.punt(v, 3, 9 if p["staart"] == "laag" else 11, 6 + tz, 3, 3, 4, C["b"])
 	var ky := 21 + hy
 	ArtVorm.hals(v, 14, 13, 19 + hx, ky + 1, 7.5, 1.9, 2.2, C["b"])
@@ -309,6 +345,22 @@ static func liggen(v: Array) -> Array:
 	for p in v:
 		var y: int = p["y"]
 		p["y"] = JsGetal.rond(y * 0.3) if y <= POOT else y - POOT + plat
+	return v
+
+## Stretching (the arrival's `buk`, POSE_EXTRA): the mirror of `zitten` — the
+## FRONT sinks, up to `buk` voxels at the nose, and the rear stays where it is,
+## so the front paws flatten on the floor and the back slopes up to the tail.
+static func bukken(v: Array, buk: float) -> Array:
+	var x0 := 1 << 30
+	var x1 := -(1 << 30)
+	for p in v:
+		x0 = mini(x0, p["x"])
+		x1 = maxi(x1, p["x"])
+	var sp := maxi(1, x1 - x0)
+	for p in v:
+		var t := float(p["x"] - x0) / float(sp)
+		var zak := JsGetal.rond(t * t * buk)
+		p["y"] = maxi(0, p["y"] - zak)
 	return v
 
 # ----------------------------------------------------------------- accessoires
@@ -531,13 +583,16 @@ static func acc_sleutel(lijst) -> String:
 
 ## The finished voxel list of one guest: species, pose and outfit.
 static func bouw(kind: String, pose: String, sleutel: String) -> Array:
-	var p: Dictionary = POSE.get(pose, POSE["rust"])
+	var p: Dictionary = pose_van(pose)
 	var v := soort(kind, p)
+	var buk := float(p.get("buk", 0))
 	var acc := sleutel.split(",") if not sleutel.is_empty() else PackedStringArray()
 	if acc.is_empty():
 		if p["lig"]:
 			return liggen(v)
-		return zitten(v) if p["zit"] else v
+		if p["zit"]:
+			return zitten(v)
+		return bukken(v, buk) if buk > 0.0 else v
 	var a := ankers(kind, p)
 	if acc.has("sjaaltje"):
 		sjaaltje(v, a["hals"])
@@ -549,6 +604,8 @@ static func bouw(kind: String, pose: String, sleutel: String) -> Array:
 		v = liggen(v)
 	elif p["zit"]:
 		v = zitten(v)
+	elif buk > 0.0:
+		v = bukken(v, buk)
 	if acc.has("bal"):
 		bal(v, a["hals"])
 	return v

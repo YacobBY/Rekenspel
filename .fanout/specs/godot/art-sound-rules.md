@@ -373,6 +373,33 @@ top-left relative to the anchor)
 In canvas pixels multiply by `g` and add the constant 4 px of padding
 (2 px on each side); the offset becomes `voxel-offset·g − 2`.
 
+### 5.2 The arrival's frames (port, owner 2026-09-23)
+
+The arrival through the front door (§11.8) has six frames of its own, in
+`ArtGasten.POSE_EXTRA` — NOT in `POSE`: the fifteen above are the HTML's and each is held
+against its golden plate; these have no HTML original. `ArtGasten.pose_van(naam)` looks in
+`POSE` first, then here, and an unknown name is still `rust`. Same keys, plus two only
+they use: `buk` (the front sinks up to that many voxels at the nose while the rear stays up —
+`bukken()`, the mirror of `zitten()`: `y −= round(t²·buk)` with `t` running from the tail
+(0) to the nose (1), clamped at 0, light baked after) and `vleugel` (the goose's wings:
+1 half raised, 2 raised high over the back).
+
+| pose | hx | hy | oor | staart | mond | oog | extra | used for |
+|---|---|---|---|---|---|---|---|---|
+| `sluipA` | 1 | −2 | vooruit | laag | 0 | −1 | `stap:1`, `buk:2` | the cat slinking in, low and careful |
+| `sluipB` | 1 | −2 | vooruit | laag | 0 | −1 | `stap:2`, `buk:2` | … the other step |
+| `strek` | 2 | −2 | rust | l | 1 | 1 | `buk:6` | the cat's stretch at the desk: front down, tail up, a yawn |
+| `fladder` | 0 | 1 | perk | r | 1 | 0 | `vleugel:2` | the goose flapping where it stands, beak open |
+| `fladderA` | 1 | 0 | rust | l | 0 | 0 | `stap:1`, `vleugel:2` | the goose waddling in, wings up |
+| `fladderB` | 1 | 0 | rust | r | 0 | 0 | `stap:2`, `vleugel:1` | … the other step, wings half up |
+
+Raised goose wings: `ell(9.5, 18.5, 0.0 / 15.0, 4.6, 3.8, 1.4)` (half: `ell(9.5, 14.0, 1.2 /
+13.8, 4.6, 3.2, 1.4)`) in `b`, their top three layers repainted in `d` as feather tips, in
+place of the resting wings. Every other kind bakes these frames too (so a hat or a scarf
+sits right on them), but only the cat and the goose use them. The dog and the rabbit need
+no frame of their own: their arrivals are motion — jumps, turns and bounces — over the
+fifteen.
+
 ---
 
 ## 6. Accessories (bought at the souvenir stall, worn by the guest)
@@ -496,6 +523,20 @@ old `poort` is no longer placed anywhere; the model stays in the base set.
 
 The doors themselves are not models: `scenes/vloer.gd` draws every opening with a view of
 the room behind it, and the kitchen's back door with its open leaf — see world.md §1.4.
+
+**The front door** (`art/decor_hotel.gd`, owner 2026-09-23: the guests "komen momenteel
+vanuit de gang binnen ipv ingang"; world.md §1.2). The hotel's way in from outside, on the
+receptie's back wall right of the desk. It is the only door in the hotel that is closed,
+mint and glass: every door to a room is an open hole in a wooden frame with that room's
+floor behind it (world.md §1.4), so it never reads as one more room.
+
+| model | where | shape |
+|---|---|---|
+| `voordeur` | receptie, on the wall z = 0 @ 111,1 `ver` over the opening x 105..117 | a white frame (`#FBF7EE`) three deep, 14 wide and 28 tall, round the 12 × 26 opening of every door; over the leaf a fanlight `#FFF1C4` with a white sunburst. `params.open` 0: a mint leaf `#86C9AE` (the hotel's own colour, its collar and its hat; panel `#6DB397`, edge `#A8DCC6`) with a big pane of sky `#D6EEF7`, a hedge `#BFE0B0` low in it, a glint and a pink paw on the glass, and a brass knob. `open` 1: the leaf has swung out of sight and the opening shows outside itself — sky `#CFE9F7` with a sun and a cloud, the hedge, the pavement (`#E8DAC4` / `#DDCDB5`, the garden's paving) and the threshold `#C9A27E` |
+| `welkomsmat` | receptie, before the front door @ 111,7, depth bias −10 | a pink mat `#EF9FAE` 12 × 7, one voxel thin, with a darker border `#D98596` and a white heart: the kitchen's coir mat has a paw, this one says welcome |
+
+The door is drawn by the room scene like every wall piece; `scenes/kamer.gd` gives it
+`{open: 1}` while `World.ingang_open()` (§11.8).
 
 **The blanket chest** (`dekenkist`, `art/decor_slaapkamer.gd`, owner 2026-09-23): the chest
 the `bedden` game takes its little beds out of, standing between the two beds of kamer 1
@@ -679,6 +720,41 @@ every accessory change) — the accessory list must always be *replaced*, never 
 in place, or the counter lies.
 
 ---
+
+### 11.8 The arrival through the front door (port, owner 2026-09-23)
+
+"Doe ook een leuke animatie wanneer ze binnenkomen dat per dier anders is." A guest who
+arrives (the bell, world.md §3.3) appears on the threshold of the receptie's front door
+(world.md §1.2) and makes his own way round the end of the desk to his spot at the
+counter: threshold (111, 3) → step inside (111, 8) → before the desk's end (109, 36) → the
+spot (`WereldBinnenkomst.route`, no leg crosses the desk). The choreography is data —
+`wereld/binnenkomst.gd` writes a list of beats per kind — and `World` plays it on the 15 Hz
+think tick in state `komt` (`World.kom_binnen`), so it is deterministic and any other order
+supersedes it like a walk. Beats: `stil` (stand n ticks, a pose from a list every `per`
+ticks, optionally turning round with each pose and bouncing once per pose), `loop` (walk
+straight at `v` voxels a tick, a gait frame every `stap` voxels, bob and sway, `rem` slows
+into the end), `hup` (one arc, `n` ticks in the air, `hoog` voxels, `land` ticks squatting
+in `zit`, `draai` looks round at the top), and the instant `geluid`, `pluis` and `deur`.
+
+| kind | the arrival | frames | sounds and particles | ticks |
+|---|---|---|---|---|
+| hond | peeks in (`kijk` 5), wags on the mat (`blijA`/`blijB` with a bounce, 4), bounds in with three hops of 11 voxels (6 high, 5 + 1 ticks each) to the end of the desk, trots to the counter (3.0 voxels a tick, a quick gait) and spins there, turning round four times with a bounce each (13) | the fifteen | `hup` on the first and third bound; two sparkles when he arrives and two when he is done | 59 |
+| poes | peeks round the door (`kijk`/`tril`, 5), slinks in low — careful first steps (1.2 a tick) and on round the desk (2.5) in `sluipA`/`sluipB` — walks the last stretch tail up (2.8), and at the counter stretches (`strek`, 11) and sits down neatly (`zit`, 5) | `sluipA` `sluipB` `strek` | a soft `terug` as she stretches — a little "mrrp"; two sparkles at the end | 58 |
+| konijn | twitches its ears (`tril`/`kijk`, 4), hops the whole way in little jumps of at most 10 voxels (4 high, 4 + 1 ticks each), then one big hop where it stands (10 high, 7 ticks) looking round at its top | the fifteen | `hup` on every other hop and on the big one; two sparkles | 58 |
+| gans | looks round (3), a double "gak" and four flaps in the doorway (`fladder`/`blijB`), a puff of feathers, the first steps in flapping (`fladderA`/`fladderB`), a big waddle round the desk (2.2 a tick, sway ±3 instead of ±1.6) flapping on, the last stretch plain (2.5), and three last flaps at the counter | `fladder` `fladderA` `fladderB` | `plop` 3 and `plop` 1 as the "gak", once more at the desk; white feathers (`#FFFCF4`, the goose's light) as rising particles | 58 |
+
+The ticks are those to the bell's spot `BALIEPLEK(0)` (3.9 s; 3.2–4.5 s to the other two
+spots). Every arrival ends on the spot in `wacht`, pose `rust`, feet on the floor — the pose
+the check-in has always had — within five seconds (`tests/test_binnenkomst.gd`). The door
+stands open (`params.open`) from the first tick until the guest is `DEUR_AF = 22` voxels
+clear of the threshold, so the child sees the sky behind him, and falls shut then with
+`Snd.deur` ("een deur die opengaat en weer dichtvalt"); if the arrival is cut short it
+shuts by itself after `DEUR_OPEN_MAX = 45` ticks. No new sound: the desk bell has just
+rung, so the door opens silently. **Reduced motion:** no arrival and no open door — the
+guest simply stands at the counter; switched on halfway, he is there at once. **Off
+screen** (the child went to another room) the arrival is skipped to its end, and a bed
+chosen while he is still coming in sends him straight to it, landing him first if he was
+in the air.
 
 ## 12. Emoji, fonts and text sizes
 

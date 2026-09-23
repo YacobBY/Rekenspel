@@ -32,6 +32,7 @@ var _dieren: Dictionary = {}       ## gast id -> Dierbeeld
 var _bed_nodes: Dictionary = {}    ## slot-id -> WereldObject van een bed hier
 var _bedden_verborgen := false     ## de kamer leeg voor de vraag (zie verberg_bedden)
 var _dingen: Dictionary = {}       ## ding id -> WereldObject
+var _ingang: WereldObject = null   ## the front door, drawn open while a guest comes in
 var _proefwereld = null            ## only with --demo / ?demo=1
 
 func _ready() -> void:
@@ -74,6 +75,7 @@ func bouw(kamer_id: String) -> void:
 			laag.remove_child(k)
 			k.queue_free()
 	_decor.clear()
+	_ingang = null
 	_los.clear()
 	_dieren.clear()
 	_bed_nodes.clear()
@@ -95,6 +97,8 @@ func bouw(kamer_id: String) -> void:
 		o.zet_model(stuk["n"], stuk.get("params", {}), Vector2.ZERO, int(stuk.get("rot", 0)))
 		o.plaats(stuk["x"], stuk["z"], hoog)
 		_decor.append(o)
+		if stuk.get("ingang", false):
+			_ingang = o
 	for sid in r.slots:
 		_bouw_slot(r, sid)
 	_zet_bedden(not _bedden_verborgen)
@@ -282,6 +286,10 @@ func _ververs() -> void:
 	_ververs_dieren()
 	_ververs_dingen()
 	_ververs_los()
+	# the front door stands open while a guest comes in (World.kom_binnen);
+	# its plate follows its params, like every model's
+	if _ingang != null:
+		_ingang.params = {"open": 1} if World.ingang_open(_kamer) else {}
 	for o in _decor:
 		o.ververs()
 	voor.queue_redraw()

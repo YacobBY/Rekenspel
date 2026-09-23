@@ -136,6 +136,13 @@ class Dier extends RefCounted:
 	var reis_deuren := 0           ## doors on that journey
 	var reis_klaar := 0            ## doors already passed
 	var been_van := Vector2.INF    ## where the leg he is walking started
+	## coming in through the front door (`kom_binnen`, state `komt`): the beats
+	## still to play (`WereldBinnenkomst`), the ticks into the current one, where
+	## it started, and the spot the arrival ends on
+	var komt: Array = []
+	var komt_t := 0
+	var komt_van := Vector2.ZERO
+	var komt_doel := Vector2.INF
 	var rnd: Sommen.Prng
 	var opdracht: Object = null    ## Opdracht, resolved true/false
 
@@ -485,6 +492,27 @@ func vlak_van_deur(kamer_id: String, naar: String) -> Rect2:
 			vak = vak.expand(p)
 		return vak
 	return Rect2()
+
+## The screen rectangle of a room's front door (`Kamer.ingang`, the receptie
+## only), in frame units: the opening and its frame, as tall as every door
+## (`Rooms.deur_hoog`) plus the lintel.  `Rect2()` for a room without one.  The
+## front door is no door of the graph, so no door button stands on it and
+## `vlak_van_deur` does not know it; this is its box for whatever has to keep
+## off it or measure against it.
+func vlak_van_ingang(kamer_id: String = "") -> Rect2:
+	var r := Rooms.get_kamer(kamer_id if kamer_id != "" else _kamer_nu)
+	if r == null or r.ingang.is_empty():
+		return Rect2()
+	var a := float(r.ingang.get("at", 0)) - 1.0
+	var b := a + float(r.ingang.get("breed", 12)) + 2.0
+	var h := float(Rooms.deur_hoog(r, r.ingang)) + 2.0
+	var langs_z := str(r.ingang.get("wand", "z")) == "z"
+	var randen: Array = [[a, 0.0], [b, 0.0]] if langs_z else [[0.0, a], [0.0, b]]
+	var vak := Rect2(mik_punt(float(randen[0][0]), float(randen[0][1]), 0.0), Vector2.ZERO)
+	for xz in randen:
+		vak = vak.expand(mik_punt(float(xz[0]), float(xz[1]), 0.0))
+		vak = vak.expand(mik_punt(float(xz[0]), float(xz[1]), h))
+	return vak
 
 ## The screen rectangle of the reception desk (`Kamer.balie`), in frame units.
 ##
@@ -1282,6 +1310,14 @@ func _breek(d: Dier, gehaald: bool) -> void:
 		# target must go with it or he would climb back in on arrival
 		d.hoogte = 0.0
 		d.lift = 0.0
+	if d.staat == "komt":
+		# an arrival cut short in mid-hop comes down to the floor at once
+		d.hoogte = 0.0
+		d.lift = 0.0
+		d.bob = 0.0
+		d.zij = 0.0
+	d.komt = []
+	d.komt_doel = Vector2.INF
 	d.slaap_doel = ""
 	d.slaap_kamer = ""
 	d.bed_sprong = false
@@ -1431,6 +1467,10 @@ func _tik() -> void:
 ## world.md §2.9 — off screen: keep the route, one step per tick, straight to
 ## the target.  No poses, no particles, no drawing.
 func _grof_tik(d: Dier) -> void:
+	if d.staat == "komt":
+		# nobody sees the front door: he is at the desk already
+		_komt_af(d)
+		return
 	if d.staat == "eet":
 		# world.md §2.9: off screen the bowl is emptied at once, not chewed
 		var bak := _bak_van(Rooms.get_kamer(d.kamer))
@@ -1470,6 +1510,8 @@ func _fijn_tik(d: Dier) -> void:
 				_rijd(d)
 		"spring":
 			_spring(d)
+		"komt":
+			_komt_tik(d)
 		"slaap":
 			d.bob = sin(_tikken * 0.045) * 0.6
 			d.pose = "lig"
@@ -1791,6 +1833,193 @@ func _eind_staat(d: Dier) -> void:
 			d.staat = "stil"
 			d.pose = "rust"
 			d.tikken = JsGetal.rond((10.0 + d.rnd.volgende() * 40.0) * d.rustig)
+
+# ---------------------------------------------------------------- binnenkomen
+##
+## A guest who arrives at the hotel comes in from OUTSIDE, through the front
+## door of the receptie (`Rooms.ingang`), and not out of the corridor (owner,
+## 2026-09-23: "die komen momenteel vanuit de gang binnen ipv ingang.  Doe ook
+## een leuke animatie wanneer ze binnenkomen dat per dier anders is").  The
+## door opens, he appears on its threshold and plays his own little entrance
+## on the way to the desk — the beats are `WereldBinnenkomst`'s, this is the
+## player.  It runs on the think tick like every walk, so it is deterministic,
+## and any other order (`ga`, `reis`, `slaap`, `pose`, `zet`, ...) takes the
+## guest over at once, exactly as it would take over a walk.
+
+const DEUR_OPEN_MAX := 45       ## the front door falls shut after 3 s at the latest
+
+var _ingang_dicht_op: Dictionary = {}   ## kamer -> the tick its front door falls shut
+
+## `World.kom_binnen(id, x, z)` — the guest comes in through the front door of
+## `kamer_id` and ends on (x, z) waiting (`wacht`), as `ga(id, x, z, "wacht")`
+## would leave him.  A room without a front door, and reduced motion: he simply
+## stands there.  Not awaitable: nothing waits for him (the check-in card hangs
+## at the desk while he is still on his way).
+func kom_binnen(id: String, x: float, z: float, kamer_id := "receptie") -> bool:
+	var d: Dier = _dieren.get(id)
+	if d == null or not Rooms.bestaat(kamer_id):
+		return false
+	var doel := Vector2(x, z)
+	var ing := Rooms.ingang(kamer_id)
+	if ing.is_empty() or rust():
+		zet(id, kamer_id, x, z)
+		d.na = "wacht"
+		_eind_staat(d)
+		return true
+	zet(id, kamer_id, float(ing["dx"]), float(ing["dz"]))
+	d.komt = WereldBinnenkomst.plan(d.kind, Rooms.get_kamer(kamer_id), ing, doel)
+	d.komt_t = 0
+	d.komt_van = d.plek()
+	d.komt_doel = doel
+	# he faces into the room: away from the wall the door is in
+	d.face = -1 if str(ing.get("wand", "z")) == "z" else 1
+	d.staat = "komt"
+	# the door swings open without a sound — the desk bell has just rung; it
+	# falls shut with the door's own sound once he is in (the `deur` beat)
+	_ingang_dicht_op[kamer_id] = _tikken + DEUR_OPEN_MAX
+	vuil()
+	return true
+
+## Is this guest still on his way in through the front door?
+func komt_binnen(id: String) -> bool:
+	var d: Dier = _dieren.get(id)
+	return d != null and d.staat == "komt"
+
+## Does the front door of this room stand open right now?  `scenes/kamer.gd`
+## draws it open or shut from this.
+func ingang_open(kamer_id: String = "") -> bool:
+	var k := kamer_id if kamer_id != "" else _kamer_nu
+	return _tikken < int(_ingang_dicht_op.get(k, -1))
+
+## One tick of the arrival: the beats that happen at once (a sound, particles,
+## the door), then one tick of the beat that takes time.
+func _komt_tik(d: Dier) -> void:
+	if rust():
+		_komt_af(d)
+		return
+	var gespeeld := false
+	while not d.komt.is_empty():
+		var slag: Dictionary = d.komt[0]
+		var soort := str(slag.get("soort", ""))
+		if soort == "geluid" or soort == "pluis" or soort == "deur":
+			_komt_meteen(d, slag)
+			d.komt.pop_front()
+			continue
+		if gespeeld:
+			break
+		gespeeld = true
+		d.komt_t += 1
+		if _komt_speel(d, slag):
+			d.komt.pop_front()
+			d.komt_t = 0
+			d.komt_van = Vector2(d.x, d.z)
+	if d.komt.is_empty():
+		_komt_af(d)
+
+func _komt_meteen(d: Dier, slag: Dictionary) -> void:
+	match str(slag["soort"]):
+		"geluid":
+			var naam := str(slag.get("naam", ""))
+			if naam == "plop":
+				Snd.plop(int(slag.get("hand", 0)))
+			elif naam != "" and Snd.has_method(naam):
+				Snd.call(naam)
+		"pluis":
+			var kl: Color = slag.get("kl", ArtEffect.STER_KL[0])
+			_pluis(d, int(slag.get("n", 2)), kl, bool(slag.get("omhoog", true)))
+		"deur":
+			if ingang_open(d.kamer):
+				Snd.deur()
+			_ingang_dicht_op[d.kamer] = _tikken
+
+## One tick of a beat that takes time (`stil`, `loop`, `hup`); true once it is
+## done.  `komt_t` counts the ticks of this beat from 1.
+func _komt_speel(d: Dier, slag: Dictionary) -> bool:
+	var t := d.komt_t
+	match str(slag["soort"]):
+		"stil":
+			var n := maxi(1, int(slag.get("n", 1)))
+			var per := maxi(1, int(slag.get("per", n)))
+			var poses: Array = slag.get("poses", ["rust"])
+			var fase := (t - 1) % per
+			if fase == 0 and t > 1 and bool(slag.get("draai", false)):
+				d.face = -d.face
+			d.pose = str(poses[((t - 1) / per) % poses.size()])
+			d.bob = -sin(PI * float(fase) / float(per)) * float(slag.get("hup", 0.0))
+			d.zij = sin(float(t) * 0.9) * float(slag.get("zij", 0.0))
+			d.hoogte = 0.0
+			d.lift = 0.0
+			return t >= n
+		"loop":
+			var naar: Vector2 = slag["naar"]
+			var weg := naar - Vector2(d.x, d.z)
+			var af := weg.length()
+			var v := float(slag.get("v", 2.0))
+			if bool(slag.get("rem", false)):
+				v *= clampf(af / (v * 4.0), 0.4, 1.0)
+			var stap := minf(v, af)
+			if af > 0.0001:
+				d.x += weg.x / af * stap
+				d.z += weg.y / af * stap
+				d.face = 1 if (weg.x - weg.y) >= 0.0 else -1
+			d.gang += stap / maxf(0.5, float(slag.get("stap", 3.0)))
+			var poses: Array = slag.get("poses", ["loopA", "loopB"])
+			d.pose = str(poses[int(d.gang) % poses.size()])
+			d.bob = -absf(sin(d.gang * PI)) * float(slag.get("bob", d.bob_hoog))
+			d.zij = sin(d.gang * PI) * float(slag.get("zij", 0.0))
+			d.hoogte = 0.0
+			d.lift = 0.0
+			if af <= stap + 0.0001:
+				d.x = naar.x
+				d.z = naar.y
+				return true
+			return false
+		"hup":
+			var n := maxi(2, int(slag.get("n", SPRING_TIKKEN)))
+			var land := maxi(0, int(slag.get("land", 1)))
+			var naar: Vector2 = slag.get("naar", d.komt_van)
+			d.bob = 0.0
+			d.zij = 0.0
+			if t <= n:
+				var f := float(t) / float(n)
+				var p := d.komt_van.lerp(naar, f)
+				d.x = p.x
+				d.z = p.y
+				d.hoogte = float(slag.get("hoog", SPRING_HOOG.get(d.kind, 5.0))) * 4.0 * f * (1.0 - f)
+				d.lift = -d.hoogte * Art.HG
+				d.pose = "loopA" if f < 0.25 else ("blijA" if f < 0.75 else "loopB")
+				var weg := naar - d.komt_van
+				if weg.length() > 0.01:
+					d.face = 1 if (weg.x - weg.y) >= 0.0 else -1
+				if bool(slag.get("draai", false)) and (t == (n + 1) / 2 or t == n):
+					d.face = -d.face       # a look round at the top, back on landing
+				return t >= n and land == 0
+			d.x = naar.x
+			d.z = naar.y
+			d.hoogte = 0.0
+			d.lift = 0.0
+			d.pose = "zit"                 # the squat of a landing, as `_spring` has it
+			return t >= n + land
+	return true
+
+## The arrival is over — or cut short, off screen or by reduced motion: he
+## stands on his spot and waits, and the front door is shut.
+func _komt_af(d: Dier) -> void:
+	if is_finite(d.komt_doel.x):
+		_zet_plek(d, d.komt_doel)
+	d.komt = []
+	d.komt_t = 0
+	d.komt_doel = Vector2.INF
+	d.hoogte = 0.0
+	d.lift = 0.0
+	d.bob = 0.0
+	d.zij = 0.0
+	d.v = 0.0
+	d.na = "wacht"
+	_eind_staat(d)
+	_ingang_dicht_op[d.kamer] = mini(int(_ingang_dicht_op.get(d.kamer, -1)), _tikken)
+	_model_bij(d)
+	vuil()
 
 # ------------------------------------------------------------------- reizen
 

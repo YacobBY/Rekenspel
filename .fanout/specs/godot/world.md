@@ -60,7 +60,7 @@ direction of the camera slide.
 
 | # | id | naam | icoon | w × d | wand | vloer | loop | special |
 |---|---|---|---|---|---|---|---|---|
-| 0 | `receptie` | `Receptie` | 🛎️ | 120 × 120 | 54 | `hout` | 1.5 | mat 45..99 × 78..114, colours `#E9BFC9`/`#E3B4C0` |
+| 0 | `receptie` | `Receptie` | 🛎️ | 120 × 120 | 54 | `hout` | 1.5 | mat 45..99 × 78..114, colours `#E9BFC9`/`#E3B4C0`; **port:** the front door `ingang` (§1.2) |
 | 1 | `gang` | `Gang` | 🚪 | 120 × 36 | 56 | `loper` | 1 (default) | – |
 | 2 | `kamer1` | `Kamer 1` | 🛏️ | 114 × 114 | 58 | `zacht` | 1.5 | mat 51..93 × 45..87, `#DFCBEA`/`#D6BFE4` |
 | 3 | `kamer2` | `Kamer 2` | 🛏️ | 114 × 114 | 58 | `zacht` | 1.5 | mat 51..93 × 45..87, `#CBE3D6`/`#BFDBCB` |
@@ -133,6 +133,23 @@ for a door in a wall, the facade's height standing in for `wand` in the garden, 
 when a room does not exist. Example: `pad('kamer1','zwembad')` =
 `['kamer1','gang','keuken','tuin','zwembad']`.
 
+**The front door** (port, owner 2026-09-23: the guests "komen momenteel vanuit de gang binnen
+ipv ingang"). The receptie has one more opening that is NOT a door of this graph:
+`Kamer.ingang = {wand: 'z', at: 105, breed: 12}`, the hotel's way in from outside, on the
+back wall right of the desk — the one free stretch of wall in view (the desk ends at
+x = 102; the left wall carries the corridor door, the bench, the key board and the playroom
+door). `Rooms.ingang(kamer)` derives `{x: 111, z: 0, ix: 111, iz: 8, dx: 111, dz: 3, wand}`
+the way `deur()` does (`(dx, dz)` is the threshold, where a guest appears) and is `{}` for
+every other room. It is kept out of `deuren` and `deur_punten`, so no path (`pad`), no door
+button, no "komt eraan" bubble, no chip of the room bar and no cell of the map leads through
+it; outside is no room. Its opening is `deur_hoog()` tall like any door (26) and is not cut
+into the wall: the door is a wall model, `voordeur` (§1.3, art-sound-rules.md §8), drawn
+open (`params.open`) while `World.ingang_open(kamer)` — while a guest comes in (§2.5).
+Its step inside keeps free cells (< 14) and bought furniture (< 12) away like a door's, and
+`World.vlak_van_ingang(kamer)` is its screen box. `tests/test_rooms.gd` holds it to the door
+rules: not in the graph, nothing of the room's fixed decor or things hides more than 3 % of
+it, and the way in from it goes round the end of the desk (§3.3).
+
 ### 1.3 Fixed decor per room
 
 Decor entries are `{n, x, z, y?, ver?, params?, sleutel?}`. `ver` means "always draw first"
@@ -142,7 +159,7 @@ movable **dingen**: `balielamp` (receptie 15, 105, y 14) and `kar` (keuken 48, 6
 
 | room | decor (model @ x, z [, y]) |
 |---|---|
-| receptie | `balie` @ 40,60 · `balie` @ 75,60 · `baliez` @ 15,58 · `baliez` @ 15,93 · `bel` @ 33,60 y14 · `kassa` @ 66,60 y14 · `boek` @ 15,75 y14 · `lamp` @ 15,105 y14 (→ ding `balielamp`) · `prikbord` @ 1,64 y14 `rot 1` `ver` (since 2026-09-23 on the left wall over the bench in the waiting corner: behind the desk the visible wall had no room for the task cards, which now hang round the board instead of across the room) · `sleutelbordz` @ 1,84 `ver` · `plant` @ 105,18 · `plant` @ 108,81 |
+| receptie | `balie` @ 40,60 · `balie` @ 75,60 · `baliez` @ 15,58 · `baliez` @ 15,93 · `bel` @ 33,60 y14 · `kassa` @ 66,60 y14 · `boek` @ 15,75 y14 · `lamp` @ 15,105 y14 (→ ding `balielamp`) · `prikbord` @ 1,64 y14 `rot 1` `ver` (since 2026-09-23 on the left wall over the bench in the waiting corner: behind the desk the visible wall had no room for the task cards, which now hang round the board instead of across the room) · `sleutelbordz` @ 1,84 `ver` · `plant` @ 105,18 · `plant` @ 108,81 · **port (2026-09-23):** the front door `voordeur` @ 111,1 `ver` (with `ingang: true`, so the room scene can draw it open) over the opening of §1.2 and the welcome mat `welkomsmat` @ 111,7 before it, with a depth bias `d: −10` so a guest on the threshold is drawn over the mat |
 | gang | `plant` @ 36,30 · `plant` @ 108,30 (along the FRONT edge since 2026-09-23: against the back wall they hid 37 % and 29 % of the bedroom doors) · `kist` @ 114,14 |
 | kamer1 | `plant` @ 107,8 (was 102,12: it hid the door's corner) · `mand` @ 93,99 |
 | kamer2 | `plant` @ 12,99 · `mand` @ 93,99 |
@@ -283,7 +300,8 @@ brass knob `#F2C14E`), and wears the `luifelz` awning and the `deurmatz` doormat
 * `r.deurPunten` — see §1.2.
 * `r.vrij` — the **free-cell grid**: `x, z` from `marge` to `w−marge` / `d−marge` in steps
   of 12, with `marge = 12` (18 for the tuin, `erf`). A cell is dropped when the Manhattan
-  distance is `< 18` to any decor item or slot, `< 14` to any door's inside point, or
+  distance is `< 18` to any decor item or slot, `< 14` to any door's inside point (and, port,
+  the front door's, §1.2), or
   (pool only) when `z < bad.z1 + 6`, or (port, R3) within 3 voxels of one of the room's
   `mijd` rectangles — the floor a game's table or scale stands on (only the kas has them;
   a bought piece of furniture keeps 4 voxels from them, `_bezet`). Ids are
@@ -378,7 +396,8 @@ model, "voerbakje"), `mandje` (decor, model `mand`), `speelmand` (decor, model `
 
 1. remember the base layout of the room once (`_basis`), so "Nieuw spel" can restore it;
 2. reject a position closer than 4 voxels to any wall/edge; if the cell is occupied
-   (`bezet`: Manhattan < 15 to a slot or decor item, < 12 to a door's inside point), snap
+   (`bezet`: Manhattan < 15 to a slot or decor item, < 12 to a door's inside point or the
+   front door's), snap
    to the nearest **free** grid cell (`naarRaster`); if `x`/`z` are omitted, snap from the
    room centre;
 3. if the chosen cell is still occupied → return `null` (never a half-placed item);
@@ -509,7 +528,7 @@ Per-animal constants (from the seeded generator):
 Start position: wander place `[(index·3 + 1) % count]`.
 
 **States**: `stil`, `loop`, `zit`, `kijk`, `snuif`, `eet`, `blij`, `sip`, `slaap`,
-`wacht`, `zwem`, `spring`. The tick rate is **15 Hz** (`STAP = 1000/15`), at most 3 catch-up
+`wacht`, `zwem`, `spring`, and (port) `komt` — coming in through the front door (§2.5). The tick rate is **15 Hz** (`STAP = 1000/15`), at most 3 catch-up
 ticks per frame, drawing at ~31 Hz (`TEKEN = 1000/31`) and only when the frame actually
 changed (see §6.6).
 
@@ -534,6 +553,8 @@ Practical speed: **20–35 voxels/s in a `loop 1.5` room**.
 | `World.solo(id, act)` | walk to a free place and be happy there |
 | `World.loopNaar(id, x, z, o)` / `World.stappen(id, punten, o)` | **promise-based** movement |
 | `World.pose(id, naam, duur)` | set one pose; `true`/`false` |
+| **port** `World.kom_binnen(id, x, z, kamer = 'receptie')` | the guest arrives at the hotel: he appears on the threshold of the room's front door (`Rooms.ingang`, §1.2) and plays his own entrance to `(x, z)` (state `komt`, art-sound-rules.md §11.8), ending there in `wacht` as `ga(id, x, z, 'wacht')` would. Not awaitable. Reduced motion, or a room without a front door: he simply stands at `(x, z)`. Off screen the arrival is skipped to its end; any other order above supersedes it (a guest in mid-hop lands at once) |
+| **port** `World.komt_binnen(id)` / `World.ingang_open(kamer)` | is he still coming in? / does the front door stand open (from the start of an arrival until he is 22 voxels clear of the threshold, 3 s at most) |
 
 `na` values on arrival: `eet`, `sip`, `wacht`, `snuif`, `blij`, `slaap`, `deur`, anything
 else → `stil` for `round((10 + r()·40) · rustig)` ticks.
@@ -754,6 +775,15 @@ the ordinary morning bubble.
   the desk — `WACHTPLEK` is the far corner by the bench, and the guest "at the desk" waited
   there while its card hung at the desk.  The bill (§3.5) walks the guest to the same spot,
   and a reload puts a pending guest there.
+  **Port (owner 2026-09-23, "die komen momenteel vanuit de gang binnen ipv ingang"):** a
+  guest who arrives comes from OUTSIDE, through the receptie's front door (§1.2), not out
+  of the corridor: `World.kom_binnen(id, BALIEPLEK(0))` puts him on its threshold and he
+  makes his way round the end of the desk to the counter with an entrance of his own kind —
+  the puppy bounds, the cat slinks and stretches, the rabbit hops, the goose waddles
+  flapping (art-sound-rules.md §11.8), three to four seconds.  Nothing waits for him: the
+  check-in card is up at once, as before, and a bed chosen while he is still on his way
+  sends him to it.  The families of §3.5 do not walk — they are the `👪` bubbles at the desk
+  and the guest they fetch walks down from his own room — so check-out is unchanged.
 
 **Check-in state** (`state.checkin`): `{gastId, samen, extra, nieuw: samen+extra,
 dagen: state.levering, voorraad: state.scoops, stap: 1, fouten1: 0, fouten2: 0, invoer: '',

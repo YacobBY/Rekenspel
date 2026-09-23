@@ -74,9 +74,17 @@ class Kamer extends RefCounted:
 	var mijd: Array = []
 	var dek: Dictionary = {}        ## {start: Vector2, over: Vector2}
 	var zones: Dictionary = {}      ## reserved rectangles for the games
-	var decor: Array = []           ## {n, x, z, y, ver, params, sleutel, meubel}
+	var decor: Array = []           ## {n, x, z, y, ver, params, sleutel, meubel, ingang}
 	var slots: Dictionary = {}      ## slotId -> {id, soort, model, x, z, sx, sz, draai}
 	var deuren: Array = []          ## {naar, wand, at, breed, poort}
+	## The hotel's front door, {wand, at, breed} like a door (the receptie only,
+	## owner 2026-09-23: guests "komen momenteel vanuit de gang binnen ipv
+	## ingang").  It is NOT a door of the graph: no path (`pad`), no door button,
+	## no chip and no cell on the map lead through it.  A guest who arrives at the
+	## hotel steps in from outside here (`World.kom_binnen`).  Derived into
+	## `ingang_punt` by `bouw_af`.
+	var ingang: Dictionary = {}
+	var ingang_punt: Dictionary = {}  ## {x, z, ix, iz, dx, dz, wand}, or {}
 	var vast_kader: PackedInt32Array = PackedInt32Array()
 	var box: PackedInt32Array       ## [x0, x1, y0, y1] in voxel-px
 	var deur_punten: Dictionary = {}  ## naar -> {x, z, ix, iz}
@@ -141,6 +149,16 @@ func deur(kamer_id: String, naar: String) -> Dictionary:
 	if r == null:
 		return {}
 	return r.deur_punten.get(naar, {})
+
+## The front door of a room (only the receptie has one): the point in the wall
+## `(x, z)`, the step inside `(ix, iz)` where a guest who came in stands clear
+## of the doorway, and `(dx, dz)` on the threshold, where he appears.
+## `{}` for a room without one.  Not a door: `pad()` never goes through it.
+func ingang(kamer_id: String) -> Dictionary:
+	var r := get_kamer(kamer_id)
+	if r == null:
+		return {}
+	return r.ingang_punt.duplicate()
 
 ## How tall a door's opening is, in voxels — ONE rule for the wall drawing
 ## (`scenes/vloer.gd`) and the door's screen box (`World.vlak_van_deur`).
@@ -215,6 +233,17 @@ func bouw_af(r: Kamer) -> void:
 		else:
 			r.deur_punten[dr["naar"]] = {"x": 0.0, "z": mid, "ix": 8.0, "iz": mid,
 				"wand": "x", "poort": dr.get("poort", false)}
+	# the front door is derived like a door, but kept apart from `deur_punten`:
+	# every door button, path and "komt eraan" bubble walks that table
+	r.ingang_punt = {}
+	if not r.ingang.is_empty():
+		var im: float = float(r.ingang["at"]) + float(r.ingang["breed"]) / 2.0
+		if str(r.ingang["wand"]) == "z":
+			r.ingang_punt = {"x": im, "z": 0.0, "ix": im, "iz": 8.0, "dx": im, "dz": 3.0,
+				"wand": "z"}
+		else:
+			r.ingang_punt = {"x": 0.0, "z": im, "ix": 8.0, "iz": im, "dx": 3.0, "dz": im,
+				"wand": "x"}
 	for id in r.slots.keys():
 		_af_slot(r.slots[id])
 	_bouw_vrij(r)
@@ -276,6 +305,10 @@ func _cel_vrij(r: Kamer, x: int, z: int) -> bool:
 		var dp: Dictionary = r.deur_punten[naar]
 		if absf(dp["ix"] - x) + absf(dp["iz"] - z) < 14.0:
 			return false
+	# the front door's step inside is kept free like a door's
+	if not r.ingang_punt.is_empty() \
+			and absf(float(r.ingang_punt["ix"]) - x) + absf(float(r.ingang_punt["iz"]) - z) < 14.0:
+		return false
 	return true
 
 ## The wander places: walk the free cells in order and keep one only when it is
@@ -385,6 +418,9 @@ func _bezet(r: Kamer, x: float, z: float) -> bool:
 		var dp: Dictionary = r.deur_punten[naar]
 		if absf(dp["ix"] - x) + absf(dp["iz"] - z) < 12.0:
 			return true
+	if not r.ingang_punt.is_empty() \
+			and absf(float(r.ingang_punt["ix"]) - x) + absf(float(r.ingang_punt["iz"]) - z) < 12.0:
+		return true
 	return false
 
 ## Does (x, z) lie within `rand` voxels of one of the room's `mijd` rectangles
@@ -566,7 +602,20 @@ func _bouw_kamers() -> void:
 			# R2: de speelzaal komt bij de plant in de verre hoek; de plant had
 			# die hoek al grotendeels leeggemaakt (zie tmp/log voor de meting).
 			{"naar": "speelzaal", "wand": "x", "at": 108, "breed": 12}],
+		# The hotel's front door (owner, 2026-09-23: the guests "komen momenteel
+		# vanuit de gang binnen ipv ingang").  The one free stretch of wall in
+		# view: the back wall right of the desk, which ends at x = 102 — the
+		# left wall has the corridor door, the bench, the key board and the
+		# playroom door.  A guest who arrives steps in here and walks round the
+		# end of the desk to the counter; no door button, path or chip goes
+		# through it (`Kamer.ingang`, world.md §1.2).
+		"ingang": {"wand": "z", "at": 105, "breed": 12},
 		"decor": [
+			# the front door itself hangs on the wall over its opening, the welcome
+			# mat lies before it — with a depth bias, so a guest who stands on
+			# the threshold is drawn over the mat and not under it
+			{"n": "voordeur", "x": 111, "z": 1, "ver": true, "ingang": true},
+			{"n": "welkomsmat", "x": 111, "z": 7, "d": -10.0},
 			{"n": "balie", "x": 48, "z": 20}, {"n": "balie", "x": 83, "z": 20},
 			{"n": "bel", "x": 36, "z": 20, "y": 14, "d": 12.5},   # sorts after the desk piece at (48, 20)
 			{"n": "kassa", "x": 60, "z": 20, "y": 14},
@@ -875,6 +924,7 @@ func _kamer(o: Dictionary) -> void:
 	r.dek = o.get("dek", {})
 	r.zones = o.get("zones", {})
 	r.deuren = o.get("deuren", [])
+	r.ingang = o.get("ingang", {})
 	r.decor = o.get("decor", []).duplicate(true)
 	if o.has("vast_kader"):
 		r.vast_kader = PackedInt32Array(o["vast_kader"])
