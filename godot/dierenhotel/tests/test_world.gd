@@ -123,6 +123,22 @@ func test_lopen_haalt_zijn_doel_in_de_verwachte_tijd() -> void:
 	gelijk(d.staat, "wacht", "eindstaat is de standaard `wacht`")
 	_na_afloop()
 
+## A dive leaves `spring_land` under the floor; the NEXT walk must end ON the
+## floor.  `_aangekomen` used that depth for every arrival after a jump: the
+## swimmer who climbed out stood sunk 7 voxels into the deck (found by the
+## zwembad branch, 2026-09-23).
+func test_na_een_duik_loopt_hij_weer_op_de_vloer() -> void:
+	World.naar("receptie")
+	var d := World.zet(T, "receptie", 20.0, 20.0, {"kind": "hond"})
+	d.spring_land = -7.0          # what a dive into the water leaves behind
+	d.beweeg_pose = ""
+	var uit := {}
+	_bestel(uit, T, [Vector2(60.0, 40.0)])
+	_draai(uit)
+	waar(uit.get("klaar", false), "hij kwam aan")
+	gelijk(d.hoogte, 0.0, "op de vloer, niet op de diepte van de laatste duik")
+	_na_afloop()
+
 ## Gliding: 20 points along one straight line cost the same as one point.
 func test_glijden_door_de_punten_kost_geen_extra_tijd() -> void:
 	World.naar("receptie")

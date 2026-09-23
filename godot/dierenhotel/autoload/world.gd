@@ -1758,8 +1758,11 @@ func _aangekomen(d: Dier) -> void:
 		d.land_hoogte = NAN
 		_in_bed(d)
 		return
-	# a dive lands in the water and stays there; a hop lands where it started
-	if d.spring_land < 0.0:
+	# a dive lands in the water and stays there; a hop lands where it started.
+	# Only a JUMP that lands now: `spring_land` outlives its jump, and every later
+	# walk or swim used to end at the last dive's depth — the guest stood sunk
+	# into the deck after climbing out (found by the zwembad branch, 2026-09-23)
+	if d.beweeg_pose == "spring" and d.spring_land < 0.0:
 		d.hoogte = d.spring_land
 	else:
 		d.hoogte = 0.0 if d.beweeg_pose != "zwem" else -ZWEM_DIEP
