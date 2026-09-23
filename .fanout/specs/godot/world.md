@@ -1435,6 +1435,8 @@ The contract a game with an animal of the turn keeps:
 | `hinkel` | every guest with a bed | the wish 🧶 first, then who is in the garden | fresh turn from the start stone; the previous hopper `laat_gaan`, and on the stones he is sent to the grass like every guest who is not playing |
 | `zwembad` | every guest with a bed | §1.1 of games-b (wish, then nearest the start edge, then the first with a bed) | fresh lane from 0 m; the previous swimmer is put on the deck (`stop()`) and `laat_gaan` |
 | `wekker` | every guest who can be woken (sleepers with a bed, else everyone with a bed, else everyone) | the first three of that list | fresh round of at most three starting at the picked animal and going round; nobody is woken |
+| `oogst` | every guest with a bed | games-c §2.6 (by day and N round the list) | fresh turn from the counting question; the previous picker `laat_gaan` (off the table) |
+| `weeg` | every guest with a bed | games-c §3.6 (by day and N round the list) | fresh turn from the first reading; the previous weigher `laat_gaan` (off the scale) |
 
 No button: `bedden` (its card's animal is the guest who still needs a bed — the subject of
 the sum, not a player), `meubels`, `was`, `voerkar` (serves everybody at once) and `tobbe`

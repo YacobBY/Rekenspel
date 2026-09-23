@@ -550,6 +550,38 @@ func test_herladen_hervat_de_beurt() -> void:
 	gelijk(_stand().get("stap", ""), "tel", "begint opnieuw met tellen")
 	_af()
 
+## "Een methode om te wisselen met welk dier je de spellen speelt" (owner,
+## 2026-09-23, world.md §5.8): every guest with a bed may pick, in check-in
+## order; the animal on the game bar hands the table to the next one in a
+## fresh turn — nothing is taken away — and the next start picks with the
+## animal the child chose.
+func test_het_kind_kiest_wie_er_plukt() -> void:
+	_op()
+	var gasten := _wereld(4, 4)
+	var ids: Array[String] = []
+	for g in gasten:
+		ids.append(str(g["id"]))
+	waar(Games.start(SPEL), "het spel start")
+	gelijk(str(Games.spelers()), str(ids), "wie mag plukken: iedereen met een bed, op volgorde")
+	gelijk(Games.speler(), str(_stand().get("gast", "")), "de balk weet wie er plukt")
+	var o := Beurt.opzet(4, 4, 2)
+	_kies(int(o["T"]))
+	await _wacht_kaart()
+	gelijk(_stand().get("stap", ""), "bij", "de telvraag is af")
+	var sterren := int(State.s["sterren"])
+	var volgende := Games.volgende_speler()
+	waar(not volgende.is_empty() and volgende != Games.speler(), "er is een ander dier")
+	waar(Games.wissel_speler(), "het dier op de balk geeft de beurt door")
+	gelijk(Games.actief(), SPEL, "het plukken gaat door")
+	gelijk(Games.speler(), volgende, "met het volgende dier")
+	gelijk(str(_stand().get("gast", "")), volgende, "in een eigen beurt")
+	gelijk(_stand().get("stap", ""), "tel", "die weer bij het tellen begint")
+	gelijk(int(State.s["sterren"]), sterren, "er ging geen ster af")
+	Games.stop()
+	waar(Games.start(SPEL), "het spel start opnieuw")
+	gelijk(Games.speler(), volgende, "met het gekozen dier")
+	_af()
+
 ## Nobody in a bed yet: the game says so on the planter and closes itself.
 func test_zonder_gasten() -> void:
 	_op()

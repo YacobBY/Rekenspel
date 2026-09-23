@@ -247,6 +247,12 @@ verder waar het kind was (`test_herladen_hervat_de_beurt`); JSON-getallen worden
 gehele getallen.  `stop()` bewaart en haalt het eigen losse decor weg; het register zet
 de rustende tafel terug.
 
+**Het dier van de beurt** (world.md §5.8): `spelers()` = elke gast met een bed, in
+check-in volgorde; de start vraagt `ctx.voorkeur(spelers())` en meldt `ctx.speelt(gast)`.
+Een bewaarde beurt van een ander dier dan het gekozen gaat niet verder: het gekozen dier
+begint bij de telvraag en de vorige plukker maakt plaats (`ctx.laat_gaan`), na het sturen
+van de nieuwe (`test_het_kind_kiest_wie_er_plukt`).
+
 ---
 
 ## 3. G7 — GROENTEN WEGEN (`weeg`)
@@ -385,6 +391,11 @@ wegen na acht gewichten erop en eraf het recept: "💛 5 + 2 + 2".
 na elke stap bewaard; `opzet` wordt herrekend.  Dezelfde dag, N en band en een stap die
 niet `af` is: verder waar het kind was, ook midden in het wegen met de gewichten op de
 pan (`test_herladen_hervat_de_weging`).
+
+**Het dier van de beurt** (world.md §5.8): als bij het plukken — `spelers()` = elke gast
+met een bed, in check-in volgorde; een beurt van een ander dier dan het gekozen gaat niet
+verder, het gekozen dier begint bij de eerste leesvraag en de vorige weger maakt plaats
+(`test_het_kind_kiest_wie_er_weegt`).
 
 ---
 

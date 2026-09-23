@@ -312,8 +312,13 @@ func _speel_verder() -> Node:
 	var m: Dictionary = node.proef_pad_maat()
 	World.zet(str(st["gast"]), "tuin", node.proef_dier_x(float(st["s"])), float(m["zDier"]))
 	Games.stop()
+	# two frames for the stopped game's node to go — with the world standing
+	# still: a guest the stop let go starts to wander otherwise, and then the
+	# test depended on how many ticks fit in two frames (red on a slow run)
+	World.pauzeer(true)
 	for _f in 2:
 		await (Engine.get_main_loop() as SceneTree).process_frame
+	World.pauzeer(false)
 	waar(Games.start("hinkel"), "en gaat verder met de gast op zijn steen")
 	node = Games._knoop
 	Hits.plaats()

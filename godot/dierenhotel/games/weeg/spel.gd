@@ -132,11 +132,20 @@ func start(_c: SpelCtx) -> void:
 	var g: Dictionary = {}
 	if not S.is_empty():
 		g = ctx.state.gast_van(str(S.get("gast", "")))
-	if S.is_empty() or g.is_empty() or int(S["dag"]) != dag or int(S["N"]) != n \
-			or int(S["band"]) != band or _stap() == "af":
-		g = kies[(dag + n + 1) % kies.size()]
+	# The animal the child picked on the game bar weighs, if he may (world.md
+	# §5.8); a turn of another animal is simply not finished.
+	var wil := ctx.voorkeur(spelers())
+	var hervat := not (S.is_empty() or g.is_empty() or int(S["dag"]) != dag
+			or int(S["N"]) != n or int(S["band"]) != band or _stap() == "af")
+	var weg := ""
+	if hervat and not wil.is_empty() and wil != _gast_id():
+		weg = _gast_id()
+		hervat = false
+	if not hervat:
+		g = kies[(dag + n + 1) % kies.size()] if wil.is_empty() else ctx.state.gast_van(wil)
 		S = _nieuwe_stand(g, n, band, dag)
 	d["stand"] = S
+	ctx.speelt(_gast_id())
 	O = Beurt.opzet(n, band, dag)
 	_t0 = Time.get_ticks_msec()
 	_kaart = null
@@ -148,6 +157,10 @@ func start(_c: SpelCtx) -> void:
 	_teken()
 	State.bewaar()
 	_haal_gast()
+	# the one whose turn was dropped makes room at the scale — after the new
+	# guest was sent, so he walks off to a place the new one is not heading for
+	if not weg.is_empty() and weg != _gast_id():
+		ctx.laat_gaan(weg)
 
 func stop() -> void:
 	if ctx != null:
@@ -165,6 +178,14 @@ func _kandidaten() -> Array:
 	for g in ctx.state.s["gasten"]:
 		if not str(g.get("bed", "")).is_empty():
 			uit.append(g)
+	return uit
+
+## Who may weigh when the child chooses the animal himself (the game bar,
+## world.md §5.8): everyone with a bed, in check-in order.
+func spelers() -> Array:
+	var uit: Array = []
+	for g in _kandidaten():
+		uit.append(str(g.get("id", "")))
 	return uit
 
 func _meld_leeg() -> void:

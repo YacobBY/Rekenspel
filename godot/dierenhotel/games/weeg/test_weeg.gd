@@ -451,6 +451,38 @@ func test_de_hulpladder() -> void:
 	waar(_wolk_tekst(HULP).contains(recept), "na veel gewichten het recept (%s)" % _wolk_tekst(HULP))
 	_af()
 
+## "Een methode om te wisselen met welk dier je de spellen speelt" (owner,
+## 2026-09-23, world.md §5.8): every guest with a bed may weigh, in check-in
+## order; the animal on the game bar hands the scale to the next one in a
+## fresh turn — nothing is taken away — and the next start weighs with the
+## animal the child chose.
+func test_het_kind_kiest_wie_er_weegt() -> void:
+	_op()
+	var gasten := _wereld(4, 4)
+	var ids: Array[String] = []
+	for g in gasten:
+		ids.append(str(g["id"]))
+	waar(Games.start(SPEL), "het spel start")
+	gelijk(str(Games.spelers()), str(ids), "wie mag wegen: iedereen met een bed, op volgorde")
+	gelijk(Games.speler(), str(_stand().get("gast", "")), "de balk weet wie er weegt")
+	var o := Beurt.opzet(4, 4, 2)
+	_kies(int(o["gewicht1"]))
+	await _wacht_kaart()
+	gelijk(_stand().get("stap", ""), "leg", "de leesvraag is af")
+	var sterren := int(State.s["sterren"])
+	var volgende := Games.volgende_speler()
+	waar(not volgende.is_empty() and volgende != Games.speler(), "er is een ander dier")
+	waar(Games.wissel_speler(), "het dier op de balk geeft de beurt door")
+	gelijk(Games.actief(), SPEL, "het wegen gaat door")
+	gelijk(Games.speler(), volgende, "met het volgende dier")
+	gelijk(str(_stand().get("gast", "")), volgende, "in een eigen beurt")
+	gelijk(_stand().get("stap", ""), "lees1", "die weer bij het aflezen begint")
+	gelijk(int(State.s["sterren"]), sterren, "er ging geen ster af")
+	Games.stop()
+	waar(Games.start(SPEL), "het spel start opnieuw")
+	gelijk(Games.speler(), volgende, "met het gekozen dier")
+	_af()
+
 ## A reload in the middle of weighing keeps the pan.
 func test_herladen_hervat_de_weging() -> void:
 	_op()
