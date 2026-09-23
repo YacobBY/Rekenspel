@@ -46,6 +46,20 @@ func stop() -> void:
 func avond() -> void:
 	pass
 
+## The animals that can take this game's turn, as guest ids in a STABLE order
+## (the save's check-in order).  Optional; the default — empty — means the game
+## has no single animal of the turn, and then the game bar offers no switch.
+##
+## A game that has one says who plays with `ctx.speelt(gast_id)`, asks
+## `ctx.voorkeur(spelers())` for the animal the child picked, and resumes a
+## saved turn only when it belongs to that animal.  The switch itself is the
+## registry's: `Games.wissel_speler()` remembers the next animal of this list
+## and starts the game afresh (owner, 2026-09-23: "een methode om te wisselen
+## met welk dier je de spellen speelt").  Called at any moment while the game
+## runs, so it may read the world but never change it.
+func spelers() -> Array:
+	return []
+
 # ------------------------------------------------------------ engine hooks
 
 func _spel_start(c: SpelCtx) -> void:

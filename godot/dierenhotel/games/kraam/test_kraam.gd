@@ -676,6 +676,65 @@ func test_verdringen_is_een_hele_stop() -> void:
 	gelijk(_knoop(KAART), null, "en de kaart ook")
 	_af()
 
+## "Een methode om te wisselen met welk dier je de spellen speelt" (owner,
+## 2026-09-23): every guest with a bed may shop, in check-in order — also one
+## without the 🎁 wish; the game still picks the first with the wish; the
+## animal on the game bar hands the counter to the next one in a fresh turn,
+## the one who waited there walks off, nothing is taken away, and the next
+## start shops with the animal the child picked.
+func test_het_kind_kiest_wie_er_koopt() -> void:
+	_op()
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	var gasten := _wereld(4, 4)
+	gasten[2]["behoefte"] = "eten"
+	var ids: Array[String] = []
+	for g in gasten:
+		ids.append(str(g["id"]))
+	waar(Games.start(SPEL), "het spel start")
+	gelijk(str(Games.spelers()), str(ids), "wie mag kopen: iedereen met een bed, op volgorde")
+	gelijk(Games.speler(), ids[0], "het spel kiest zelf: de eerste met de wens 🎁")
+	var boef = World.dier(ids[0])
+	waar(boef != null and boef.kamer == KAMER and boef.staat == "wacht",
+		"Boef wacht aan de toonbank")
+	var bij_de_toonbank := Vector2(boef.x, boef.z) if boef != null else Vector2.ZERO
+	var o := Sommen.Kraam.opzet(4, 4, 2)
+	_tel_in(int(o["vraag"]["goed"]))
+	await _wacht(0.8)
+	_tik("kr_m1")
+	_tik(BANK)
+	gelijk(_som(_stand().get("gelegd", [])), 1, "er ligt één euro op de toonbank")
+	var sterren := int(State.s["sterren"])
+	waar(Games.wissel_speler(), "het dier op de balk geeft de beurt door")
+	gelijk(Games.actief(), SPEL, "de kraam draait nog")
+	gelijk(Games.speler(), ids[1], "nu koopt Muis")
+	gelijk(str(_stand().get("gast", "")), ids[1], "in een eigen beurt")
+	gelijk(str(_stand().get("stap", "")), "som", "die weer bij de som begint")
+	gelijk(_som(_stand().get("gelegd", [])), 0, "met een lege toonbank")
+	gelijk(int(State.s["sterren"]), sterren, "er ging geen ster af")
+	waar(_kaart_tekst("Kolom/Regel2") == T_SAMEN, "de vraag staat er weer")
+	boef = World.dier(ids[0])
+	waar(boef != null and boef.staat != "wacht", "Boef wacht niet meer, hij gaat zijn eigen gang")
+	waar(boef != null and Vector2(boef.x, boef.z).distance_to(bij_de_toonbank) > 8.0,
+		"hij liep weg van de toonbank")
+	await _wacht(1.6)          # he comes from his room: one look every 700 ms (§5.5)
+	var muis = World.dier(ids[1])
+	waar(muis != null and muis.kamer == KAMER, "en Muis staat nu bij de kraam")
+	waar(muis != null and Vector2(muis.x, muis.z).distance_to(bij_de_toonbank) < 2.0,
+		"op de plek waar Boef stond (%s)" % (str(Vector2(muis.x, muis.z)) if muis != null else "-"))
+	# one without the wish may shop too — he just has no wish to fulfil
+	waar(Games.wissel_speler(), "nog een keer")
+	gelijk(Games.speler(), ids[2], "de gast zonder wens")
+	gelijk(int(_stand().get("wens", -1)), 0, "koopt zonder wens")
+	# the next start shops with the animal the child picked
+	Games.stop()
+	waar(Games.start(SPEL), "de kraam start opnieuw")
+	gelijk(Games.speler(), ids[2], "met het gekozen dier")
+	Ui.zet_rust_modus(rust_voor)
+	_af()
+
+const T_SAMEN := "Hoeveel euro samen?"
+
 # --------------------------------------------------------------- de getallen
 
 ## The ghost coins are exactly [5, 2, 1] and never more than four (§5.3).

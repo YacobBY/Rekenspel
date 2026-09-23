@@ -51,6 +51,54 @@ func taak_klaar(taak_naam: String = "", o: Dictionary = {}) -> void:
 func sluit() -> void:
 	Games.stop()
 
+# ----------------------------------------------------- het dier van de beurt
+
+## The animal you play with (owner, 2026-09-23: "een methode om te wisselen met
+## welk dier je de spellen speelt").  The child picks it on the game bar and
+## `State.s.speler` remembers it for the session (not a field of the save
+## format: a reload forgets it).  A game asks `voorkeur(spelers())` when it
+## builds a turn: the picked animal when it may take part in THIS game, "" when
+## it may not or nothing was picked — then the game chooses as it always did.
+func voorkeur(kandidaten: Array) -> String:
+	var wil := str(State.s.get("speler", ""))
+	if wil.is_empty() or not kandidaten.has(wil) or State.gast_van(wil).is_empty():
+		return ""
+	return wil
+
+## This game's animal of the turn is now `gast_id` — the game bar shows it and
+## offers the next one.  A game calls it whenever its turn takes (or moves on
+## to) an animal; "" means the turn has none.
+func speelt(gast_id: String) -> void:
+	Games.meld_speler(id, gast_id)
+
+## What the animal on the game bar does when it is tapped: the next animal of
+## `spelers()` takes over in a fresh turn (`Games.wissel_speler`).
+func wissel_speler() -> bool:
+	return Games.wissel_speler()
+
+## The animal whose unfinished turn this start drops must not stay in the new
+## animal's way — at the counter of the stall, on the deck of the pool — nor
+## arrive there after it.  Call it AFTER the new animal was sent, so the free
+## place the old one walks to keeps off the new one's target.
+##   * asleep or gone: left alone (a switch never wakes anybody);
+##   * still on his way into this game's room: back to his own bed instead;
+##   * on his way anywhere else: left alone (a `stop()` already sent him);
+##   * in this game's room: off to a free place there (`World.solo`).
+func laat_gaan(gast_id: String) -> void:
+	var d = World.dier(gast_id)
+	if d == null or World.slaapt(gast_id) or kamer.is_empty():
+		return
+	var onderweg := str(d.reis_doel)
+	if onderweg == kamer and d.kamer != kamer:
+		var g := State.gast_van(gast_id)
+		if not str(g.get("bed", "")).is_empty() and not str(g.get("kamer", "")).is_empty():
+			World.slaap(gast_id, str(g["kamer"]), str(g["bed"]))
+			g["waar"] = g["kamer"]
+		return
+	if not onderweg.is_empty() or d.kamer != kamer:
+		return
+	World.solo(gast_id)
+
 ## Owner-stamped hotspot API (`ctx.hotspots`).
 class Knoppen extends RefCounted:
 	var _door: String

@@ -79,6 +79,13 @@ func start(_c: SpelCtx) -> void:
 	Art.registreer_model(MODEL_VLAG, ZwembadModellen.vlag)
 	var bewaard := ZwembadBeurt.normaliseer(ctx.data(), ctx.state.band())
 	_hersteld = ZwembadBeurt.geldig(bewaard, _bestaat(str(bewaard.get("gast", ""))))
+	# the animal the child picked on the game bar swims; half a lane of another
+	# one is simply not finished (owner, 2026-09-23)
+	var wil := ctx.voorkeur(spelers())
+	var weg := ""              ## whose half lane this start drops
+	if _hersteld and not wil.is_empty() and wil != str(bewaard.get("gast", "")):
+		_hersteld = false
+		weg = str(bewaard.get("gast", ""))
 	if not _hersteld:
 		bewaard = _nieuwe_beurt()
 	if bewaard.is_empty():
@@ -90,14 +97,24 @@ func start(_c: SpelCtx) -> void:
 	_gast = str(_b["gast"])
 	_t0 = Time.get_ticks_msec()
 	_bewaar()
+	ctx.speelt(_gast)
 	_uit_kader = ctx.ui.op_kader(_op_kader)
 	_bouw_decor()
 	print("[probe] zwembad=start gast=", _gast, " band=", _b["band"], " L=", _b["L"],
 		" M=", _b["M"], " p=", _b["p"], " hersteld=", _hersteld)
 	_begin()
+	# who swam the dropped lane was put on the deck by the old `stop()`: he
+	# makes room, or turns back when he was still on his way to the pool
+	if not weg.is_empty() and weg != _gast:
+		ctx.laat_gaan(weg)
 
 func _nieuwe_beurt() -> Dictionary:
 	var keus := _gast_kies()
+	var wil := ctx.voorkeur(spelers())
+	if not wil.is_empty():
+		var g: Dictionary = ctx.state.gast_van(wil)
+		keus = {"id": wil, "wens": str(g.get("behoefte", "")) == "zwemmen"
+			and not bool(g.get("blij", false))}
 	if keus.is_empty():
 		return {}
 	var band: int = ctx.state.band()
@@ -108,6 +125,16 @@ func _nieuwe_beurt() -> Dictionary:
 		"p": 0, "leg": 0, "misser": 0,
 		"laatste_p": 0, "laatste_rest": int(baan["L"]), "klaar": "",
 	}, band)
+
+## Who may swim when the child picks the swimmer himself (the animal on the
+## game bar): every guest with a bed, in check-in order.  `_gast_kies` stays
+## the game's own choice when nobody was picked.
+func spelers() -> Array:
+	var uit: Array = []
+	for g in ctx.state.s["gasten"]:
+		if not str(g.get("bed", "")).is_empty():
+			uit.append(str(g["id"]))
+	return uit
 
 ## Who swims, in the order of games-b.md §1.1.
 func _gast_kies() -> Dictionary:

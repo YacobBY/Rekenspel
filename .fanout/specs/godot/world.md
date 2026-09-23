@@ -1040,7 +1040,10 @@ the start screen has been answered (`startKeuze`), and any storage error is swal
 | `checkin` | object or null | half-finished check-in (see §3.3) |
 
 Not saved: `rekening`, `dagBericht` (both are re-created), loose decor of games, hotspots,
-promises. `Ui`/`Hits`/`World` hold no persistent state.
+promises. `Ui`/`Hits`/`World` hold no persistent state. `speler` — the animal the child
+picked on the game bar (§5.8) — lives in `State.s` for the session only: it is written
+along with the rest, but `State.lees()` keeps only the fields of this table, so a reload
+(and a new game) forgets it.
 
 **When it is saved:** `State.bewaar()` is called after assigning a bed, feeding, playing,
 `wensAf`, checkout, every `ctx.taakKlaar`, every accessory change, furniture changes, and
@@ -1162,6 +1165,11 @@ also returns every borrowed button), `Hits.voorrang(null)`, `Ui.leegPaneel()`,
 detect it — its `stop()` runs, its hotspots, bubbles, cards, number tags, sources and loose
 decor are removed for it. Promises from `stappen` resolve `false`.
 
+**Switching the animal** (§5.8) is a supersede of the running game by itself:
+`Games.wissel_speler()` writes the next animal into `State.s.speler` and calls
+`Games.start(id)` for the game that runs, so the unfinished turn goes with every timer,
+walk, card and prop of it, and the new `start(ctx)` builds a fresh turn for that animal.
+
 **Evening**: `Hotel.avondronde()` sets the round, turns the desk lamp model into `lampaan`,
 closes the board and paints the checkout bubbles. It does **not** stop a running game; the
 game keeps its priority until it stops itself.
@@ -1189,6 +1197,13 @@ save). `ctx.ui` = `Ui` with the game stamped as owner on `wolk`, `somkaart`, `br
 `ctx.econ` = `Econ`, `ctx.snd` = `Snd`.
 `ctx.taakKlaar(naam, {sterren})` → one star (`sterren` or 1), tick the card by that name
 **and** by the game id, save. `ctx.sluit()` → `Games.stop()`.
+
+The animal of the turn (§5.8): `ctx.voorkeur(kandidaten)` → the animal the child picked
+(`State.s.speler`) when it is one of `kandidaten` and still a guest, else `""`;
+`ctx.speelt(gastId)` → this game's animal of the turn is now `gastId` (the game bar shows
+it; call it whenever the turn takes or moves on to an animal); `ctx.wissel_speler()` →
+`Games.wissel_speler()`; `ctx.laat_gaan(gastId)` → the animal whose unfinished turn the
+pick dropped makes room (§5.8).
 
 Extensions are added through `window.CTX_UITBREIDINGEN` — a list of
 `function(ctx, eigen)` that registry runs once per game, so a motor module can add API
@@ -1346,6 +1361,66 @@ target is `document.elementFromPoint(...).closest(dropSel)`; the current target 
 class `drop-hot`. `body.sleept` is set while dragging. The context menu is suppressed on
 drag sources. After a tap or a drop, one following `click` on the same node is swallowed in
 the capture phase (and the soft tap sound is played instead), so one tap delivers one item.
+
+### 5.8 The game bar and the animal of the turn
+
+While a game runs, the room bar's row is the **game bar** (`ui/spelbalk.gd`, owner
+2026-09-18): `⬅ Terug` first, the game's pictogram and name beside it, in the room bar's
+exact footprint (under the frame, or as the rail beside it in the compact shell), so the
+frame never moves. `⬅ Terug` is `Games.stop()`. The name hides when the row is too narrow;
+the buttons never do.
+
+**The animal of the turn** (owner, 2026-09-23: "een methode om te wisselen met welk dier
+je de spellen speelt"). A game whose turn belongs to ONE animal gets one more button on
+the bar, after the name: that animal as `<pictogram> <naam> 🔄` (`🐶 Boef 🔄`; in the rail
+`🐶 🔄` over `Boef`, so it keeps the rail's 152 units), title `Speel met een ander dier`.
+The pictogram is the hotel's own per kind (`Hotel.DIER_ICOON`: 🐶 🐱 🐰 🦆, else 🐾). The
+design sketch had ⇄ (U+21C4); it is in none of the bundled subsets, nor in Noto Sans
+Symbols 2, so it would draw tofu — 🔄, the house glyph for "nog een keer / opnieuw", says
+the same: this game once more, with somebody else.
+
+The button is there only when the running game has an animal of the turn AND somebody else
+could take it (`Games.kan_wisselen()`); with one animal it could do nothing, so it is not
+shown at all. A tap (`Snd.tik()`, then deferred, because it rebuilds the bar) runs
+`Games.wissel_speler()`: the next animal of the game's list after the one playing now,
+going round (the first of the list when the current one is not on it); it is remembered for
+the session in `State.s.speler` (§4.2) and the game restarts with it (§5.2). Nothing is taken
+away — no star, no coin; the unfinished turn of the previous animal is simply not finished,
+and the adaptive signal only ever counts finished turns. The bar follows the game through
+`Games.speler_veranderd`; probe lines `[probe] speler=<id> van=<id> spel=<id>` on a switch
+and `[probe] spelbalk speler=<id> knop=<rect>` with the button's rectangle.
+
+The contract a game with an animal of the turn keeps:
+
+- `func spelers() -> Array` on its node: the guest ids that may take the turn, in a
+  **stable** order (the save's check-in order). The default (`MiniGame`) is `[]`: no animal
+  of the turn, no button. Called at any moment while the game runs; reads, never writes.
+- `ctx.speelt(gastId)` whenever its turn takes, or moves on to, an animal.
+- `ctx.voorkeur(spelers())` when it builds a turn: the picked animal when it may take part
+  here, else `""` and the game chooses as it always did. A saved turn is resumed only when
+  it belongs to the picked animal (the multi-animal games: when that animal already had or
+  has its go in it) or when there is no pick that may take part.
+- `ctx.laat_gaan(gastId)` for the animal whose unfinished turn the pick dropped, AFTER the
+  new animal was sent (so the free place he walks to keeps off the new one's target):
+  asleep or gone → left alone (a switch never wakes anybody); still on his way into the
+  game's room → back to his own bed instead; on his way anywhere else → left alone (the
+  old `stop()` already sent him); in the game's room → off to a free place (`World.solo`).
+  Without it the stall had two animals on one spot: the old one still walked in and
+  waited at the counter after the new one.
+
+| game | who may take the turn (`spelers()`) | its own choice without a pick | on a switch |
+|---|---|---|---|
+| `sleutels` | every guest with a bed and a room | keys in check-in order | the same board (the core seeds on day, N, band, round) laid out again, first key for the picked animal, the next keys round the list; who waited at the desk goes back to bed (its own `stop()`) |
+| `kraam` | every guest with a bed (also without the 🎁 wish: he buys without one) | the first with the 🎁 wish, else the first with a bed | fresh turn for the picked animal; the previous one `laat_gaan` (off the counter, or back to bed when still on his way) |
+| `hinkel` | every guest with a bed | the wish 🧶 first, then who is in the garden | fresh turn from the start stone; the previous hopper `laat_gaan`, and on the stones he is sent to the grass like every guest who is not playing |
+| `zwembad` | every guest with a bed | §1.1 of games-b (wish, then nearest the start edge, then the first with a bed) | fresh lane from 0 m; the previous swimmer is put on the deck (`stop()`) and `laat_gaan` |
+| `wekker` | every guest who can be woken (sleepers with a bed, else everyone with a bed, else everyone) | the first three of that list | fresh round of at most three starting at the picked animal and going round; nobody is woken |
+
+No button: `bedden` (its card's animal is the guest who still needs a bed — the subject of
+the sum, not a player), `meubels`, `was`, `voerkar` (serves everybody at once) and `tobbe`
+(the sum is about soap and tubs; afterwards every waiting animal has its own button in the
+bath step, and since 2026-09-23 a tap on it bathes THAT animal — games-a §6.5 E — so the
+child picks who bathes there).
 
 ---
 

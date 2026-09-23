@@ -1075,6 +1075,65 @@ func test_eerste_hulp_licht_de_strepen_op() -> void:
 			"met de slag gaat het licht uit (%s)" % id2)
 	await _af()
 
+# ------------------------------------------------------ het dier van de beurt
+
+## "Een methode om te wisselen met welk dier je de spellen speelt" (owner,
+## 2026-09-23): every guest with a bed may swim, in check-in order; the game
+## still picks its own swimmer; the animal on the game bar hands the lane to the
+## next one in a fresh turn — the one who was swimming is out of the water and
+## nothing was taken away — and the next start swims with the animal the child
+## picked, as long as that one may swim.
+func test_het_kind_kiest_wie_er_zwemt() -> void:
+	_op()
+	var gasten := _gasten(4)
+	var ids: Array[String] = []
+	for g in gasten:
+		ids.append(str(g["id"]))
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_kaart_staat), "de vraagkaart staat er")
+	gelijk(str(Games.spelers()), str(ids), "wie mag zwemmen: iedereen met een bed, op volgorde")
+	gelijk(Games.speler(), ids[0], "het spel kiest zelf, zoals altijd: wie al bij het water staat")
+	waar(_druk(_juist_nu()), "één etappe")
+	waar(await _wacht(_kaart_staat), "de tweede kaart staat er")
+	waar(int(_beurt()["p"]) > 0, "hij is halverwege (%d m)" % int(_beurt()["p"]))
+	var sterren := int(State.s["sterren"])
+	var munten := int(State.s["munten"])
+	waar(Games.wissel_speler(), "het dier op de balk geeft de beurt door")
+	waar(await _wacht(_kaart_staat), "en er staat meteen een vraag")
+	gelijk(Games.actief(), ID, "het zwembad draait nog")
+	gelijk(Games.speler(), ids[1], "nu zwemt de volgende")
+	gelijk(str(_beurt()["gast"]), ids[1], "in een eigen beurt")
+	gelijk(int(_beurt()["p"]), 0, "die vooraan begint")
+	gelijk(int(_beurt()["misser"]), 0, "zonder missers")
+	gelijk(_klaar(), "", "en nog niet af is")
+	gelijk(int(State.s["sterren"]), sterren, "er ging geen ster af")
+	gelijk(int(State.s["munten"]), munten, "en geen munt")
+	var d = World.dier(ids[0])
+	waar(d != null and d.z > float(Rooms.get_kamer(ID).bad["z1"]),
+		"wie zwom, ligt niet meer in het water")
+	# the lane is the new swimmer's: the next card names him
+	waar(_druk(_juist_nu()), "een etappe voor de nieuwe zwemmer")
+	waar(await _wacht(func() -> bool: return _kaart_staat() or not _klaar().is_empty(), 8000),
+		"en het spel gaat verder")
+	gelijk(int(_beurt()["laatste_p"]), 0, "hij zwom vanaf nul, niet vanaf de meter van de vorige")
+	if _klaar().is_empty():
+		var kaart := _kaart_knoop()
+		waar(kaart != null and kaart.regel_label.text.contains(str(gasten[1]["naam"])),
+			"de kaart noemt hem: %s" % (kaart.regel_label.text if kaart != null else "geen kaart"))
+	# the next start swims with the animal the child picked ...
+	Games.stop()
+	await _frames(2)
+	waar(Games.start(ID), "het spel start opnieuw")
+	gelijk(Games.speler(), ids[1], "met het gekozen dier, op zijn eigen baan")
+	Games.stop()
+	await _frames(2)
+	# ... not with one who may not swim: then the game picks, as always
+	gasten[1]["bed"] = ""
+	State.spel_data(ID).clear()
+	waar(Games.start(ID), "en nog eens, nu de gekozen gast geen bed meer heeft")
+	gelijk(Games.speler(), ids[0], "dan kiest het spel zelf")
+	await _af()
+
 # ------------------------------------------------------------------- hulpjes
 
 ## The biggest button that is still SHORT of the right answer.

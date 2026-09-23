@@ -12,6 +12,9 @@ extends Node
 
 signal spel_gestart(id: String)
 signal spel_gestopt(id: String)
+## The running game's animal of the turn changed (`ctx.speelt`), "" = none: the
+## game bar redraws its animal chip (scenes/main.gd).
+signal speler_veranderd(gast_id: String)
 
 const MAP := "res://games"
 
@@ -23,6 +26,7 @@ var _ctx: Dictionary = {}       ## id -> SpelCtx
 var _actief := ""
 var _actieve_kamer := ""
 var _knoop: Node = null         ## the running game's node
+var _speler := ""               ## the running game's animal of the turn, as it said
 
 const EIGENAAR := "registry"
 
@@ -125,6 +129,7 @@ func start(id: String) -> bool:
 		return false
 	if _actief != "":
 		stop()
+	_speler = ""
 	var def: Dictionary = _defs[id]
 	# every game's resting props go: this game puts down its real ones, and
 	# world.md §5.2 step 4 wants the others' out of the way
@@ -171,6 +176,7 @@ func stop() -> void:
 	var id := _actief
 	_actief = ""
 	_actieve_kamer = ""
+	_speler = ""
 	if _knoop != null and is_instance_valid(_knoop):
 		if _knoop.has_method("_spel_stop"):
 			_knoop._spel_stop()
@@ -189,6 +195,70 @@ func _maak_ctx(id: String, def: Dictionary) -> SpelCtx:
 	if not _ctx.has(id):
 		_ctx[id] = SpelCtx.new(id, def)
 	return _ctx[id]
+
+# ----------------------------------------------------- het dier van de beurt
+
+## "Een methode om te wisselen met welk dier je de spellen speelt" (owner,
+## 2026-09-23).  A game with an animal of the turn names it (`ctx.speelt`) and
+## lists who else may take the turn (`MiniGame.spelers()`); the game bar shows
+## the animal as one chip, and a tap hands the turn to the next one.
+
+## The running game's animal of the turn, "" when it has none (or none runs).
+func speler() -> String:
+	return _speler if _actief != "" else ""
+
+## Who may take the running game's turn, in the game's own stable order, minus
+## anybody who is not a guest any more.  Empty for a game without an animal of
+## the turn.
+func spelers() -> Array[String]:
+	var uit: Array[String] = []
+	if _actief == "" or _knoop == null or not is_instance_valid(_knoop) \
+			or not _knoop.has_method("spelers"):
+		return uit
+	for g in _knoop.spelers():
+		var gid := str(g)
+		if not gid.is_empty() and not uit.has(gid) and not State.gast_van(gid).is_empty():
+			uit.append(gid)
+	return uit
+
+## The animal that comes after the one playing now, going round; "" when there
+## is nobody else to hand the turn to — and then the bar shows no chip at all,
+## because a button that cannot do anything is no button (owner).
+func volgende_speler() -> String:
+	var nu := speler()
+	if nu.is_empty():
+		return ""
+	var lijst := spelers()
+	var i := lijst.find(nu)
+	if i < 0:
+		return "" if lijst.is_empty() else lijst[0]
+	if lijst.size() < 2:
+		return ""
+	return lijst[(i + 1) % lijst.size()]
+
+func kan_wisselen() -> bool:
+	return not volgende_speler().is_empty()
+
+## The animal on the game bar was tapped: the next one is remembered for the
+## session (`State.s.speler`) and the running game starts afresh with it.  It is
+## the same stop-and-start a supersede is, so the unfinished turn goes with every
+## timer, walk, card and prop of it, and nothing is taken away — no star, no
+## coin; the previous animal simply did not finish its turn.
+func wissel_speler() -> bool:
+	var naar := volgende_speler()
+	if naar.is_empty():
+		return false
+	var id := _actief
+	print("[probe] speler=", naar, " van=", _speler, " spel=", id)
+	State.s["speler"] = naar
+	return start(id)
+
+## `ctx.speelt()` lands here.  Only the running game may say who plays.
+func meld_speler(spel_id: String, gast_id: String) -> void:
+	if spel_id != _actief:
+		return
+	_speler = gast_id
+	speler_veranderd.emit(gast_id)
 
 # ------------------------------------------------------------- de ingangen
 

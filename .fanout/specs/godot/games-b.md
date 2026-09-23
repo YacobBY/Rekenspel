@@ -229,6 +229,16 @@ Elk spel bewaart zijn beurt in `ctx.data()` (= `State.spelData(id)`), dat mee
 gaat in de opslag `kws-hotel-v7`. **Een belofte overleeft geen herlaad**; de
 stand moet altijd uit `ctx.data()` te herstellen zijn.
 
+**Het dier van de beurt** (Godot-poort, eigenaar 2026-09-23, world.md §5.8): zwembad,
+wekker, hinkel en kraam hebben er één; de spelbalk toont het (`🐶 Boef 🔄`) zolang een
+ander dier de beurt kan overnemen, en een tik geeft de beurt aan het volgende dier van
+`spelers()` (check-in volgorde) in een verse beurt — `Games.start` van hetzelfde spel,
+dus precies de verdringing hierboven. Het gekozen dier (`State.s.speler`, alleen deze
+sessie) gaat bij elke volgende start vóór de eigen keuze van het spel, zolang het mee
+mag doen; een bewaarde beurt van een ANDER dier wordt dan niet hervat maar is gewoon
+niet afgemaakt. Er gaat niets af: geen ster, geen munt, en `tel()` telt alleen
+afgemaakte beurten. `was` heeft geen dier van de beurt en geen dierknop.
+
 ---
 
 ## 1. G1 — HET ZWEMBAD (`zwembad`)
@@ -272,6 +282,13 @@ bad.
 3. anders de eerste gast met een bed; als er niemand met bed is, de eerste gast
    überhaupt. Is er helemaal niemand: toast `'🏊 Er is nog geen gast'` (klas
    `kind`) en het spel opent niet.
+
+Heeft het kind op de spelbalk een dier gekozen (§0.12) en heeft dat dier een bed, dan
+zwemt dát dier, vóór deze volgorde (`wens` = of het de wens 🏊 heeft en nog niet
+`blij` is). `spelers()` = elke gast met een bed, in check-in volgorde. Een bewaarde
+baan van een ander dier wordt niet hervat; bij de wissel legt `stop()` de zwemmer op
+het dek, `ctx.laat_gaan` laat hem daar plaats maken (of terug naar bed gaan als hij nog
+onderweg was), en de nieuwe begint op 0 m.
 
 ### 1.2 Aanmelding en start
 
@@ -674,6 +691,13 @@ bed; is dat leeg, alle gasten. Daarvan de **eerste drie** — een ronde blijft
 kindermaat. Is die lijst leeg, dan een wolkje op de kist (`🛏 'nog geen gasten'`)
 en na 1800 ms sluit het spel zichzelf.
 
+**Het dier van de beurt** (Godot-poort, §0.12) is de gast die nu gewekt wordt.
+`spelers()` = die lijst vóór de grens van drie, in check-in volgorde. Is er een dier
+gekozen dat erop staat, dan begint een verse ronde bij hem en gaat rond: hooguit drie,
+het gekozen dier voorop (`idx` 0, dus de getallen van de eerste beurt van de dag). Een
+bewaarde ronde gaat alleen verder als het gekozen dier daarin al aan de beurt was of
+is; bij de wissel wordt niemand gewekt, wie sliep slaapt door.
+
 ### 2.2 Aanmelding en start
 
 ```
@@ -1016,6 +1040,14 @@ ernaast zolang de beurt loopt.
 🧶 `spelen` en zijn ze niet blij, dan alleen die; daarna gesorteerd met wie al in
 de tuin is vooraan. De eerste speelt. Is de lijst leeg: wolkje op het hok
 `🛏 'nog geen gasten'` en na 1800 ms sluiten.
+
+**Het dier van de beurt** (Godot-poort, §0.12). De eigen volgorde hierboven heet in de
+poort `_spelers()`; de lijst waar de spelbalk doorheen gaat is `MiniGame.spelers()` =
+elke gast met een bed, in check-in volgorde. Een gekozen dier dat erop staat hinkelt,
+in een verse beurt vanaf de startsteen; een bewaarde beurt van een ander dier wordt
+niet hervat. Wie bij de wissel op de stenen stond, wordt er net als elke andere gast
+af gestuurd (§3.6); was hij nog onderweg naar de tuin, dan gaat hij terug naar bed
+(`ctx.laat_gaan`).
 
 ### 3.2 Aanmelding en start
 
@@ -1706,6 +1738,15 @@ zolang je speelt, en nooit in de hinkelzone ernaast (`hinkel` x ≤ 100 < 104
 terugval als de tobbe). Is ook dát leeg: wolkje `🎁 'nog geen gasten'` bij
 `(zone.x0, zone.z1)` en na 1800 ms sluiten.
 
+**Het dier van de beurt** (Godot-poort, §0.12). `spelers()` = elke gast met een bed,
+in check-in volgorde — ook een gast zonder de wens 🎁: die koopt gewoon iets zonder
+wens (`wens: 0`, dus ook geen wens ingelost). Een gekozen dier dat erop staat koopt,
+vóór `kandidaten`; een bewaarde beurt van een ander dier wordt niet hervat. Wie bij de
+wissel nog aan de toonbank wachtte loopt naar een vrij plekje in de tuin, en wie nog
+onderweg was gaat terug naar bed (`ctx.laat_gaan`, nadat de nieuwe gast op weg is
+gestuurd; een slaper wordt nooit gewekt) — anders stonden er twee dieren op dezelfde
+plek.
+
 ### 5.2 Aanmelding en start
 
 ```
@@ -2028,7 +2069,8 @@ terug, al het eigen decor weg, en alle beeldstanden (kaartlift, terugschuivende
 munt, gastteller) op nul.
 
 `start()` hergebruikt de bewaarde stand alleen als hij bestaat, de gast nog
-bestaat, `dag`, `N` en `band` nog kloppen en de stap niet `af` is. `O` (de opzet)
+bestaat, `dag`, `N` en `band` nog kloppen, de stap niet `af` is en hij niet van een
+ander dier is dan het gekozen dier (§5.1). `O` (de opzet)
 en `P` (de plekken) worden altijd opnieuw berekend — ze zijn puur een functie van
 N, band en dag. Zit er een munt in de hand die in deze band niet bestaat, dan
 wordt de kleinste munt gepakt.

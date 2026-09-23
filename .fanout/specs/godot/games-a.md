@@ -631,6 +631,16 @@ Welke gasten meedoen: `gastenMetBed()` = alle gasten met een `bed` én een
 gasten"`, klas `hulp`, hoog 26, en na **1900 ms** sluit het spel zichzelf.
 Helper is **buurvrouw Els** (🩺).
 
+**Het dier van de beurt** (eigenaar 2026-09-23, world.md §5.8) is de gast van de
+sleutel in de hand; de spelbalk toont hem (`🐶 Boef 🔄`). `spelers()` =
+`gastenMetBed()` in check-in volgorde. Kiest het kind een dier (`State.s.speler`),
+dan wordt een NIEUW bord gelegd met `mee` = die lijst rondgedraaid tot het gekozen
+dier vooraan staat: hij krijgt de eerste sleutel, de volgende de tweede. Het is
+hetzelfde bord (het zaad is `dag, N, band, ronde`, nooit wie de sleutels heeft), dus
+dezelfde getallen met een andere naam erbij. Een bewaard bord gaat alleen verder als
+het gekozen dier er zijn sleutel al op had of nu vasthoudt; anders is het gewoon niet
+afgemaakt. Wie bij de wissel aan de balie wachtte gaat terug naar bed (`stop()`).
+
 ### 4.2 De generator (alles gezaaid, dus reproduceerbaar)
 
 `sommen.*` kent geen reeksgenerator; deze is hier afgeleid volgens dezelfde
@@ -1318,6 +1328,12 @@ Wolkje ✅ + per + `"even hoog"`, klas `goed`, na **2200 ms** weg.
 eigen plek (`volg()` loopt mee), html = zijn diericoon + 🛁, klas `hotbron`,
 prio 11, titel `<naam> wil in bad`. Het dier is óók sleepbaar naar een tobbe.
 Eén tik-afhandelaar: de hotspot (`aan`), de sleep heeft géén `onTap`.
+**Wie je aantikt gaat in bad**, in de leegste tobbe (Godot-poort, eigenaar
+2026-09-23: het kind kiest met welk dier het speelt). De HTML stuurde bij elke tik de
+EERSTE wachtende erin; daar kon je het dier zelf nog naar een tobbe slepen, maar dat
+slepen is in de poort nooit meegekomen, dus koos het kind niets. Een tik op een
+TOBBE zet nog steeds de eerste wachtende in die tobbe. Tobbe heeft geen dier van de
+beurt en dus geen dierknop op de spelbalk (world.md §5.8).
 
 `inBad(id, i)`:
 * meer dan 2 dieren in één tobbe → `Snd.zacht()` + wolkje 🛁 2 `"zit vol"`;

@@ -316,3 +316,225 @@ func test_een_spel_zonder_iets_te_doen_heeft_geen_knop() -> void:
 	waar(not kaarten.has("bedden"), "geen taakkaartje voor een spel zonder iets te doen")
 	State.s = bewaard
 	_af()
+
+# ------------------------------------------------------ het dier van de beurt
+
+## `n` guests from the pool, the first `met_bed` of them with a bed of their
+## own, all of them standing at the desk: Boef, Muis, Wolkje, …
+func _gasten_van_de_pool(n: int, met_bed: int) -> Array:
+	var pool := State.gasten_pool()
+	var bedden := State.alle_bedden()
+	var uit: Array = []
+	for i in n:
+		var g: Dictionary = pool[i].duplicate(true)
+		if i < met_bed:
+			var bed: Dictionary = bedden[i % bedden.size()]
+			g["kamer"] = str(bed["kamer"])
+			g["bed"] = str(bed["slot"])
+		g["waar"] = "receptie"
+		g["behoefte"] = "eten"
+		g["nachten"] = 100
+		uit.append(g)
+	State.s["gasten"] = uit
+	State.herbereken()
+	for i in uit.size():
+		World.zet(str(uit[i]["id"]), "receptie", 40.0 + i * 8.0, 60.0,
+			{"naam": str(uit[i]["naam"]), "kind": str(uit[i]["kind"]), "nr": i})
+	return uit
+
+func _ids(gasten: Array) -> Array[String]:
+	var uit: Array[String] = []
+	for g in gasten:
+		uit.append(str((g as Dictionary)["id"]))
+	return uit
+
+## "Een methode om te wisselen met welk dier je de spellen speelt" (owner,
+## 2026-09-23), the registry half: the running game names its animal of the
+## turn and who else may take it; the switch goes round in that stable order,
+## is remembered for the session, and starts the game afresh with the next
+## animal.  A game without an animal of the turn, or with one animal only,
+## offers nothing to switch to.
+func test_het_dier_van_de_beurt_gaat_rond() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	_op()
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	State.nieuw_spel()
+	State.s["taken"] = []
+	var gasten := _gasten_van_de_pool(4, 3)
+	var ids := _ids(gasten)
+	# the sample game has no animal of the turn
+	waar(Games.start("_voorbeeld"), "het voorbeeld start")
+	gelijk(Games.speler(), "", "het voorbeeld heeft geen dier van de beurt")
+	gelijk(Games.spelers().size(), 0, "en niemand om mee te wisselen")
+	waar(not Games.kan_wisselen(), "dus valt er niets te wisselen")
+	waar(not Games.wissel_speler(), "en een wissel doet niets")
+	gelijk(Games.actief(), "_voorbeeld", "het voorbeeld draait gewoon door")
+	# the pool: everybody with a bed may swim, in check-in order
+	waar(Games.start("zwembad"), "het zwembad start")
+	gelijk(str(Games.spelers()), str(ids.slice(0, 3)), "wie mag zwemmen: de drie met een bed, op volgorde")
+	gelijk(Games.speler(), ids[0], "het spel kiest zelf, zoals altijd: Boef")
+	gelijk(Games.volgende_speler(), ids[1], "na Boef komt Muis")
+	waar(Games.wissel_speler(), "de wissel lukt")
+	gelijk(Games.actief(), "zwembad", "het zwembad draait nog")
+	gelijk(Games.speler(), ids[1], "Muis zwemt nu")
+	gelijk(str(State.s.get("speler", "")), ids[1], "en dat onthoudt het hotel")
+	gelijk(str(State.spel_data("zwembad").get("gast", "")), ids[1], "een beurt voor Muis")
+	gelijk(int(State.spel_data("zwembad").get("p", -1)), 0, "die vooraan begint")
+	waar(Games.wissel_speler(), "nog een keer")
+	gelijk(Games.speler(), ids[2], "Wolkje")
+	waar(Games.wissel_speler(), "en nog een keer")
+	gelijk(Games.speler(), ids[0], "en weer rond naar Boef — de gast zonder bed zwemt niet")
+	Games.stop()
+	gelijk(Games.speler(), "", "zonder spel speelt er niemand")
+	# the pick stays for the session: the next start prefers that animal
+	State.s["speler"] = ids[2]
+	waar(Games.start("zwembad"), "het zwembad start opnieuw")
+	gelijk(Games.speler(), ids[2], "met het dier dat het kind koos")
+	Games.stop()
+	# ... as long as it may take part; otherwise the game chooses itself
+	State.s["speler"] = ids[3]
+	(State.s["spel"] as Dictionary).erase("zwembad")
+	waar(Games.start("zwembad"), "het zwembad start met een keuze zonder bed")
+	gelijk(Games.speler(), ids[0], "wie niet mee mag doen, zwemt niet: het spel kiest zelf")
+	Games.stop()
+	# one animal that may swim: nothing to switch to, so no button either
+	for g in gasten.slice(1):
+		(g as Dictionary)["bed"] = ""
+	State.s.erase("speler")
+	(State.s["spel"] as Dictionary).erase("zwembad")
+	waar(Games.start("zwembad"), "het zwembad start met één gast met een bed")
+	gelijk(Games.speler(), ids[0], "Boef zwemt")
+	waar(not Games.kan_wisselen(), "en er is niemand om mee te wisselen")
+	waar(not Games.wissel_speler(), "dus doet een wissel niets")
+	gelijk(str(State.s.get("speler", "")), "", "en er wordt niets onthouden")
+	Games.stop()
+	for d in World.dieren():
+		World.weg(d.id)
+	Ui.zet_rust_modus(rust_voor)
+	State.s = bewaard
+	Games.hersteek()
+	_af()
+
+## The game bar half, in the real shell, on the owner's screen (1536 x 760),
+## the tablet, the phone and the low landscape phone (its rail): the animal
+## stands beside the game's name as one full tap target inside the bar, the
+## frame does not move by it, a tap hands the turn to the next animal, and a
+## game without an animal of the turn shows no such button.
+func test_de_spelbalk_wisselt_van_dier() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var scherm_voor = Ui.get("_scherm")
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	for maat in [Vector2i(1536, 760), Vector2i(1024, 768), Vector2i(360, 740), Vector2i(740, 360)]:
+		var vp := SubViewport.new()
+		vp.size = maat
+		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		boom.root.add_child(vp)
+		var shell = load("res://scenes/main.tscn").instantiate()
+		shell.set_meta("geen_start", true)
+		vp.add_child(shell)
+		State.nieuw_spel()
+		State.start_gekozen()
+		State.s["taken"] = []
+		var ids := _ids(_gasten_van_de_pool(3, 3))
+		Hotel.start()
+		for _f in 3:
+			await boom.process_frame
+		var kader: Control = shell.kader
+		var kader_voor := kader.get_global_rect()
+		waar(Games.start("_voorbeeld"), "%s: het voorbeeld start" % str(maat))
+		for _f in 2:
+			await boom.process_frame
+		var balk: UiSpelbalk = shell.spelbalk
+		waar(balk.speler_knop != null and not balk.speler_knop.visible,
+			"%s: zonder dier van de beurt geen dierknop" % str(maat))
+		waar(Games.start("zwembad"), "%s: het zwembad start" % str(maat))
+		for _f in 2:
+			await boom.process_frame
+		balk = shell.spelbalk
+		var knop: Button = balk.speler_knop
+		waar(knop != null and knop.visible, "%s: het dier staat op de balk" % str(maat))
+		if knop == null or not knop.visible:
+			Games.stop()
+			vp.queue_free()
+			await boom.process_frame
+			continue
+		var rail := (balk.get_child(0) is VBoxContainer)
+		gelijk(knop.text, UiTekst.speler_knop("🐶", "Boef", rail),
+			"%s: pictogram, naam en 🔄, woordelijk" % str(maat))
+		waar(Ui.mist_tekens(knop.text).is_empty(), "%s: zonder tofu" % str(maat))
+		gelijk(kader.get_global_rect(), kader_voor, "%s: het kader is niet bewogen" % str(maat))
+		var r := knop.get_global_rect()
+		waar(r.size.x >= 48.0 and r.size.y >= 48.0, "%s: een vol tikdoel (%s)" % [str(maat), str(r.size)])
+		waar(balk.get_global_rect().encloses(r), "%s: binnen de balk" % str(maat))
+		waar(not r.intersects(balk.terug_knop.get_global_rect()), "%s: naast Terug, niet erop" % str(maat))
+		waar(Rect2(Vector2.ZERO, Vector2(maat)).encloses(r), "%s: en op het scherm" % str(maat))
+		# the tap: the next animal swims, in a fresh turn, and the frame stays put
+		knop.pressed.emit()
+		for _f in 3:
+			await boom.process_frame
+		gelijk(Games.actief(), "zwembad", "%s: het zwembad draait nog" % str(maat))
+		gelijk(Games.speler(), ids[1], "%s: nu zwemt Muis" % str(maat))
+		gelijk(str(State.spel_data("zwembad").get("gast", "")), ids[1], "%s: in een eigen beurt" % str(maat))
+		knop = shell.spelbalk.speler_knop
+		waar(knop.visible and knop.text.contains("Muis") and knop.text.contains("🐱"),
+			"%s: en de balk zegt het: %s" % [str(maat), knop.text])
+		gelijk(kader.get_global_rect(), kader_voor, "%s: het kader staat nog steeds stil" % str(maat))
+		# ⬅ Terug still ends the game
+		shell.spelbalk.terug_knop.pressed.emit()
+		for _f in 2:
+			await boom.process_frame
+		gelijk(Games.actief(), "", "%s: na Terug draait er niets meer" % str(maat))
+		Games.stop()
+		Hits.wis_alles()
+		for d in World.dieren():
+			World.weg(d.id)
+		vp.queue_free()
+		await boom.process_frame
+	Ui.zet_rust_modus(rust_voor)
+	Ui.registreer_lagen(null, null, null)
+	Ui.vergeet_scherm()
+	if scherm_voor != null:
+		Ui.set("_scherm", scherm_voor)
+	State.s = bewaard
+
+## `ctx.laat_gaan`: the animal whose unfinished turn a pick dropped makes room
+## for the new one, and a switch never wakes anybody.  With real walking (no
+## reduced motion), because "still on his way" only exists while walking.
+func test_wie_zijn_beurt_niet_afmaakt_maakt_plaats() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	_op()
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(false)
+	State.nieuw_spel()
+	var gasten := _gasten_van_de_pool(4, 4)
+	var ctx := SpelCtx.new("proefspel", {"naam": "Proef", "kamer": "tuin"})
+	# Boef was still on his way to the garden: he turns back to his own bed
+	World.reis("boef", "tuin", {"x": 110.0, "z": 60.0, "na": "wacht"})
+	waar(World.onderweg_naar("tuin").has("boef"), "Boef is op weg naar de tuin")
+	ctx.laat_gaan("boef")
+	waar(not World.onderweg_naar("tuin").has("boef"), "Boef komt niet meer naar de tuin")
+	gelijk(str(World.dier("boef").reis_doel), str(gasten[0]["kamer"]), "hij gaat terug naar zijn kamer")
+	gelijk(str(gasten[0]["waar"]), str(gasten[0]["kamer"]), "en daar hoort hij nu")
+	# Muis sleeps: nobody is woken by a switch
+	World.zet("muis", str(gasten[1]["kamer"]))
+	World.slaap("muis", str(gasten[1]["kamer"]), str(gasten[1]["bed"]))
+	waar(World.slaapt("muis"), "Muis slaapt")
+	ctx.laat_gaan("muis")
+	waar(World.slaapt("muis"), "en slaapt door")
+	# Wolkje stands in the garden where the new one is heading: he walks off
+	World.zet("wolkje", "tuin", 112.0, 60.0)
+	ctx.laat_gaan("wolkje")
+	var wolkje = World.dier("wolkje")
+	waar(wolkje.staat == "loop" and not wolkje.punten.is_empty(), "Wolkje loopt weg")
+	# Gerrit was sent somewhere else already (a stop sends him to bed): left alone
+	World.reis("gerrit", "keuken", {"na": "wacht"})
+	ctx.laat_gaan("gerrit")
+	gelijk(str(World.dier("gerrit").reis_doel), "keuken", "Gerrit gaat gewoon waar hij heen ging")
+	for d in World.dieren():
+		World.weg(d.id)
+	Ui.zet_rust_modus(rust_voor)
+	State.s = bewaard
+	_af()

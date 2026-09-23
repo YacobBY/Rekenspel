@@ -519,6 +519,55 @@ func test_gasten_naast_de_strook_en_terug() -> void:
 			gelijk(d.pose, "rust", "%s krijgt zijn eigen gang terug" % id)
 	await _af()
 
+# ======================================================= het dier van de beurt
+
+## "Een methode om te wisselen met welk dier je de spellen speelt" (owner,
+## 2026-09-23): every guest with a bed may hop, in check-in order; the game
+## still picks its own hopper; the animal on the game bar hands the path to the
+## next one in a fresh turn — the one who stood on the stones is sent off them
+## like every other guest — and the next start hops with the animal the child
+## picked.
+func test_het_kind_kiest_wie_er_hinkelt() -> void:
+	_op()
+	var node := await _speel(5, 1, 3)          # band 4: van 10 naar 20
+	if node == null:
+		await _af()
+		return
+	gelijk(str(Games.spelers()), str(["hk0", "hk1", "hk2", "hk3", "hk4"]),
+		"wie mag hinkelen: iedereen met een bed, op volgorde")
+	var eerste := str(node.proef_stand()["gast"])
+	gelijk(Games.speler(), eerste, "het spel kiest zelf, zoals altijd")
+	waar(_tik_keuze("k2"), "de sprongmaat 2")
+	Hits.plaats()
+	waar(_tik_keuze("n4"), "vier sprongen, nog niet bij de trap")
+	Hits.plaats()
+	gelijk(int(node.proef_stand()["s"]), 18, "hij staat halverwege het pad")
+	var sterren := int(State.s["sterren"])
+	var volgende := Games.volgende_speler()
+	waar(not volgende.is_empty() and volgende != eerste, "er is een volgend dier")
+	waar(Games.wissel_speler(), "het dier op de balk geeft de beurt door")
+	gelijk(Games.actief(), "hinkel", "het hinkelpad draait nog")
+	node = Games._knoop
+	var st: Dictionary = node.proef_stand()
+	gelijk(str(st["gast"]), volgende, "nu hinkelt het volgende dier")
+	gelijk(Games.speler(), volgende, "en de balk weet het")
+	gelijk(int(st["s"]), 10, "vanaf de start van het pad")
+	gelijk(str(st["fase"]), "sprong", "met de eerste vraag")
+	gelijk(int(st["missers"]), 0, "zonder missers")
+	gelijk(int(State.s["sterren"]), sterren, "er ging geen ster af")
+	# who stood on the stones is sent off them, like every guest who is not playing
+	var z: Dictionary = Rooms.get_kamer("tuin").zones["hinkel"]
+	var d = World.dier(eerste)
+	waar(d != null and (d.z >= float(z["z1"]) + 10.0 or not d.punten.is_empty()),
+		"%s staat niet meer op de stenen" % eerste)
+	# the next start hops with the animal the child picked
+	Games.stop()
+	for _f in 2:
+		await (Engine.get_main_loop() as SceneTree).process_frame
+	waar(Games.start("hinkel"), "het hinkelpad start opnieuw")
+	gelijk(str((Games._knoop as Node).proef_stand()["gast"]), volgende, "met het gekozen dier")
+	await _af()
+
 # ============================================================== de kindtekst
 
 ## F3: every child-facing string of games-b.md §3.9 stands verbatim in the file.

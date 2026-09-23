@@ -12,10 +12,18 @@ extends PanelContainer
 ##
 ## It takes the room bar's minimum size on purpose, so the world frame keeps
 ## its exact size when a game starts or ends: nothing in the room moves.
+##
+## A game with an animal of the turn gets ONE more button here: that animal,
+## `🐶 Boef 🔄` — tap it and the next animal takes the turn (owner, 2026-09-23:
+## "een methode om te wisselen met welk dier je de spellen speelt").  It is only
+## there when there IS another animal to switch to: a button that cannot do
+## anything is no button.
 
 var terug_knop: Button = null
 var titel_label: Label = null
+var speler_knop: Button = null     ## the animal of the turn; hidden when there is none
 var _doos: BoxContainer = null
+var _rail := false
 
 func _init() -> void:
 	name = "Spelbalk"
@@ -23,11 +31,13 @@ func _init() -> void:
 
 ## Build (or rebuild after a breakpoint change).  `terug` runs when the child
 ## taps the button; `rail` stacks the two under each other beside the frame.
+## `wissel` runs when the child taps the animal (`zet_speler` shows it).
 func bouw(icoon: String, titel: String, mt: Dictionary, tap: int, terug: Callable,
-		rail := false) -> void:
+		rail := false, wissel := Callable()) -> void:
 	for k in get_children():
 		remove_child(k)
 		k.queue_free()
+	_rail = rail
 	# As flat as the room bar: the chips have no panel around them either, and
 	# the bar must not be one unit taller than the row it replaces.
 	add_theme_stylebox_override("panel",
@@ -67,6 +77,33 @@ func bouw(icoon: String, titel: String, mt: Dictionary, tap: int, terug: Callabl
 		titel_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		titel_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_doos.add_child(titel_label)
+
+	# The animal of the turn: the same kind of button as `⬅ Terug`, after the
+	# name.  The switch runs deferred, because it rebuilds this very bar.
+	speler_knop = Button.new()
+	speler_knop.name = "Speler"
+	speler_knop.theme_type_variation = "Hotknop"
+	speler_knop.tooltip_text = UiTekst.SPELER_TITEL
+	speler_knop.clip_text = false
+	speler_knop.custom_minimum_size = Vector2(tap, tap)
+	speler_knop.focus_mode = Control.FOCUS_ALL
+	speler_knop.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	speler_knop.add_theme_font_size_override("font_size", mt["knop"])
+	speler_knop.visible = false
+	if wissel.is_valid():
+		speler_knop.pressed.connect(func() -> void:
+			Snd.tik()
+			wissel.call_deferred())
+	_doos.add_child(speler_knop)
+
+## The animal of the turn on the bar: its pictogram, its name and the 🔄 that
+## says "another one".  An empty name hides the button.  In the rail beside the
+## frame the name goes under the pictures, so the button keeps the rail's width.
+func zet_speler(icoon: String, naam: String) -> void:
+	if speler_knop == null:
+		return
+	speler_knop.visible = not naam.is_empty()
+	speler_knop.text = "" if naam.is_empty() else UiTekst.speler_knop(icoon, naam, _rail)
 
 ## The room bar's footprint, so the frame does not move: its height under the
 ## frame, its width as the rail.  The name goes when the row is too narrow for

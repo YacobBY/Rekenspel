@@ -1006,8 +1006,13 @@ func _teken_baden() -> void:
 			"volg": func() -> Dictionary:
 				var q := World.dier(id)
 				return {} if q == null else {"x": q.x, "z": q.z, "y": 34.0, "kamer": q.kamer},
-			# ÉÉN tik-afhandelaar; het slepen zit op de tobbe, niet hier
-			"aan": func(_spot) -> void: _volgende_in_bad(-1)})
+			# ÉÉN tik-afhandelaar; het slepen zit op de tobbe, niet hier.  Wie je
+			# aantikt gaat in bad, in de leegste tobbe (eigenaar, 2026-09-23: het
+			# kind kiest met welk dier het speelt).  Tot dan ging bij elke tik de
+			# EERSTE wachtende erin, ook als je een ander dier aantikte — de HTML
+			# deed dat ook, maar daar kon je het dier zelf nog naar een tobbe
+			# slepen, en dat slepen is in de poort nooit meegekomen.
+			"aan": func(_spot) -> void: _in_bad(id, _leegste())})
 	var rij := _rij_punt()
 	if str(_s["stap"]) == "af":
 		ctx.ui.wolk({"id": "tb_af", "kamer": KAMER, "x": rij["x"], "z": rij["z"],
@@ -1051,12 +1056,16 @@ func _volgende_in_bad(i: int) -> void:
 	if w.is_empty():
 		return
 	if i < 0:
-		# geen tobbe aangewezen: pak de leegste
-		i = 0
-		for j in range(1, int(_s["M"])):
-			if (_s["inbad"][j] as Array).size() < (_s["inbad"][i] as Array).size():
-				i = j
+		i = _leegste()       # geen tobbe aangewezen: pak de leegste
 	_in_bad(str(w[0]["id"]), i)
+
+## De tobbe waar het minst dieren in zitten (bij gelijkspel de linker).
+func _leegste() -> int:
+	var i := 0
+	for j in range(1, int(_s["M"])):
+		if (_s["inbad"][j] as Array).size() < (_s["inbad"][i] as Array).size():
+			i = j
+	return i
 
 func _in_bad(id: String, i) -> void:
 	if _s.is_empty() or str(_s["stap"]) != "baden" or id.is_empty():

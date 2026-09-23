@@ -188,13 +188,23 @@ func start(_c: SpelCtx) -> void:
 	var g: Dictionary = {}
 	if not S.is_empty():
 		g = ctx.state.gast_van(str(S.get("gast", "")))
-	# Resume only when the saved turn is still THIS turn (§5.12).
-	if S.is_empty() or g.is_empty() or int(S.get("dag", 0)) != dag \
-			or int(S.get("N", 0)) != n or int(S.get("band", 0)) != band \
-			or str(S.get("stap", "")) == "af":
-		g = kies[0]
+	# The animal the child picked on the game bar shops, if he may (owner,
+	# 2026-09-23); a turn of another animal is simply not finished.
+	var wil := ctx.voorkeur(spelers())
+	# Resume only when the saved turn is still THIS turn (§5.12) — and the turn of
+	# the picked animal: another animal's is dropped, and he makes room (`weg`).
+	var hervat := not (S.is_empty() or g.is_empty() or int(S.get("dag", 0)) != dag
+			or int(S.get("N", 0)) != n or int(S.get("band", 0)) != band
+			or str(S.get("stap", "")) == "af")
+	var weg := ""
+	if hervat and not wil.is_empty() and wil != str(S.get("gast", "")):
+		weg = str(S.get("gast", ""))
+		hervat = false
+	if not hervat:
+		g = kies[0] if wil.is_empty() else ctx.state.gast_van(wil)
 		S = _nieuwe_stand(g, n, band, dag)
 		d["stand"] = S
+	ctx.speelt(str(S.get("gast", "")))
 	O = Sommen.Kraam.opzet(n, band, dag)
 	P = _plekken((O["waren"] as Array).size())
 	_t0 = Time.get_ticks_msec()
@@ -214,6 +224,11 @@ func start(_c: SpelCtx) -> void:
 	_kader_af = ctx.ui.op_kader(_op_kader)
 	_zet_decor()
 	_haal_gast()
+	# the one who was waiting at the counter for the dropped turn makes room —
+	# after the new guest was sent, so he walks off to a place the new one is
+	# not heading for
+	if not weg.is_empty() and weg != str(S.get("gast", "")):
+		ctx.laat_gaan(weg)
 	_teken()
 	State.bewaar()
 
@@ -269,6 +284,16 @@ func _kandidaten() -> Array:
 		if str(g.get("behoefte", "")) == "souvenir" and not bool(g.get("blij", false)):
 			met.append(g)
 	return met if not met.is_empty() else alle
+
+## Who may shop when the child picks the animal himself (the game bar): every
+## guest with a bed, in check-in order — the same friendly fallback as above,
+## so a guest without the 🎁 wish simply buys something without one.
+func spelers() -> Array:
+	var uit: Array = []
+	for g in ctx.state.s["gasten"]:
+		if not str(g.get("bed", "")).is_empty():
+			uit.append(str(g["id"]))
+	return uit
 
 func _nieuwe_stand(g: Dictionary, n: int, band: int, dag: int) -> Dictionary:
 	var b := 3 if band <= 3 else (5 if band >= 5 else 4)

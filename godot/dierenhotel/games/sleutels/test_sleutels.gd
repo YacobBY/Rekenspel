@@ -766,6 +766,59 @@ func test_beurt_overleeft_een_herlaad() -> void:
 	_af()
 
 
+## "Een methode om te wisselen met welk dier je de spellen speelt" (eigenaar,
+## 2026-09-23): iedereen met een bed mag een sleutel krijgen, in check-in
+## volgorde; zonder keuze deelt het bord zijn sleutels uit zoals altijd.  Het
+## dier op de spelbalk geeft de eerste sleutel aan het volgende dier — hetzelfde
+## bord, opnieuw uitgedeeld, en wie aan de balie wachtte gaat terug naar bed —
+## en een bord waarop het gekozen dier zijn sleutel al had, gaat gewoon verder.
+func test_het_kind_kiest_wie_zijn_sleutel_krijgt() -> void:
+	_op()
+	var gasten := _wereld(5, 3)
+	var ids: Array[String] = []
+	for g in gasten:
+		if not str(g.get("bed", "")).is_empty():
+			ids.append(str(g["id"]))
+	waar(ids.size() >= 3, "minstens drie gasten met een bed (%d)" % ids.size())
+	waar(Games.start(ID), "het spel start")
+	gelijk(str(Games.spelers()), str(ids), "wie een sleutel mag krijgen: iedereen met een bed")
+	var p := _bord()
+	var sleutels: Array = p["sleutels"]
+	waar(sleutels.size() >= 2, "er zijn twee sleutels (%d)" % sleutels.size())
+	gelijk(Games.speler(), ids[0], "zonder keuze is de eerste sleutel van de eerste gast")
+	var sig := str(p["sig"])
+	var nummer := _nummer_nu()
+	var sterren := int(State.s["sterren"])
+	waar(await _beantwoord(), "het getal is al gekozen")
+	waar(Games.wissel_speler(), "het dier op de balk geeft de beurt door")
+	gelijk(Games.actief(), ID, "het sleutelbord draait nog")
+	var q := _bord()
+	gelijk(Games.speler(), ids[1], "nu krijgt het volgende dier de eerste sleutel")
+	gelijk(str(q["sig"]), sig, "op hetzelfde bord")
+	gelijk(int(q["nu"]), 0, "vanaf de eerste sleutel")
+	gelijk(str(q.get("stap", "")), "reken", "en weer met de vraag naar het getal")
+	gelijk(str(((q["sleutels"] as Array)[0] as Dictionary)["gast"]), ids[1],
+		"de eerste sleutel is van hem")
+	gelijk(str(((q["sleutels"] as Array)[1] as Dictionary)["gast"]), ids[2],
+		"de tweede van wie na hem komt")
+	gelijk(_nummer_nu(), nummer, "met hetzelfde nummer: de kern zaait op dag, N en band")
+	gelijk(int(State.s["sterren"]), sterren, "er ging geen ster af")
+	var eerste := State.gast_van(ids[0])
+	gelijk(str(eerste.get("waar", "")), str(eerste.get("kamer", "")),
+		"wie aan de balie wachtte, ging terug naar zijn kamer")
+	gelijk(str(State.gast_van(ids[1]).get("waar", "")), "receptie", "en de nieuwe komt naar de balie")
+	# zijn sleutel hangt: dan is de volgende sleutel aan de beurt ...
+	await _hang(int(((q["sleutels"] as Array)[0] as Dictionary)["haak"]))
+	gelijk(int(_bord()["nu"]), 1, "de sleutel hangt")
+	gelijk(Games.speler(), ids[2], "en de balk toont wie nu wacht")
+	# ... en na een stop gaat dat bord verder: het gekozen dier had zijn sleutel al
+	Games.stop()
+	waar(Games.start(ID), "het spel start opnieuw")
+	gelijk(int(_bord()["nu"]), 1, "het bord gaat verder waar het was")
+	gelijk(Games.speler(), ids[2], "met de sleutel die nog wacht")
+	_af()
+
+
 ## Een verse dag geeft een verse opdracht (de handtekening klopt niet meer).
 func test_nieuwe_dag_geeft_nieuwe_opdracht() -> void:
 	_op()

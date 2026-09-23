@@ -211,6 +211,36 @@ func test_eerlijk_verdelen_slaagt() -> void:
 	gelijk(str(d["stand"]["stap"]), "baden", "en dat staat in de savegame")
 	_af()
 
+## Who you tap goes into the bath (owner, 2026-09-23: "een methode om te
+## wisselen met welk dier je de spellen speelt").  Tobbe has no animal of the
+## turn — the sum is about soap and tubs — so it gets no button on the game
+## bar; the child picks who bathes by tapping that animal.  Until then every
+## tap on any waiting animal bathed the FIRST one in the queue.
+func test_wie_je_aantikt_gaat_in_bad() -> void:
+	_op()
+	var gasten := _gasten(3, 1, 3)
+	waar(Games.start(ID), "het spel start")
+	var spel = _spel()
+	if spel == null:
+		_af()
+		return
+	gelijk(Games.speler(), "", "tobbe heeft geen dier van de beurt")
+	gelijk(Games.spelers().size(), 0, "en dus geen dierknop op de spelbalk")
+	# the sum is done: everybody with a bed may bathe, and they stand in the garden
+	spel._s["stap"] = "baden"
+	for i in gasten.size():
+		World.zet(str(gasten[i]["id"]), "tuin", 60.0 + 10.0 * i, 110.0)
+	spel._teken()
+	var tweede := str(gasten[1]["id"])
+	var spot := Hits.spot("tb_dier" + tweede)
+	waar(spot != null and is_instance_valid(spot.knoop), "%s heeft een eigen knopje" % tweede)
+	if spot != null and is_instance_valid(spot.knoop):
+		(spot.knoop as BaseButton).pressed.emit()
+	var erin: Array = spel._in_bad_ids()
+	waar(erin.has(tweede), "wie je aantikt, gaat in bad (%s)" % str(erin))
+	waar(not erin.has(str(gasten[0]["id"])), "en niet de eerste van het rijtje")
+	_af()
+
 ## A miss costs nothing: the turn goes on, the star count does not move.
 func test_misser_helpt_en_straft_nooit() -> void:
 	_op()

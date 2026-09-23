@@ -182,15 +182,25 @@ func start(_c: SpelCtx) -> void:
 	var band: int = ctx.state.band()
 	var dag := int(ctx.state.s["dag"])
 	_s = d.get("stand", {})
+	# the animal the child picked on the game bar hops, if he may (owner,
+	# 2026-09-23); half a path of another animal is simply not finished
+	var wil := ctx.voorkeur(spelers())
 	# half a turn from the save may go on, but only when the day, the number of
-	# guests, the band AND the guest still match
-	if _s.is_empty() or str(_s.get("fase", "")) == "af" \
-			or int(_s.get("dag", 0)) != dag or int(_s.get("N", -1)) != n \
-			or int(_s.get("band", 0)) != Sommen.Hinkel.band_of(band) \
-			or str(_s.get("gast", "")).is_empty() \
-			or State.gast_van(str(_s.get("gast", ""))).is_empty():
-		_s = _nieuwe_stand(n, band, dag, str(lijst[0]["id"]))
+	# guests, the band AND the guest still match — and when it is the picked
+	# animal's: another animal's is dropped, and he makes room (`weg`)
+	var hervat := not (_s.is_empty() or str(_s.get("fase", "")) == "af"
+			or int(_s.get("dag", 0)) != dag or int(_s.get("N", -1)) != n
+			or int(_s.get("band", 0)) != Sommen.Hinkel.band_of(band)
+			or str(_s.get("gast", "")).is_empty()
+			or State.gast_van(str(_s.get("gast", ""))).is_empty())
+	var weg := ""
+	if hervat and not wil.is_empty() and wil != str(_s.get("gast", "")):
+		weg = str(_s.get("gast", ""))
+		hervat = false
+	if not hervat:
+		_s = _nieuwe_stand(n, band, dag, str(lijst[0]["id"]) if wil.is_empty() else wil)
 		d["stand"] = _s
+	ctx.speelt(str(_s.get("gast", "")))
 	_t0 = Time.get_ticks_msec()
 	_s["wacht"] = 0
 	if str(_s["fase"]) == "hop":
@@ -199,6 +209,10 @@ func start(_c: SpelCtx) -> void:
 	_opzij.clear()
 	_zet_decor()
 	_haal_gast()
+	# who hopped the dropped path makes room, or turns back on his way here;
+	# on the stones the loop below sends him to the grass like any other guest
+	if not weg.is_empty() and weg != str(_s.get("gast", "")):
+		ctx.laat_gaan(weg)
 	_teken()
 	_houd_vrij_lus()                   # the other guests off the stones
 	_wacht_lus()                       # and watch for our guest to arrive
@@ -272,6 +286,15 @@ func _spelers() -> Array:
 		else:
 			elders.append(g)
 	return in_tuin + elders
+
+## Who may hop when the child picks the animal himself (the game bar): every
+## guest with a bed, in check-in order.  `_spelers` stays the game's own order
+## when nobody was picked.
+func spelers() -> Array:
+	var uit: Array = []
+	for g in _gasten():
+		uit.append(str(g.get("id", "")))
+	return uit
 
 func _gast() -> Dictionary:
 	if _s.is_empty():

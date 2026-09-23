@@ -682,6 +682,65 @@ func test_herstel_uit_ctx_data() -> void:
 			"%s komt als heel getal terug" % sleutel)
 	_af()
 
+## "Een methode om te wisselen met welk dier je de spellen speelt" (eigenaar,
+## 2026-09-23): iedereen die gewekt kan worden mag als eerste, in check-in
+## volgorde; zonder keuze begint de ronde zoals altijd.  Het dier op de
+## spelbalk begint een verse ronde bij het volgende dier — de wijzers van de
+## vorige zijn gewoon niet afgemaakt en niemand wordt wakker gemaakt — en een
+## ronde waarin het gekozen dier al gewekt is, gaat gewoon verder.
+func test_het_kind_kiest_wie_er_gewekt_wordt() -> void:
+	_op()
+	var gasten := _gasten(4, 1, 3)
+	var ids: Array[String] = []
+	for g in gasten:
+		ids.append(str(g["id"]))
+	waar(Games.start(ID), "het spel start")
+	var spel := _spel()
+	if spel == null:
+		_af()
+		return
+	gelijk(str(Games.spelers()), str(ids), "wie gewekt kan worden: iedereen die slaapt, op volgorde")
+	gelijk(Games.speler(), ids[0], "zonder keuze begint de ronde bij de eerste slaper")
+	gelijk(str(spel.stand()["rij"]), str(ids.slice(0, 3)), "een rijtje van drie")
+	waar(_tik("uur"), "de wijzers een uur verder")
+	var sterren := int(State.s["sterren"])
+	waar(Games.wissel_speler(), "het dier op de balk geeft de beurt door")
+	gelijk(Games.actief(), ID, "de wekkerdienst draait nog")
+	spel = _spel()
+	var s: Dictionary = spel.stand()
+	gelijk(Games.speler(), ids[1], "nu wordt het volgende dier gewekt")
+	gelijk(str(s["gast"]), ids[1], "in een verse ronde")
+	gelijk(int(s["idx"]), 0, "die vooraan begint")
+	gelijk(str(s["rij"]), str([ids[1], ids[2], ids[3]]), "met het gekozen dier voorop")
+	gelijk(int(s["draaien"]), 0, "en ongedraaide wijzers")
+	gelijk(int(State.s["sterren"]), sterren, "er ging geen ster af")
+	waar(World.slaapt(ids[0]), "wie eerst aan de beurt was, slaapt gewoon door")
+	# het gekozen dier wordt gewekt, dan komt de volgende van zijn rijtje
+	var stappen := {"uur": 60, "kwartier": 15, "vijf": 5}
+	for _rondje in 200:
+		if spel.goed():
+			break
+		var nu: int = Sommen.Wekker.in_min(int(s["u"]), int(s["m"]))
+		var over: int = posmod(Sommen.Wekker.in_min(int(s["doelU"]), int(s["doelM"])) - nu, 720)
+		var gedaan := false
+		for knop in ["uur", "kwartier", "vijf"]:
+			if _knop(knop) != null and over >= int(stappen[knop]):
+				gedaan = _tik(knop)
+				break
+		if not gedaan:
+			break
+	waar(spel.goed(), "de wijzers staan op zijn wektijd")
+	waar(_tik("klaar"), "✅ Klaar")
+	waar(spel.volgende(), "de volgende slaper komt aan de beurt")
+	gelijk(Games.speler(), ids[2], "en de balk toont hem")
+	# een stop en een start: het gekozen dier is al gewekt, de ronde gaat verder
+	Games.stop()
+	waar(Games.start(ID), "het spel start opnieuw")
+	gelijk(Games.speler(), ids[2], "met wie nu aan de beurt is")
+	gelijk(int(_spel().stand()["idx"]), 1, "halverwege dezelfde ronde")
+	State.s.erase("speler")
+	_af()
+
 ## Een andere dag hoort een nieuwe beurt te geven, geen oude stand.
 func test_andere_dag_geeft_een_nieuwe_beurt() -> void:
 	_op()

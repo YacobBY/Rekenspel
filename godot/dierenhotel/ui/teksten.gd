@@ -117,3 +117,24 @@ const MIS_ZIN := "Nog een keer"
 ## (bottom left of the frame) with the game's name beside it.
 const TERUG := "⬅ Terug"
 const TERUG_TITEL := "Terug naar het hotel"
+
+## The animal of the turn, beside it (owner, 2026-09-23: "een methode om te
+## wisselen met welk dier je de spellen speelt"): `🐶 Boef 🔄`.  Its pictogram
+## and its name, and 🔄 for "another one" — tap it and the next animal plays.
+##
+## The design sketch had ⇄ (U+21C4).  That arrow is in none of the three
+## bundled subsets, and not in Noto Sans Symbols 2 either (only Noto Sans Math
+## carries it), so it would have drawn tofu; 🔄 is in `fonts/Emoji.ttf` and is
+## the house glyph for "nog een keer / opnieuw", which is what a switch is: the
+## same game once more, with somebody else.
+const SPELER_WISSEL := "🔄"
+const SPELER_TITEL := "Speel met een ander dier"
+
+## The label of the animal button.  The pictogram is the hotel's own
+## (`Hotel.DIER_ICOON`, the one its "komt eraan" bubbles wear).  In the rail
+## beside the frame the name goes on a line of its own under the two pictures,
+## so the button stays as narrow as the rail (three chips of 48 units).
+static func speler_knop(icoon: String, naam: String, rail := false) -> String:
+	if rail:
+		return "%s %s\n%s" % [icoon, SPELER_WISSEL, naam]
+	return "%s %s %s" % [icoon, naam, SPELER_WISSEL]

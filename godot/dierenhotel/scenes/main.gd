@@ -69,6 +69,8 @@ func _ready() -> void:
 	kolom.move_child(spelbalk, kamerbalk.get_index() + 1)
 	Games.spel_gestart.connect(_spel_aan)
 	Games.spel_gestopt.connect(_spel_uit)
+	# ... and the animal of the turn beside it (owner, 2026-09-23)
+	Games.speler_veranderd.connect(_op_speler)
 
 	# The save owns the sound: every time `State.s` is replaced (a fresh game, a
 	# restored save) the mixer is told what the child chose last (V1 finding 2).
@@ -199,10 +201,30 @@ func _bouw_spelbalk() -> void:
 	if spelbalk == null or _spel_titel.is_empty():
 		return
 	spelbalk.bouw(str(_spel_titel["icoon"]), str(_spel_titel["titel"]), Ui.maten, Ui.tap_maat(),
-		Games.stop, _compact)
+		Games.stop, _compact, Games.wissel_speler)
+	_zet_speler_knop()
 
 func spel_balk_aan() -> bool:
 	return spelbalk != null and not _spel_titel.is_empty()
+
+## The animal of the turn on the game bar (owner, 2026-09-23): shown only when
+## the running game has one AND somebody else could take its turn — with a
+## single animal the button could do nothing, so it is not there.
+func _zet_speler_knop() -> void:
+	if spelbalk == null:
+		return
+	var gast: Dictionary = State.gast_van(Games.speler()) if Games.kan_wisselen() else {}
+	spelbalk.zet_speler(str(Hotel.DIER_ICOON.get(str(gast.get("kind", "")), "🐾")),
+		str(gast.get("naam", "")))
+
+## The running game moved on to another animal (the next key, the next
+## sleeper) or started with one: redraw the button, and lay the shell out again
+## because the bar may have grown or shrunk by it.
+func _op_speler(_gast: String) -> void:
+	if not is_inside_tree() or not spel_balk_aan():
+		return
+	_zet_speler_knop()
+	_pas_shell()
 
 ## A room was added or renamed: rebuild the chips and re-lay the shell, because
 ## the bar's own width decides how many columns it gets.
@@ -526,6 +548,9 @@ func _meld_knoppen() -> void:
 	# the game bar, when a game runs: one fixed place for `⬅ Terug`
 	if spel_balk_aan() and spelbalk.visible and spelbalk.terug_knop != null:
 		print("[probe] spelbalk=", spelbalk.get_global_rect(), " terug=", spelbalk.terug_knop.get_global_rect())
+		if spelbalk.speler_knop != null and spelbalk.speler_knop.visible:
+			print("[probe] spelbalk speler=", Games.speler(), " knop=",
+				spelbalk.speler_knop.get_global_rect())
 	# the room bar, so a probe can tap a room or the map ("kaart") by name
 	if kamerbalk != null:
 		for id in kamerbalk.chips():

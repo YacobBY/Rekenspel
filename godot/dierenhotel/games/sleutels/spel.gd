@@ -124,9 +124,17 @@ func start(_c: SpelCtx) -> void:
 	d["ronde"] = ronde
 	var sig := Sommen.Sleutels.handtekening(n, clampi(band, 3, 5), dag, ronde)
 	var oud = d.get("bord", null)
+	# The animal the child picked on the game bar gets the first key (owner,
+	# 2026-09-23).  A board he already had his key on goes on as it was; any
+	# other board is simply not finished, and the same board is laid out again
+	# with his key first — the frozen core seeds it on day, N, band and round,
+	# never on who holds the keys.
+	var wil := ctx.voorkeur(spelers())
 	if typeof(oud) != TYPE_DICTIONARY or str((oud as Dictionary).get("sig", "")) != sig \
-			or bool((oud as Dictionary).get("klaar", false)) or not _gasten_kloppen(oud):
-		var mee: Array = _gasten.slice(0, int(Sommen.Sleutels.MAXBLANCO.get(clampi(band, 3, 5), 2)))
+			or bool((oud as Dictionary).get("klaar", false)) or not _gasten_kloppen(oud) \
+			or (not wil.is_empty() and not _had_zijn_beurt(oud, wil)):
+		var mee: Array = _gasten_vanaf(wil).slice(0,
+			int(Sommen.Sleutels.MAXBLANCO.get(clampi(band, 3, 5), 2)))
 		d["bord"] = Sommen.Sleutels.maak_opdracht(n, band, dag, mee, ronde)
 	_p = d["bord"]
 	if int(_p.get("t0", 0)) == 0:
@@ -138,6 +146,7 @@ func start(_c: SpelCtx) -> void:
 	if _stap() == STAP_HANG and _gekozen() <= 0:
 		_p[STAP_KEY] = STAP_REKEN
 	_haal_gast()
+	ctx.speelt(str(_sleutel_nu().get("gast", "")))
 	_kader_af = ctx.ui.op_kader(_op_kader)
 	_teken()
 	print("[probe] spel=start id=", ctx.id, " band=", band, " borden=", _borden().size(),
@@ -182,6 +191,42 @@ func _gasten_met_bed() -> Array:
 		if not str(gast.get("bed", "")).is_empty() and not str(gast.get("kamer", "")).is_empty():
 			uit.append(gast)
 	return uit
+
+
+## Wie een sleutel mag krijgen als het kind zelf het dier kiest (de spelbalk):
+## elke gast met een bed en een kamer, in check-in volgorde.
+func spelers() -> Array:
+	var uit: Array = []
+	for g in _gasten_met_bed():
+		uit.append(str((g as Dictionary).get("id", "")))
+	return uit
+
+
+## De gasten met een bed, beginnend bij `id` en dan rond in check-in volgorde:
+## het gekozen dier krijgt de eerste sleutel, de volgende de tweede.  Zonder
+## keuze gewoon de check-in volgorde, zoals altijd.
+func _gasten_vanaf(id: String) -> Array:
+	var i := -1
+	for k in _gasten.size():
+		if str((_gasten[k] as Dictionary).get("id", "")) == id:
+			i = k
+			break
+	if i <= 0:
+		return _gasten.duplicate()
+	return _gasten.slice(i) + _gasten.slice(0, i)
+
+
+## Hing de sleutel van `id` op dit bord al, of zit hij nu in de hand?  Dan had
+## dat dier zijn beurt en gaat het bord gewoon verder.
+func _had_zijn_beurt(p, id: String) -> bool:
+	if typeof(p) != TYPE_DICTIONARY:
+		return false
+	var lijst: Array = (p as Dictionary).get("sleutels", [])
+	var nu := int((p as Dictionary).get("nu", 0))
+	for k in lijst.size():
+		if str((lijst[k] as Dictionary).get("gast", "")) == id:
+			return k <= nu
+	return false
 
 
 ## Staan de gasten van deze opdracht er nog (niet uitgecheckt)?
@@ -1554,6 +1599,7 @@ func _goed(i: int) -> void:
 	_wolk_weg_straks()
 	if not volgende.is_empty():
 		_haal_gast()
+		ctx.speelt(str(volgende.get("gast", "")))
 		State.bewaar()
 		return
 	_klaar()

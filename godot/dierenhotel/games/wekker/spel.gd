@@ -191,6 +191,12 @@ func start(_c: SpelCtx) -> void:
 	var n := maxi(1, int(ctx.state.n_gasten()))
 	var band := Sommen.Wekker.band_klem(int(ctx.state.band()))
 	var oud := _lees_stand(d.get("stand", null))
+	# Het dier dat het kind op de spelbalk koos wordt als eerste gewekt
+	# (eigenaar, 2026-09-23).  Een ronde waarin het al aan de beurt was of is
+	# gaat gewoon door; elke andere ronde is gewoon niet afgemaakt.
+	var wil := ctx.voorkeur(spelers())
+	if not wil.is_empty():
+		rij = _rij_vanaf(wil)
 	# Een belofte overleeft geen herlaad: de stand komt altijd uit ctx.data().
 	# Hergebruiken mag alleen als dag, N en band nog kloppen, de beurt niet af
 	# is, de gast nog bestaat en het doeluur gezet is (games-b.md §2.11).
@@ -200,7 +206,8 @@ func start(_c: SpelCtx) -> void:
 		and int(oud.get("band", -1)) == band \
 		and int(oud.get("af", 0)) == 0 \
 		and int(oud.get("doelU", 0)) > 0 \
-		and not gast_van(str(oud.get("gast", ""))).is_empty()
+		and not gast_van(str(oud.get("gast", ""))).is_empty() \
+		and (wil.is_empty() or _had_zijn_beurt(oud, wil))
 	if zelfde:
 		_s = oud
 		# Na een herlaad slaapt iedereen weer, en de stap `wakker` hoort bij
@@ -215,6 +222,7 @@ func start(_c: SpelCtx) -> void:
 		_s = _nieuwe_beurt(n, band, dag, 0, str(eerste["id"]), slaapt_gast(eerste))
 		_s["rij"] = _ids_van(rij)
 	d["stand"] = _s
+	ctx.speelt(str(_s.get("gast", "")))
 	_t0 = Time.get_ticks_msec()
 	if ctx.wereld.kamer_nu() != KAMER:
 		ctx.wereld.naar(KAMER)
@@ -268,6 +276,11 @@ func _geen_gasten() -> void:
 ## `rijtje()` — eerst alle gasten met een bed die slapen, is dat leeg dan alle
 ## gasten met een bed, is dat leeg dan alle gasten.  Daarvan de eerste drie.
 func rijtje() -> Array:
+	return _wekbaar().slice(0, RIJ_MAX)
+
+## Dezelfde lijst, zonder de grens van drie: iedereen die vandaag gewekt kan
+## worden, in check-in volgorde.
+func _wekbaar() -> Array:
 	var alle: Array = ctx.state.s["gasten"]
 	var l: Array = []
 	for g in alle:
@@ -279,7 +292,27 @@ func rijtje() -> Array:
 				l.append(g)
 	if l.is_empty():
 		l = alle.duplicate()
+	return l
+
+## Wie als eerste gewekt mag worden als het kind zelf het dier kiest (de
+## spelbalk): iedereen die gewekt kan worden, in check-in volgorde.
+func spelers() -> Array:
+	return _ids_van(_wekbaar())
+
+## Het rijtje van een ronde die bij `id` begint en dan rond gaat: het gekozen
+## dier eerst, daarna de volgende slapers, hooguit drie.
+func _rij_vanaf(id: String) -> Array:
+	var l := _wekbaar()
+	var i := _ids_van(l).find(id)
+	if i > 0:
+		l = l.slice(i) + l.slice(0, i)
 	return l.slice(0, RIJ_MAX)
+
+## Was `id` in de bewaarde ronde al aan de beurt, of is hij het nu?  Dan gaat
+## die ronde gewoon verder.
+func _had_zijn_beurt(oud: Dictionary, id: String) -> bool:
+	var plek := (oud.get("rij", []) as Array).find(id)
+	return plek >= 0 and plek <= int(oud.get("idx", 0))
 
 func _ids_van(rij: Array) -> Array:
 	var uit: Array = []
@@ -899,6 +932,7 @@ func volgende() -> bool:
 		str(g["id"]), slaapt_gast(g))
 	_s["rij"] = l
 	_s["ster"] = ster             # er valt hooguit één ster per ronde
+	ctx.speelt(str(g["id"]))
 	if _kaart != null:
 		_kaart.weg()
 		_kaart = null
