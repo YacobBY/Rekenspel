@@ -58,6 +58,92 @@ static func trap_hoppen(bad: Dictionary) -> Array:
 static func tempo_van(l: int) -> float:
 	return clampf(4.3 * 5.0 / float(maxi(1, l)), 4.3 / 15.0, 1.0)
 
+# ------------------------------------------------------------- de verre wand
+
+## How far his nose sticks out in front of the paws he stands on: the guest
+## models are ~29 voxels long with their anchor on voxel 13 (`Art.DIER_ANKER`).
+## A stroke that ends at the far wall stops with the NOSE against the wall —
+## with his middle on `x(L)` his head used to stand on the tiles beyond it
+## (owner, 2026-09-23: the bumping animal "is slecht geanimeerd").
+const NEUS := 15.0
+## The last stretch before the wall, in voxels: there he swims slowly.
+const REM := 10.0
+## ... at this tempo: he sees the wall coming (about two thirds of a second).
+const TRAAG := 0.6
+
+## The bonk at the wall, as [pose, seconds]: his head dips against it, then
+## comes up, dazed (games-b.md §1.7).  1.2 s in all: the time the 💛 Au!
+## bubble stays up.  Two poses, not a wobble of four: every pose is another
+## box for his number, his name and the bubble, and on a phone each change
+## sent them hopping from one side of him to the other.
+const BONK := [["snuif", 0.25], ["kijk", 0.95]]
+
+## Where his paws are when his nose touches the far wall.
+static func wand_x(bad: Dictionary) -> float:
+	return (134.0 if bad.is_empty() else float(bad["x1"])) - NEUS
+
+## The x of every metre of one stroke of `aantal` metres from metre `p0`, split
+## into what he swims at his own tempo (`snel`) and what he swims slowly
+## (`traag`).  One point per metre, on the number line (§1.6) — except for a
+## stroke that ends at the wall: its metres past `wand_x − REM` are spread
+## evenly over that last stretch, so the number on his back says `L` exactly
+## when his nose touches the wall.  `x_nu` is where he lies now; he never
+## swims backwards to reach the wall.
+static func slag_x(bad: Dictionary, l: int, p0: int, aantal: int, x_nu: float) -> Dictionary:
+	var snel: Array = []
+	var traag: Array = []
+	if aantal <= 0 or l <= 0:
+		return {"snel": snel, "traag": traag}
+	if p0 + aantal < l:
+		for i in range(1, aantal + 1):
+			snel.append(baan_x(bad, l, p0 + i))
+		return {"snel": snel, "traag": traag}
+	var wand := wand_x(bad)
+	var rem := wand - REM
+	var n_traag := 0
+	for i in range(1, aantal + 1):
+		var x := baan_x(bad, l, p0 + i)
+		if x <= rem and n_traag == 0:
+			snel.append(x)
+		else:
+			n_traag += 1
+	var van: float = x_nu if snel.is_empty() else float(snel[snel.size() - 1])
+	for j in range(1, n_traag + 1):
+		# already at (or past) the wall: the last metres are counted on the spot
+		traag.append(van if van >= wand else lerpf(van, wand, float(j) / float(n_traag)))
+	return {"snel": snel, "traag": traag}
+
+## The bump (PLAN N3; owner, 2026-09-23: "Bij stoten moet de speler ook
+## opnieuw rekenen met een andere afstand"): the wall throws him back into
+## the lane and he floats `L − p` metres before it, so the card that follows
+## is a NEW sum — never the question he just missed.  The metre he lands on:
+##
+##   * the throw is a fifth to a third of the lane (band 3: 2…7 m, band 4:
+##     5…17 m, band 5: 7…27 m) — always far enough that his nose is clear of
+##     the wall, and never more than one stroke back (`L − p ≤ M`);
+##   * he keeps what he swam: he lands AHEAD of the metre he started the
+##     stroke from whenever the lane leaves room for that; only a stroke that
+##     began closer to the wall than the smallest throw lands a little behind
+##     it, and then with the smallest throw;
+##   * never the rest he had (that would be the same distance again), never on
+##     or past the wall, never behind the start;
+##   * the pool's own LCG seeded by the stroke (L, M, p, leg) picks it, so a
+##     reload, a replay and a test all see the same throw.
+static func bots_plek(l: int, m: int, p_voor: int, leg: int) -> int:
+	if l <= 2:
+		return 0
+	var r: int = clampi(l - p_voor, 1, l)
+	var lo := maxi(1, ceili(l / 5.0))
+	var hi := maxi(lo, ceili(l / 3.0))
+	var worp := lo
+	if r - 1 >= lo:
+		hi = mini(hi, r - 1)
+		var rnd := Sommen.Lcg31.new(l * 977 + m * 131 + p_voor * 17 + leg * 7 + 3)
+		worp = lo + mini(hi - lo, JsGetal.vloer(rnd.volgende() * float(hi - lo + 1)))
+	elif worp == r:
+		worp += 1
+	return clampi(l - worp, 1, l - 1)
+
 ## At most four splashes over a long stretch.
 static func plons_elke(n: int) -> int:
 	return maxi(1, ceili(n / 4.0)) if n > 10 else 5
@@ -170,11 +256,13 @@ static func regel_verder(naam: String, p: int) -> String:
 static func regel2_verder() -> String:
 	return "Nog hoeveel meter?"
 
-## Card n straight after a bump (PLAN N3, V1): the wall is not a finish line,
-## so the SAME question comes back with `regel2_verder()` under it and the
-## pictogram is a wry 🙃 instead of the swimmer.  6 words, 24 characters.
-static func regel_bots_terug() -> String:
-	return "Te ver, hij tikt de rand"
+## Card n straight after a bump (PLAN N3, V1; owner 2026-09-23): the wall is
+## not a finish line, and it threw him back — so this card says WHERE he is
+## now, with `regel2_verder()` and the new sum under it, and the pictogram is
+## a wry 🙃 instead of the swimmer.  6 words, at most 37 characters with the
+## longest guest name.
+static func regel_bots_terug(naam: String, p: int) -> String:
+	return "%s botste terug naar %d meter" % [naam, p]
 
 ## The real minus sign U+2212, never a hyphen (architecture.md §1.1 F3).
 static func som_verder(l: int, p: int) -> String:

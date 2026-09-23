@@ -270,15 +270,24 @@ Kamer `zwembad`: 144 × 88 voxels, **buiten** (2026-09-14): geen wanden, vloer
 (`x = 0`, z 60…72, poort op (4, 66)). Het hek staat op de eigen
 `hek_x = hek_z = 4` van de kamer — verder van het water dan het tuinhek, om
 ruimte te maken voor het startblok (owner, 2026-09-17: "Doe het hek verder
-van beide kanten van het zwembad") — en het **achterhek is weg achter het
-water zelf** (owner, 2026-09-17: "Haal het hek gedeelte dat op het zwembad
-zit weg", verduidelijkt tot "alleen achter het bad"). Vast decor: `plant` op
+van beide kanten van het zwembad") — en het loopt **langs de lange
+achterkant van het water, niet langs de korte kant bij het startblok**
+(owner, 2026-09-23: "zet het hek aan de bovenste zijkant van het zwembad niet
+aan de korte kant bij de startblokken"): `hekx`-palen op `z = 4` vanaf
+`x = bad.x0 + 14 = 32` tot het eind van de kamer, geen `hekz`; aan de korte
+kant staat alleen de rozenboog van de poort. Het hek begint één paal voorbij
+de hoek boven het startblok, zodat de 🏊-knop van het blok die hoek vrij
+heeft. (Tot 2026-09-23 andersom: een zijhek langs het startblok en achter het
+water alleen de palen voorbij de twee uiteinden — owner, 2026-09-17: "Haal
+het hek gedeelte dat op het zwembad zit weg".) Vast decor: `plant` op
 (136, 80) en **één groot `startblok`** op (14, 28) op de baan (owner,
 2026-09-17: "startblokken ... met een trappetje zodat het dier langzaam
 omhoog kan springen" en "Maak het startblok groter en doe 1 ipv 3"). De oude
 instapvlonder `mat` is weg (owner, 2026-09-17: "haal de oude houten plank
 weg"); het 🏊-icoontje hangt nu op het startblok. Dekplekken:
-`dek.start = (12, 56)` en `dek.over = (132, 56)` — beide vóór het water.
+`dek.start = (12, 56)` en `dek.over = (116, 56)` — beide vóór het water;
+`over` staat naast de vlag (x 134, z 50) en niet in zijn voet (2026-09-23: op
+(132, 56) stond wie eruit klom ín de vlag).
 
 **Regel die hard is:** zet nooit een sta- of dwaalplek in het water. Alle
 dwaalplekken, de deur en beide dekplekken liggen in de convexe strook `z ≥ 50`,
@@ -477,6 +486,16 @@ rood, geen ster minder, geen herhaling van de beurt.
   In `perStap(i)`: `p = p0 + i + 1`, het cijfer op het dier wordt bijgewerkt, en
   bij `i mod elke == 0` klinkt `plons`, met `elke = (n > 10) ? ceil(n/4) : 5` —
   dus hooguit vier plonzen over een lang stuk.
+* **Een slag die bij de wand eindigt** (de precieze laatste etappe, en elke
+  bots) remt af en stopt met zijn **neus** tegen de verre wand, niet met zijn
+  midden op `x(L)` — dan stond zijn kop op de tegels achter het water (owner,
+  2026-09-23: het dier dat zich stoot "is slecht geanimeerd"). `NEUS = 15`
+  voxels (de gastmodellen zijn ~29 lang met hun anker op voxel 13), dus
+  `wand_x = bad.x1 − NEUS = 119`. De meters van zo'n slag staan op de
+  getallenlijn tot `wand_x − REM` (`REM = 10`); de meters daarna worden gelijk
+  verdeeld over dat laatste stuk en traag gezwommen (`TRAAG = 0,6`), zodat het
+  cijfer op zijn rug `L` zegt precies als zijn neus de wand raakt. Nog steeds
+  één punt per meter, nooit achteruit (`ZwembadBeurt.slag_x`).
 * Tempo: `tempoVan(L) = klem(4,3 · 5 / max(1, L), 4,3/15, 1)`. Verified:
   L ≤ 21 → 1,0; L = 22 → 0,977; L = 43 → 0,500; L = 76 → 0,287. Doel: het cijfer
   op de zwemmer blijft leesbaar (≈ 5 m/s) en een hele baan duurt nooit langer
@@ -490,9 +509,59 @@ rood, geen ster minder, geen herhaling van de beurt.
 de kaart `✅` en de regels
 `'Precies aan de overkant!'` / `'<naam> zwom <L> meter'`.
 
-**Bots** (`soort === 'ver'`): `snd.au()`, wolkje `💛 Au!` dat na **1200 ms**
-verdwijnt, dan `afronden('bots', …)` met de kaart `💛` en de regels
-`'<naam> is aan de overkant'` / `'Het was nog <laatsteRest> meter'`.
+**Bots** (`soort === 'ver'`) — sinds PLAN N3 geen einde van de beurt, en
+sinds 2026-09-23 (owner: "Bij stoten moet de speler ook opnieuw rekenen met
+een andere afstand") ook niet meer dezelfde vraag. Hij heeft de rest
+gezwommen en ligt met zijn neus tegen de wand (§1.6); dan, in deze volgorde:
+
+1. de wand gooit hem terug naar meter `p' = ZwembadBeurt.bots_plek(L, M, p,
+   leg)` — dat wordt **meteen bewaard**, vóór hij beweegt (§1.12);
+2. de aanraking: `snd.au()`, water spat over de wand, wolkje `💛 Au!`;
+3. de bonk: zijn kop duikt tegen de wand (`snuif`, 250 ms) en komt dan
+   een beetje duizelig omhoog (`kijk`, 950 ms) terwijl er een paar
+   twinkelingetjes rond zijn kop draaien — wit en roze, **nooit** de
+   sterkleur: de glans blijft de prijs van het precieze antwoord. Samen
+   **1200 ms**: zo lang staat `💛 Au!`, en zolang ligt hij stil (twee
+   houdingen, geen gewiebel: elke houding is een ander vak voor zijn cijfer,
+   zijn naam en het wolkje, en op een telefoon sprongen die bij elke wissel
+   naar de andere kant van hem);
+4. de terugworp: de wand duwt hem terug door het water naar `x(p')`, het
+   cijfer op zijn rug telt terug van `L` tot `p'`, een `plons`; de strepen die
+   hij terug passeert worden weer wit;
+5. een klein slagje vooruit draait zijn neus weer naar de wand; hij drijft;
+6. na `WOLK_S` een **nieuwe vraag vanaf `p'`**: pictogram `🙃`, regel
+   `'<naam> botste terug naar <p'> meter'`, regel 2 `'Nog hoeveel meter?'`,
+   sombalk `'<L> − <p'> ='`, en de knoppen uit `keuzeGetallen(L, M, p', band,
+   leg)`. Een andere afstand, dus opnieuw rekenen.
+
+Er gaat niets af: geen ster, geen etappe; de misser voedt alleen de
+hulpladder. In rustmodus ligt hij stil tegen de wand zolang `💛 Au!` staat
+(1200 ms) en daarna meteen op `x(p')`, zonder deeltjes.
+
+`bots_plek(L, M, p, leg)` — deterministisch, per slag:
+
+```
+r   = L − p                         (≥ 1)
+lo  = max(1, ceil(L/5));  hi = max(lo, ceil(L/3))      // een vijfde tot een derde
+als r − 1 ≥ lo:  hi = min(hi, r − 1)                    // hij houdt wat hij zwom
+                 worp = lo + min(hi − lo, floor(LCG(L·977 + M·131 + p·17 + leg·7 + 3) · (hi − lo + 1)))
+anders:          worp = lo, of lo + 1 als lo == r       // dicht bij de wand: de kleinste worp
+p'  = klem(L − worp, 1, L − 1)
+```
+
+Dus: nooit dezelfde afstand (`worp ≠ r`), nooit op of voorbij de wand, nooit
+achter de start, altijd in één slag te halen (`L − p' ≤ M`), altijd ver genoeg
+dat zijn neus los van de wand is, en vóór de meter waar hij de slag begon
+zodra de baan daar ruimte voor laat. Worked example (band 3, `L = 16`,
+`M = 10`): eerst netjes 10 m, dan een tik op 16 → hij zwemt 6 m tot de wand,
+de wand gooit hem terug naar **11 m** (`bots_plek(16, 10, 10, 2) = 11`), en de
+nieuwe kaart vraagt `16 − 11 =` met de knoppen `keuzeGetallen(16, 10, 11, 3,
+2)` = 16 / 10 / **5** / 15 (vóór de bots: 16 / 6 / 10 / 5 met de vraag
+`16 − 10 =`).
+
+(De oude HTML-bots — `afronden('bots', …)` met de kaart `💛` en de regels
+`'<naam> is aan de overkant'` / `'Het was nog <laatsteRest> meter'` — bestaat
+sinds N3 niet meer als einde; de zinnen staan nog in `ZwembadBeurt`.)
 
 De sombalk op de eindkaart is `somAf()`:
 `'<L> − <laatsteP> = <laatsteRest>'`, of `'<L> m ✓'` als er nog geen etappe was.
@@ -501,8 +570,9 @@ De sombalk op de eindkaart is `somAf()`:
 1. `klaar = soort` en bewaren;
 2. was het een wens, dan `behoefteKlaar(gast, 'zwemmen')`;
 3. `state.tel(misser == 0, verstreken ms sinds het begin van de beurt)`;
-4. `taakKlaar('zwemles')` — **ook na een bots**: de ster hoort bij het hálen van
-   de overkant, niet bij goed gokken;
+4. `taakKlaar('zwemles')` — sinds PLAN N3 alleen nog na **precies**: een bots
+   is geen einde meer (hierboven), dus de ster hoort bij de baan die echt
+   gezwommen is;
 5. de eindkaart neerzetten (zonder keuzestrook), `kaart.klaar()` (vinkje), de
    plek-rem vergeten en opnieuw neerleggen;
 6. toast `'🏊 Precies aan de overkant! ⭐'` of `'🏊 Aan de overkant! ⭐'`
@@ -520,7 +590,11 @@ bad, dan wordt hij eerst met `World.zet` op het dek gezet (`noodUit`).
 
 `uitHetWater`: doel is `dek.over` als `p ≥ L/2`, anders `dek.start`. Ligt het dier
 in het bad, dan eerst nog **zwemmend** naar de voorrand (`[klem(d.x, x0, x1),
-z1 − 1]`, `pose 'zwem'`, `tempo 1.2`) en daarna lopend het dek op (`tempo 1.2`,
+z1 − 1]`, `pose 'zwem'`, `tempo 1.2`), dan **een hop over de rand het dek op**
+(`[zelfde x, z1 + 6]`, `pose 'spring'`, `tempo 0.9`, `land_hoogte 0`, met een
+spatje — 2026-09-23: hij liep het water uit alsof hij erop stond, en een
+wandeling na de duik kwam aan op de diepte van die duik, zodat hij verzonken
+in de tegels stond) en daarna lopend naar zijn dekplek (`tempo 1.2`,
 `na: 'wacht'`). Zo begint er nooit een dwaaltocht vanuit het bad.
 
 ### 1.9 Eigen decor
@@ -659,8 +733,9 @@ eindkaart 3,4 s over het bad en over de meterstrepen.
 | te veel | wolkje `🏊` + `'hooguit <M> m'` |
 | te kort | wolkje `🏊` + `'nog <L−p> m'` |
 | bots | wolkje `💛` + `'Au!'` (1200 ms) |
+| kaart na een bots | pictogram `🙃`, regels `'<naam> botste terug naar <p> meter'` / `'Nog hoeveel meter?'`; sombalk `'<L> − <p> ='` |
 | eind precies | kaart `✅`, `'Precies aan de overkant!'` / `'<naam> zwom <L> meter'` |
-| eind bots | kaart `💛`, `'<naam> is aan de overkant'` / `'Het was nog <rest> meter'` |
+| eind bots | (sinds N3 geen einde meer) kaart `💛`, `'<naam> is aan de overkant'` / `'Het was nog <rest> meter'` |
 | eindsombalk | `'<L> − <p> = <rest>'` of `'<L> m ✓'` |
 | toast | `'🏊 Precies aan de overkant! ⭐'` of `'🏊 Aan de overkant! ⭐'` |
 | geen gast | toast `'🏊 Er is nog geen gast'` |
@@ -678,6 +753,10 @@ kader-luisteraar opzeggen.
 `start()` opnieuw terwijl het spel al open staat en de beurt geldig is: alleen
 het decor opnieuw bouwen en, als er niets beweegt en er geen kaart is, de
 vraagkaart terugzetten.
+
+Tijdens een bots staat in de opslag al de meter waar de wand hem heen gooit
+(§1.7 stap 1), nooit `p = L`: een herlaad midden in de bots vindt hem op die
+meter met de nieuwe vraag.
 
 Na een herlaad (`herstel`): staat `p > 0`, dan wordt het dier met `World.zet`
 teruggezet op `x(p)`, `z = 28`, krijgt `pose('zwem', 0)`, zijn cijfer en zijn

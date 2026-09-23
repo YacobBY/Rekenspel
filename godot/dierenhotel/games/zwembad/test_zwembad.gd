@@ -139,6 +139,19 @@ func _druk(waarde: int) -> bool:
 			return true
 	return false
 
+## The numbers on the real strip, in the order the child sees them.
+func _waarden() -> Array:
+	var uit: Array = []
+	var s := Hits.spot(STROOK)
+	if s == null or not is_instance_valid(s.knoop):
+		return uit
+	var rij := s.knoop.get_node_or_null("Rij")
+	if rij == null:
+		return uit
+	for knop in rij.get_children():
+		uit.append(int(str(knop.name).substr(2)))
+	return uit
+
 func _juist_nu() -> int:
 	var b := _beurt()
 	return Sommen.Zwembad.juist_van(int(b["L"]), int(b["M"]), int(b["p"]))
@@ -258,8 +271,8 @@ func test_de_zinnen_staan_er_woordelijk() -> void:
 	gelijk(ZwembadBeurt.som_start(43), "nog 43 m", "kaart 1, sombalk")
 	gelijk(ZwembadBeurt.regel_verder("Muis", 30), "Muis is bij 30 meter", "kaart n, regel 1")
 	gelijk(ZwembadBeurt.regel2_verder(), "Nog hoeveel meter?", "kaart n, regel 2")
-	gelijk(ZwembadBeurt.regel_bots_terug(), "Te ver, hij tikt de rand",
-		"kaart n na een bots")
+	gelijk(ZwembadBeurt.regel_bots_terug("Muis", 12), "Muis botste terug naar 12 meter",
+		"kaart n na een bots: waar hij nu ligt")
 	gelijk(ZwembadBeurt.BOTS_KAART_ICOON, "🙃", "en haar pictogram")
 	gelijk(ZwembadBeurt.som_verder(43, 30), "43 − 30 =", "kaart n, sombalk")
 	gelijk(ZwembadBeurt.som_af(43, 30, 13, true), "43 − 30 = 13", "eindsombalk")
@@ -281,7 +294,7 @@ func test_de_zinnen_staan_er_woordelijk() -> void:
 			var m := int(baan["M"])
 			for zin in [ZwembadBeurt.regel_start(l), ZwembadBeurt.regel2_start(m),
 					ZwembadBeurt.regel_verder(naam, m), ZwembadBeurt.regel2_verder(),
-					ZwembadBeurt.regel_bots_terug(),
+					ZwembadBeurt.regel_bots_terug(naam, l - 1),
 					ZwembadBeurt.eind_regel2_precies(naam, l),
 					ZwembadBeurt.eind_regel_bots(naam), ZwembadBeurt.eind_regel2_bots(l),
 					ZwembadBeurt.hulp_regel(1, m), ZwembadBeurt.hulp_regel(2, m),
@@ -293,7 +306,7 @@ func test_de_zinnen_staan_er_woordelijk() -> void:
 	for zin in [ZwembadBeurt.GEEN_GAST, ZwembadBeurt.TOAST_PRECIES,
 			ZwembadBeurt.TOAST_BOTS, ZwembadBeurt.ICOON, ZwembadBeurt.PRECIES_ICOON,
 			ZwembadBeurt.BOTS_ICOON, ZwembadBeurt.BOTS_KAART_ICOON,
-			ZwembadBeurt.regel_bots_terug(), ZwembadBeurt.som_verder(43, 30),
+			ZwembadBeurt.regel_bots_terug("Muis", 12), ZwembadBeurt.som_verder(43, 30),
 			ZwembadBeurt.som_af(43, 0, 43, false), ZwembadBeurt.hulp_regel(1, 30)]:
 		gelijk(str(Ui.mist_tekens(zin)), "[]", 'geen ontbrekend teken in "%s"' % zin)
 
@@ -505,12 +518,14 @@ func test_derde_misser_zet_een_spookstreep() -> void:
 		waar(true, "de baan was te kort voor drie missers")
 	await _af()
 
-## PLAN N3 (open question V1): too far is a soft bump, a 💛 Au! and never a
-## cross — and since this task never the end of the turn either.  He swims the
-## rest, taps the wall, swims back to his own metre and the SAME question comes
-## back, so one tap on a number that is too big no longer buys the other side
-## (R3).  This is the test that replaced `test_te_ver_botst_zacht_en_geeft_toch
-## _een_ster`, which asserted exactly the behaviour N3 removes.
+## PLAN N3 (open question V1) and the owner, 2026-09-23 ("Bij stoten moet de
+## speler ook opnieuw rekenen met een andere afstand"): too far is a soft
+## bump, a 💛 Au! and never a cross, and never the end of the turn.  He swims
+## the rest, touches the wall, and the wall throws him back to a NEW metre —
+## so the card that follows is a new sum from there, not the question he just
+## missed.  Nothing is taken: no star, and the lane goes on from there.
+## (Until 2026-09-23 this test asserted the opposite: back on `p_voor` with
+## the same sum under the line "Te ver, hij tikt de rand".)
 func test_een_te_ver_antwoord_eindigt_de_beurt_niet() -> void:
 	_op()
 	var gasten := _gasten(4)
@@ -525,30 +540,47 @@ func test_een_te_ver_antwoord_eindigt_de_beurt_niet() -> void:
 	var ver := _ver_antwoord()
 	waar(ver > 0, "er staat een te verre knop op de strook (%d)" % ver)
 	var p_voor := int(_beurt()["p"])
+	var rest_voor := l - p_voor
 	var missers_voor := int(_beurt()["misser"])
+	var leg := int(_beurt()["leg"]) + 1
 	waar(_druk(ver), "de te verre knop is aan te tikken")
-	waar(await _wacht(_kaart_staat, 8000), "de vraag komt terug na de bots")
+	waar(await _wacht(_kaart_staat, 8000), "er komt een nieuwe vraag na de bots")
 	gelijk(_klaar(), "", "de beurt is NIET afgelopen")
-	gelijk(int(_beurt()["p"]), p_voor, "hij ligt weer op meter %d" % p_voor)
+	var p_na := int(_beurt()["p"])
+	gelijk(p_na, ZwembadBeurt.bots_plek(l, m, p_voor, leg),
+		"de wand gooide hem terug naar de meter die bots_plek zegt")
+	waar(p_na != p_voor, "hij ligt NIET meer op meter %d" % p_voor)
+	waar(p_na > 0 and p_na < l, "maar wel in de baan (%d m)" % p_na)
+	waar(l - p_na != rest_voor, "dus het is een andere afstand (%d, was %d)"
+		% [l - p_na, rest_voor])
 	gelijk(int(_beurt()["misser"]), missers_voor + 1, "de misser telt voor de hulptrap")
 	gelijk(int(State.s["sterren"]), sterren_voor, "en er viel geen ster")
 	var kaart := _kaart_knoop()
 	waar(kaart != null, "er staat weer een somkaart")
 	if kaart != null:
-		gelijk(kaart.regel_label.text,
-			ZwembadBeurt.BOTS_KAART_ICOON + " " + ZwembadBeurt.regel_bots_terug(),
-			"en die vertelt waarom hij terug is")
-		gelijk(kaart.regel2_label.text, ZwembadBeurt.regel2_verder(), "met dezelfde vraag")
-		gelijk(kaart.som_label.text, ZwembadBeurt.som_verder(l, p_voor), "en dezelfde som")
+		gelijk(kaart.regel_label.text, ZwembadBeurt.BOTS_KAART_ICOON + " "
+			+ ZwembadBeurt.regel_bots_terug(str(gasten[0]["naam"]), p_na),
+			"die zegt waar de wand hem heen gooide")
+		gelijk(kaart.regel2_label.text, ZwembadBeurt.regel2_verder(), "met de vraag")
+		gelijk(kaart.som_label.text, ZwembadBeurt.som_verder(l, p_na), "en de nieuwe som")
 		waar(not kaart.regel_label.text.contains("✗"), "geen kruis op de kaart")
 	var rij := Hits.spot(STROOK).knoop.get_node_or_null("Rij")
 	gelijk(rij.get_child_count(), 4, "met vier keuzeknoppen")
-	# de zwemmer ligt écht terug op zijn meter, niet tegen de wand
+	gelijk(str(_waarden()), str(Sommen.Zwembad.keuze_getallen(l, m, p_na,
+		int(_beurt()["band"]), int(_beurt()["leg"]))["lijst"]),
+		"de keuzes komen uit de bevroren kern, vanaf zijn nieuwe meter")
+	# the swimmer really floats on his new metre, not against the wall
 	var d = World.dier(str(gasten[0]["id"]))
-	var doel := ZwembadBeurt.baan_x(Rooms.get_kamer(ID).bad, l, p_voor)
+	var doel := ZwembadBeurt.baan_x(Rooms.get_kamer(ID).bad, l, p_na)
 	waar(absf(d.x - doel) <= 3.0,
-		"en hij zwom terug naar meter %d (x=%.1f, doel %.1f)" % [p_voor, d.x, doel])
-	waar(m > 0, "de baan is er nog")
+		"en hij drijft op meter %d (x=%.1f, doel %.1f)" % [p_na, d.x, doel])
+	waar(Hits.spot(GAST_TAG) != null, "met zijn nummer op zijn rug")
+	# and the new sum fits one stroke: its exact answer ends the lane
+	waar(l - p_na <= m, "de nieuwe rest (%d) past in één slag (max %d)" % [l - p_na, m])
+	waar(_druk(_juist_nu()), "het goede antwoord op de nieuwe som")
+	waar(await _wacht(func() -> bool: return not _klaar().is_empty(), 8000), "de baan is af")
+	gelijk(_klaar(), "precies", "precies aan de overkant")
+	gelijk(int(State.s["sterren"]), sterren_voor + 1, "en nu pas valt de ster")
 	await _af()
 
 ## De kaart die ná een bots terugkomt is een gewone kaart: ze past in het kader
@@ -1223,6 +1255,467 @@ func test_het_kind_kiest_wie_er_zwemt() -> void:
 	waar(Games.start(ID), "en nog eens, nu de gekozen gast geen bed meer heeft")
 	gelijk(Games.speler(), ids[0], "dan kiest het spel zelf")
 	await _af()
+
+# ------------------------------------------- de bots en de verre wand (2026-09-23)
+
+## Owner, 2026-09-23: "Bij stoten moet de speler ook opnieuw rekenen met een
+## andere afstand".  The metre the wall throws him back to, for every lane of
+## every band, from every metre and every stroke: never the same distance
+## again, never on or past the wall, never behind the start, one stroke from
+## the wall, far enough that his nose is clear of it, ahead of where he began
+## whenever there is room — and the same throw every time.
+func test_de_botsplek_volgt_de_regel() -> void:
+	var bad: Dictionary = Rooms.get_kamer(ID).bad
+	var banen := {}
+	for band in [3, 4, 5]:
+		for n in range(1, 13):
+			for dag in range(1, 9):
+				var baan := Sommen.Zwembad.baan(n, band, dag)
+				banen["%d|%d" % [int(baan["L"]), int(baan["M"])]] = baan
+	var geteld := 0
+	for sleutel in banen:
+		var l := int(banen[sleutel]["L"])
+		var m := int(banen[sleutel]["M"])
+		var lo := ceili(l / 5.0)
+		for p_voor in range(0, l):
+			for leg in range(1, 5):
+				var p := ZwembadBeurt.bots_plek(l, m, p_voor, leg)
+				var wat := "L=%d M=%d p=%d leg=%d -> %d" % [l, m, p_voor, leg, p]
+				gelijk(ZwembadBeurt.bots_plek(l, m, p_voor, leg), p, "steeds dezelfde worp: " + wat)
+				waar(p >= 1 and p <= l - 1, "in de baan, niet op de wand of voor de start: " + wat)
+				waar(p != p_voor, "een andere plek dan vóór de slag: " + wat)
+				waar(l - p <= m, "de nieuwe rest past in één slag: " + wat)
+				waar(ZwembadBeurt.baan_x(bad, l, p) + ZwembadBeurt.NEUS
+						<= float(bad["x1"]) - 4.0, "zijn neus is los van de wand: " + wat)
+				if l - p_voor - 1 >= lo:
+					waar(p > p_voor, "hij houdt wat hij zwom: " + wat)
+				else:
+					gelijk(l - p, lo if lo != l - p_voor else lo + 1,
+						"dicht bij de wand: de kleinste worp terug: " + wat)
+				geteld += 1
+	waar(geteld > 1000, "alle banen, alle meters (%d)" % geteld)
+	# the worked example of games-b.md §1.7: 16 m, max 10, after the first 10 m
+	gelijk(ZwembadBeurt.bots_plek(16, 10, 10, 2), 11, "16 m, na 10 m te ver: terug naar 11 m")
+
+## A stroke that ends at the far wall stops with his NOSE against it: one point
+## per metre, the last one where his paws are when the nose touches, never
+## past it, never backwards — and a stroke that stops short of the wall keeps
+## the plain number line (§1.6).
+func test_een_slag_tot_de_wand_stopt_met_de_neus_ertegen() -> void:
+	var bad: Dictionary = Rooms.get_kamer(ID).bad
+	var wand := ZwembadBeurt.wand_x(bad)
+	gelijk(wand, float(bad["x1"]) - ZwembadBeurt.NEUS, "de neus raakt de wand")
+	for l in [8, 12, 16, 20, 31, 46, 53, 80]:
+		for p0 in range(0, l):
+			var x_nu := ZwembadBeurt.baan_x(bad, l, p0)
+			var tot := ZwembadBeurt.slag_x(bad, l, p0, l - p0, x_nu)
+			var alles: Array = (tot["snel"] as Array) + (tot["traag"] as Array)
+			var wat := "L=%d p0=%d" % [l, p0]
+			gelijk(alles.size(), l - p0, "één punt per meter: " + wat)
+			var vorig := x_nu
+			for x in alles:
+				waar(float(x) >= vorig - 0.001, "nooit achteruit: " + wat)
+				waar(float(x) <= maxf(wand, x_nu) + 0.001, "nooit voorbij de wand: " + wat)
+				vorig = float(x)
+			if x_nu < wand:
+				waar(absf(float(alles[alles.size() - 1]) - wand) < 0.001,
+					"de laatste meter is de neus tegen de wand: " + wat)
+				waar(not (tot["traag"] as Array).is_empty(), "het laatste stuk gaat traag: " + wat)
+			if p0 + 1 < l:
+				var kort := ZwembadBeurt.slag_x(bad, l, p0, 1, x_nu)
+				gelijk(str(kort["snel"]), str([ZwembadBeurt.baan_x(bad, l, p0 + 1)]),
+					"een slag die de wand niet haalt blijft op de getallenlijn: " + wat)
+
+## Owner, 2026-09-23: "Getallen boven 10 klikken wordt niet afgehandeld".  Every
+## value the strip offers is tapped the way a finger taps it — a real press
+## and release pushed into the real shell, at the four ticket screens, on the
+## first card and on the card after the first stroke, in all three bands —
+## and every tap reaches the game.  At the first screen it also swims what
+## the frozen core says it swims: short and exact that far, too much only M,
+## too far to the wall and back to `bots_plek`.
+func test_elke_knop_op_de_strook_werkt() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var scherm_terug = Ui.get("_scherm")
+	# a real press is the child's first touch: the shell unlocks the sound on
+	# it (architecture.md §8), and that has to be undone for the next file
+	var wakker_voor := Snd.ontgrendeld()
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	var boom := Engine.get_main_loop() as SceneTree
+	var getikt := 0
+	var boven_tien := 0
+	for maat in [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740),
+			Vector2i(740, 360)]:
+		var vp := SubViewport.new()
+		vp.size = maat
+		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		boom.root.add_child(vp)
+		var shell = (load("res://scenes/main.tscn") as PackedScene).instantiate()
+		shell.set_meta("geen_start", true)
+		vp.add_child(shell)
+		for _f in 4:
+			await boom.process_frame
+		for rij in [[1, 3, 3], [4, 3, 4], [7, 5, 5]]:
+			State.nieuw_spel()
+			State.s["taken"] = []
+			var gasten := _gasten(int(rij[0]), int(rij[1]))
+			gelijk(State.band(), int(rij[2]), "%s: band %d" % [str(maat), rij[2]])
+			var baan := Sommen.Zwembad.baan(State.n_gasten(), State.band(), int(State.s["dag"]))
+			var l := int(baan["L"])
+			var m := int(baan["M"])
+			for p0 in ([0, m] if m < l else [0]):
+				for k in 4:
+					var wat := "%s band %d p=%d knop %d" % [str(maat), rij[2], p0, k]
+					Games.stop()
+					await boom.process_frame
+					var d := State.spel_data(ID)
+					d.clear()
+					if p0 > 0:
+						# the card after the first stroke: a saved turn half way (§1.12)
+						d.merge({"gast": str(gasten[0]["id"]), "wens": false, "L": l,
+							"M": m, "band": int(rij[2]), "p": p0, "leg": 1, "misser": 0,
+							"laatste_p": 0, "laatste_rest": l, "klaar": ""}, true)
+					waar(Games.start(ID), wat + ": het spel start")
+					if not await _wacht(_kaart_staat):
+						fout(wat + ": geen strook")
+						continue
+					for _f in 3:
+						await boom.process_frame
+					gelijk(int(_beurt()["p"]), p0, wat + ": hij ligt op meter %d" % p0)
+					var rij_knoppen := Hits.spot(STROOK).knoop.get_node_or_null("Rij")
+					var knop := rij_knoppen.get_child(k) as Button
+					var n := int(str(knop.name).substr(2))
+					if n > 10:
+						boven_tien += 1
+					var midden := knop.get_global_rect().get_center()
+					var ingedrukt := [0]
+					knop.pressed.connect(func() -> void: ingedrukt[0] += 1)
+					var leg_voor := int(_beurt()["leg"])
+					await _tik(vp, midden)
+					gelijk(ingedrukt[0], 1, wat + ": de vinger op %d m drukt de knop in" % n)
+					gelijk(int(_beurt()["leg"]), leg_voor + 1, wat + ": het spel telt de tik op %d" % n)
+					getikt += 1
+					if maat != Vector2i(1024, 768):
+						continue
+					# what the stroke did — straight from the frozen core
+					var slag := Sommen.Zwembad.slag(l, m, p0, n)
+					var verwacht: int = p0 + int(slag["meters"])
+					if str(slag["soort"]) == "ver":
+						verwacht = ZwembadBeurt.bots_plek(l, m, p0, leg_voor + 1)
+					waar(await _wacht(func() -> bool: return _kaart_staat() or not _klaar().is_empty(),
+						6000), wat + ": daarna een nieuwe vraag of de overkant")
+					gelijk(int(_beurt()["p"]), verwacht,
+						wat + ": %d m (%s) brengt hem op meter %d" % [n, slag["soort"], verwacht])
+		Games.stop()
+		Ui.naamplaten_leeg()
+		Hits.wis_alles()
+		vp.queue_free()
+		await boom.process_frame
+		Ui.registreer_lagen(null, null, null)
+	waar(getikt >= 80, "alle knoppen op alle schermen (%d tikken)" % getikt)
+	waar(boven_tien >= 40, "en daarvan veel boven de 10 (%d)" % boven_tien)
+	State.s = bewaard
+	Ui.set("_scherm", scherm_terug)
+	Ui.zet_rust_modus(rust_voor)
+	Snd.set("_wakker", wakker_voor)
+	Snd.sfeer()
+	for dier in World.dieren():
+		World.weg(dier.id)
+
+## A real finger: over the button, down, a frame, up — through the viewport's
+## own GUI input, so whatever lies on top of the button gets the tap instead.
+func _tik(vp: SubViewport, punt: Vector2) -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var mm := InputEventMouseMotion.new()
+	mm.position = punt
+	mm.global_position = punt
+	vp.push_input(mm)
+	await boom.process_frame
+	var mb := InputEventMouseButton.new()
+	mb.button_index = MOUSE_BUTTON_LEFT
+	mb.pressed = true
+	mb.button_mask = MOUSE_BUTTON_MASK_LEFT
+	mb.position = punt
+	mb.global_position = punt
+	vp.push_input(mb)
+	await boom.process_frame
+	var los := InputEventMouseButton.new()
+	los.button_index = MOUSE_BUTTON_LEFT
+	los.pressed = false
+	los.position = punt
+	los.global_position = punt
+	vp.push_input(los)
+	await boom.process_frame
+
+## Reduced motion (games-b.md §0.11): the same bump, the same outcome, no
+## animation — he is on his new metre at once, there is not one particle, the
+## 💛 Au! still stands its full time, and then the new sum comes.
+func test_de_bots_in_rustmodus() -> void:
+	_op()
+	var gasten := _gasten(4)
+	var sterren := int(State.s["sterren"])
+	waar(Ui.rust_modus(), "de rust staat aan")
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_kaart_staat), "de vraagkaart staat er")
+	var l := int(_beurt()["L"])
+	var m := int(_beurt()["M"])
+	waar(_druk(_juist_nu()), "eerst netjes %d m" % m)
+	waar(await _wacht(_kaart_staat), "de tweede kaart staat er")
+	var p_voor := int(_beurt()["p"])
+	var leg := int(_beurt()["leg"]) + 1
+	var ver := _ver_antwoord()
+	waar(ver > 0, "er staat een te verre knop (%d)" % ver)
+	var t0 := Time.get_ticks_msec()
+	waar(_druk(ver), "te ver getikt")
+	await _frames(2)
+	var p_na := ZwembadBeurt.bots_plek(l, m, p_voor, leg)
+	gelijk(int(_beurt()["p"]), p_na, "de bewaarde beurt staat meteen op zijn nieuwe meter")
+	var bad: Dictionary = Rooms.get_kamer(ID).bad
+	var d = World.dier(str(gasten[0]["id"]))
+	var wand := ZwembadBeurt.wand_x(bad)
+	var doel := ZwembadBeurt.baan_x(bad, l, p_na)
+	waar(absf(d.x - wand) < 0.01, "stilstaand beeld 1: hij ligt met zijn neus tegen de wand (x=%.1f)"
+		% d.x)
+	waar(Hits.spot("zb_wolk") != null, "met 💛 Au!")
+	gelijk(World.deeltjes().size(), 0, "geen enkel deeltje in rustmodus")
+	var gezien_deeltje := false
+	var tussendoor := false
+	while not _kaart_staat() and Time.get_ticks_msec() - t0 < 6000:
+		await _frames(1)
+		if not World.deeltjes().is_empty():
+			gezien_deeltje = true
+		if absf(d.x - wand) > 0.01 and absf(d.x - doel) > 0.01:
+			tussendoor = true
+	waar(_kaart_staat(), "de nieuwe vraag komt")
+	waar(absf(d.x - doel) < 0.01, "stilstaand beeld 2: hij drijft op meter %d (x=%.1f, doel %.1f)"
+		% [p_na, d.x, doel])
+	waar(not tussendoor, "en er zat geen beweging tussen")
+	waar(not gezien_deeltje, "en er spatte niets")
+	waar(Time.get_ticks_msec() - t0 >= 1150, "💛 Au! hield zijn volle tijd (%d ms)"
+		% (Time.get_ticks_msec() - t0))
+	var kaart := _kaart_knoop()
+	if kaart != null:
+		gelijk(kaart.som_label.text, ZwembadBeurt.som_verder(l, p_na), "met de som vanaf daar")
+	gelijk(int(State.s["sterren"]), sterren, "geen ster weg, geen ster erbij")
+	gelijk(_klaar(), "", "en de beurt loopt door")
+	await _af()
+
+## The bump as the child sees it, in real motion: he brakes into the far wall
+## and stops with his nose against it (never past it), 💛 Au! stands while he
+## bonks and wobbles there, the wall pushes him back with the number on his
+## back counting down to his new metre, and he ends afloat on that metre,
+## facing the wall again.  From the touch on, the save already says where he
+## will end up.
+func test_de_bots_als_film() -> void:
+	_op()
+	var gasten := _gasten(1)
+	Ui.zet_rust_modus(false)
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_kaart_staat, 20000), "de vraagkaart staat er")
+	waar(_druk(_juist_nu()), "eerst de eerlijke slag")
+	waar(await _wacht(_kaart_staat, 20000), "de tweede kaart staat er")
+	var l := int(_beurt()["L"])
+	var m := int(_beurt()["M"])
+	var p_voor := int(_beurt()["p"])
+	var leg := int(_beurt()["leg"]) + 1
+	var p_na := ZwembadBeurt.bots_plek(l, m, p_voor, leg)
+	var bad: Dictionary = Rooms.get_kamer(ID).bad
+	var wand := ZwembadBeurt.wand_x(bad)
+	var doel := ZwembadBeurt.baan_x(bad, l, p_na)
+	var ver := _ver_antwoord()
+	waar(ver > 0, "er staat een te verre knop (%d)" % ver)
+	var id := str(gasten[0]["id"])
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	waar(_druk(ver), "te ver getikt")
+	var verste := -INF
+	var raak_t := -1
+	var wolk_weg_t := -1
+	var x_bij_wolk: Array = []
+	var p_bij_raak := -1
+	var cijfers: Array = []
+	while Time.get_ticks_msec() - t0 < 20000 and not _kaart_staat():
+		await boom.process_frame
+		var d = World.dier(id)
+		verste = maxf(verste, d.x)
+		var wolk := Hits.spot("zb_wolk") != null
+		if raak_t < 0 and wolk:
+			raak_t = Time.get_ticks_msec()
+			p_bij_raak = int(_beurt()["p"])
+		if raak_t >= 0 and wolk_weg_t < 0:
+			if wolk:
+				x_bij_wolk.append(d.x)
+			else:
+				wolk_weg_t = Time.get_ticks_msec()
+		var tag := Hits.spot(GAST_TAG)
+		if tag != null and is_instance_valid(tag.knoop):
+			var tekst := str((tag.knoop as Label).text)
+			if cijfers.is_empty() or cijfers[cijfers.size() - 1] != tekst:
+				cijfers.append(tekst)
+	Ui.zet_rust_modus(true)
+	waar(_kaart_staat(), "de nieuwe vraag komt")
+	waar(verste <= wand + 0.01, "hij zwom nooit voorbij de wand (verste x=%.2f, wand %.2f)"
+		% [verste, wand])
+	waar(verste >= wand - 0.01, "maar wel met zijn neus ertegen (%.2f)" % verste)
+	waar(raak_t >= 0, "💛 Au! kwam bij de aanraking")
+	gelijk(p_bij_raak, p_na, "vanaf de aanraking staat zijn nieuwe meter al in de opslag")
+	waar(wolk_weg_t - raak_t >= 1100 and wolk_weg_t - raak_t <= 1700,
+		"💛 Au! stond %d ms (spec: 1200)" % (wolk_weg_t - raak_t))
+	var stil := true
+	for x in x_bij_wolk:
+		if absf(float(x) - wand) > 0.01:
+			stil = false
+	waar(stil, "zolang 💛 Au! er staat, ligt hij stil tegen de wand")
+	waar(cijfers.has("%d m" % l), "het getal op zijn rug haalde %d m" % l)
+	var terug := cijfers.slice(cijfers.find("%d m" % l))
+	var verwacht: Array = []
+	for metre in range(l, p_na - 1, -1):
+		verwacht.append("%d m" % metre)
+	gelijk(str(terug), str(verwacht), "en telde terug tot zijn nieuwe meter")
+	var d = World.dier(id)
+	waar(absf(d.x - doel) <= 0.5, "hij drijft op meter %d (x=%.1f, doel %.1f)" % [p_na, d.x, doel])
+	gelijk(d.face, 1, "met zijn neus weer naar de wand")
+	gelijk(str(d.staat), "zwem", "en drijvend")
+	gelijk(_klaar(), "", "de beurt loopt door")
+	await _af()
+
+## Out of the water at the end of a lane: he hops out onto the deck and stands
+## ON it, at his deck spot beside the finish flag — not sunk to the dive's
+## depth in the tiles, and not inside the flag's foot.
+func test_na_de_overkant_staat_hij_op_het_dek() -> void:
+	_op()
+	var gasten := _gasten(1)
+	Ui.zet_rust_modus(false)
+	waar(Games.start(ID), "het spel start")
+	var t0 := Time.get_ticks_msec()
+	while _klaar().is_empty() and Time.get_ticks_msec() - t0 < 40000:
+		if _kaart_staat():
+			_druk(_juist_nu())
+		await _frames(1)
+	gelijk(_klaar(), "precies", "de baan is gezwommen")
+	var id := str(gasten[0]["id"])
+	var dek: Vector2 = Rooms.get_kamer(ID).dek["over"]
+	waar(await _wacht(func() -> bool:
+		var d = World.dier(id)
+		return d != null and d.staat == "pose" and Vector2(d.x, d.z).distance_to(dek) < 0.5, 8000),
+		"hij staat blij op zijn dekplek")
+	var d = World.dier(id)
+	gelijk(d.hoogte, 0.0, "op het dek, niet op de diepte van de duik")
+	var vlag := World.decor_plek("zb_vlag", ID)
+	waar(absf(float(vlag["x"]) - d.x) >= 16.0, "en naast de vlag, niet in zijn voet (%.1f)"
+		% absf(float(vlag["x"]) - d.x))
+	Ui.zet_rust_modus(true)
+	await _af()
+
+## Owner, 2026-09-23: "zet het hek aan de bovenste zijkant van het zwembad niet
+## aan de korte kant bij de startblokken".  The fence runs along the BACK long
+## side of the water, the short side by the startblok is open, the gate's
+## rose arch still stands in the line of the side fence, the walk from the
+## gate to the stair stays in front of the fence, and no button of the room
+## — the gate's, the swimming lesson's — stands on a fence post, on any of
+## the four ticket frames.
+func test_het_hek_staat_langs_de_lange_kant() -> void:
+	var kamer = Rooms.get_kamer(ID)
+	var bad: Dictionary = kamer.bad
+	var palen: Array = []
+	for stuk in kamer.decor:
+		if bool(stuk.get("hek", false)):
+			palen.append(stuk)
+			gelijk(str(stuk["n"]), "hekx", "elk hekstuk loopt langs de lange kant")
+			gelijk(int(stuk["z"]), int(kamer.hek_z), "achter het water, op de hekkenlijn")
+			waar(int(stuk["z"]) < int(bad["z0"]), "achter de achterrand van het bad")
+	waar(not palen.is_empty(), "er staat een hek")
+	var eerste := INF
+	var laatste := -INF
+	for stuk in palen:
+		eerste = minf(eerste, float(stuk["x"]))
+		laatste = maxf(laatste, float(stuk["x"]) + 12.0)
+	waar(eerste <= float(bad["x0"]) + 14.0 and laatste >= float(bad["x1"]),
+		"het hek loopt de lange kant langs (%d..%d)" % [eerste, laatste])
+	waar(eerste > ZwembadBeurt.blok_x(bad) + 2.0, "en begint pas voorbij het startblok")
+	var boog := {}
+	for stuk in kamer.decor:
+		if stuk["n"] == "rozenboog":
+			boog = stuk
+	waar(not boog.is_empty() and int(boog["x"]) == int(kamer.hek_x),
+		"de rozenboog staat nog in de opening naar de tuin")
+	var deur: Dictionary = kamer.deur_punten["tuin"]
+	var voet := Vector2(ZwembadBeurt.trap_voet(bad), ZwembadBeurt.baan_z(bad))
+	for punt in [Vector2(deur["ix"], deur["iz"]), kamer.dek["start"], voet]:
+		waar(punt.y > float(kamer.hek_z) + 10.0, "%s ligt vóór het hek" % str(punt))
+	waar(Rooms.om_het_water(ID, kamer.dek["start"], voet).is_empty(),
+		"de weg naar de trap blijft een rechte streep")
+	# The buttons, on the real shell at the four ticket screens: with nobody
+	# in the room, and with a guest waiting on the deck right under the
+	# startblok.  In that second case a PHONE has no free side left for the
+	# 🏊 button (the guest under the block, his wish over it, the rose arch to
+	# the left), so `Hits` hangs it beside the block over the first posts of
+	# the fence — the least it can hide.  That is written down in PLAN.md §7
+	# (2026-09-23) and checked here as what it is: tablets keep the rule.
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var scherm_terug = Ui.get("_scherm")
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	var boom := Engine.get_main_loop() as SceneTree
+	for maat in [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740),
+			Vector2i(740, 360)]:
+		var vp := SubViewport.new()
+		vp.size = maat
+		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		boom.root.add_child(vp)
+		var shell = (load("res://scenes/main.tscn") as PackedScene).instantiate()
+		shell.set_meta("geen_start", true)
+		vp.add_child(shell)
+		for _f in 4:
+			await boom.process_frame
+		for wacht_er_een in [false, true]:
+			State.nieuw_spel()
+			State.s["taken"] = []
+			for dier in World.dieren():
+				World.weg(dier.id)
+			_gasten(1)
+			if not wacht_er_een:
+				World.zet(str(State.s["gasten"][0]["id"]), "receptie", 40.0, 60.0)
+			World.naar(ID)
+			waar(await _wacht(func() -> bool: return not World.reist(), 3000),
+				"%s: de camera staat stil" % str(maat))
+			Hotel.render()
+			for _f in 4:
+				await boom.process_frame
+			var telefoon: bool = maat.x < 520 or maat.y < 450
+			var wat := "%s%s" % [str(maat), " met een gast op het dek" if wacht_er_een else ""]
+			var dbg := Hits.debug()
+			for sid in dbg.keys():
+				var spot := Hits.spot(sid)
+				if spot == null or spot.kind == "tag" or spot.kind == "naam":
+					continue
+				var r: Rect2 = dbg[sid]["rect"]
+				var meeste := 0.0
+				for stuk in palen:
+					# the house rule of `Hits`: a button that hides less than
+					# VREEMD_DEEL of a thing's box does not read as that thing's
+					var v := World.vlak_van("hekx", float(stuk["x"]), float(stuk["z"]), 0.0, {})
+					var snij := r.intersection(v)
+					meeste = maxf(meeste, maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y)
+						/ maxf(1.0, v.size.x * v.size.y))
+				if wacht_er_een and telefoon and sid == "spel_zwembad":
+					print("[probe] zwembad hek ", wat, " spel_zwembad bedekt een paal voor %.0f %%"
+						% (meeste * 100.0))
+					continue
+				waar(meeste < Hits.VREEMD_DEEL, "%s: %s staat niet op het hek (%.0f %% van een paal)"
+					% [wat, sid, meeste * 100.0])
+			waar(dbg.has("spel_zwembad") and dbg.has("deur_zwembad_tuin"),
+				"%s: de knoppen van de kamer staan er" % wat)
+		Ui.naamplaten_leeg()
+		Hits.wis_alles()
+		vp.queue_free()
+		await boom.process_frame
+		Ui.registreer_lagen(null, null, null)
+	State.s = bewaard
+	Ui.set("_scherm", scherm_terug)
+	Ui.zet_rust_modus(rust_voor)
+	for dier in World.dieren():
+		World.weg(dier.id)
 
 # ------------------------------------------------------------------- hulpjes
 

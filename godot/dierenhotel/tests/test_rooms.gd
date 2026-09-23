@@ -306,7 +306,7 @@ func test_niemand_loopt_in_het_zwembad() -> void:
 			and p[1] >= bad["z0"] and p[1] <= bad["z1"]
 		waar(not nat, "loopplek staat niet in het water")
 	gelijk(r.dek["start"], Vector2(12, 56), "dek.start")
-	gelijk(r.dek["over"], Vector2(132, 56), "dek.over")
+	gelijk(r.dek["over"], Vector2(116, 56), "dek.over, naast de vlag en niet in zijn voet")
 	waar(r.dek["start"].y >= 50, "het startvak ligt in de droge strook")
 
 ## OWNER DECISION (architecture.md §13, Q-X1-13).  The desk stands along the

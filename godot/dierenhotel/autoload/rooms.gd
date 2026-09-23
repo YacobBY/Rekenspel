@@ -796,23 +796,27 @@ func _bouw_kamers() -> void:
 	# front of the water (owner, 2026-09-16: "de duikplek van het zwembad zit
 	# door een hek heen").  The old instapvlonder (`mat`) is gone: the entry is
 	# the startblok now (owner, 2026-09-17: "haal de oude houten plank weg").
-	# The fence stands further from the water on both fenced sides (owner,
-	# 2026-09-17: "Doe het hek verder van beide kanten van het zwembad") and
-	# the back fence is dropped behind the water itself (owner, 2026-09-17:
-	# "Haal het hek gedeelte dat op het zwembad zit weg" → only behind the
-	# pool).  One big startblok with a little stair sits at the west end of the
-	# lane ("startblokken ... met een trappetje zodat het dier langzaam omhoog
-	# kan springen"; "Maak het startblok groter en doe 1 ipv 3").
+	# The fence stands further from the water than the garden's (owner,
+	# 2026-09-17: "Doe het hek verder van beide kanten van het zwembad"), and
+	# it runs along the BACK long side of the pool, not along the short side
+	# by the startblok (owner, 2026-09-23: "zet het hek aan de bovenste
+	# zijkant van het zwembad niet aan de korte kant bij de startblokken");
+	# `_bouw_zwembad` builds it.  One big startblok with a little stair sits at
+	# the west end of the lane ("startblokken ... met een trappetje zodat het
+	# dier langzaam omhoog kan springen"; "Maak het startblok groter en doe 1
+	# ipv 3").
 	_kamer({"id": "zwembad", "naam": "Zwembad", "icoon": "🏊", "w": 144, "d": 88,
 		"wand": 0, "vloer": "gras", "loop": 1.5, "erf": true,
 		"hek_x": 4, "hek_z": 4,
 		"vast_kader": [-190, 300, -60, 250],
 		"bad": {"x0": 18, "x1": 134, "z0": 12, "z1": 44},
-		"dek": {"start": Vector2(12, 56), "over": Vector2(132, 56)},
+		# `over` stands beside the finish flag (x 134, z 50), not in its foot:
+		# a guest who climbed out at (132, 56) stood inside the flag
+		"dek": {"start": Vector2(12, 56), "over": Vector2(116, 56)},
 		"deuren": [{"naar": "tuin", "wand": "x", "at": 60, "breed": 12, "poort": true}],
 		# The way back to the garden looks like a garden (owner, 2026-09-23): a
-		# rose arch in the side fence, and behind the fence the garden's tree
-		# and its flowers.
+		# rose arch in the line of the side fence, and beyond it the garden's
+		# tree and its flowers.
 		"decor": [{"n": "plant", "x": 136, "z": 80},
 			{"n": "rozenboog", "x": 4, "z": 66},
 			{"n": "startblok", "x": 14, "z": 28},
@@ -936,29 +940,28 @@ func _kamer(o: Dictionary) -> void:
 	_kamers[r.id] = r
 	_volgorde.append(r.id)
 
-## The pool's fence: the back fence whole, the side fence with the gate to the
-## garden (door at z 60..72), and a few tufts on the lawn beyond the deck.
-## The pool stands further off the fence than the garden does (owner,
-## 2026-09-17), so the fence lines come from the room's own `hek_x`/`hek_z`.
+## The pool's fence runs along the BACK long side of the water, from one
+## post past the corner by the startblok to the far end of the room (owner,
+## 2026-09-23: "zet het hek aan de bovenste zijkant van het zwembad niet aan
+## de korte kant bij de startblokken").  Nothing stands by the startblok: the
+## short side has no fence, only the rose arch of the gate to the garden in
+## its line (door at z 60..72), so the walk from the gate to the stair stays
+## open, and the corner over the block stays free for the block's own 🏊
+## button — on a phone a post in that corner stood under it.  Until
+## 2026-09-23 it was the other way round: a side fence along the startblok
+## and, behind the water, only the posts beyond its two ends (2026-09-17:
+## "Haal het hek gedeelte dat op het zwembad zit weg").  The line is the
+## room's own `hek_z`, further off the water than the garden's.
 func _bouw_zwembad(r: Kamer) -> void:
-	var z := r.hek_z
-	while z <= r.d:
-		if z < 56 or z > 76:
-			r.decor.append({"n": "hekz", "x": r.hek_x, "z": z, "hek": true})
-		z += 14
-	var x := 24
-	while x <= r.w:
-		# the back fence is dropped behind the water itself (owner, 2026-09-17:
-		# "Haal het hek gedeelte dat op het zwembad zit weg" → only behind the
-		# pool); the posts beyond the pool's ends stay
-		if x < float(r.bad["x0"]) or x > float(r.bad["x1"]):
-			r.decor.append({"n": "hekx", "x": x, "z": r.hek_z, "hek": true})
+	var x := int(r.bad["x0"]) + 14
+	while x + 12 <= r.w:
+		r.decor.append({"n": "hekx", "x": x, "z": r.hek_z, "hek": true})
 		x += 14
 	var rnd := Sommen.Prng.new(TUFT_ZAAD + 7)
 	for i in 12:
 		var px := 16 + JsGetal.rond(rnd.volgende() * (r.w - 24))
 		var pz := 58 + JsGetal.rond(rnd.volgende() * (r.d - 62))
-		if absf(px - 132) + absf(pz - 56) < 18 or absf(px - 12) + absf(pz - 56) < 18 \
+		if absf(px - 116) + absf(pz - 56) < 18 or absf(px - 12) + absf(pz - 56) < 18 \
 				or absf(px - 26) + absf(pz - 58) < 18 \
 				or absf(px - 136) + absf(pz - 80) < 14:
 			continue

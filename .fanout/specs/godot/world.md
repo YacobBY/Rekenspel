@@ -165,7 +165,7 @@ movable **dingen**: `balielamp` (receptie 15, 105, y 14) and `kar` (keuken 48, 6
 | kamer2 | `plant` @ 12,99 · `mand` @ 93,99 |
 | keuken | `kast` @ 33,6 · `zak` @ 66,18 · `kar` @ 48,66 (→ ding `kar`) · `plant` @ 108,93 |
 | tuin | the lawn behind the hotel (owner 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk dat lijkt gewoon op een huis"): `gevel` `{wand: x, hoog: 34, stoep: 8}` — the hotel's back wall with the kitchen door and (R3) the kas's glass door with its glass canopy `kasluifelz` @ 1,68 y27 `ver` and a potted plant `kaspot` @ 4,58 (the kitchen window `gevelraamz` @ 1,70 made way for it: z ≤ 85 is all the facade in view), `luifelz` @ 1,40 y27 `ver`, `deurmatz` @ 5,40 · behind the back fence the pool (`uitzicht`, below) with `zwembadtrap` @ 31,−3 and `parasol` @ 66,0, seen through `zwembadpoort` @ 44,10 · `boom` @ 22,126 · `hok` @ 22,22 (the back corner against the hotel, where it also closes the gap between wall and fence; the hopscotch path starts in front of it) · `tobbe` @ 32,94 · `bal` @ 120,76 · `kist` @ 12,84 · plus the generated back fence and grass tufts (below), and the resting props of `hinkel` and `kraam` (§5.1) |
-| zwembad | `plant` @ 136,80 · `rozenboog` @ 4,66 (the gate back to the garden, 2026-09-23) with the garden beyond the fence: `boom` @ −22,46, `bloemstruik` @ −8,40 and −9,79 · one big `startblok` @ 14,28 (owner 2026-09-17: "Maak het startblok groter en doe 1 ipv 3"; the old `mat` entry plank is gone — "haal de oude houten plank weg") · plus the generated fence (the back fence is dropped behind the water) and grass tufts |
+| zwembad | `plant` @ 136,80 · `rozenboog` @ 4,66 (the gate back to the garden, 2026-09-23) with the garden beyond it: `boom` @ −22,46, `bloemstruik` @ −8,40 and −9,79 · one big `startblok` @ 14,28 (owner 2026-09-17: "Maak het startblok groter en doe 1 ipv 3"; the old `mat` entry plank is gone — "haal de oude houten plank weg") · plus the generated fence (along the back long side only, 2026-09-23) and grass tufts |
 | wasserij | `kast` @ 28,6 · `tobbe` @ 80,74 |
 | kas | (R3, games-c.md §1.4, `art/decor_kas.gd`) `zonnebloem` @ 6,6 · `moesbak` @ 28,10 `groei 3` and @ 86,10 `groei 2` · `potkast` @ 118,5 · `hangplant` @ 28,1 y22 `ver` · `hangplantz` @ 1,76 y22 `ver` · `aardbeienbakz` @ 7,38 · `gieter` @ 14,66 · `zaadkist` @ 118,20 · `pompoenen` @ 114,100 · `kruiwagen` @ 22,104 — plus the resting props of `oogst` (the picking table @ 30,38) and `weeg` (the balance @ 90,54 and its row of weights) |
 
@@ -185,11 +185,18 @@ The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and
 * `hekx` posts at `z = hek_z`, `x = 24, 38, … ≤ 130` — from `x = 10` when the left side is
   the facade, so the fence starts at its corner — **skipping** `38 ≤ x ≤ 50` (the opening
   to the pool, where `zwembadpoort` stands).
-* The pool's own fence (`bouwZwembad`) uses the room's `hek_x`/`hek_z` (4/4)
-  and drops the back-fence posts that stand behind the water itself — the
-  `hekx` line skips every `x` in `[bad.x0, bad.x1]` (owner 2026-09-17:
-  "Haal het hek gedeelte dat op het zwembad zit weg", clarified to "only
-  behind the pool"); the posts beyond the pool's ends stay.
+* The pool's own fence (`bouwZwembad`) runs along the BACK long side of the
+  water and nowhere else (owner 2026-09-23: "zet het hek aan de bovenste
+  zijkant van het zwembad niet aan de korte kant bij de startblokken"):
+  `hekx` posts at `z = hek_z` (4), `x = bad.x0 + 14 = 32, 46, … ≤ w − 12`
+  (the last rail ends at 142), and **no `hekz`**: the short side by the
+  startblok is open, only the `rozenboog` of the gate stands in its line
+  (`x = hek_x = 4`).  The fence starts one post past the corner over the
+  startblok, so the block's own 🏊 button keeps that corner free (on a phone a
+  post there stood under it).  Until 2026-09-23 it was the other way round: a
+  side fence along the startblok, and behind the water only the posts beyond
+  its two ends (owner 2026-09-17: "Haal het hek gedeelte dat op het zwembad
+  zit weg").
 * 30 grass tufts `pol0..pol4` from a seeded PRNG (`prng(90210)`, the same
   `a += 0x6D2B79F5` / `Math.imul` mulberry-style generator used for animals). Per iteration
   `i`: `u = round(r()*300 − 150)`, `w = 24 + round(r()*220)`, `px = (u+w)/2`,
@@ -213,8 +220,10 @@ The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and
 * `bad = {x0: 18, x1: 134, z0: 12, z1: 44}` — water is a floor rule, not a model
   (116 × 32 voxels = 81 % of the room width), with a 4-voxel stone rim around it
   (x 14..138, z 8..48).
-* `dek = {start: {x: 12, z: 56}, over: {x: 132, z: 56}}` — the two standing places on the
-  deck, 12 voxels in front of the waterline.
+* `dek = {start: {x: 12, z: 56}, over: {x: 116, z: 56}}` — the two standing places on the
+  deck, 12 voxels in front of the waterline.  `over` stands beside the finish flag
+  (x 134, z 50), not in its foot: at (132, 56) a guest who climbed out stood inside the
+  flag (2026-09-23).
 * A lane of `L` metres maps linearly: `x(p) = 18 + 116 · p / L`, swim lane `z = 28`.
 * **Rule:** never put a standing or wander place in the water. All wander places, the door
   and both deck places lie in the convex strip `z ≥ 50`, so no straight walk crosses the

@@ -33,7 +33,19 @@ const REIS_TIK := 0.22        ## how often we look whether he arrived  (§1.6)
 const REIS_GEDULD := 25.0     ## and how long we keep looking
 const WOLK_S := 1.1           ## a bubble between two questions
 const BOTS_S := 1.2           ## the 💛 Au! stays this long             (§1.7)
+## The bump (owner, 2026-09-23): the bounce back through the water, and the
+## little paddle that turns him to the wall again.
+const TERUG_TEMPO := 1.5      ## the wall pushes him back: quick, then braking
+const DRAAI := 1.5            ## voxels short of his metre, so the last paddle ...
+const DRAAI_TEMPO := 0.8      ## ... forward turns his nose to the wall again
+## Dizzy twinkles round his head: white and pink, never the star colour of
+## `ArtEffect.STER_KL` — the shine is the prize of the exact answer (§1.7).
+const DUIZEL_KL := [Color("#FFFFFF"), Color("#F5A8BE")]
+const DUIZEL_N := 8           ## twinkles, a pair every DUIZEL_TEL seconds
+const DUIZEL_TEL := 0.12
+const DUIZEL_HOOG := 6.0      ## voxels over his floor point: round his head
 const SNUIF_S := 1.3          ## a bump sniffs first, then is happy
+const UIT_HOP := 6.0          ## voxels past the near edge: the hop out lands on the deck
 const SLUIT_S := 3.4          ## reading time before the game closes
 const VANGNET_S := 11.0       ## ... and the net under it
 
@@ -216,14 +228,14 @@ func _vraag() -> void:
 			"kies": func(_id) -> void: _kies(v),
 		})
 	var eerste := p == 0
-	# the card straight after a bump says WHY the question is back (N3): the wall
-	# stopped him, he swam back, and this is the same question once more
+	# the card straight after a bump says what happened (N3; owner 2026-09-23):
+	# the wall threw him back to a NEW metre, so this is a new sum to work out
 	var terug := _na_bots
 	_na_bots = false
 	var regel := ZwembadBeurt.regel_start(l) if eerste \
 		else ZwembadBeurt.regel_verder(_naam(), p)
 	if terug:
-		regel = ZwembadBeurt.regel_bots_terug()
+		regel = ZwembadBeurt.regel_bots_terug(_naam(), p)
 	_kaart = ctx.ui.somkaart(_mik_start(),
 		ZwembadBeurt.som_start(l) if eerste else ZwembadBeurt.som_verder(l, p), {
 			"id": KAART_ID, "kamer": KAMER, "hoog": 0.0,
@@ -281,6 +293,11 @@ func _kies(n: int) -> void:
 	if not actief:
 		return
 	_bezig = false
+	if gehaald and soort == "ver":
+		# the wall throws him back, and the SAVE knows where to before he moves:
+		# a reload in the middle of the bump finds him on that metre, never
+		# parked against the wall where no button could answer (§1.12)
+		_b["p"] = ZwembadBeurt.bots_plek(l, m, p, int(_b["leg"]))
 	_bewaar()
 	if not gehaald:
 		# another order took him over, or he never reached the water: never
@@ -388,6 +405,33 @@ func _spat(n: int) -> void:
 	if d != null and d.kamer == KAMER:
 		ctx.wereld.spetter(KAMER, d.x, d.z, n, ArtEffect.PLONS_KL[0], true)
 
+## The bump throws water up over the far wall, where his nose touched it.
+func _spat_wand() -> void:
+	var bad := _bad()
+	if bad.is_empty():
+		return
+	var x := float(bad["x1"]) - 1.0
+	var z := ZwembadBeurt.baan_z(bad)
+	ctx.wereld.spetter(KAMER, x, z, 6, ArtEffect.PLONS_KL[0], true)
+	ctx.wereld.spetter(KAMER, x, z, 4, ArtEffect.PLONS_KL[1], true, 3.0)
+
+## A few dizzy twinkles round his head after the bonk, a pair at a time on a
+## little ring, so they circle instead of bursting.  Fired and forgotten: it
+## stops by itself when the game stops or he leaves the water.
+func _duizel() -> void:
+	for k in DUIZEL_N:
+		var d = ctx.wereld.dier(_gast)
+		if d == null or d.kamer != KAMER or not _in_bad(d):
+			return
+		var hoek := TAU * float(k) / 4.5
+		var kop := float(d.x) + 8.0 * float(d.face)
+		for kant in [0.0, PI]:
+			ctx.wereld.spetter(KAMER, kop + cos(hoek + kant) * 6.0,
+				float(d.z) + sin(hoek + kant) * 6.0, 1,
+				DUIZEL_KL[(k + int(kant > 0.0)) % DUIZEL_KL.size()], true, DUIZEL_HOOG)
+		if not await na(DUIZEL_TEL):
+			return
+
 ## Star sparkles above the swimmer — ONLY for arriving exactly (§1.7: the
 ## bump stays soft and keeps just its water splash).  `hoog` lifts the burst
 ## above his back, so it reads as a shine and not as more water.
@@ -397,6 +441,10 @@ func _sprankel() -> void:
 		ctx.wereld.spetter(KAMER, d.x, d.z, 10, ArtEffect.STER_KL[0], true, 10.0)
 
 ## `n` metres, one point per metre — the number on his back counts with him.
+## A stroke that ends at the far wall (the exact last stretch, and every bump)
+## brakes over its last stretch and stops with his NOSE against the wall, the
+## number saying `L` as it touches (`ZwembadBeurt.slag_x`) — his middle on
+## `x(L)` stood his head on the tiles beyond the water.
 func _zwem(n: int) -> bool:
 	var d = ctx.wereld.dier(_gast)
 	if d == null or d.kamer != KAMER:
@@ -408,64 +456,134 @@ func _zwem(n: int) -> bool:
 		return true
 	var bad := _bad()
 	var z := ZwembadBeurt.baan_z(bad)
-	var punten: Array = []
-	for i in range(1, aantal + 1):
-		punten.append(Vector2(ZwembadBeurt.baan_x(bad, l, p0 + i), z))
+	var xs := ZwembadBeurt.slag_x(bad, l, p0, aantal, float(d.x))
+	var snel: Array = xs["snel"]
+	var traag: Array = xs["traag"]
 	var elke := ZwembadBeurt.plons_elke(aantal)
+	if not snel.is_empty():
+		if not await ctx.wereld.stappen(_gast, _op_de_baan(snel, z), {"pose": "zwem",
+				"tempo": ZwembadBeurt.tempo_van(l), "per_stap": _slag_stap(p0, 0, elke),
+				"na": "zwem"}):
+			return false
+		if not actief:
+			return false
+	if traag.is_empty():
+		return true
+	return await ctx.wereld.stappen(_gast, _op_de_baan(traag, z), {"pose": "zwem",
+		"tempo": ZwembadBeurt.TRAAG, "per_stap": _slag_stap(p0, snel.size(), elke),
+		"na": "zwem"})
+
+static func _op_de_baan(xs: Array, z: float) -> Array:
+	var uit: Array = []
+	for x in xs:
+		uit.append(Vector2(float(x), z))
+	return uit
+
+## What every metre of a stroke does as he passes it: the number on his back,
+## a plons now and then, and the marker he has just swum past colours itself
+## in (§1.9).  `voor` = the metres of this stroke already swum by an earlier
+## part of it (the slow stretch before the wall is a second order).
+func _slag_stap(p0: int, voor: int, elke: int) -> Callable:
+	var l := int(_b["L"])
+	var bad := _bad()
 	var zrand := ZwembadBeurt.rand_z(bad)
-	var stap := func(i: int, _punt: Vector2) -> void:
-		_b["p"] = mini(l, p0 + i + 1)
+	return func(i: int, _punt: Vector2) -> void:
+		var k := voor + i
+		_b["p"] = mini(l, p0 + k + 1)
 		_zet_gasttag()
-		if i % elke == 0:
+		if k % elke == 0:
 			ctx.snd.plons()
 			_spat(2)
-		# the marker he has just swum past colours itself in (§1.9)
 		var p := int(_b["p"])
 		var sm := int(_b["stap"])
 		if p % sm == 0 and p < l:
 			_streep_zet(p, p % (2 * sm) == 0,
 				float(JsGetal.rond(ZwembadBeurt.baan_x(bad, l, p))), zrand)
-	return await ctx.wereld.stappen(_gast, punten, {"pose": "zwem",
-		"tempo": ZwembadBeurt.tempo_van(l), "per_stap": stap, "na": "zwem"})
 
 # ------------------------------------------------------------- de twee einden
 
-## The soft bump against the wall — a 💛, never a cross and never a fright.
-## Since N3 it is not an ending either: it is only the plons (PLAN §3.8).
-func _bots() -> void:
+## Too far (PLAN N3, open question V1; owner 2026-09-23): the soft bump — a
+## 💛, never a cross, never a fright, never an ending (`_afronden` is only for
+## the exact answer, R3).  `_zwem` has braked him into the far wall nose
+## first, `_kies` has saved the metre the wall throws him back to
+## (`ZwembadBeurt.bots_plek`), and now, in this order:
+##   1. the touch: a small `au`, water thrown up over the wall, 💛 Au!;
+##   2. the bonk: his head dips against the wall, then he pulls it up, a
+##      little dazed, with a few twinkles circling his head — white and
+##      pink, never the star colour: the shine stays the prize of the exact
+##      answer.  💛 Au! stays up exactly this long (1.2 s);
+##   3. the bounce: the wall pushes him back through the water to that metre,
+##      the number on his back counting down with him, a plons as he goes;
+##   4. he paddles round to face the wall again and floats;
+##   5. a NEW question from there: a different distance to work out.
+## Nothing is taken — no star, no stroke of the turn; the miss only feeds the
+## help ladder.  With reduced motion he is simply on his new metre, the bubble
+## keeps its full time.  `p_voor` is his metre before the stroke.
+func _bots_en_terug(p_voor: int) -> void:
+	var l := int(_b["L"])
+	var p_nieuw := int(_b["p"])
+	var bad := _bad()
+	var z := ZwembadBeurt.baan_z(bad)
+	var t0 := Time.get_ticks_msec()
+	print("[probe] zwembad=bots van=", p_voor, " naar=", p_nieuw, " L=", l,
+		" misser=", _b["misser"])
 	ctx.snd.au()
-	_spat(6)                   # the bump throws a splash over the wall
 	_zeg(ZwembadBeurt.BOTS_ICOON, "", "Au!")
-	if not await na(BOTS_S):
+	_spat_wand()
+	var rust: bool = ctx.wereld.rust()
+	if not rust:
+		# the bonk and the daze, all while 💛 Au! is up and he lies still, so
+		# the bubble never has to hop aside.  Every pose is broken by the next
+		# order long before it runs out (a pose that ran out would send him
+		# wandering off through the water).
+		_duizel()
+		for stap in ZwembadBeurt.BONK:
+			ctx.wereld.pose(_gast, str(stap[0]), 12)
+			if not await na(float(stap[1])):
+				return
+	# 💛 Au! keeps its full time, counted from the touch (§1.7)
+	var over := BOTS_S - float(Time.get_ticks_msec() - t0) / 1000.0
+	if over > 0.0 and not await na(over):
 		return
 	ctx.ui.wolk_weg(WOLK_ID)
-
-## Too far (PLAN N3, open question V1): he swims the rest, taps the wall, swims
-## back to the metre he came from and the SAME question returns — never
-## `_afronden`.  That is what makes the sum unavoidable (R3): one tap on a
-## number that is too big no longer buys the other side, and the third rung of
-## the help ladder is finally reachable.  `p_voor` is his metre before the
-## stroke; `_b["p"]` is `L` while he lies against the wall.
-func _bots_en_terug(p_voor: int) -> void:
-	await _bots()
-	if not actief:
+	var terug := false
+	var d = ctx.wereld.dier(_gast)
+	if d != null and d.kamer == KAMER:
+		var doel := ZwembadBeurt.baan_x(bad, l, p_nieuw)
+		var van := float(d.x)
+		var n := maxi(1, l - p_nieuw)
+		var punten: Array = []
+		for j in range(1, n + 1):
+			punten.append(Vector2(lerpf(van, doel - DRAAI, float(j) / float(n)), z))
+		ctx.snd.plons()
+		_spat(4)
+		var sm := int(_b["stap"])
+		var zrand := ZwembadBeurt.rand_z(bad)
+		terug = await ctx.wereld.stappen(_gast, punten, {"pose": "zwem",
+			"tempo": TERUG_TEMPO, "na": "zwem",
+			"per_stap": func(i: int, _punt: Vector2) -> void:
+				var metre := l - i - 1
+				_zet_gasttag(metre)
+				# the marker he is thrown back past loses its flag pink again
+				var voorbij := metre + 1
+				if voorbij % sm == 0 and voorbij < l:
+					_streep_zet(voorbij, voorbij % (2 * sm) == 0,
+						float(JsGetal.rond(ZwembadBeurt.baan_x(bad, l, voorbij))), zrand)})
+		if not actief:
+			return
+		if terug:
+			# round again, nose to the wall, and afloat on his metre
+			terug = await ctx.wereld.loop_naar(_gast, doel, z,
+				{"pose": "zwem", "tempo": DRAAI_TEMPO, "na": "zwem"})
+			if not actief:
+				return
+	if not str(_b.get("klaar", "")).is_empty():
 		return
-	# the SAVE goes back before he does: a reload in the middle of the swim back
-	# must never find him parked against the wall, where the rest is 0 and no
-	# button on the strip could answer the question (§1.12)
-	_b["p"] = p_voor
-	_bewaar()
-	var bad := _bad()
-	var terug: bool = await ctx.wereld.loop_naar(_gast,
-		ZwembadBeurt.baan_x(bad, int(_b["L"]), float(p_voor)),
-		ZwembadBeurt.baan_z(bad), {"pose": "zwem", "tempo": 1.1, "na": "zwem"})
-	if not actief or not str(_b.get("klaar", "")).is_empty():
-		return
-	# he is back on his own metre: the number on his back and the markers say so
-	# again, whether the swim back finished or another order took him over
+	# he is on his new metre: the number on his back and the markers say so,
+	# whether the bounce finished or another order took him over
 	_zet_gasttag()
 	_strepen_ververs()
-	print("[probe] zwembad=bots terug=", terug, " p=", p_voor,
+	print("[probe] zwembad=bots terug=", terug, " p=", p_nieuw,
 		" misser=", _b["misser"])
 	_na_bots = true
 	# One breath before the question returns — and never straight out of the
@@ -531,8 +649,14 @@ func _eindkaart(soort: String) -> void:
 	_kaart.klaar()
 	_meld_kaart()
 
-## Out of the water (§1.8): swim to the near edge first, then onto the deck, so
-## a wander never starts from inside the pool.
+## Out of the water (§1.8): swim to the near edge first, hop out over the rim
+## onto the deck, then walk to his deck spot, so a wander never starts from
+## inside the pool.  The hop is the climb out (he used to walk up out of the
+## water, standing on it), and it lands him ON the deck: a walk after the dive
+## arrived at the dive's depth and left him standing sunk in the tiles
+## (`World._aangekomen` keeps the `spring_land` of the last jump; the fix for
+## that belongs in World and is written down in the PLAN.md §7 line of this
+## change).
 func _uit_het_water() -> bool:
 	var d = ctx.wereld.dier(_gast)
 	if d == null:
@@ -543,6 +667,12 @@ func _uit_het_water() -> bool:
 		var rand_x := clampf(d.x, float(bad["x0"]), float(bad["x1"]))
 		if not await ctx.wereld.loop_naar(_gast, rand_x, float(bad["z1"]) - 1.0,
 				{"pose": "zwem", "tempo": 1.2, "na": "wacht"}):
+			return false
+		if not actief:
+			return false
+		_spat(3)
+		if not await ctx.wereld.loop_naar(_gast, rand_x, float(bad["z1"]) + UIT_HOP,
+				{"pose": "spring", "tempo": 0.9, "land_hoogte": 0.0, "na": "wacht"}):
 			return false
 		if not actief:
 			return false
@@ -845,10 +975,14 @@ func _mik_start() -> Dictionary:
 	return {"x": float(bad.get("x0", 18)), "z": ZwembadBeurt.baan_z(bad)}
 
 ## The number that swims with him (§1.9): `<p> m`, on the guest, prio 10.
-func _zet_gasttag() -> void:
+## `metre` shows a number other than the saved one: while the wall throws him
+## back the save already holds the metre he ends on, and his back counts down
+## to it.
+func _zet_gasttag(metre: int = -1) -> void:
 	if _gast.is_empty():
 		return
-	ctx.ui.getal_tag({"x": 0.0, "z": 0.0}, "%d m" % int(_b.get("p", 0)), {
+	var m := int(_b.get("p", 0)) if metre < 0 else metre
+	ctx.ui.getal_tag({"x": 0.0, "z": 0.0}, "%d m" % m, {
 		"id": GAST_TAG, "kamer": KAMER, "y": 18, "prio": 10,
 		"volg": _volg_gast,
 	})
@@ -888,6 +1022,9 @@ func _meld_kaart() -> void:
 	var strook := Hits.spot(STROOK_ID)
 	if strook == null or not is_instance_valid(strook.knoop):
 		return
+	# the strip as one rectangle, in the form `tools/speel.js` taps
+	# (`zb_som_keuzes#k/4`): without it the pool could not be played there
+	print("[probe] ", STROOK_ID, "=", (strook.knoop as Control).get_global_rect())
 	var rij := strook.knoop.get_node_or_null("Rij")
 	if rij == null:
 		return
