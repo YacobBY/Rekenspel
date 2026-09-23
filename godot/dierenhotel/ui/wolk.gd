@@ -25,6 +25,7 @@ var icoon_label: Label
 var getal_label: Label
 var zeg_label: Label
 var balk: ProgressBar = null    ## only on a "komt eraan" bubble (`voortgang`)
+var knop_label: Label = null    ## the "👀 Volg" pill of a bubble a tap acts on (`knop`)
 var _doos: MarginContainer
 var _smal := false
 
@@ -91,6 +92,16 @@ func bouw(o: Dictionary, mt: Dictionary, smal: bool) -> void:
 	zeg_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	zeg_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	rij.add_child(zeg_label)
+	# A bubble whose tap DOES something says so at its right end: the whole
+	# bubble is the button, the pill is what tells a child it is one ("👀 Volg"
+	# on a "komt eraan" bubble, owner 2026-09-23).
+	var knop := str(o.get("knop", ""))
+	if not knop.is_empty():
+		knop_label = _regel("Knop", knop, mt["wereld"])
+		knop_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		knop_label.add_theme_stylebox_override("normal",
+			UiThema.vulling(UiThema.vlak(UiThema.ZON, 999, 2, UiThema.WIT), 10, 3))
+		rij.add_child(knop_label)
 	_smal = smal
 	tooltip_text = str(o.get("titel", ("%s %s %s" % [icoon_label.text, getal_label.text,
 		zeg_label.text]).strip_edges()))

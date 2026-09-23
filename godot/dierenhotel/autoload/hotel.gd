@@ -80,9 +80,14 @@ func _ready() -> void:
 	_prikbord = HotelPrikbord.new()
 	_bouw_spel_taak()
 	Econ.rekening_klaar.connect(_rekening_klaar)
-	# "Boef komt eraan": refreshed with every drawn frame and every room change
+	# "Boef komt eraan": refreshed with every drawn frame and every room change,
+	# and so is "👀 Volg" — a room change that was not the walk's own ends it
+	World.getekend.connect(_volg_stap)
 	World.getekend.connect(komt_eraan)
-	World.kamer_veranderd.connect(func(_k: String) -> void: komt_eraan())
+	World.kamer_veranderd.connect(func(_k: String) -> void:
+		if not _volgt_zelf:
+			stop_volgen()
+		komt_eraan())
 	# every furniture change, whoever made it, lands in the save at once
 	Rooms.kamers_veranderd.connect(bewaar_inrichting)
 
@@ -1210,16 +1215,66 @@ func komt_eraan() -> void:
 			(s.knoop as UiWolk).zet_voortgang(f)
 			continue
 		var dp := Rooms.deur(nu, World.reis_van(id))
+		var gast: String = id
 		Ui.wolk({"id": sid, "door": KOMT, "kamer": nu,
 			"x": float(dp.get("ix", 20.0)), "z": float(dp.get("iz", 20.0)), "hoog": 30,
 			"icoon": str(DIER_ICOON.get(str(d.kind), "🐾")),
 			"tekst": "%s komt eraan" % str(d.naam), "voortgang": f, "prio": 8,
-			"klas": "komt", "titel": "%s komt eraan" % str(d.naam)})
+			"klas": "komt", "titel": "Volg %s" % str(d.naam), "knop": VOLG_KNOP,
+			"tik": func(_s): volg(gast)})
 		_komt[id] = sid
 	for id in _komt.keys():
 		if not gezien.has(id):
 			Hits.weg(_komt[id])
 			_komt.erase(id)
+
+# ------------------------------------------------------------------ volgen
+
+const VOLG_KNOP := "👀 Volg"
+const VOLG_TEKEN := "👀"       ## on the name plate of the guest you walk along with
+var _volg_id := ""             ## that guest, or ""
+var _volgt_zelf := false       ## the walk switches rooms itself: that is no "stop"
+
+## "👀 Volg" on a "komt eraan" bubble (owner, 2026-09-23): the camera goes to
+## the guest and walks along with him, room by room through the doors, until
+## he is in the room he was heading for — which is where you were looking.
+## Choosing a room yourself, or a game that starts, ends the walk.
+func volg(id: String) -> void:
+	var d = World.dier(id)
+	if d == null or d.reis_doel == "" or not Games.actief().is_empty():
+		return
+	if _volg_id != id:
+		stop_volgen()
+	_volg_id = id
+	Ui.zet_plaat_teken(id, VOLG_TEKEN)
+	_volg_stap()
+
+## The guest the camera walks along with, or "".
+func volgt() -> String:
+	return _volg_id
+
+func stop_volgen() -> void:
+	if _volg_id.is_empty():
+		return
+	Ui.zet_plaat_teken(_volg_id, "")
+	_volg_id = ""
+
+## Every drawn frame: has the guest gone through a door?  Then the camera goes
+## through it too — the same room change as tapping that door, sound and all.
+## In the room he was heading for, the walk is done.
+func _volg_stap() -> void:
+	if _volg_id.is_empty():
+		return
+	var d = World.dier(_volg_id)
+	if d == null or not Games.actief().is_empty():
+		stop_volgen()
+		return
+	if d.kamer != World.kamer_nu():
+		_volgt_zelf = true
+		naar_kamer(d.kamer)
+		_volgt_zelf = false
+	if d.reis_doel == "":
+		stop_volgen()
 
 ## Every button the hotel itself owns, laid out again after each render.
 func hotspots() -> void:

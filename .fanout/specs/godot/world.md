@@ -624,6 +624,8 @@ Every guest has a DOM label (`.wtag`) in `#worldTags`, positioned at
 `screenY − (30·HG + 8)·g + (bob + lift)·g`, divided by `dicht`. Overlap resolution: up to
 6 passes, and a plate within 62 css-px horizontally and 24 vertically of an already-placed
 plate is moved to `otherY − 26`. Plates of guests in other rooms are hidden.
+**Port:** while the camera follows a guest (`👀 Volg`, §6.3) his plate reads `👀 <naam>`
+(`Ui.zet_plaat_teken`).
 
 ---
 
@@ -1406,6 +1408,16 @@ check-in is repainted (it comes first), otherwise the prikbord opens when the ro
   each showing icon, name and the waiting badge, and a `Sluiten` button.
 * `Hotel.naarKamer(id)` = `World.naar(id)` + `state.kamerNu = id` + `Snd.deur()` +
   `render()`.
+* **Port (owner 2026-09-23): `👀 Volg`.**  The "komt eraan" bubble (a guest walking in
+  from a room you cannot see, with its bar) carries a `👀 Volg` pill, and the whole bubble
+  is the button: a tap calls `Hotel.volg(id)`.  The camera goes to the room the guest is
+  in, and every drawn frame (`World.getekend`) follows him through the next door with
+  `Hotel.naarKamer` — so the door sound and the repaint come along — until he steps into
+  the room he was heading for (`reis_doel` empties); there the walk ends by itself, which
+  is where the child was looking.  His name plate reads `👀 <naam>` meanwhile.  Every
+  other room change ends it (a door, the room bar, the map, a game's own camera — the
+  walk's own switches are the only ones it lets through), and so does a game that
+  starts; during a game nobody is followed.  Not saved.
 * **Port (owner 2026-09-23): a hotel button stands only where a tap does something**
   ("actions such as a blank bed are available ... but when you click on them you can't
   execute them ... this provides visual clutter").  Outside a game: the bell only with a

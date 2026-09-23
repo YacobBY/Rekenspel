@@ -16,7 +16,10 @@ func _op() -> void:
 	World.naar("receptie")
 
 func _af() -> void:
+	Hotel.stop_volgen()
 	World.weg("k_boef")
+	World.naar("receptie")
+	State.s["kamerNu"] = "receptie"
 	Hotel.komt_eraan()
 	Hits.wis_alles()
 	Ui.zet_rust_modus(false)
@@ -107,4 +110,94 @@ func test_rust_en_een_nieuwe_opdracht() -> void:
 	World.ga("k_boef", 30.0, 30.0, "wacht")
 	Hotel.komt_eraan()
 	waar(_bubbel() == null, "een nieuwe opdracht in zijn eigen kamer haalt de bubbel weg")
+	_af()
+
+# ------------------------------------------------------------------ volgen
+
+## "👀 Volg" (owner, 2026-09-23): the bubble carries the pill, and a tap takes
+## the camera to the guest and along with him through every door, until he is
+## in the room he was heading for.  There the walk ends by itself.
+func test_volg_loopt_mee_tot_hij_er_is() -> void:
+	_op()
+	World.zet("k_boef", "kamer1", 60.0, 60.0, {"kind": "hond", "naam": "Boef"})
+	World.reis("k_boef", "receptie", {"x": 40.0, "z": 40.0, "na": "wacht"})
+	Hotel.komt_eraan()
+	var w := _bubbel()
+	waar(w != null and w.knop_label != null, "de bubbel draagt een knop")
+	if w == null or w.knop_label == null:
+		_af()
+		return
+	gelijk(w.knop_label.text, "👀 Volg", "die zegt wat een tik doet")
+	w.pressed.emit()
+	gelijk(Hotel.volgt(), "k_boef", "een tik: de camera loopt met Boef mee")
+	gelijk(World.kamer_nu(), "kamer1", "en gaat eerst naar hem toe")
+	gelijk(Ui.plaat_teken("k_boef"), "👀", "met ogen op zijn naambordje")
+	var d := World.dier("k_boef")
+	var kamers: Array = [World.kamer_nu()]
+	var t := 0
+	while not Hotel.volgt().is_empty() and t < 900:
+		World._tik()
+		Hotel._volg_stap()
+		t += 1
+		if World.kamer_nu() != d.kamer:
+			fout("de camera is steeds waar Boef is: %s tegen %s" % [World.kamer_nu(), d.kamer])
+			break
+		if kamers.back() != World.kamer_nu():
+			kamers.append(World.kamer_nu())
+	gelijk(kamers, ["kamer1", "gang", "receptie"], "door elke deur mee")
+	gelijk(d.kamer, "receptie", "Boef is er")
+	gelijk(Hotel.volgt(), "", "en dan stopt het volgen vanzelf")
+	gelijk(Ui.plaat_teken("k_boef"), "", "de ogen gaan van zijn bordje")
+	gelijk(State.s["kamerNu"], "receptie", "het hotel weet waar je kijkt")
+	for i in 40:
+		World._tik()
+		Hotel._volg_stap()
+	gelijk(World.kamer_nu(), "receptie", "de camera blijft waar hij aankwam")
+	_af()
+
+## Choosing a room yourself ends the walk: the camera stays where you went
+## while the guest walks on.  A guest who is not on his way is not followed.
+func test_zelf_een_kamer_kiezen_stopt_het_volgen() -> void:
+	_op()
+	World.zet("k_boef", "kamer1", 60.0, 60.0, {"kind": "poes", "naam": "Muis"})
+	World.reis("k_boef", "receptie")
+	Hotel.volg("k_boef")
+	gelijk(World.kamer_nu(), "kamer1", "de camera is bij Muis")
+	Hotel.naar_kamer("tuin")
+	gelijk(Hotel.volgt(), "", "een deur kiezen: je volgt niet meer")
+	gelijk(Ui.plaat_teken("k_boef"), "", "en de ogen zijn weg")
+	var t := 0
+	while World.dier("k_boef").kamer != "receptie" and t < 900:
+		World._tik()
+		Hotel._volg_stap()
+		t += 1
+	gelijk(World.dier("k_boef").kamer, "receptie", "Muis loopt gewoon door")
+	gelijk(World.kamer_nu(), "tuin", "en de camera blijft in de tuin")
+	Hotel.volg("k_boef")
+	gelijk(Hotel.volgt(), "", "wie er al is, volg je niet")
+	gelijk(World.kamer_nu(), "tuin", "dus de camera blijft staan")
+	_af()
+
+## A game that starts takes the camera for itself: the walk ends, and while it
+## runs there is nothing to follow.
+func test_een_spel_stopt_het_volgen() -> void:
+	_op()
+	var def := Games.definitie("_voorbeeld")
+	if not Rooms.bestaat(str(def.get("kamer", ""))):
+		_af()
+		return
+	World.zet("k_boef", "kamer1", 60.0, 60.0, {"kind": "konijn", "naam": "Pluis"})
+	World.reis("k_boef", "receptie")
+	Hotel.volg("k_boef")
+	gelijk(Hotel.volgt(), "k_boef", "je volgt Pluis")
+	waar(Games.start("_voorbeeld"), "het spel start")
+	gelijk(Hotel.volgt(), "", "het spel stopt het volgen")
+	var kamer := World.kamer_nu()
+	for i in 200:
+		World._tik()
+		Hotel._volg_stap()
+	gelijk(World.kamer_nu(), kamer, "de camera blijft bij het spel")
+	Hotel.volg("k_boef")
+	gelijk(Hotel.volgt(), "", "tijdens een spel volg je niemand")
+	Games.stop()
 	_af()

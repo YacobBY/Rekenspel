@@ -19,7 +19,7 @@ Op een tablet in hetzelfde netwerk: open het adres van deze computer op poort 86
 - Een spel op een bepaalde dag/band bekijken: `index.html?opslag=<base64url van een volledige save>`.
 - Ontwerp: `.fanout/specs/godot/architecture.md`. Regels voor kindteksten: `HOTEL.md` §9.
 - Antwoorden: altijd een strook van hooguit vier knoppen onder het kaartje (`"goed": n` op `Ui.somkaart` maakt er vier getallen van via `ui/afleiders.gd`); er is geen cijferpad.
-- Een gast die uit een kamer buiten beeld komt aanlopen krijgt een bubbel met balk bij de deur (`Hotel.komt_eraan`).
+- Een gast die uit een kamer buiten beeld komt aanlopen krijgt een bubbel met balk bij de deur (`Hotel.komt_eraan`). Een tik op de bubbel (`👀 Volg`) laat de camera met hem meelopen, door elke deur, tot hij er is (`Hotel.volg`); zelf een kamer kiezen of een spel dat begint stopt het volgen.
 
 ## Structuur
 

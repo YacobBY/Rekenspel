@@ -732,7 +732,7 @@ func wolk(o: Dictionary) -> String:
 		# like a button (the coins on the meubels counter)
 		"op": o.get("op", "auto"),
 		"vlak": o.get("vlak", Rect2()), "aan": tik,
-		"voortgang": o.get("voortgang", null),
+		"voortgang": o.get("voortgang", null), "knop": o.get("knop", ""),
 	})
 
 func wolk_weg(id: String) -> void:
@@ -1135,6 +1135,8 @@ func kaart_van(id: String) -> Kaart:
 func naamplaat(id: String, naam: String, punt: Vector2 = Vector2.ZERO) -> void:
 	if naamlaag == null:
 		return
+	if _plaat_teken.has(id):
+		naam = "%s %s" % [_plaat_teken[id], naam]
 	var spot_id := PLAAT + id
 	var s := Hits.spot(spot_id)
 	if s != null and is_instance_valid(s.knoop):
@@ -1160,6 +1162,20 @@ func _volg_plaat(id: String) -> Callable:
 		if d == null:
 			return {}
 		return {"x": d.x, "z": d.z, "kamer": d.kamer, "vlak": World.vlak_van_dier(id)}
+
+## A sign in front of a guest's name — "👀" while the camera walks along with
+## him (`Hotel.volg`) — or `""` to take it off again.  The room redraws its
+## plates every frame, so the sign is kept here and not in the plate.
+var _plaat_teken: Dictionary = {}
+
+func zet_plaat_teken(id: String, teken: String) -> void:
+	if teken.is_empty():
+		_plaat_teken.erase(id)
+	else:
+		_plaat_teken[id] = teken
+
+func plaat_teken(id: String) -> String:
+	return str(_plaat_teken.get(id, ""))
 
 func naamplaat_weg(id: String) -> void:
 	Hits.weg(PLAAT + id)

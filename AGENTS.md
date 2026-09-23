@@ -233,7 +233,7 @@ ones a game or a feature normally needs.
 | `State` | the save (`State.s`, JSON in `user://dierenhotel.json`, atomic), band | `bewaar()`, `lees()`, `nieuw_spel()`, `spel_data(id)`, `band()`, `tel(goed, ms)`, `n_gasten()`, `max_gasten()`, `bed_vrij()`, `gasten_in(kamer)` |
 | `Econ` | stars, coins, the bill | `sterren(n)`, `geef_munt(n)`, `buidel(totaal)`, `splits(n)`, `rekening(o)`; signals `sterren_veranderd`, `munten_veranderd` |
 | `Games` | registry of minigames, start/stop/supersede | `lijst()`, `definitie(id)`, `actief()`, `ontgrendeld(id)`, `start(id)`, `stop()`, `hersteek()`; signals `spel_gestart`, `spel_gestopt` |
-| `Hotel` | day cycle, wishes, board, check-in, evening round, letters, hotel buttons | `start()`, `bel()`, `morgen()`, `avondronde()`, `taak_af(id)`, `spel_taken()`, `wens_af(gast, welke)`, `komt_eraan()`, `hotspots()`, `naar_kamer(id)` |
+| `Hotel` | day cycle, wishes, board, check-in, evening round, letters, hotel buttons | `start()`, `bel()`, `morgen()`, `avondronde()`, `taak_af(id)`, `spel_taken()`, `wens_af(gast, welke)`, `komt_eraan()`, `volg(id)`, `stop_volgen()`, `hotspots()`, `naar_kamer(id)` |
 
 Rooms (`Rooms.lijst()`): `receptie` (desk top-right, door top-left), `gang`,
 `kamer1`, `kamer2`, `keuken`, `tuin` (outdoor, zones `hinkel` and `kraam`),
