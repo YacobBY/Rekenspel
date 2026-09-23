@@ -489,6 +489,27 @@ func test_geen_knop_op_de_voordeur() -> void:
 			m = _op_de_deur()
 			waar(float(m["deel"]) < Hits.VREEMD_DEEL, "%s: bij vraag %d dekt %s %.0f %% van de voordeur"
 				% [str(maat), stap, m["id"], float(m["deel"]) * 100.0])
+		# the evening: the 🌙 button on the desk lamp stands right beside the door
+		# (up to 69 % of it in the shell before the door counted as a box for the
+		# placement, `Hits.plaats`)
+		State.s["checkin"] = null
+		State.s["nieuweGast"] = null
+		var g: Dictionary = State.gasten_pool()[0]
+		var bed: Dictionary = State.alle_bedden()[0]
+		g["kamer"] = str(bed["kamer"])
+		g["bed"] = str(bed["slot"])
+		g["waar"] = g["kamer"]
+		g["nachten"] = 1
+		g["geslapen"] = 1
+		State.s["gasten"] = [g]
+		World.sync(Hotel.alle_dieren())
+		State.s["uitcheck"] = [str(g["id"])]
+		Hotel.render()                  # someone goes home: the 🌙 button stands
+		for _f in 3:
+			await boom.process_frame
+		m = _op_de_deur()
+		waar(float(m["deel"]) < Hits.VREEMD_DEEL, "%s: met de avondknop dekt %s %.0f %% van de voordeur"
+			% [str(maat), m["id"], float(m["deel"]) * 100.0])
 		await _hotel_af(h)
 	Ui.zet_rust_modus(was)
 	State.s = bewaard

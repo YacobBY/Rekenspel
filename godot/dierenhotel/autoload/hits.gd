@@ -422,6 +422,12 @@ func plaats() -> void:
 	for s in lijstje:
 		if s.zichtbaar and s.vlak_nu.size.x > 0.0 and s.vlak_nu.size.y > 0.0:
 			_vakken.append(s.vlak_nu)
+	# The front door of the receptie is a thing as well, though no button hangs
+	# on it: without its box the evening's 🌙 button covered up to 69 % of it and
+	# the bill's buttons 42 % (2026-09-23, the entrance of `Rooms.ingang`).
+	var ingang := World.vlak_van_ingang(World.kamer_nu())
+	if ingang.size.x > 0.0 and ingang.size.y > 0.0:
+		_vakken.append(ingang)
 	_verzamel_dingen(World.kamer_nu())
 	# place front-most first inside each layer
 	var rijen := maxi(1, int((kader.size.y - 2 * RAND) / RIJ))
