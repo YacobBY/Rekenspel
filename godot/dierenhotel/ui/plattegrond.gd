@@ -25,7 +25,7 @@ signal kamer_gekozen(kamer: String)
 const KAART := {
 	"receptie": [1, 2], "gang": [2, 2], "kamer1": [2, 1], "kamer2": [2, 3],
 	"keuken": [3, 2], "tuin": [4, 2], "wasserij": [3, 3], "zwembad": [4, 3],
-	"speelzaal": [1, 1],
+	"speelzaal": [1, 1], "kas": [4, 1],
 }
 const KOLOMMEN := 4
 const RIJEN := 3

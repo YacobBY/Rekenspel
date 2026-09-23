@@ -35,6 +35,7 @@ func test_stille_kamers_en_de_bevroren_achttien() -> void:
 	gelijk(Snd.sfeer_naam("tuin"), "wind", "de tuin waait")
 	gelijk(Snd.sfeer_naam("zwembad"), "water", "het bad klotst")
 	gelijk(Snd.sfeer_naam("speelzaal"), "speeldoos", "de speelzaal speelt")
+	gelijk(Snd.sfeer_naam("kas"), "warm", "de kas zoemt warm, als de keuken")
 	gelijk(Snd.namen().size(), 18, "de achttien geluiden zijn de achttien gebleven")
 	for naam in ["wind", "tiktak", "water", "warm"]:
 		waar(not Snd.namen().has(naam), "%s is geen van de achttien" % naam)

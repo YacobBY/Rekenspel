@@ -113,7 +113,9 @@ func _notification(wat: int) -> void:
 # game is muted, asleep or in the background.
 
 const SFEER := {"tuin": "wind", "receptie": "tiktak", "zwembad": "water",
-	"keuken": "warm", "wasserij": "warm", "speelzaal": "speeldoos"}
+	"keuken": "warm", "wasserij": "warm", "speelzaal": "speeldoos",
+	# R3: the glass house hums warm like the kitchen — a reused loop, no new one
+	"kas": "warm"}
 const SFEER_DUUR := 4.0        ## seconds per loop; every modulation divides it
 const SFEER_TOP := 0.30        ## of MEESTER: the ceiling of any ambience sample
 

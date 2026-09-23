@@ -28,7 +28,9 @@ FE0F               # variation selector-16: 🛎️ ☀️ 🛏️ carry it
 2705 2714 2716 2728
 2B05 2B06 2B07 2B50    # ⬅ "Terug" in de spelbalk
 1F319 1F333 1F338
+1F349 1F353          # 🍉 🍓 de kas (weeg, oogst)
 1F36A 1F36C 1F37D
+1F383 1F954          # 🎃 🥔 de kas (weeg)
 1F381 1F388 1F389 1F392 1F3A9 1F3CA
 1F411 1F430 1F431 1F436 1F43E
 1F440 1F446 1F449 1F44B 1F44D 1F45B 1F46A 1F47B   # 👀 Volg

@@ -63,6 +63,15 @@ class Kamer extends RefCounted:
 	var kijk := Vector2(-1.0, -1.0)
 	var balie: Dictionary = {}      ## the desk footprint; nobody walks over it
 	var vrij_z0 := 0                ## no wander place in front of this z
+	## Glass walls (the kas, R3): a brick knee wall with panes and white glazing
+	## bars over it instead of plaster (`scenes/vloer.gd`); a door INTO such a
+	## room gets a white frame, like a door that leads outside.
+	var glas := false
+	## Floor rectangles {x0, x1, z0, z1} kept free of wander places and of bought
+	## furniture: where a game's own table or scale stands (its resting props,
+	## world.md §5.1), so a guest does not stroll into it and the furniture book
+	## cannot put a plant on it.  Empty in every room but the kas.
+	var mijd: Array = []
 	var dek: Dictionary = {}        ## {start: Vector2, over: Vector2}
 	var zones: Dictionary = {}      ## reserved rectangles for the games
 	var decor: Array = []           ## {n, x, z, y, ver, params, sleutel, meubel}
@@ -254,6 +263,8 @@ func _cel_vrij(r: Kamer, x: int, z: int) -> bool:
 	if not r.balie.is_empty() and x >= int(r.balie["x0"]) - 2 and x <= int(r.balie["x1"]) + 2 \
 			and z >= int(r.balie["z0"]) - 2 and z <= int(r.balie["z1"]) + 2:
 		return false
+	if _in_mijd(r, x, z, 3.0):
+		return false
 	for stuk in r.decor:
 		if absf(stuk["x"] - x) + absf(stuk["z"] - z) < 18.0:
 			return false
@@ -361,6 +372,8 @@ func vrij_vak(kamer_id: String, x: float, z: float) -> bool:
 	return not _bezet(r, x, z)
 
 func _bezet(r: Kamer, x: float, z: float) -> bool:
+	if _in_mijd(r, x, z, 4.0):
+		return true
 	for id in r.slots:
 		var slot: Dictionary = r.slots[id]
 		if absf(slot["x"] - x) + absf(slot["z"] - z) < 15.0:
@@ -371,6 +384,15 @@ func _bezet(r: Kamer, x: float, z: float) -> bool:
 	for naar in r.deur_punten:
 		var dp: Dictionary = r.deur_punten[naar]
 		if absf(dp["ix"] - x) + absf(dp["iz"] - z) < 12.0:
+			return true
+	return false
+
+## Does (x, z) lie within `rand` voxels of one of the room's `mijd` rectangles
+## (the floor a game's table or scale stands on)?  No room but the kas has one.
+func _in_mijd(r: Kamer, x: float, z: float, rand: float) -> bool:
+	for m in r.mijd:
+		if x >= float(m["x0"]) - rand and x <= float(m["x1"]) + rand \
+				and z >= float(m["z0"]) - rand and z <= float(m["z1"]) + rand:
 			return true
 	return false
 
@@ -697,13 +719,21 @@ func _bouw_kamers() -> void:
 		"uitzicht": [{"soort": "bad", "x0": 24, "x1": 124, "z0": -36, "z1": -4}],
 		"zones": {"hinkel": {"x0": 24, "x1": 100, "z0": 34, "z1": 50},
 			"kraam": {"x0": 104, "x1": 126, "z0": 36, "z1": 68}},
+		# R3: the glass door of the kas sits in the hotel's back wall where the
+		# kitchen window hung — the only stretch of the facade in view that is
+		# not the kitchen door, its open leaf or the doghouse (z ≤ 85 is in
+		# the frame).  A glass canopy over it and a potted plant beside it say
+		# "greenhouse" before its sign does; through it you see the kas's
+		# terracotta path (`kijk`).
 		"deuren": [
 			{"naar": "keuken", "wand": "x", "at": 34, "breed": 12},
-			{"naar": "zwembad", "wand": "z", "at": 38, "breed": 12, "poort": true}],
+			{"naar": "zwembad", "wand": "z", "at": 38, "breed": 12, "poort": true},
+			{"naar": "kas", "wand": "x", "at": 62, "breed": 12}],
 		"decor": [{"n": "boom", "x": 22, "z": 126}, {"n": "hok", "x": 22, "z": 22},
 			{"n": "tobbe", "x": 32, "z": 94}, {"n": "bal", "x": 120, "z": 76},
 			{"n": "kist", "x": 12, "z": 84},
-			{"n": "gevelraamz", "x": 1, "z": 70, "y": 9, "ver": true},
+			{"n": "kasluifelz", "x": 1, "z": 68, "y": 27, "ver": true},
+			{"n": "kaspot", "x": 4, "z": 58},
 			{"n": "luifelz", "x": 1, "z": 40, "y": 27, "ver": true},
 			{"n": "deurmatz", "x": 5, "z": 40},
 			{"n": "zwembadpoort", "x": 44, "z": 10},
@@ -782,6 +812,39 @@ func _bouw_kamers() -> void:
 			{"n": "kussenhoek", "x": 100, "z": 86},
 			{"n": "muziekdoos", "x": 57, "z": 90},
 			{"n": "wimpel", "x": 30, "z": 50}]})
+	# R3: de Kas 🪴, the glass house behind the hotel (PLAN.md §3.5; the garden
+	# was rebuilt on 2026-09-23, so its door is in the facade, not in a side
+	# fence).  Glass walls on a brick knee wall, a tiled floor with a terracotta
+	# path from the garden door to the front, the vegetable beds along the back
+	# wall (zone `rijen`), the strawberry planter along the left wall and the
+	# pumpkins in the front corner.  Two games live here, and their tables stand
+	# where `mijd` keeps the floor free: the picking table of `oogst` in front of
+	# the strawberries, the scale of `weeg` on the right (world.md §5.1, their
+	# resting props).
+	_kamer({"id": "kas", "naam": "Kas", "icoon": "🪴", "w": 128, "d": 112,
+		"wand": 40, "vloer": "tegel", "loop": 1.25, "glas": true,
+		"matten": [{"x0": 50, "x1": 66, "z0": 0, "z1": 112,
+			"kl": [Color("#DDA88C"), Color("#D39B7E")]}],
+		"kijk": Vector2(58, 48),
+		"zones": {"rijen": {"x0": 12, "x1": 102, "z0": 3, "z1": 17}},
+		# the picking table in front of the strawberries (`oogst`), the balance
+		# and its row of weights (`weeg`)
+		"mijd": [{"x0": 16, "x1": 44, "z0": 19, "z1": 57},
+			{"x0": 68, "x1": 112, "z0": 32, "z1": 76},
+			{"x0": 74, "x1": 122, "z0": 54, "z1": 102}],
+		"deuren": [{"naar": "tuin", "wand": "z", "at": 52, "breed": 12}],
+		"decor": [
+			{"n": "zonnebloem", "x": 6, "z": 6},
+			{"n": "moesbak", "x": 28, "z": 10, "params": {"groei": 3}},
+			{"n": "moesbak", "x": 86, "z": 10, "params": {"groei": 2}},
+			{"n": "potkast", "x": 118, "z": 5},
+			{"n": "hangplant", "x": 28, "z": 1, "y": 22, "ver": true},
+			{"n": "hangplantz", "x": 1, "z": 76, "y": 22, "ver": true},
+			{"n": "aardbeienbakz", "x": 7, "z": 38},
+			{"n": "gieter", "x": 14, "z": 66},
+			{"n": "zaadkist", "x": 118, "z": 20},
+			{"n": "pompoenen", "x": 114, "z": 100},
+			{"n": "kruiwagen", "x": 22, "z": 104}]})
 	_bouw_tuin(_kamers["tuin"])
 	_bouw_zwembad(_kamers["zwembad"])
 	for id in _volgorde:
@@ -807,6 +870,8 @@ func _kamer(o: Dictionary) -> void:
 	r.kijk = o.get("kijk", Vector2(-1.0, -1.0))
 	r.balie = o.get("balie", {})
 	r.vrij_z0 = int(o.get("vrij_z0", 0))
+	r.glas = bool(o.get("glas", false))
+	r.mijd = o.get("mijd", [])
 	r.dek = o.get("dek", {})
 	r.zones = o.get("zones", {})
 	r.deuren = o.get("deuren", [])

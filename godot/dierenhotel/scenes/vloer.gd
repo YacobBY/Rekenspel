@@ -69,6 +69,23 @@ const DAK_GOOT := Color("#B7876C")
 const GEVEL_EIND := 400.0                 ## the wall runs off the picture this far
 const DAK_RIJEN := 44                     ## ... and the roof this many 4-voxel rows
 
+## The glass walls of the kas (`Kamer.glas`, PLAN.md R3): a brick knee wall with
+## a darker course on top, panes that show the garden's green low down and the
+## light higher up, white glazing bars every GLAS_VAK voxels, one transom and a
+## white cap.  The same two planes as a plaster wall, so the doors, the view
+## through them and the shadow strips work unchanged.
+const GLAS_Z := Color("#CFE7E3")          ## the z wall's panes face +z: a touch darker
+const GLAS_X := Color("#DCEFEB")
+const GLAS_GROEN := Color("#BCDDB7")      ## low in the panes: the garden seen through them
+const GLAS_STIJL := Color("#FBF7EE")      ## the white glazing bars
+const GLAS_STIJL_D := Color("#E6DDCC")
+const BORST := Color("#C98B6B")           ## the brick knee wall
+const BORST_D := Color("#B67858")
+const GLAS_VAK := 12.0                    ## voxels between two glazing bars
+const GLAS_VOET := 6.0                    ## the knee wall is this high
+const GLAS_GROEN_TOT := 14.0              ## the green fades out this far above it
+const GLAS_KOP := 22.0                    ## the transom
+
 var _mesh: ArrayMesh = null
 var _kamer := ""
 var _vignet: ImageTexture = null
@@ -170,6 +187,9 @@ func _vloer(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 
 func _wanden(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 		i: PackedInt32Array) -> void:
+	if r.glas:
+		_wanden_glas(r, v, k, i)
+		return
 	var h := float(r.wand)
 	# wall on z = 0, running along x
 	_vlak(v, k, i, [_proj(0, 0, 0), _proj(r.w, 0, 0), _proj(r.w, 0, h), _proj(0, 0, h)], W_L)
@@ -192,6 +212,58 @@ func _wanden(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 		_proj(SCHADUW_BREED, 0)], WAND_SCHADUW)
 	_deuren(r, v, k, i)
 
+## The kas: both back walls in glass (see GLAS_*), then the shadow strips and the
+## doors exactly as a plaster room has them.
+func _wanden_glas(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
+		i: PackedInt32Array) -> void:
+	var h := float(r.wand)
+	_glaswand(v, k, i, float(r.w), h, true)
+	_glaswand(v, k, i, float(r.d), h, false)
+	_vlak(v, k, i, [_proj(0, 0), _proj(r.w, 0), _proj(r.w, SCHADUW_BREED),
+		_proj(0, SCHADUW_BREED)], WAND_SCHADUW)
+	_vlak(v, k, i, [_proj(0, 0), _proj(0, r.d), _proj(SCHADUW_BREED, r.d),
+		_proj(SCHADUW_BREED, 0)], WAND_SCHADUW)
+	_deuren(r, v, k, i)
+
+## One glass wall, `lang` voxels long: along x on z = 0 (`langs_z`) or along z
+## on x = 0.  Later quads are drawn over earlier ones, so the bars lie on the
+## panes and the doors, drawn after, lie on everything.
+func _glaswand(v: PackedVector2Array, k: PackedColorArray, i: PackedInt32Array,
+		lang: float, h: float, langs_z: bool) -> void:
+	var p := func(a: float, y: float) -> Vector2:
+		return _proj(a, 0, y) if langs_z else _proj(0, a, y)
+	var ruit := GLAS_Z if langs_z else GLAS_X
+	var stijl := GLAS_STIJL_D if langs_z else GLAS_STIJL
+	var voet := GLAS_VOET
+	# the brick knee wall and its darker top course
+	_vlak(v, k, i, [p.call(0.0, 0.0), p.call(lang, 0.0), p.call(lang, voet), p.call(0.0, voet)],
+		BORST if langs_z else BORST.lightened(0.06))
+	_vlak(v, k, i, [p.call(0.0, voet - 1.0), p.call(lang, voet - 1.0), p.call(lang, voet),
+		p.call(0.0, voet)], BORST_D)
+	# the panes: the garden's green low down, fading into the light glass
+	var groen := voet + GLAS_GROEN_TOT
+	_vlak_kl(v, k, i, [p.call(0.0, voet), p.call(lang, voet), p.call(lang, groen),
+		p.call(0.0, groen)], [GLAS_GROEN, GLAS_GROEN, ruit, ruit])
+	_vlak(v, k, i, [p.call(0.0, groen), p.call(lang, groen), p.call(lang, h), p.call(0.0, h)], ruit)
+	# the glazing bars, the transom and the top rail
+	var a := 0.0
+	while a <= lang + 0.01:
+		var a0 := clampf(a - 0.5, 0.0, lang)
+		var a1 := clampf(a + 0.5, 0.0, lang)
+		_vlak(v, k, i, [p.call(a0, voet), p.call(a1, voet), p.call(a1, h), p.call(a0, h)], stijl)
+		a += GLAS_VAK
+	_vlak(v, k, i, [p.call(0.0, GLAS_KOP), p.call(lang, GLAS_KOP), p.call(lang, GLAS_KOP + 0.8),
+		p.call(0.0, GLAS_KOP + 0.8)], stijl)
+	_vlak(v, k, i, [p.call(0.0, h - 1.2), p.call(lang, h - 1.2), p.call(lang, h),
+		p.call(0.0, h)], stijl)
+	# the cap, as deep as a plaster wall is thick
+	if langs_z:
+		_vlak(v, k, i, [_proj(0, 0, h), _proj(lang, 0, h), _proj(lang, -WAND_DIK, h),
+			_proj(0, -WAND_DIK, h)], GLAS_STIJL)
+	else:
+		_vlak(v, k, i, [_proj(0, 0, h), _proj(0, lang, h), _proj(-WAND_DIK, lang, h),
+			_proj(-WAND_DIK, 0, h)], GLAS_STIJL)
+
 ## Door openings are cut to `Rooms.deur_hoog()` — `min(wand − 6, 26)` — and
 ## every one shows the room it leads to (`_doorkijk`), inside the thickness of
 ## the wall and under the lintel's shadow, in a wooden frame that is white when
@@ -210,7 +282,10 @@ func _deuren(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 		var a: float = dr["at"]
 		var b: float = a + dr["breed"]
 		var doel := Rooms.get_kamer(str(dr["naar"]))
-		var buiten := doel != null and doel.erf
+		# A door that leads outside is painted white, and so is a door into a
+		# glass house (the kas, R3): a greenhouse has white frames.
+		var glas := doel != null and doel.glas
+		var buiten := doel != null and (doel.erf or glas)
 		var langs_z := wand == "z"
 		_doorkijk(dr, doel, hoog, r.erf, v, k, i)
 		# The jamb.  The wall is WAND_DIK thick and the viewer looks along
@@ -218,6 +293,8 @@ func _deuren(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 		# viewer shows — the left one in the z wall, the right one in the x wall.
 		var in_gevel := not r.gevel.is_empty() and str(r.gevel.get("wand", "")) == wand
 		var negge := GEVEL_NEGGE if in_gevel else (W_R if langs_z else W_L).darkened(0.12)
+		if r.glas:
+			negge = GLAS_STIJL_D
 		# the lintel's shadow, fading down into the opening (half of it outside)
 		var s := LATEI_SCHADUW * (0.5 if buiten else 1.0)
 		var boven := Color(BINNEN_SCHADUW, s)
@@ -247,7 +324,8 @@ func _deuren(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 				_proj(0, b, hoog + 1.4)], post)
 			_vlak(v, k, i, [_proj(0, a - 1, hoog), _proj(0, b + 1, hoog),
 				_proj(0, b + 1, hoog + 1.4), _proj(0, a - 1, hoog + 1.4)], latei)
-			if in_gevel:
+			# the kas's glass door slides away: no leaf folded against the wall
+			if in_gevel and not glas:
 				_deurblad(b + 1.0, b + 1.0 + (b - a) - 0.5, hoog, v, k, i)
 
 ## The open leaf of the back door, folded flat against the facade on x = 0
@@ -306,7 +384,9 @@ func _doorkijk(dr: Dictionary, doel: Rooms.Kamer, hoog: float, van_buiten: bool,
 		if doel.erf:
 			kl = kl.lerp(DAG, DAG_LICHT)
 		else:
-			kl = kl.lerp(BINNEN_SCHADUW, BUITEN_IN_DIEP if van_buiten else BINNEN_DIEP)
+			# a glass house is as light inside as the lawn it stands on
+			var diep := BUITEN_IN_DIEP if van_buiten and not doel.glas else BINNEN_DIEP
+			kl = kl.lerp(BINNEN_SCHADUW, diep)
 		_veelhoek(v, k, i, tegel["p"], kl)
 	var drempel: Array = [Vector2(a, -WAND_DIK), Vector2(b, -WAND_DIK), Vector2(b, 0),
 		Vector2(a, 0)] if str(dr["wand"]) == "z" \

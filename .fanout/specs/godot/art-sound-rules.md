@@ -504,6 +504,26 @@ and lid edge, a gold clasp on the front and the side, a folded light-blue blanke
 darker fold and a white pillow on top; footprint 13 × 9, 14 tall.  Before it, "🛏 Bedden"
 hung on the play basket next to that basket's own "Speelmand".
 
+**The kas** (`art/decor_kas.gd`, class `ArtDecorKas`, PLAN.md R3, games-c.md §1.4): a
+glass house behind the hotel.  Own names, merged through `ArtDecor._extra()`.
+
+| model | shape |
+|---|---|
+| `moesbak` / `moesbakz` | raised plank bed 30 × 12, 5 high, `HOUT_D` with a `HOUT_L` rim, potting soil `#8C6A4E` with two furrows `#77583F`; `params.groei` 0 bare, 1 sprouts, 2 leaves, 3 heads of lettuce (two rows of five) |
+| `moesinhoud` | only the plants of a `moesbak` (for the day dressing of R6) |
+| `aardbeienbak` / `aardbeienbakz` | wooden planter 34 × 10, 6 high, five strawberry plants (`#86B86F` / `BLAD_A` mounds), red berries `#E4574B` hanging over the front edge and lying in the leaves, white flowers |
+| `potkast` / `potkastz` | open plank shelf 18 × 6 × 24 with three shelves of terracotta pots and seedlings |
+| `zaadkist` | chest 12 × 8 with its lid open against the back, full of pink, yellow, blue and green seed packets |
+| `kruiwagen` | green wheelbarrow `#7DB3A0` full of soil, one grey wheel, wooden handles |
+| `gieter` | green watering can with a spout and a rose |
+| `hangplant` / `hangplantz` | a pot on a wooden arm from the wall with vines hanging 7 voxels down (`ver`) |
+| `zonnebloem` | a big pot with three sunflowers, 21, 27 and 33 tall; the heads lie in the plane x + z = const (facing the viewer), half as deep as tall so they read round |
+| `pompoenen` | three ribbed pumpkins `#F29A4A` / `#DE8338` among flat leaves, 20 × 18 |
+| `kasluifel` / `kasluifelz` | a glass canopy (white bars, glass `#D6EFEE`) on two struts, 16 × 7, over the kas door in the garden's facade |
+| `kaspot` | a small terracotta pot with a plant, beside that door |
+
+The walls of the kas are glass (`Kamer.glas`, drawn by `scenes/vloer.gd`, world.md §1.4).
+
 The grass tufts of the garden are laid out by a seeded PRNG (`prng(90210)`, 30
 attempts) that keeps 22 voxels' Manhattan distance from the five large props and
 4 voxels' margin from the reserved zones (`hinkel`, `kraam`). **Reproduce the PRNG
@@ -530,6 +550,9 @@ your own name is allowed (last one wins). Caching key = `naam | g | paramSleutel
 | `kr_kraam` | kraam | market stall: back panel 21×24×2, two 27-tall posts, 6-row striped awning. |
 | `kr_bank` | kraam | square counter 21×11×15 with a 23×2×17 top. |
 | `kr_hoedje` / `kr_sjaaltje` / `kr_bal` / `kr_tas` | kraam | the displayed goods, deliberately 10–12 voxels tall (20–24 css-px at garden scale) so they do not vanish next to their price tag. |
+| `oogst_tafel` | oogst | picking table 26 × 37 (top at y 8) with ten punnet places in two columns of five, the punnets PART OF THE MODEL (`params.b`: −1 none, 0–10 berries; `params.spook`: ghost berries in the empty holes of one punnet).  Punnet 12 × 6 green `#9CCB8C` / `#83B474`; berries 2 × 2 × 2 `#E4574B` with a highlight and a green crown each, two rows of five; ghost berries `#F6CFC9` (games-c.md §2.4). |
+| `weeg_schaal` | weeg | market balance: wooden foot 12 × 12, tin column, a pivot lamp green `#8CC08A` when level and grey otherwise (never red), a beam along x + z = const and two tin pans (radius 8) at ±14; `params.kant` −2 … 2 moves the pans 3 voxels a step; `params.l`/`lm` the thing on the left pan (pumpkin in three sizes, watermelon, jute sack), `params.r` the weights stacked on the right pan (games-c.md §3.4). |
+| `weeg_gewicht` | weeg | one weight (`params.kg` 1, 2, 5, 10, 20): 3×2, 4×3, 5×4, 6×5, 7×6 voxels in yellow, green, blue, pink, purple, a lighter top, a darker foot and a brass knob. |
 
 ---
 

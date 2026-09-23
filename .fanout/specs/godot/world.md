@@ -68,6 +68,8 @@ direction of the camera slide.
 | 5 | `tuin` | `Tuin` | 🌳 | 130 × 130 | 0 | `gras` | 1 | `erf: 1`, fixed frame `[-170, 190, -70, 220]`, `zones` |
 | 6 | `zwembad` | `Zwembad` | 🏊 | 144 × 88 | 50 | `tegel` | 1.5 | `bad`, `dek` |
 | 7 | `wasserij` | `Wasserij` | 🧺 | 100 × 90 | 52 | `tegel` | 1.25 | – |
+| 8 | `speelzaal` | `Speelzaal` | 🧸 | 114 × 100 | 56 | `hout` | 1.5 | mat, zone `dans` (R2) |
+| 9 | `kas` | `Kas` | 🪴 | 128 × 112 | 40 | `tegel` | 1.25 | **glass walls** (`glas`), terracotta path mat, zone `rijen`, `mijd` (R3, games-c.md §1) |
 
 `loop` is the walking-speed multiplier of that room (the rooms grew 1.5×, the animals did
 not, so a guest crosses a big room in the same wall-clock time as before).
@@ -87,6 +89,8 @@ box = [ -d*S - 10 , w*S + 10 , -wand*HG - 12 , (w+d)*(S/2) + 10 ]
 | tuin | `[-170, 190, -70, 220]` (literal, floor runs on beyond it) | 360 × 290 |
 | zwembad | `[-186, 298, -112, 242]` | 484 × 354 |
 | wasserij | `[-190, 210, -116, 200]` | 400 × 316 |
+| speelzaal | `[-210, 238, -124, 224]` | 448 × 348 |
+| kas | `[-234, 266, -92, 250]` | 500 × 342 |
 
 ### 1.2 Doors and the door graph
 
@@ -119,6 +123,10 @@ for a door in a wall, the facade's height standing in for `wand` in the garden, 
 | tuin | zwembad | z | 38 | 12 | (44, 0) | (44, 8) — `poort` |
 | zwembad | tuin | x | 60 | 12 | (0, 66) | (8, 66) — `poort` |
 | wasserij | keuken | z | 62 | 12 | (68, 0) | (68, 8) |
+| receptie | speelzaal | x | 108 | 12 | (0, 114) | (8, 114) |
+| speelzaal | receptie | z | 57 | 12 | (63, 0) | (63, 8) |
+| tuin | kas | x | 62 | 12 | (0, 68) | (8, 68) — the kas's glass door in the hotel's back wall, where the kitchen window hung (R3) |
+| kas | tuin | z | 52 | 12 | (58, 0) | (58, 8) |
 
 `Rooms.pad(van, naar)` is a breadth-first search over this graph; it returns the full path
 *including* the start room (`['gang','kamer1']`), `[van]` when `van === naar`, and `[]`
@@ -139,9 +147,10 @@ movable **dingen**: `balielamp` (receptie 15, 105, y 14) and `kar` (keuken 48, 6
 | kamer1 | `plant` @ 107,8 (was 102,12: it hid the door's corner) · `mand` @ 93,99 |
 | kamer2 | `plant` @ 12,99 · `mand` @ 93,99 |
 | keuken | `kast` @ 33,6 · `zak` @ 66,18 · `kar` @ 48,66 (→ ding `kar`) · `plant` @ 108,93 |
-| tuin | the lawn behind the hotel (owner 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk dat lijkt gewoon op een huis"): `gevel` `{wand: x, hoog: 34, stoep: 8}` — the hotel's back wall with the kitchen door, `gevelraamz` @ 1,70 y9 `ver`, `luifelz` @ 1,40 y27 `ver`, `deurmatz` @ 5,40 · behind the back fence the pool (`uitzicht`, below) with `zwembadtrap` @ 31,−3 and `parasol` @ 66,0, seen through `zwembadpoort` @ 44,10 · `boom` @ 22,126 · `hok` @ 22,22 (the back corner against the hotel, where it also closes the gap between wall and fence; the hopscotch path starts in front of it) · `tobbe` @ 32,94 · `bal` @ 120,76 · `kist` @ 12,84 · plus the generated back fence and grass tufts (below), and the resting props of `hinkel` and `kraam` (§5.1) |
+| tuin | the lawn behind the hotel (owner 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk dat lijkt gewoon op een huis"): `gevel` `{wand: x, hoog: 34, stoep: 8}` — the hotel's back wall with the kitchen door and (R3) the kas's glass door with its glass canopy `kasluifelz` @ 1,68 y27 `ver` and a potted plant `kaspot` @ 4,58 (the kitchen window `gevelraamz` @ 1,70 made way for it: z ≤ 85 is all the facade in view), `luifelz` @ 1,40 y27 `ver`, `deurmatz` @ 5,40 · behind the back fence the pool (`uitzicht`, below) with `zwembadtrap` @ 31,−3 and `parasol` @ 66,0, seen through `zwembadpoort` @ 44,10 · `boom` @ 22,126 · `hok` @ 22,22 (the back corner against the hotel, where it also closes the gap between wall and fence; the hopscotch path starts in front of it) · `tobbe` @ 32,94 · `bal` @ 120,76 · `kist` @ 12,84 · plus the generated back fence and grass tufts (below), and the resting props of `hinkel` and `kraam` (§5.1) |
 | zwembad | `plant` @ 136,80 · `rozenboog` @ 4,66 (the gate back to the garden, 2026-09-23) with the garden beyond the fence: `boom` @ −22,46, `bloemstruik` @ −8,40 and −9,79 · one big `startblok` @ 14,28 (owner 2026-09-17: "Maak het startblok groter en doe 1 ipv 3"; the old `mat` entry plank is gone — "haal de oude houten plank weg") · plus the generated fence (the back fence is dropped behind the water) and grass tufts |
 | wasserij | `kast` @ 28,6 · `tobbe` @ 80,74 |
+| kas | (R3, games-c.md §1.4, `art/decor_kas.gd`) `zonnebloem` @ 6,6 · `moesbak` @ 28,10 `groei 3` and @ 86,10 `groei 2` · `potkast` @ 118,5 · `hangplant` @ 28,1 y22 `ver` · `hangplantz` @ 1,76 y22 `ver` · `aardbeienbakz` @ 7,38 · `gieter` @ 14,66 · `zaadkist` @ 118,20 · `pompoenen` @ 114,100 · `kruiwagen` @ 22,104 — plus the resting props of `oogst` (the picking table @ 30,38) and `weeg` (the balance @ 90,54 and its row of weights) |
 
 The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and two
 `baliez` along z, so the four objects on it stay far apart on screen.
@@ -246,6 +255,12 @@ posts 1 voxel wide plus a `HOUT #D0A87A` lintel 1.4 high — `#E6DDCC` / `#FBF7E
 when the door leads outside. `tests/test_rooms.gd` holds every door to it: each view shows
 a colour its own room does not have, no two doors of a room look alike, and no fixed decor
 hides more than 3 % of an opening.
+**Glass walls** (`Kamer.glas`, the kas, R3 — games-c.md §1.3): the same two planes, drawn
+as a brick knee wall `#C98B6B` (y 0..6, top course `#B67858`), panes that show the
+garden's green `#BCDDB7` low down fading over 14 voxels into light glass (`#CFE7E3` on the
+z wall, `#DCEFEB` on the x wall), white glazing bars every 12 voxels, a transom at y 22 and
+a white cap; the jamb of a door in a glass wall is white.  A door INTO a glass room has a
+white frame and no folded leaf, and seen from the lawn its view is darkened 16 %, not 36 %.
 The wall top cap is `#FCF0DE`, 3 voxels deep. A 10 %-alpha `#6E5A4A` shadow strip 4 voxels
 wide lies where each wall meets the floor. A radial vignette
 (`rgba(120,96,70,0)` → `.18`) is painted over the whole plate.
@@ -269,7 +284,10 @@ brass knob `#F2C14E`), and wears the `luifelz` awning and the `deurmatz` doormat
 * `r.vrij` — the **free-cell grid**: `x, z` from `marge` to `w−marge` / `d−marge` in steps
   of 12, with `marge = 12` (18 for the tuin, `erf`). A cell is dropped when the Manhattan
   distance is `< 18` to any decor item or slot, `< 14` to any door's inside point, or
-  (pool only) when `z < bad.z1 + 6`. Ids are `'v' + x + '_' + z`, soort `'vrij'`.
+  (pool only) when `z < bad.z1 + 6`, or (port, R3) within 3 voxels of one of the room's
+  `mijd` rectangles — the floor a game's table or scale stands on (only the kas has them;
+  a bought piece of furniture keeps 4 voxels from them, `_bezet`). Ids are
+  `'v' + x + '_' + z`, soort `'vrij'`.
 * `r.plekkenLijst` — the **wander places**: walk `r.vrij` in order and keep a cell only if
   it is ≥ 22 (Manhattan) away from every kept cell. If nothing survives, `[[w/2, d/2]]`.
 * Every slot gets its **standing place** `sx, sz` (`afSlot`):
@@ -1140,6 +1158,8 @@ Currently registered games:
 | `hinkel` | Hinkelpad | tuin | `hok` 🪨 (offset), resting on `rust_hk_steen0` — band 3's eleven plain stones | N ≥ 1 | `spelen` | prio 2 with a waiting guest, else 5 |
 | `was` | Wasmandtoren | wasserij | `tobbe` 🧺 (offset), resting on `rust_was_berg` — the pile at (60, 54) | N ≥ 1 | – | `was`, prio 8 |
 | `kraam` | Souvenirkraam | tuin | `bal` 🎁 (offset), resting on `rust_kr_toonbank` — the stall and its counter | N ≥ 1 | `souvenir` | `souvenir`, prio 1 |
+| `oogst` | Aardbeien plukken | kas | `aardbeienbakz` 🍓 (offset), resting on `rust_og_tafel` — the picking table with five empty punnets (games-c.md §2) | N ≥ 1 | – | `oogst`, prio 6 |
+| `weeg` | Groenten wegen | kas | `pompoenen` ⚖️ (offset), resting on `rust_wg_schaal` — the level balance and its row of weights (games-c.md §3) | N ≥ 1 | – | `weeg`, prio 7 |
 
 ### 5.2 Lifecycle
 

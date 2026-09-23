@@ -10,7 +10,7 @@ extends Proef
 ## mulberry32 bit for bit (architecture.md §13, Q-X1-2).
 
 const ORDE := ["receptie", "gang", "kamer1", "kamer2", "keuken", "tuin",
-	"zwembad", "wasserij", "speelzaal"]
+	"zwembad", "wasserij", "speelzaal", "kas"]
 
 ## The five floors `ArtVloer.kleur()` knows how to draw (`art/vloer.gd:18`);
 ## any other word gives a room the plank floor by accident.
@@ -71,6 +71,9 @@ func test_maten_en_vloeren() -> void:
 		"zwembad": [144, 88, 0, "gras", 1.5],
 		"wasserij": [100, 90, 52, "tegel", 1.25],
 		"speelzaal": [114, 100, 56, "hout", 1.5],
+		# R3: de kas, zo groot als de receptie-doos (twee spellen en negen
+		# meubels, en toch ≥ 8 loopplekken)
+		"kas": [128, 112, 40, "tegel", 1.25],
 	}
 	for id in verwacht:
 		var r := Rooms.get_kamer(id)
@@ -93,6 +96,7 @@ func test_kamerkaders() -> void:
 		"zwembad": [-190, 300, -60, 250],
 		"wasserij": [-190, 210, -116, 200],
 		"speelzaal": [-210, 238, -124, 224],
+		"kas": [-234, 266, -92, 250],
 	}
 	for id in verwacht:
 		var box := Rooms.kader(Rooms.get_kamer(id))
@@ -122,6 +126,10 @@ func test_deurpunten() -> void:
 		# R2: de speelzaal-deuren, gegenereerd uit een headless run (2026-09-21)
 		["receptie", "speelzaal", 0, 114, 8, 114],
 		["speelzaal", "receptie", 63, 0, 63, 8],
+		# R3: de glazen deur van de kas in de achtergevel, waar het keukenraam
+		# hing, en de tuindeur van de kas midden in haar achterwand
+		["tuin", "kas", 0, 68, 8, 68],
+		["kas", "tuin", 58, 0, 58, 8],
 	]
 	for rij in verwacht:
 		var dp := Rooms.deur(rij[0], rij[1])
@@ -563,6 +571,53 @@ func test_de_tuin_ligt_achter_het_hotel_en_naast_het_zwembad() -> void:
 		if stuk["n"] == "boom" and float(stuk["x"]) < zb.hek_x:
 			boom = true
 	waar(boom, "achter het hek van het zwembad staat de boom van de tuin")
+
+## PLAN.md R3: the kas is a glass house behind the hotel.  From the garden its
+## glass door is in the hotel's back wall where the kitchen window hung (the
+## left fence R3 planned is the facade since 2026-09-23), with a glass canopy
+## over it; through the door you see the kas's terracotta path, not more tiles.
+## Inside, the floor under the two games' tables (`mijd`) holds no wander place
+## and takes no bought furniture, and the vegetable beds keep their zone.
+func test_de_kas_is_een_glazen_kas_achter_het_hotel() -> void:
+	var kas := Rooms.get_kamer("kas")
+	var tuin := Rooms.get_kamer("tuin")
+	waar(kas.glas, "de kas heeft glazen wanden")
+	waar(not tuin.glas, "de tuin niet")
+	var deur := {}
+	for dr in tuin.deuren:
+		if dr["naar"] == "kas":
+			deur = dr
+	gelijk(str(deur.get("wand", "")), str(tuin.gevel.get("wand", "")), "de kasdeur zit in de achtergevel")
+	gelijk(Rooms.deur_hoog(tuin, deur), 26, "een echte deur, zo hoog als de keukendeur")
+	waar(not bool(deur.get("poort", false)), "geen poort: een gat in de gevel")
+	var luifel := _stuk(tuin, "kasluifelz")
+	waar(not luifel.is_empty() and bool(luifel.get("ver", false)), "een glazen luifel aan de gevel")
+	gelijk(float(luifel.get("z", 0)), float(deur["at"]) + float(deur["breed"]) / 2.0, "boven de deur")
+	waar(_stuk(tuin, "gevelraamz").is_empty(), "het keukenraam maakte plaats voor de kasdeur")
+	# through the door: the path's terracotta, which no other room has
+	var pad := Rooms.vloer_kleur(kas, int(kas.kijk.x), int(kas.kijk.y))
+	var mat: Dictionary = (kas.matten as Array)[0]
+	waar((mat["kl"] as Array).has(pad), "de kijk van de kas valt op het terracotta pad")
+	for id in Rooms.lijst():
+		if id == "kas":
+			continue
+		waar(not _vloerkleuren(Rooms.get_kamer(id)).has(pad.to_html()),
+			"%s heeft het terracotta van de kas niet" % id)
+	# the games' floor
+	gelijk(kas.mijd.size(), 3, "de pluktafel, de weegschaal en de rij gewichten")
+	for p in kas.plekken:
+		for m in kas.mijd:
+			waar(not (p[0] >= m["x0"] and p[0] <= m["x1"] and p[1] >= m["z0"] and p[1] <= m["z1"]),
+				"loopplek %s staat niet op een spel" % str(p))
+	for m in kas.mijd:
+		var mx := (float(m["x0"]) + float(m["x1"])) / 2.0
+		var mz := (float(m["z0"]) + float(m["z1"])) / 2.0
+		waar(not Rooms.vrij_vak("kas", mx, mz), "geen gekocht meubel op een spel (%s)" % str(m))
+	waar(kas.zones.has("rijen"), "de moesbakken houden hun zone (R3)")
+	# every other room: no `mijd`, so nothing moved there
+	for id in Rooms.lijst():
+		if id != "kas":
+			gelijk(Rooms.get_kamer(id).mijd.size(), 0, "%s houdt al zijn vloer" % id)
 
 ## A gate's rectangle is the gate in the fence line, not the door line behind
 ## it: measured on the door line the pool gate's button landed on the gate.

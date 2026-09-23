@@ -170,6 +170,36 @@ func _keur(scherm: Vector2, extra: bool) -> void:
 				"%s: %s van %s staat in de chip (%s in %s)"
 					% [wat, naam, id, str(l.get_global_rect()), str(r)])
 
+## R3: with the kas the hotel has eleven chips.  On the 1000 unit tablet row
+## (1024 × 768) they need 1029 units at the normal padding, and a second row
+## would take a whole band of height from the world frame (990 × 637 became
+## 990 × 585 and the check-in card lost its guest, test_hits).  So the row first
+## takes the tighter padding, and only a row that does not fit even then wraps.
+## A row that fits keeps its padding exactly as it was.
+func test_elf_chips_op_een_rij_op_de_tablet() -> void:
+	_op(SCHERMEN[0], KADERS[0])
+	await _leg_uit(SCHERMEN[0], 0.0)
+	gelijk(_balk.chips().size(), Rooms.lijst().size() + 1, "elke kamer en de kaart")
+	waar(_balk.chips().size() >= 11, "met de kas zijn het er elf")
+	gelijk(_balk.rijen(), 1, "één rij op de tablet")
+	var rij: Control = (_balk.chips()["kas"] as Button).get_node("Rij")
+	gelijk(rij.offset_left, float(UiKamerbalk.VULLING_KRAP), "met de krappe vulling")
+	_af()
+	# a wide screen has room: the normal padding stays
+	_op(Vector2(1280, 800), Vector2(1170, 669))
+	await _leg_uit(Vector2(1280, 800), 0.0)
+	gelijk(_balk.rijen(), 1, "één rij op 1280")
+	rij = (_balk.chips()["kas"] as Button).get_node("Rij")
+	gelijk(rij.offset_left, float(UiKamerbalk.VULLING), "met de gewone vulling")
+	_af()
+	# a tablet upright needs two rows anyway: those keep the normal padding too
+	_op(SCHERMEN[1], KADERS[1])
+	await _leg_uit(SCHERMEN[1], 0.0)
+	waar(_balk.rijen() >= 2, "rechtop blijven het twee rijen")
+	rij = (_balk.chips()["kas"] as Button).get_node("Rij")
+	gelijk(rij.offset_left, float(UiKamerbalk.VULLING), "met de gewone vulling")
+	_af()
+
 # ------------------------------------------------------------------- de rail
 
 ## The rail costs the world width, never height: it must fit in the height the

@@ -27,6 +27,11 @@ const GAT := 4
 const RAIL_KOLOMMEN := 3
 const RAIL_BREED := UiThema.HOT   ## art-sound-rules.md §16.4: repeat(3, 48px)
 const VULLING := 6            ## the chip's own padding, both sides
+## ... and the tighter padding a row of chips takes before it wraps (R3): with
+## the kas the hotel has eleven chips, one row needs 1029 units, and a 1000
+## unit tablet (1024 × 768) would put the last chip on a second row — which
+## takes a whole band of height from the world frame (990 × 637 → 990 × 585).
+const VULLING_KRAP := 4
 
 var _chips: Dictionary = {}   ## kamer id -> Button ("" = the map chip)
 var _rail := false
@@ -197,18 +202,22 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = fal
 			nm.custom_minimum_size = Vector2.ZERO
 			nm.max_lines_visible = -1
 	if rail:
+		_zet_vulling(VULLING)
 		_meet_rail(hoogte)
 		_raster.columns = RAIL_KOLOMMEN
 		return
-	var breedtes: Array[float] = []
-	for b in _chips.values():
-		var rij: BoxContainer = b.get_node_or_null("Rij")
-		if rij == null:
-			continue
-		var nodig := rij.get_combined_minimum_size()
-		b.custom_minimum_size = Vector2(maxf(UiThema.HOT, nodig.x + 2 * VULLING),
-			maxf(UiThema.HOT, nodig.y + 4.0))
-		breedtes.append(b.custom_minimum_size.x)
+	var breedtes := _chip_breedtes(VULLING)
+	# One row that overflows by a few units takes the tighter padding before it
+	# wraps (VULLING_KRAP, R3).  Only then: every row that fits today keeps its
+	# chips exactly as they were, and a bar that needs two rows anyway keeps
+	# them too.
+	if not _strook and not breedtes.is_empty() \
+			and _rij_breedte(breedtes, breedtes.size()) > breedte:
+		var krap := _chip_breedtes(VULLING_KRAP)
+		if _rij_breedte(krap, krap.size()) <= breedte:
+			breedtes = krap
+		else:
+			breedtes = _chip_breedtes(VULLING)
 	if _strook:
 		# one row, as wide as it needs to be: the ScrollContainer takes the
 		# overflow instead of the world frame taking three rows of chips
@@ -232,6 +241,30 @@ func kolommen() -> int:
 
 func rijen() -> int:
 	return int(ceil(_chips.size() / float(maxi(1, kolommen()))))
+
+## Give every chip `vulling` units of padding on both sides and its minimum
+## size for that padding; returns the widths in chip order.  The content is
+## anchored to the chip with offsets (a Button lays out no children), so the
+## offsets follow the padding or the word would be cut.
+func _chip_breedtes(vulling: int) -> Array[float]:
+	_zet_vulling(vulling)
+	var uit: Array[float] = []
+	for b in _chips.values():
+		var rij: BoxContainer = b.get_node_or_null("Rij")
+		if rij == null:
+			continue
+		var nodig := rij.get_combined_minimum_size()
+		b.custom_minimum_size = Vector2(maxf(UiThema.HOT, nodig.x + 2 * vulling),
+			maxf(UiThema.HOT, nodig.y + 4.0))
+		uit.append(b.custom_minimum_size.x)
+	return uit
+
+func _zet_vulling(vulling: int) -> void:
+	for b in _chips.values():
+		var rij: BoxContainer = b.get_node_or_null("Rij")
+		if rij != null:
+			rij.offset_left = vulling
+			rij.offset_right = -vulling
 
 func _rij_breedte(breedtes: Array[float], kolommen_n: int) -> float:
 	var som := float((kolommen_n - 1) * GAT)
