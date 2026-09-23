@@ -94,8 +94,14 @@ A door is `{naar, wand: 'x'|'z', at, breed}`; `at` is the start of the gap along
 `Rooms.deur(kamer, naar)` returns the derived point: for `wand: 'z'`,
 `{x: at + breed/2, z: 0, ix: at + breed/2, iz: 8}`; for `wand: 'x'`,
 `{x: 0, z: at + breed/2, ix: 8, iz: at + breed/2}`. `(ix, iz)` is the step *inside* the
-room where an animal stands before walking through. `poort: 1` marks a garden gate (no
-door hole is cut in a wall; the tuin has no walls).
+room where an animal stands before walking through. `poort: 1` marks a gate in a fence:
+no hole is cut, the gate model stands in the fence line (`hek_x`/`hek_z`) and the gate's
+screen box is measured there. Since 2026-09-23 the kitchen and the garden are joined by a
+real door on both sides — a hole in the kitchen wall, and a door in the hotel's back wall
+(`gevel`) on the garden side — so only the garden ↔ pool passage is a gate.
+`Rooms.deur_hoog(r, dr)` is the one height rule for drawing and measuring: `min(wand − 6, 26)`
+for a door in a wall, the facade's height standing in for `wand` in the garden, and
+`POORT_HOOG = 18` for a gate.
 
 | from | to | wand | at | breed | door point (x, z) | inside (ix, iz) |
 |---|---|---|---|---|---|---|
@@ -107,11 +113,11 @@ door hole is cut in a wall; the tuin has no walls).
 | kamer1 | gang | z | 72 | 12 | (78, 0) | (78, 8) |
 | kamer2 | gang | z | 72 | 12 | (78, 0) | (78, 8) |
 | keuken | gang | x | 75 | 12 | (0, 81) | (8, 81) |
-| keuken | tuin | z | 90 | 12 | (96, 0) | (96, 8) — `poort` |
+| keuken | tuin | z | 104 | 12 | (110, 0) | (110, 8) — the back door, in the corner after the fridge (2026-09-23) |
 | keuken | wasserij | x | 30 | 12 | (0, 36) | (8, 36) |
-| tuin | keuken | x | 34 | 12 | (0, 40) | (8, 40) — `poort` |
+| tuin | keuken | x | 34 | 12 | (0, 40) | (8, 40) — a door in the hotel's back wall (`gevel`) |
 | tuin | zwembad | z | 38 | 12 | (44, 0) | (44, 8) — `poort` |
-| zwembad | tuin | x | 60 | 12 | (0, 66) | (8, 66) |
+| zwembad | tuin | x | 60 | 12 | (0, 66) | (8, 66) — `poort` |
 | wasserij | keuken | z | 62 | 12 | (68, 0) | (68, 8) |
 
 `Rooms.pad(van, naar)` is a breadth-first search over this graph; it returns the full path
@@ -129,12 +135,12 @@ movable **dingen**: `balielamp` (receptie 15, 105, y 14) and `kar` (keuken 48, 6
 | room | decor (model @ x, z [, y]) |
 |---|---|
 | receptie | `balie` @ 40,60 · `balie` @ 75,60 · `baliez` @ 15,58 · `baliez` @ 15,93 · `bel` @ 33,60 y14 · `kassa` @ 66,60 y14 · `boek` @ 15,75 y14 · `lamp` @ 15,105 y14 (→ ding `balielamp`) · `prikbord` @ 39,1 `ver` · `sleutelbordz` @ 1,84 `ver` · `plant` @ 105,18 · `plant` @ 108,81 |
-| gang | `plant` @ 44,8 · `plant` @ 82,8 · `kist` @ 114,14 |
-| kamer1 | `plant` @ 102,12 · `mand` @ 93,99 |
+| gang | `plant` @ 36,30 · `plant` @ 108,30 (along the FRONT edge since 2026-09-23: against the back wall they hid 37 % and 29 % of the bedroom doors) · `kist` @ 114,14 |
+| kamer1 | `plant` @ 107,8 (was 102,12: it hid the door's corner) · `mand` @ 93,99 |
 | kamer2 | `plant` @ 12,99 · `mand` @ 93,99 |
 | keuken | `kast` @ 33,6 · `zak` @ 66,18 · `kar` @ 48,66 (→ ding `kar`) · `plant` @ 108,93 |
-| tuin | `boom` @ 16,68 · `hok` @ 67,19 · `tobbe` @ 32,94 · `bal` @ 120,76 · `kist` @ 95,23 · `poort` @ 10,40 `ver` · plus generated fence and grass tufts (below) |
-| zwembad | `plant` @ 136,80 · `poort` @ 4,66 `ver` · one big `startblok` @ 14,28 (owner 2026-09-17: "Maak het startblok groter en doe 1 ipv 3"; the old `mat` entry plank is gone — "haal de oude houten plank weg") · plus the generated fence (the back fence is dropped behind the water) and grass tufts |
+| tuin | the lawn behind the hotel (owner 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk dat lijkt gewoon op een huis"): `gevel` `{wand: x, hoog: 34, stoep: 8}` — the hotel's back wall with the kitchen door, `gevelraamz` @ 1,70 y9 `ver`, `luifelz` @ 1,40 y27 `ver`, `deurmatz` @ 5,40 · behind the back fence the pool (`uitzicht`, below) with `zwembadtrap` @ 31,−3 and `parasol` @ 66,0, seen through `zwembadpoort` @ 44,10 · `boom` @ 22,126 · `hok` @ 112,22 · `plant` @ 7,16 (closes the corner between wall and fence) · `tobbe` @ 32,94 · `bal` @ 120,76 · `kist` @ 12,84 · plus the generated back fence and grass tufts (below) |
+| zwembad | `plant` @ 136,80 · `rozenboog` @ 4,66 (the gate back to the garden, 2026-09-23) with the garden beyond the fence: `boom` @ −22,46, `bloemstruik` @ −8,40 and −9,79 · one big `startblok` @ 14,28 (owner 2026-09-17: "Maak het startblok groter en doe 1 ipv 3"; the old `mat` entry plank is gone — "haal de oude houten plank weg") · plus the generated fence (the back fence is dropped behind the water) and grass tufts |
 | wasserij | `kast` @ 28,6 · `tobbe` @ 80,74 |
 
 The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and two
@@ -147,10 +153,12 @@ The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and
   fence at 4/4 — owner 2026-09-17: "Doe het hek verder van beide kanten van
   het zwembad", to make room for the startblokken).  Inside ⇔ `x > hek_x`
   and `z > hek_z`.
-* `hekz` posts at `x = hek_x`, `z = hek_z, +14, … ≤ 130`, **skipping** `34 ≤ z ≤ 46` (the gate
-  to the kitchen).
-* `hekx` posts at `z = hek_z`, `x = 24, 38, … ≤ 130`, **skipping** `38 ≤ x ≤ 50` (the opening
-  to the pool).
+* `hekz` posts at `x = hek_x`, `z = hek_z, +14, … ≤ 130`, **skipping** `34 ≤ z ≤ 46` — but
+  only where the side is a fence: since 2026-09-23 the garden's left side is the hotel's
+  back wall (`gevel` on `x`), so the garden has no `hekz` at all (and `hek_x = 0`).
+* `hekx` posts at `z = hek_z`, `x = 24, 38, … ≤ 130` — from `x = 10` when the left side is
+  the facade, so the fence starts at its corner — **skipping** `38 ≤ x ≤ 50` (the opening
+  to the pool, where `zwembadpoort` stands).
 * The pool's own fence (`bouwZwembad`) uses the room's `hek_x`/`hek_z` (4/4)
   and drops the back-fence posts that stand behind the water itself — the
   `hekx` line skips every `x` in `[bad.x0, bad.x1]` (owner 2026-09-17:
@@ -160,8 +168,10 @@ The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and
   `a += 0x6D2B79F5` / `Math.imul` mulberry-style generator used for animals). Per iteration
   `i`: `u = round(r()*300 − 150)`, `w = 24 + round(r()*220)`, `px = (u+w)/2`,
   `pz = (w−u)/2`. A tuft is kept only if `px > 12 && pz > 12`, it is ≥ 22 (Manhattan) away
-  from every large object `[(16,68),(67,19),(32,94),(120,76),(95,23)]`, and it is outside
-  both reserved zones inflated by 4 voxels. Model name is `'pol' + (i % 5)`.
+  from every piece of fixed decor that stands on the lawn (every decor entry that is neither
+  `ver` nor a fence post — so a prop that moves takes its clear patch along; until
+  2026-09-23 this was the literal list `[(16,68),(67,19),(32,94),(120,76),(95,23)]`), and it
+  is outside both reserved zones inflated by 4 voxels. Model name is `'pol' + (i % 5)`.
   The port must reproduce this PRNG bit-for-bit if the garden is to look identical
   (32-bit unsigned arithmetic, `Math.imul`).
 
@@ -169,7 +179,7 @@ The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and
 
 | zone | rectangle | size |
 |---|---|---|
-| `hinkel` | x 24..100, z 34..50 | 76 × 16, in front of the doghouse |
+| `hinkel` | x 24..100, z 34..50 | 76 × 16, running towards the doghouse in the far corner (moved there 2026-09-23) |
 | `kraam` | x 104..126, z 36..68 | 22 × 32, along the right edge |
 
 **Pool** (`Rooms.get('zwembad')`):
@@ -204,18 +214,53 @@ Order of the rules:
 6. `zacht` → `['#E6D3B8','#DFC9AC'][(z>>2)&1]`.
 7. default (`hout`) → `((z>>2)&3) === 0 ? '#D2B58C' : ['#E4CBA6','#DCC29B'][(z>>2)&1]`.
 
+Two rules the port added for the lawn (2026-09-23), both checked on a `gras` floor before
+rule 2's meadow/grass split:
+
+* `r.gevel.stoep`: the strip `0 ≤ x < stoep` along a facade on `x` (inside the fence) is
+  paved, `STOEP = ['#E8DAC4','#DDCDB5'][((x>>2)+(z>>2))&1]` — the garden's path along the
+  hotel's back wall.
+* `r.uitzicht`: what lies beyond the fence and can be seen from here. A `{soort: 'bad', x0,
+  x1, z0, z1}` entry is drawn exactly like `r.bad` (edge, water, rim) plus a `TEGEL` deck of
+  16 voxels round it that stops at the fence line — the pool behind the garden's back fence
+  (water `x 24..124, z −36..−4`), so the garden's exit to the pool shows the pool.
+
 **Walls** (`bouwWand`, only for rooms with `wand > 0`; the tuin has none): both back walls
 are drawn as flat quads on the baked floor plate. Wall `z` (running along x, facing +z)
 uses `#DFC6A8` with band `#E9D4BA`; wall `x` uses `#EDD8BC` with band `#F5E5CE`. Every
 segment gets a skirting `y 0..3` in `#C08F6B` and a rail `y 9..10.4` in the band colour.
-Door openings (`poort` doors excluded) are cut to height `min(wand − 6, 26)`: dark hole
-`#7A6250`, lighter lintel strip `#9C8168` over the top 1.2 voxels, wall above the opening,
-and a frame of `HOUT_D #B98F62` posts 1 voxel wide plus a `HOUT #D0A87A` lintel 1.4 high.
+Door openings (`poort` doors excluded) are cut to height `Rooms.deur_hoog()` =
+`min(wand − 6, 26)`. **Every opening shows the room it leads to** (owner 2026-09-23: "geen
+mooie overgang die sprekend is"; the HTML drew one dark hole `#7A6250` for every door):
+the floor behind the wall in the destination room's own 4×4 tile colours, clipped to what
+the opening lets through (a floor point (x, z) behind the `z` wall shows when
+`a ≤ x − z ≤ b` and `−z ≤ hoog`, the `x` wall likewise with x and z swapped), centred on
+the destination's `kijk` point (its middle by default; the reception, the kitchen and the
+laundry aim theirs at their rug, runner and bath mat so rooms with the same floor still look
+different). Indoors the view is darkened 16 % towards `#6E5A4A`, from the lawn into the
+hotel 36 %; a view onto a lawn is lightened 8 % towards `#FFFBEF`. Over it: the threshold
+`#C9A27E` inside the 3-voxel wall, the one jamb the viewer can see (the left one in the `z`
+wall, the right one in the `x` wall, in the wall colour darkened 12 %), a lintel shadow
+fading from 38 % to 0 over 11 voxels (half that outdoors), and the frame of `HOUT_D #B98F62`
+posts 1 voxel wide plus a `HOUT #D0A87A` lintel 1.4 high — `#E6DDCC` / `#FBF7EE`, white,
+when the door leads outside. `tests/test_rooms.gd` holds every door to it: each view shows
+a colour its own room does not have, no two doors of a room look alike, and no fixed decor
+hides more than 3 % of an opening.
 The wall top cap is `#FCF0DE`, 3 voxels deep. A 10 %-alpha `#6E5A4A` shadow strip 4 voxels
 wide lies where each wall meets the floor. A radial vignette
 (`rgba(120,96,70,0)` → `.18`) is painted over the whole plate.
 The tuin instead fills the plate with `#AAD190` and tiles diamond cells of 4 voxels out to
 8 voxels beyond the frame, so the lawn runs on past the edge.
+
+**The facade** (`r.gevel = {wand: 'x', hoog: 34, stoep: 8}`, the tuin since 2026-09-23): the
+hotel's back wall on `x = 0` from `z = −6` to `z = 400` — no end of the building is ever in
+view — in plaster `#F3E2C9` on a `#CDB195` plinth (`y 0..3`) with a `#E6D0B1` band in the
+shadow of the eaves (`y hoog−3..hoog`), a shadow strip on the paving at its foot, and a
+roof of 44 rows of 4 voxels at 45° (`#E79C7C` / `#DA8C6D`) from eaves that stick out 3
+voxels (`#B7876C` fascia) back and up out of the picture. The facade's doors are cut like
+indoor doors; the kitchen door also shows its open leaf folded flat against the wall
+beyond the opening (sage `#93C19C`, panel `#7BA986`, a four-pane window `#DDF0F4` and a
+brass knob `#F2C14E`), and wears the `luifelz` awning and the `deurmatz` doormat.
 
 ### 1.5 Derived data (`bouwAf`, recomputed after every furniture change)
 

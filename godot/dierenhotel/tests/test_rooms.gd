@@ -111,7 +111,9 @@ func test_deurpunten() -> void:
 		["kamer1", "gang", 78, 0, 78, 8],
 		["kamer2", "gang", 78, 0, 78, 8],
 		["keuken", "gang", 0, 81, 8, 81],
-		["keuken", "tuin", 96, 0, 96, 8],
+		# the garden door moved into the corner at the end of the kitchen run
+		# (owner, 2026-09-23): in front of x 90..102 the fridge hid it
+		["keuken", "tuin", 110, 0, 110, 8],
 		["keuken", "wasserij", 0, 36, 8, 36],
 		["tuin", "keuken", 0, 40, 8, 40],
 		["tuin", "zwembad", 44, 0, 44, 8],
@@ -132,6 +134,10 @@ func test_deurpunten() -> void:
 		gelijk(dp["iz"], rij[5], "%s->%s iz" % [rij[0], rij[1]])
 	waar(Rooms.deur("tuin", "zwembad")["poort"], "de tuinpoort is een poort")
 	waar(not Rooms.deur("gang", "kamer1")["poort"], "een gewone deur is geen poort")
+	# the kitchen's back door is a door on both sides now: a hole in the
+	# kitchen wall and a door in the hotel's facade in the garden
+	waar(not Rooms.deur("keuken", "tuin")["poort"], "de keuken heeft een echte tuindeur")
+	waar(not Rooms.deur("tuin", "keuken")["poort"], "de tuin gaat door een deur de keuken in")
 
 ## `pad()` is a BFS that includes the start room.
 func test_pad_door_de_deuren() -> void:
@@ -228,6 +234,11 @@ func test_decor_staat_er_en_is_bakbaar() -> void:
 			waar(stuk.get("ver", false), "het prikbord hangt aan de wand")
 
 ## world.md §1.3 — the garden fence and its 30 seeded tufts, bit for bit.
+##
+## Since 2026-09-23 the garden's left side is the hotel's back wall, so there
+## is no side fence (`hekz`), the back fence starts at the wall's corner, and
+## the tufts keep clear of the props where they stand now; the table below was
+## regenerated from a headless run, once.
 func test_tuin_is_deterministisch() -> void:
 	var tuin := Rooms.get_kamer("tuin")
 	var hekz := 0
@@ -236,21 +247,19 @@ func test_tuin_is_deterministisch() -> void:
 	for stuk in tuin.decor:
 		if stuk["n"] == "hekz":
 			hekz += 1
-			gelijk(stuk["x"], 10, "hekz staat op x = 10")
-			waar(stuk["z"] < 34 or stuk["z"] > 46, "het hek laat de poort vrij")
 		elif stuk["n"] == "hekx":
 			hekx += 1
 			gelijk(stuk["z"], 10, "hekx staat op z = 10")
 			waar(stuk["x"] < 38 or stuk["x"] > 50, "het hek laat de opening vrij")
 		elif String(stuk["n"]).begins_with("pol"):
 			pollen.append([String(stuk["n"]), stuk["x"], stuk["z"]])
-	gelijk(hekz, 8, "acht hekpalen langs z")
-	gelijk(hekx, 7, "zeven hekpalen langs x")
+	gelijk(hekz, 0, "geen zijhek: daar staat de achtergevel van het hotel")
+	gelijk(hekx, 8, "acht hekpalen langs x, de eerste bij de hoek van de gevel")
 	var verwacht := [
-		["pol0", 60.5, 125.5], ["pol4", 169.5, 29.5], ["pol0", 159.5, 40.5],
-		["pol1", 138.5, 68.5], ["pol4", 52.5, 65.5], ["pol0", 117.5, 123.5],
-		["pol2", 50.5, 142.5], ["pol4", 62.5, 142.5], ["pol2", 145.0, 57.0],
-		["pol0", 111.0, 16.0], ["pol1", 132.5, 100.5], ["pol4", 24.0, 154.0],
+		["pol0", 60.5, 125.5], ["pol2", 92.0, 14.0], ["pol4", 169.5, 29.5],
+		["pol0", 159.5, 40.5], ["pol1", 138.5, 68.5], ["pol4", 52.5, 65.5],
+		["pol0", 117.5, 123.5], ["pol2", 50.5, 142.5], ["pol4", 62.5, 142.5],
+		["pol2", 145.0, 57.0], ["pol1", 132.5, 100.5], ["pol4", 24.0, 154.0],
 		["pol0", 150.5, 35.5], ["pol3", 45.0, 128.0],
 	]
 	gelijk(pollen.size(), verwacht.size(), "aantal graspollen")
@@ -388,3 +397,182 @@ func test_meubels_zetten_en_weghalen() -> void:
 	Rooms.herstel()
 	gelijk(Rooms.slots("", "bed").size(), voor, "herstel geeft de basisinrichting terug")
 	gelijk(Rooms.get_kamer("kamer1").slots.size(), 3, "en de slots van kamer1")
+
+# ------------------------------------------------------------ de overgangen
+
+## The floor plate, for the pure helpers of its door drawing.
+const VLOER := preload("res://scenes/vloer.gd")
+
+## OWNER, 2026-09-23: "Ook andere ruimtes als keuken naar tuin hebben geen mooie
+## overgang die sprekend is".  Through every door you see the floor of the room
+## it leads to, and only the floor its opening lets through.  That view is never
+## just more of the room you stand in, and no two doors of one room show the
+## same thing — the kitchen and the laundry share their tiles, the reception
+## and the playroom their planks, which is why those rooms point their view
+## (`kijk`) at their runner, bath mat and rug.
+func test_elke_deur_laat_zien_waar_hij_heen_gaat() -> void:
+	for id in Rooms.lijst():
+		var r := Rooms.get_kamer(id)
+		var eigen := _vloerkleuren(r)
+		var gezien: Array = []
+		for dr in r.deuren:
+			if dr.get("poort", false):
+				continue
+			var naar := String(dr["naar"])
+			var hoog := float(Rooms.deur_hoog(r, dr))
+			var tegels: Array = VLOER.doorkijk_tegels(dr, Rooms.get_kamer(naar), hoog)
+			waar(tegels.size() >= 12,
+				"%s -> %s: de opening laat vloer zien (%d tegels)" % [id, naar, tegels.size()])
+			var zicht: Array = VLOER.doorkijk_zicht(dr, hoog)
+			var binnen := true
+			var kleuren := {}
+			for t in tegels:
+				kleuren[(t["kl"] as Color).to_html()] = true
+				for q in t["p"]:
+					for h in zicht:
+						if h.x * q.x + h.y * q.y > h.z + 0.001:
+							binnen = false
+			waar(binnen, "%s -> %s: alleen de vloer die de opening doorlaat" % [id, naar])
+			var nieuw := 0
+			for kl in kleuren:
+				if not eigen.has(kl):
+					nieuw += 1
+			waar(nieuw > 0, "%s -> %s: de deur laat een andere kamer zien, niet meer %s"
+				% [id, naar, id])
+			for ander in gezien:
+				waar(ander["kleuren"] != kleuren, "%s: de deuren naar %s en %s zien er anders uit"
+					% [id, ander["naar"], naar])
+			gezien.append({"naar": naar, "kleuren": kleuren})
+
+## Every floor colour a room has, inside its walls or on its lawn.
+func _vloerkleuren(r: Rooms.Kamer) -> Dictionary:
+	var uit := {}
+	var rand := 48 if r.erf else 0
+	var x := -rand
+	while x < r.w + rand:
+		var z := -rand
+		while z < r.d + rand:
+			uit[Rooms.vloer_kleur(r, x, z).to_html()] = true
+			z += 4
+		x += 4
+	return uit
+
+## No piece of furniture stands in front of a door (owner, 2026-09-23): the
+## corridor's plants hid 37 % of the kamer 1 door and 29 % of the kamer 2 door.
+## Counted in pixels at g = 2: the opening against every plate of the room's
+## fixed floor decor and slots, all of which stand in front of the wall.
+const DEUR_DEKKING_MAX := 0.03
+
+func test_geen_meubel_voor_een_deur() -> void:
+	for id in Rooms.lijst():
+		var r := Rooms.get_kamer(id)
+		for dr in r.deuren:
+			if dr.get("poort", false):
+				continue
+			var dekking := _deur_dekking(r, dr)
+			waar(dekking <= DEUR_DEKKING_MAX, "%s -> %s: %d %% van de deur zit achter een meubel"
+				% [id, dr["naar"], roundi(dekking * 100.0)])
+
+func _deur_dekking(r: Rooms.Kamer, dr: Dictionary) -> float:
+	var g := 2
+	var a := float(dr["at"])
+	var b := a + float(dr["breed"])
+	var h := float(Rooms.deur_hoog(r, dr))
+	var hoeken: PackedVector2Array
+	if str(dr["wand"]) == "z":
+		hoeken = PackedVector2Array([_px(a, 0, 0, g), _px(b, 0, 0, g), _px(b, 0, h, g),
+			_px(a, 0, h, g)])
+	else:
+		hoeken = PackedVector2Array([_px(0, a, 0, g), _px(0, b, 0, g), _px(0, b, h, g),
+			_px(0, a, h, g)])
+	var vak := Rect2(hoeken[0], Vector2.ZERO)
+	for q in hoeken:
+		vak = vak.expand(q)
+	var gat: Array[Vector2i] = []
+	for py in range(int(floor(vak.position.y)), int(ceil(vak.end.y))):
+		for px in range(int(floor(vak.position.x)), int(ceil(vak.end.x))):
+			if Geometry2D.is_point_in_polygon(Vector2(px + 0.5, py + 0.5), hoeken):
+				gat.append(Vector2i(px, py))
+	var stukken: Array = []
+	for stuk in r.decor:
+		if not stuk.get("ver", false) and not stuk.get("pol", false):
+			stukken.append([String(stuk["n"]), float(stuk["x"]), float(stuk["z"]),
+				float(stuk.get("y", 0.0)), stuk.get("params", {})])
+	for sid in r.slots:
+		var m := String(r.slots[sid].get("model", ""))
+		if m != "" and Art.heeft_model(m):
+			stukken.append([m, float(r.slots[sid]["x"]), float(r.slots[sid]["z"]), 0.0, {}])
+	var bedekt := {}
+	for st in stukken:
+		var p = Art.plaat(st[0], g, st[4])
+		if p == null:
+			continue
+		var img: Image = p.tex.get_image()
+		var o := _px(st[1], st[2], st[3], g) + Vector2(p.dx, p.dy)
+		for q in gat:
+			var lx := q.x - roundi(o.x)
+			var ly := q.y - roundi(o.y)
+			if lx >= 0 and ly >= 0 and lx < img.get_width() and ly < img.get_height() \
+					and img.get_pixel(lx, ly).a > 0.5:
+				bedekt[q] = true
+	return float(bedekt.size()) / float(maxi(1, gat.size()))
+
+func _px(x: float, z: float, y: float, g: int) -> Vector2:
+	return Vector2((x - z) * Art.S * g, (x + z) * (Art.S / 2.0) * g - y * Art.HG * g)
+
+## OWNER, 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk dat
+## lijkt gewoon op een huis".  The garden is the lawn behind the hotel: its left
+## side is the hotel's back wall with the kitchen door in it, and behind its back
+## fence lies the pool — deck and water — right behind a pool gate.  Neither the
+## doghouse nor the tree stands in front of an exit any more.  From the pool the
+## way back is a rose arch, with the garden's tree behind the fence.
+func test_de_tuin_ligt_achter_het_hotel_en_naast_het_zwembad() -> void:
+	var tuin := Rooms.get_kamer("tuin")
+	gelijk(str(tuin.gevel.get("wand", "")), "x", "de tuin heeft de achtergevel op x = 0")
+	var keuken := {}
+	var poort := {}
+	for dr in tuin.deuren:
+		if dr["naar"] == "keuken":
+			keuken = dr
+		elif dr["naar"] == "zwembad":
+			poort = dr
+	gelijk(str(keuken.get("wand", "")), "x", "de keukendeur zit in de gevel")
+	gelijk(Rooms.deur_hoog(tuin, keuken), 26, "een echte deur, zo hoog als binnen")
+	var mid := int(float(poort["at"]) + float(poort["breed"]) / 2.0)
+	waar(ArtVloer.TEGEL.has(Rooms.vloer_kleur(tuin, mid, 4)), "achter de poort ligt het tegeldek")
+	waar(ArtVloer.BADWATER.has(Rooms.vloer_kleur(tuin, mid + 16, -20)), "en daarachter het water")
+	waar(ArtVloer.GRAS.has(Rooms.vloer_kleur(tuin, mid, 20)), "vóór het hek is het gras van de tuin")
+	var hek := _stuk(tuin, "zwembadpoort")
+	waar(not hek.is_empty(), "de opening naar het zwembad is een zwembadpoort")
+	gelijk(float(hek.get("x", 0)), float(mid), "in het midden van de opening")
+	gelijk(float(hek.get("z", 0)), float(tuin.hek_z), "in de lijn van het hek")
+	waar(_stuk(tuin, "poort").is_empty(), "de oude tuinpoort is weg")
+	for naam in ["hok", "boom"]:
+		var s := _stuk(tuin, naam)
+		for naar in tuin.deur_punten:
+			var dp: Dictionary = tuin.deur_punten[naar]
+			waar(absf(float(s["x"]) - float(dp["ix"])) + absf(float(s["z"]) - float(dp["iz"])) >= 30.0,
+				"%s staat niet voor de uitgang naar %s" % [naam, naar])
+	var zb := Rooms.get_kamer("zwembad")
+	var boog := _stuk(zb, "rozenboog")
+	waar(not boog.is_empty(), "het zwembad gaat door een rozenboog terug naar de tuin")
+	gelijk(float(boog.get("z", 0)), float(zb.deur_punten["tuin"]["z"]), "de boog staat in de opening")
+	gelijk(float(boog.get("x", 0)), float(zb.hek_x), "in de lijn van het hek")
+	var boom := false
+	for stuk in zb.decor:
+		if stuk["n"] == "boom" and float(stuk["x"]) < zb.hek_x:
+			boom = true
+	waar(boom, "achter het hek van het zwembad staat de boom van de tuin")
+
+## A gate's rectangle is the gate in the fence line, not the door line behind
+## it: measured on the door line the pool gate's button landed on the gate.
+func test_een_poort_meet_zich_in_de_hekkenlijn() -> void:
+	var vak := World.vlak_van_deur("tuin", "zwembad")
+	waar(vak.has_point(World.mik_punt(44.0, 10.0, 9.0)), "het vak omvat de poort in het hek")
+	waar(not vak.has_point(World.mik_punt(44.0, 0.0, 9.0)), "en niet de deurlijn erachter")
+
+func _stuk(r: Rooms.Kamer, naam: String) -> Dictionary:
+	for stuk in r.decor:
+		if stuk["n"] == naam:
+			return stuk
+	return {}

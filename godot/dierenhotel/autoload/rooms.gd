@@ -52,6 +52,15 @@ class Kamer extends RefCounted:
 	var hek_z := HEK_Z              ## the fence line along z (inside ⇔ z > hek_z)
 	var matten = {}                 ## {x0, x1, z0, z1, kl: [Color, Color]} of een lijst daarvan (R2)
 	var bad: Dictionary = {}        ## {x0, x1, z0, z1} — water is a floor rule
+	## Outdoors: a building wall on one side, {wand, hoog, stoep} — the garden
+	## has the hotel's back wall on x = 0, with the kitchen door in it.
+	var gevel: Dictionary = {}
+	## Outdoors: what lies beyond the fence and can be seen from here, drawn
+	## as floor — the pool behind the garden's back fence.  [{soort, x0, x1, z0, z1}]
+	var uitzicht: Array = []
+	## The floor point a door INTO this room shows through its opening
+	## (`scenes/vloer.gd`); the middle of the room when it is not set.
+	var kijk := Vector2(-1.0, -1.0)
 	var balie: Dictionary = {}      ## the desk footprint; nobody walks over it
 	var vrij_z0 := 0                ## no wander place in front of this z
 	var dek: Dictionary = {}        ## {start: Vector2, over: Vector2}
@@ -123,6 +132,23 @@ func deur(kamer_id: String, naar: String) -> Dictionary:
 	if r == null:
 		return {}
 	return r.deur_punten.get(naar, {})
+
+## How tall a door's opening is, in voxels — ONE rule for the wall drawing
+## (`scenes/vloer.gd`) and the door's screen box (`World.vlak_van_deur`).
+## A door in a wall is cut to `min(wand − 6, 26)` (world.md §1.4); a door in
+## the garden's facade the same, with the facade's height as the wall; a
+## gate in a fence is as tall as the gate model that stands in it.
+const POORT_HOOG := 18
+
+func deur_hoog(r: Kamer, dr: Dictionary) -> int:
+	if r == null:
+		return 6
+	if bool(dr.get("poort", false)):
+		return POORT_HOOG
+	var wand := r.wand
+	if not r.gevel.is_empty() and str(r.gevel.get("wand", "")) == str(dr.get("wand", "")):
+		wand = int(r.gevel.get("hoog", 0))
+	return maxi(6, mini(wand - 6, 26))
 
 ## world.md §1.2 — breadth-first over the door graph.  Returns the whole path
 ## INCLUDING the start room, `[van]` when they are the same, `[]` when a room
@@ -509,6 +535,9 @@ func _bouw_kamers() -> void:
 		"wand": 54, "vloer": "hout", "loop": 1.5,
 		"matten": {"x0": 45, "x1": 99, "z0": 78, "z1": 114,
 			"kl": [Color("#E9BFC9"), Color("#E3B4C0")]},
+		# a door into the receptie shows its planks AND the edge of its pink
+		# rug, so it is not the playroom's wooden floor (owner, 2026-09-23)
+		"kijk": Vector2(72, 84),
 		"balie": {"x0": 28, "x1": 102, "z0": 13, "z1": 27},
 		"vrij_z0": 36,
 		"deuren": [{"naar": "gang", "wand": "x", "at": 24, "breed": 12},
@@ -542,12 +571,18 @@ func _bouw_kamers() -> void:
 			{"naar": "keuken", "wand": "z", "at": 96, "breed": 12}],
 		# the corridor is only 36 deep, so everything new hangs on the back wall
 		# (z = 1): a piece there is 23 voxels from the walking cells at z = 24
-		# and drops none of them.  The pictures hang at y = 30, above the
-		# foliage of the plants in front of them (they reach y = 21).
+		# and drops none of them.  The pictures hang at y = 30.
+		# The two plants stand along the FRONT edge (owner, 2026-09-23: every
+		# door should show where it goes): against the back wall a plant hides
+		# the wall from 21 voxels left of it to 5 right of it, and the doors
+		# are only 24 apart, so at (44, 8) and (82, 8) they covered 37 % of the
+		# kamer 1 door and 29 % of the kamer 2 door.  Here they cover nothing,
+		# and at x = 36 and 108 they sit exactly between the walking cells of
+		# the front row, so the corridor keeps its four wander places.
 		"decor": [{"n": "kapstok", "x": 12, "z": 1, "ver": true},
 			{"n": "poster_poot", "x": 48, "z": 1, "y": 30, "ver": true},
 			{"n": "poster_boom", "x": 84, "z": 1, "y": 30, "ver": true},
-			{"n": "plant", "x": 44, "z": 8}, {"n": "plant", "x": 82, "z": 8},
+			{"n": "plant", "x": 36, "z": 30}, {"n": "plant", "x": 108, "z": 30},
 			{"n": "kist", "x": 114, "z": 14}]})
 	# OWNER DECISION (2026-09-17): "kamer 2 lijkt exact op kamer 1, die mag wel
 	# iets anders".  The two bedrooms were one loop; they are two rooms now.
@@ -566,7 +601,8 @@ func _bouw_kamers() -> void:
 			{"n": "schilderijz", "x": 1, "z": 51, "y": 29, "ver": true},
 			{"n": "nachtkastje", "x": 8, "z": 51},
 			{"n": "blokken", "x": 14, "z": 100},
-			{"n": "plant", "x": 102, "z": 12},
+			# (107, 8), not (102, 12): there it hid the corner of the door
+			{"n": "plant", "x": 107, "z": 8},
 			{"n": "mand", "x": 93, "z": 99}],
 		"slots": [
 			{"id": "bed1", "soort": "bed", "model": "bed", "x": 30, "z": 27},
@@ -597,37 +633,74 @@ func _bouw_kamers() -> void:
 			{"id": "bak", "soort": "bak", "model": "kom", "x": 96, "z": 84}]})
 	_kamer({"id": "keuken", "naam": "Keuken", "icoon": "🍪", "w": 120, "d": 114,
 		"wand": 56, "vloer": "tegel", "loop": 1.5,
+		# an apricot runner in front of the sink: the laundry and the pool deck
+		# have the same tiles, so a door into the kitchen shows the runner too
+		# (`kijk`, owner 2026-09-23)
+		"matten": {"x0": 48, "x1": 76, "z0": 14, "z1": 26,
+			"kl": [Color("#EBC3A8"), Color("#E3B598")]},
+		"kijk": Vector2(62, 22),
+		# OWNER, 2026-09-23: "keuken naar tuin hebben geen mooie overgang die
+		# sprekend is".  The garden door was a `poort` in a room WITH walls, so
+		# no hole was cut and the kitchen had no door to the garden at all —
+		# only a button beside the fridge.  It is a real back door now, in the
+		# corner at the end of the kitchen run, and through it you see the lawn.
+		# The fridge moved up next to the stove to make room: in front of the
+		# old opening (x 90..102) its body hid a third of the door.
 		"deuren": [
 			{"naar": "gang", "wand": "x", "at": 75, "breed": 12},
-			{"naar": "tuin", "wand": "z", "at": 90, "breed": 12, "poort": true},
+			{"naar": "tuin", "wand": "z", "at": 104, "breed": 12},
 			{"naar": "wasserij", "wand": "x", "at": 30, "breed": 12}],
 		# OWNER, 2026-09-17: "de keuken heeft een bed en kast en plant ipv
 		# kookgerei".  The kitchen now reads as a kitchen: one run along the back
-		# wall (voerkast, aanrecht with a sink, fornuis, koelkast in the corner)
-		# with a pannenrek and a pottenplank on the wall above it, and a little
-		# table with biscuits in the near corner instead of the plant.  Nothing
-		# stands in front of the tuin door (x 90..102) and the middle of the
-		# floor stays open for the guests and for the voerkar's bowls.
+		# wall (voerkast, aanrecht with a sink, fornuis, koelkast) with a
+		# pannenrek and a pottenplank on the wall above it, and a little table
+		# with biscuits in the near corner instead of the plant.  Nothing stands
+		# in front of the garden door (x 104..116) but its doormat, and the
+		# middle of the floor stays open for the guests and the voerkar's bowls.
 		# `keukenkar` is the kitchen's own trolley model (art/decor_keuken.gd);
 		# it keeps the thing key "kar", so the game and the save do not notice.
 		"decor": [{"n": "kast", "x": 33, "z": 6}, {"n": "zak", "x": 12, "z": 22},
 			{"n": "aanrecht", "x": 60, "z": 6}, {"n": "fornuis", "x": 80, "z": 6},
-			{"n": "koelkast", "x": 112, "z": 8},
+			{"n": "koelkast", "x": 94, "z": 8},
 			{"n": "pottenplank", "x": 55, "z": 2, "y": 18, "ver": true},
 			{"n": "pannenrek", "x": 79, "z": 2, "y": 20, "ver": true},
+			{"n": "deurmat", "x": 110, "z": 5},
 			{"n": "keukentafel", "x": 104, "z": 98},
 			{"n": "keukenkar", "x": 48, "z": 66, "sleutel": "kar"}]})
+	# OWNER, 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk
+	# dat lijkt gewoon op een huis" — and no exit of the garden said where it
+	# went: the kitchen gate stood behind the tree, the pool opening behind the
+	# doghouse.  The garden is the lawn BEHIND the hotel now:
+	#   * the left side is the hotel's back wall (`gevel`), with the kitchen's
+	#     back door in it — an awning over it, a doormat before it, a window
+	#     beside it and a paved strip along the wall;
+	#   * behind the back fence lies the pool itself (`uitzicht`): deck, rim,
+	#     water, a ladder and a parasol, seen through a white pool gate with a
+	#     lifebuoy on it;
+	#   * the doghouse moved to the far right corner and the tree to the front
+	#     left, so neither stands in front of an exit any more (the doghouse
+	#     beside the kitchen door read as a second door), and a potted plant
+	#     closes the corner between the hotel and the fence.
 	_kamer({"id": "tuin", "naam": "Tuin", "icoon": "🌳", "w": 130, "d": 130,
 		"wand": 0, "vloer": "gras", "loop": 1.0, "erf": true,
+		"hek_x": 0,
 		"vast_kader": [-170, 190, -70, 220],
+		"gevel": {"wand": "x", "hoog": 34, "stoep": 8},
+		"uitzicht": [{"soort": "bad", "x0": 24, "x1": 124, "z0": -36, "z1": -4}],
 		"zones": {"hinkel": {"x0": 24, "x1": 100, "z0": 34, "z1": 50},
 			"kraam": {"x0": 104, "x1": 126, "z0": 36, "z1": 68}},
 		"deuren": [
-			{"naar": "keuken", "wand": "x", "at": 34, "breed": 12, "poort": true},
+			{"naar": "keuken", "wand": "x", "at": 34, "breed": 12},
 			{"naar": "zwembad", "wand": "z", "at": 38, "breed": 12, "poort": true}],
-		"decor": [{"n": "boom", "x": 16, "z": 68}, {"n": "hok", "x": 67, "z": 19},
+		"decor": [{"n": "boom", "x": 22, "z": 126}, {"n": "hok", "x": 112, "z": 22},
 			{"n": "tobbe", "x": 32, "z": 94}, {"n": "bal", "x": 120, "z": 76},
-			{"n": "kist", "x": 95, "z": 23}, {"n": "poort", "x": 10, "z": 40, "ver": true}],
+			{"n": "kist", "x": 12, "z": 84}, {"n": "plant", "x": 7, "z": 16},
+			{"n": "gevelraamz", "x": 1, "z": 70, "y": 9, "ver": true},
+			{"n": "luifelz", "x": 1, "z": 40, "y": 27, "ver": true},
+			{"n": "deurmatz", "x": 5, "z": 40},
+			{"n": "zwembadpoort", "x": 44, "z": 10},
+			{"n": "zwembadtrap", "x": 31, "z": -3},
+			{"n": "parasol", "x": 66, "z": 0}],
 		"slots": [{"id": "tobbe", "soort": "vrij", "model": "tobbe", "x": 32, "z": 94}]})
 	# Outdoors (owner, 2026-09-14: "het zwembad wil ik graag ook buiten"): lawn
 	# and a fence like the garden's, the water with a tiled deck round it, and
@@ -650,9 +723,14 @@ func _bouw_kamers() -> void:
 		"bad": {"x0": 18, "x1": 134, "z0": 12, "z1": 44},
 		"dek": {"start": Vector2(12, 56), "over": Vector2(132, 56)},
 		"deuren": [{"naar": "tuin", "wand": "x", "at": 60, "breed": 12, "poort": true}],
+		# The way back to the garden looks like a garden (owner, 2026-09-23): a
+		# rose arch in the side fence, and behind the fence the garden's tree
+		# and its flowers.
 		"decor": [{"n": "plant", "x": 136, "z": 80},
-			{"n": "poort", "x": 4, "z": 66, "ver": true},
-			{"n": "startblok", "x": 14, "z": 28}]})
+			{"n": "rozenboog", "x": 4, "z": 66},
+			{"n": "startblok", "x": 14, "z": 28},
+			{"n": "boom", "x": -22, "z": 46},
+			{"n": "bloemstruik", "x": -8, "z": 40}, {"n": "bloemstruik", "x": -9, "z": 79}]})
 	# The laundry was "heel kaal" — a cupboard and a tub (owner, 2026-09-17).
 	# It is furnished with `art/decor_wasserij.gd` now, and every piece stands
 	# where the `was` game does NOT draw (games-b.md §4.4): its crates fill the
@@ -663,8 +741,14 @@ func _bouw_kamers() -> void:
 	# the kitchen door's button), the left wall in front of the crates (the
 	# drying rack) and the front-right corner (the tub with its basket).
 	# The tub stays at (80, 74): the game's entry button hangs on it.
+	# An aqua bath mat lies under the laundry pile (owner, 2026-09-23): the
+	# laundry and the kitchen both have tiles, and the kitchen's door into the
+	# laundry should show a different room, not more kitchen (`kijk`).
 	_kamer({"id": "wasserij", "naam": "Wasserij", "icoon": "🧺", "w": 100, "d": 90,
 		"wand": 52, "vloer": "tegel", "loop": 1.25,
+		"matten": {"x0": 40, "x1": 80, "z0": 36, "z1": 68,
+			"kl": [Color("#C9E7EC"), Color("#BCDFE6")]},
+		"kijk": Vector2(60, 52),
 		"deuren": [{"naar": "keuken", "wand": "z", "at": 62, "breed": 12}],
 		"decor": [
 			{"n": "wasmachine", "x": 14, "z": 7}, {"n": "wasmachine", "x": 30, "z": 7},
@@ -710,6 +794,9 @@ func _kamer(o: Dictionary) -> void:
 	r.hek_z = int(o.get("hek_z", HEK_Z))
 	r.matten = o.get("matten", {})
 	r.bad = o.get("bad", {})
+	r.gevel = o.get("gevel", {})
+	r.uitzicht = o.get("uitzicht", [])
+	r.kijk = o.get("kijk", Vector2(-1.0, -1.0))
 	r.balie = o.get("balie", {})
 	r.vrij_z0 = int(o.get("vrij_z0", 0))
 	r.dek = o.get("dek", {})
@@ -755,18 +842,30 @@ func _bouw_zwembad(r: Kamer) -> void:
 		r.decor.append({"n": "pol%d" % (i % 5), "x": px, "z": pz, "pol": true})
 
 ## world.md §1.3 — the fence and the 30 grass tufts, deterministic, once.
+##
+## The left side is the hotel's back wall (owner, 2026-09-23), so where the
+## garden has a `gevel` on x = 0 there is no side fence, and the back fence
+## starts one post earlier, at the wall's corner.  The tufts keep clear of
+## every piece of fixed decor that stands on the lawn — the big props, the
+## doormat, the pool things behind the fence — read from the decor list, so a
+## prop that moves takes its clear patch with it.
 func _bouw_tuin(r: Kamer) -> void:
-	var z := HEK_Z
-	while z <= 130:
-		if z < 34 or z > 46:
-			r.decor.append({"n": "hekz", "x": HEK_X, "z": z, "hek": true})
-		z += 14
-	var x := 24
+	var gevel_x := str(r.gevel.get("wand", "")) == "x"
+	if not gevel_x:
+		var z := HEK_Z
+		while z <= 130:
+			if z < 34 or z > 46:
+				r.decor.append({"n": "hekz", "x": HEK_X, "z": z, "hek": true})
+			z += 14
+	var x := HEK_X if gevel_x else 24
 	while x <= 130:
 		if x < 38 or x > 50:
 			r.decor.append({"n": "hekx", "x": x, "z": HEK_Z, "hek": true})
 		x += 14
-	var groot := [[16, 68], [67, 19], [32, 94], [120, 76], [95, 23]]
+	var groot: Array = []
+	for stuk in r.decor:
+		if not stuk.get("ver", false) and not stuk.get("hek", false):
+			groot.append([float(stuk["x"]), float(stuk["z"])])
 	var rnd := Sommen.Prng.new(TUFT_ZAAD)
 	for i in 30:
 		var u := JsGetal.rond(rnd.volgende() * 300.0 - 150.0)

@@ -17,12 +17,12 @@ Pivot van het Kwispelsteeg-diorama naar een Habbo-achtig dierenhotel waarin de r
 | `kamer1` | Kamer 1 🛏️ | 114 × 114 | 58 | gang | twee bedden, een voerbakje en een speelmand: hier slapen en eten de gasten. |
 | `kamer2` | Kamer 2 🛏️ | 114 × 114 | 58 | gang | dezelfde inrichting als kamer 1, tweede slaapkamer (en de uitwijkkamer van "bedden op rij"). |
 | `keuken` | Keuken 🍪 | 120 × 114 | 56 | gang, tuin, wasserij | voerkast, koekjeszak en de voerkar: hier wordt het eten verdeeld. |
-| `tuin` | Tuin 🌳 | 130 × 130 | — (erf, vast kader) | keuken, zwembad | het erf van de Kwispelsteeg: tobbe, hok, boom, bal, kist, plus twee vrijgehouden vloerzones. |
+| `tuin` | Tuin 🌳 | 130 × 130 | — (erf, vast kader) | keuken, zwembad | het gazon áchter het hotel: links de achtergevel met de keukendeur (luifel, deurmat, keukenraam), achter het hek het zwembad met parasol en trapje, verder tobbe, hok, boom, bal, kist, plus twee vrijgehouden vloerzones. |
 | `zwembad` | Zwembad 🏊 | 144 × 88 | 50 | tuin | een langwerpig bad ín de vloer tegen de achterwand, met een dek ervóór: de zwemles (G1). |
 | `wasserij` | Wasserij 🧺 | 100 × 90 | 52 | keuken | wasrek en wastobbe, vrije wand voor de kratten: de wasmandtoren (G4). |
 | `speelzaal` | Speelzaal 🧸 | 114 × 100 | 56 | receptie | klimrek, ballenbak, blokkentoren, kussenhoek en muziekdoos om een lichtblauwe mat: de dansvloer is vrijgehouden zone. |
 
-De deurgraaf is één samenhangend geheel (`Rooms.pad`); de tuin heeft geen wanden, dus haar twee doorgangen zijn gaten in het hek in plaats van deurgaten.
+De deurgraaf is één samenhangend geheel (`Rooms.pad`). **Elke overgang laat zien waar hij heen gaat** (eigenaar, 2026-09-23): door elke deur zie je de vloer van de kamer erachter (de roze loper van de gang, de tegels en de abrikozen loper van de keuken, het gras van de tuin), de keuken en de tuin hebben aan beide kanten een echte deur (in de keuken in de hoek na de koelkast, in de tuin in de achtergevel van het hotel), en de enige poort is die tussen tuin en zwembad: vanuit de tuin een witte zwembadpoort met reddingsboei en het water erachter, vanuit het zwembad een rozenboog met de tuinboom erachter.
 
 **Nieuwe ruimtes (golf 3, ticket P1a).** Het zwembad hangt aan de tuin via een opening in het achterhek. Het bad staat als data op de ruimte (`Rooms.get('zwembad').bad` = x 18..134, z 12..44), zodat een spel er een baan van L meter lineair op afbeeldt; de twee wachtplekken staan er ook (`.dek.start` en `.dek.over`). De dieren dwalen alleen op het dek vóór het water — de dwaalplekken, de deur en beide dek-plekken liggen in dezelfde convexe strook, dus geen enkele wandeling kruist het bad. De wasserij ligt naast de keuken en is de kamer van de wasmandtoren (G4). De tuin houdt twee kale vloerzones vrij (`Rooms.get('tuin').zones`): `hinkel` langs de achterrand vóór het hok (76 × 16, voor de stapstenen van G3) en `kraam` langs de rechterzijrand (22 × 32, voor de souvenirkraam van G5).
 

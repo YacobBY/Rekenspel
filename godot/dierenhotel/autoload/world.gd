@@ -447,10 +447,11 @@ func vlak_van(model: String, x: float, z: float, y: float, params: Dictionary = 
 ##
 ## A door is not a model: `scenes/vloer.gd` cuts the hole out of the wall, so
 ## its rectangle is that hole projected — the door point plus the opening's own
-## width and the `min(wand − 6, 26)` height the wall drawing uses.  Without it a
+## width and the height the wall drawing uses (`Rooms.deur_hoog`).  Without it a
 ## door button had nothing to stay off and `Hits.dekking()` proved nothing for
-## it.  A garden gate cuts no hole; its frame is measured the same way, which is
-## what the gate model fills.
+## it.  A garden gate cuts no hole: its rectangle is the gate model standing in
+## the fence line (`hek_x` / `hek_z`), as tall as that gate — measured on the
+## door line instead, the pool gate's button landed on the gate itself.
 func vlak_van_deur(kamer_id: String, naar: String) -> Rect2:
 	var r := Rooms.get_kamer(kamer_id)
 	if r == null:
@@ -460,9 +461,12 @@ func vlak_van_deur(kamer_id: String, naar: String) -> Rect2:
 			continue
 		var a := float(dr.get("at", 0))
 		var b := a + float(dr.get("breed", 12))
-		var h := float(maxi(6, mini(int(r.wand) - 6, 26)))
+		var h := float(Rooms.deur_hoog(r, dr))
 		var langs_z := str(dr.get("wand", "z")) == "z"
-		var randen: Array = [[a, 0.0], [b, 0.0]] if langs_z else [[0.0, a], [0.0, b]]
+		var lijn := 0.0
+		if bool(dr.get("poort", false)):
+			lijn = float(r.hek_z if langs_z else r.hek_x)
+		var randen: Array = [[a, lijn], [b, lijn]] if langs_z else [[lijn, a], [lijn, b]]
 		var hoeken: Array[Vector2] = []
 		for xz in randen:
 			hoeken.append(mik_punt(float(xz[0]), float(xz[1]), 0.0))

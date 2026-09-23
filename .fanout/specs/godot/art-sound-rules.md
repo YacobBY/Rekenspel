@@ -477,6 +477,26 @@ All models are anchored at `(0,0,0)` on the floor, `y` up. `l×h×d` in voxels;
 that is how `baliez`, `bedz`, `kastz`, `prikbordz` and `sleutelbordz` exist. There is
 no `poortz` yet.
 
+**The passages outdoors** (`art/decor_buiten.gd`, class `ArtDecorBuiten`, owner 2026-09-23:
+"Het zwembad vanuit de tuin gezien is niet duidelijk dat lijkt gewoon op een huis"). Every
+exit should say where it goes before its button does. Own names, merged through
+`ArtDecor._extra()`; the base models above stay frozen (their golden images). The garden's
+old `poort` is no longer placed anywhere; the model stays in the base set.
+
+| model | where | shape |
+|---|---|---|
+| `zwembadpoort` | tuin, in the back fence @ 44,10 | two white posts with blue caps and bar, a blue sign with two white waves, a coral-and-white lifebuoy on the left post; opening 12, 19 wide, 23 tall |
+| `rozenboog` | zwembad, in the side fence @ 4,66 | two wooden posts overgrown with leaves, a leafy arch, roses in pink, white and yellow on the pool side; opening 12, 26 tall |
+| `gevelraam` / `gevelraamz` | tuin, on the hotel's back wall | a kitchen window seen from outside: white frame and cross, warm light `#FFEFC6`, half curtains, sill and a terracotta flower box with five flowers; 17 × 19 |
+| `luifel` / `luifelz` | tuin, over the kitchen door | coral-and-white striped awning, 16 wide, 6 deep, scalloped edge |
+| `deurmat` / `deurmatz` | before the kitchen's back door, both sides | coir mat 12 × 7 with a darker border and a paw print |
+| `parasol` | tuin, on the pool deck behind the fence | coral-and-white canopy on a white pole, 17 across, 21 tall |
+| `zwembadtrap` | tuin, at the water behind the gate | the two bent handrails of a pool ladder, 7 × 9 |
+| `bloemstruik` | zwembad, the garden beyond the fence | a green mound with pink, yellow, white and lilac flowers, 9 × 7 (the reception's desk flowers are `bloemen`) |
+
+The doors themselves are not models: `scenes/vloer.gd` draws every opening with a view of
+the room behind it, and the kitchen's back door with its open leaf — see world.md §1.4.
+
 The grass tufts of the garden are laid out by a seeded PRNG (`prng(90210)`, 30
 attempts) that keeps 22 voxels' Manhattan distance from the five large props and
 4 voxels' margin from the reserved zones (`hinkel`, `kraam`). **Reproduce the PRNG

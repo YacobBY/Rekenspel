@@ -164,8 +164,12 @@ func test_aanmelding_en_ontgrendeling() -> void:
 	gelijk(hs.get("icoon", ""), "🪨", "met het steentje")
 	gelijk(hs.get("label", ""), "Hinkelen", "en het woord Hinkelen")
 	gelijk(hs.get("hoog", 0), 6, "hoogte 6")
-	gelijk(hs.get("dx", 0), -40, "dx schuift naar de eerste steen")
-	gelijk(hs.get("dz", 0), 22, "dz naar de stenenrij")
+	# dx/dz slide the button from the hok onto the first stone (27, 41); the
+	# hok itself moved to the far corner of the garden (owner, 2026-09-23),
+	# so the shift is measured from wherever it stands
+	var hok := World.mik("hok", "tuin")
+	gelijk(float(hok.get("x", 0)) + float(hs.get("dx", 0)), 27.0, "dx schuift naar de eerste steen")
+	gelijk(float(hok.get("z", 0)) + float(hs.get("dz", 0)), 41.0, "dz naar de stenenrij")
 	var slot: Callable = def["unlock"]
 	waar(not slot.call(0, 3), "zonder gast is er niets te hinkelen")
 	waar(slot.call(1, 3), "vanaf één gast wel")

@@ -43,7 +43,7 @@ const POL_AANTAL := 5
 ## every name, base set first.
 static func _extra() -> Array:
 	return [ArtDecorKeuken, ArtDecorWasserij, ArtDecorSlaapkamer, ArtDecorHotel,
-		ArtDecorSpeelzaal]
+		ArtDecorSpeelzaal, ArtDecorBuiten]
 
 static func alle_namen() -> Array[String]:
 	var uit: Array[String] = []
