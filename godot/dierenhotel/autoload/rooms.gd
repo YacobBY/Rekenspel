@@ -791,17 +791,20 @@ func _bouw_kamers() -> void:
 	#   * the doghouse stands in the back corner against the hotel, where it
 	#     also closes the gap between the wall and the fence, and the hopscotch
 	#     path starts in front of it; the tree moved to the front left.  Neither
-	#     stands in front of an exit any more.  (For a while the doghouse stood
-	#     in the far right corner — but the souvenir stall, which stays standing
-	#     now, would hide it there.)
+	#     stands in front of an exit any more.
+	# OWNER, 2026-09-24: "De kraam in de tuin voelt nu dubbelop die kan verwerkt
+	# worden in de winkels".  The souvenir stall and its reserved zone along the
+	# right edge (x 104..126, z 36..68) are gone: the stall is one of the shops
+	# in the arcade now (`winkels`, `souvenirkraamz`).  The lawn there is plain
+	# grass again — its tufts grow back and guests may wander there; the ball
+	# stays, it is the garden's own.
 	_kamer({"id": "tuin", "naam": "Tuin", "icoon": "🌳", "w": 130, "d": 130,
 		"wand": 0, "vloer": "gras", "loop": 1.0, "erf": true,
 		"hek_x": 0,
 		"vast_kader": [-170, 190, -70, 220],
 		"gevel": {"wand": "x", "hoog": 34, "stoep": 8},
 		"uitzicht": [{"soort": "bad", "x0": 24, "x1": 124, "z0": -36, "z1": -4}],
-		"zones": {"hinkel": {"x0": 24, "x1": 100, "z0": 34, "z1": 50},
-			"kraam": {"x0": 104, "x1": 126, "z0": 36, "z1": 68}},
+		"zones": {"hinkel": {"x0": 24, "x1": 100, "z0": 34, "z1": 50}},
 		# R3: the glass door of the kas sits in the hotel's back wall where the
 		# kitchen window hung — the only stretch of the facade in view that is
 		# not the kitchen door, its open leaf or the doghouse (z ≤ 85 is in
@@ -936,32 +939,57 @@ func _bouw_kamers() -> void:
 	# in het hotel met kraampjes en een luxe winkel waarin veel gerekend moet
 	# worden ... Maak verschillende winkels met verschillende items zoals hoeden
 	# sjalen, schoenen etc.").  A covered shopping arcade beside the lobby: a
-	# tiled floor with a warm runner as the street, three market stalls with
+	# tiled floor with a warm runner as the street, four market stalls with
 	# striped awnings along the back wall — hats (pink), scarves (mint), shoes
-	# (blue) — the luxury shop with its gold front and a glass display counter
+	# (blue), souvenirs (yellow, see below) — the luxury shop with its gold
+	# front and a glass display counter
 	# along the left wall, and the fitting room's big mirror by the front.
-	# Every shop is a game (`games/hoeden`, `sjaals`, `schoenen`, `luxe`,
+	# Every shop is a game (`games/hoeden`, `sjaals`, `schoenen`, `kraam`, `luxe`,
 	# `paskamer`), and `mijd` keeps the floor where their customers stand free
 	# of wandering guests and bought furniture.
+	# 2026-09-24 (owner: "De kraam in de tuin voelt nu dubbelop die kan verwerkt
+	# worden in de winkels"): the SOUVENIR STALL (`games/kraam`) moved in from
+	# the garden and is the FOURTH stall of the row along the back wall, a yellow
+	# awning with a gift on its sign (`souvenirkraam` @ (118, 12)).  To make room
+	# the arcade's door moved from the back wall (x 114..126, where the stall
+	# stands now) to the left wall where the lamp stood (z 24..36): the door
+	# opens onto the runner, so every customer walks ALONG the street to his
+	# stall — before, the walk from the door to the hat and scarf stalls cut
+	# through the shoe stall's counter.  For the same reason the display
+	# counter of the luxury shop stands 14 further out (x 30): the walk from the
+	# door to the mirror passes between it and the shop front.  The lamp stands
+	# beside the new door, in the corner behind the hat stall (at the far end
+	# of the street it hid the souvenir stall), the shopping bags in the front corner
+	# and the plant a little further to the front.  `mijd` keeps free: the four
+	# customers' floor, the luxury customer's, the mirror's, the strip between
+	# the shop front and its counter, and the floor that counter hides from the
+	# door — no wander place is left from which a stroll would cross a stall,
+	# the counter or the plant (`games/kraam/test_kraam.gd`).
 	_kamer({"id": "winkels", "naam": "Winkels", "icoon": "🛍️", "w": 132, "d": 112,
 		"wand": 54, "vloer": "tegel", "loop": 1.5,
 		"matten": [{"x0": 0, "x1": 132, "z0": 28, "z1": 42,
 			"kl": [Color("#E9C2B4"), Color("#E2B5A6")]}],
 		"kijk": Vector2(96, 34),
-		"mijd": [{"x0": 8, "x1": 100, "z0": 22, "z1": 36},
-			{"x0": 20, "x1": 40, "z0": 50, "z1": 74},
+		"mijd": [{"x0": 8, "x1": 126, "z0": 22, "z1": 36},
+			{"x0": 34, "x1": 58, "z0": 50, "z1": 74},
+			{"x0": 0, "x1": 24, "z0": 38, "z1": 84},
+			{"x0": 26, "x1": 76, "z0": 76, "z1": 104},
 			{"x0": 8, "x1": 26, "z0": 84, "z1": 102}],
-		"deuren": [{"naar": "receptie", "wand": "z", "at": 114, "breed": 12}],
+		# where the souvenir stall's customer stands, and where a guest with the
+		# 🎁 wish waits for it (`Hotel.plek_van_behoefte`)
+		"zones": {"kraam": {"x0": 112, "x1": 124, "z0": 28, "z1": 40}},
+		"deuren": [{"naar": "receptie", "wand": "x", "at": 24, "breed": 12}],
 		"decor": [
 			{"n": "hoedenkraam", "x": 22, "z": 12},
 			{"n": "sjaalkraam", "x": 54, "z": 12},
 			{"n": "schoenenkraam", "x": 86, "z": 12},
+			{"n": "souvenirkraam", "x": 118, "z": 12},
 			{"n": "luxepuiz", "x": 1, "z": 62, "ver": true},
-			{"n": "vitrinez", "x": 16, "z": 62},
+			{"n": "vitrinez", "x": 30, "z": 62},
 			{"n": "spiegelz", "x": 1, "z": 94, "ver": true},
-			{"n": "lantaarn", "x": 8, "z": 30},
-			{"n": "tassen", "x": 108, "z": 16},
-			{"n": "plant", "x": 124, "z": 58},
+			{"n": "lantaarn", "x": 4, "z": 18},
+			{"n": "tassen", "x": 122, "z": 102},
+			{"n": "plant", "x": 124, "z": 76},
 			{"n": "bloembak", "x": 90, "z": 104}]})
 	_bouw_tuin(_kamers["tuin"])
 	_bouw_zwembad(_kamers["zwembad"])

@@ -1,6 +1,7 @@
 extends Proef
-## De winkels van de Winkelstraat (games-d.md §4), headless: de drie kraampjes
-## (hoeden, sjaals, schoenen), de luxe winkel en de paskamer.
+## De winkels van de Winkelstraat (games-d.md §4), headless: de vier kraampjes
+## (hoeden, sjaals, schoenen en de souvenirkraam `kraam`), de luxe winkel en de
+## paskamer.  De souvenirkraam heeft daarnaast zijn eigen `games/kraam/test_kraam.gd`.
 ##
 ## Driven the way a child drives it: a choice is a `pressed` on a button of the
 ## real strip under the card.  Only the pure turn logic in `beurt.gd` is called
@@ -11,7 +12,7 @@ const KAART := "wk_kaart"
 const STROOK := "wk_kaart_keuzes"
 const WEG := "wk_weg"
 const PK := "pk_kaart_keuzes"
-const WINKELS := ["hoeden", "sjaals", "schoenen", "luxe"]
+const WINKELS := ["hoeden", "sjaals", "schoenen", "luxe", "kraam"]
 const Beurt := preload("res://games/_winkel/beurt.gd")
 
 const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740),
@@ -165,11 +166,11 @@ func _fout_keuze(spel: String) -> String:
 
 # -------------------------------------------------------------- aanmelding
 
-## The scan finds the five games of the arcade; each hangs on its own stall, the
+## The scan finds the six games of the arcade; each hangs on its own stall, the
 ## luxury shop's front or the mirror, all in the arcade.
 func test_aanmelding() -> void:
 	var dingen := {"hoeden": "hoedenkraam", "sjaals": "sjaalkraam", "schoenen": "schoenenkraam",
-		"luxe": "luxepuiz", "paskamer": "spiegelz"}
+		"luxe": "luxepuiz", "paskamer": "spiegelz", "kraam": "souvenirkraam"}
 	var r := Rooms.get_kamer(KAMER)
 	waar(r != null, "de winkelstraat bestaat")
 	for id in dingen:
@@ -192,7 +193,7 @@ func test_aanmelding() -> void:
 		var p = Art.plaat("waar_" + str(naam), 3)
 		waar(p != null and p.w > 0, "waar_%s bakt" % naam)
 	for model in ["hoedenkraam", "sjaalkraam", "schoenenkraam", "luxepuiz", "vitrinez",
-			"spiegelz", "lantaarn", "winkelbord", "cadeaudoos"]:
+			"spiegelz", "lantaarn", "winkelbord", "cadeaudoos", "souvenirkraam"]:
 		var p = Art.plaat(model, 3)
 		waar(p != null and p.w > 0 and p.h > 0, "%s bakt" % model)
 	# kan: a shop has something to do as soon as somebody sleeps here; the
@@ -494,9 +495,9 @@ func test_de_knoppen_op_vier_schermen() -> void:
 		for _f in 4:
 			await boom.process_frame
 		# every shop has its button on its own thing in the arcade
-		for id in ["hoeden", "sjaals", "schoenen", "luxe"]:
+		for id in ["hoeden", "sjaals", "schoenen", "luxe", "kraam"]:
 			waar(Hits.spot("spel_" + id) != null, "%s: de knop van %s staat er" % [str(maat), id])
-		for winkel in ["hoeden", "luxe"]:
+		for winkel in ["hoeden", "luxe", "kraam"]:
 			waar(Games.start(winkel), "%s: %s start" % [str(maat), winkel])
 			for _f in 4:
 				await boom.process_frame

@@ -267,11 +267,14 @@ func plek_van_behoefte(g: Dictionary) -> Dictionary:
 	if b == "zwemmen":
 		return _zwem_plek(kamer)
 	if b == "souvenir":
-		var tu = Rooms.get_kamer("tuin")
-		if tu != null and "zones" in tu and (tu.zones as Dictionary).has("kraam"):
-			var p := _voor_rand("tuin", tu.zones["kraam"], 8)
-			if not p.is_empty():
-				return p
+		# the souvenir stall is in the arcade since 2026-09-24 (it stood in the
+		# garden): the guest waits at its counter, in the zone `kraam`
+		var wk = Rooms.get_kamer("winkels")
+		if wk != null and (wk.zones as Dictionary).has("kraam"):
+			var z: Dictionary = wk.zones["kraam"]
+			return {"kamer": "winkels",
+				"x": JsGetal.rond((float(z["x0"]) + float(z["x1"])) / 2.0),
+				"z": JsGetal.rond((float(z["z0"]) + float(z["z1"])) / 2.0)}
 		return _tuin_plek(106, 58)
 	return {}
 
@@ -295,7 +298,7 @@ func _zwem_plek(van_kamer: String) -> Dictionary:
 
 ## A quiet spot in the garden.  `Rooms.vrij_vak` only says whether a cell is
 ## free, so an occupied one is nudged to the nearest free wander place — the
-## fallback for 🏊 and 🎁 as long as the pool and the stall are not there yet.
+## fallback for 🏊 and 🎁 as long as the pool and the arcade are not there.
 func _tuin_plek(x: int, z: int) -> Dictionary:
 	if Rooms.vrij_vak("tuin", x, z):
 		return {"kamer": "tuin", "x": x, "z": z}
@@ -312,27 +315,6 @@ func _tuin_plek(x: int, z: int) -> Dictionary:
 			beste_af = af
 			beste = Vector2(cel["x"], cel["z"])
 	return {"kamer": "tuin", "x": JsGetal.rond(beste.x), "z": JsGetal.rond(beste.y)}
-
-## The point IN FRONT OF a rectangle: the middle of the side that faces the
-## middle of the room, a few voxels off it.
-func _voor_rand(kamer_id: String, rc: Dictionary, af: int = 8) -> Dictionary:
-	var r = Rooms.get_kamer(kamer_id)
-	if r == null or rc.is_empty() or not rc.has("x0") or not rc.has("z0"):
-		return {}
-	var cx := (float(rc["x0"]) + float(rc["x1"])) / 2.0
-	var cz := (float(rc["z0"]) + float(rc["z1"])) / 2.0
-	var dx := minf(float(rc["x0"]), r.w - float(rc["x1"]))
-	var dz := minf(float(rc["z0"]), r.d - float(rc["z1"]))
-	var px := 0.0
-	var pz := 0.0
-	if dx <= dz:
-		px = float(rc["x1"]) + af if float(rc["x0"]) <= r.w / 2.0 else float(rc["x0"]) - af
-		pz = cz
-	else:
-		px = cx
-		pz = float(rc["z1"]) + af if float(rc["z0"]) <= r.d / 2.0 else float(rc["z0"]) - af
-	return {"kamer": kamer_id, "x": JsGetal.rond(clampf(px, 4.0, r.w - 4.0)),
-			"z": JsGetal.rond(clampf(pz, 4.0, r.d - 4.0))}
 
 ## The animal walks there itself and waits patiently — nothing decays.
 func stuur_naar_behoefte(g: Dictionary) -> void:

@@ -1,9 +1,10 @@
 class_name WinkelSpel
 extends MiniGame
 ## De winkels van de Winkelstraat (games-d.md §4) — the shared game of the
-## three market stalls and the luxury shop.  Each shop is its own game
-## (`games/hoeden`, `sjaals`, `schoenen`, `luxe`) that only says WHICH shop it
-## is (`winkel()`); the turn lives here.
+## market stalls and the luxury shop.  Each shop is its own game
+## (`games/hoeden`, `sjaals`, `schoenen`, `luxe`, and the souvenir stall
+## `kraam` that moved in from the garden) that only says WHICH shop it is
+## (`winkel()`); the turn lives here.
 ##
 ## A turn: the animal of the turn walks up to the counter.  The goods stand on
 ## the counter, each with its price on it, and the child picks what the animal
@@ -63,6 +64,9 @@ var _t0 := 0
 ##   klant                         where the customer stands
 ##   buiten                        where he walks to when he is sent out
 ##   doos                          (luxe) where the gift box stands
+##   wens                          (kraam) the guest wish this shop fulfils
+##                                 ("souvenir"): who has it shops first, and
+##                                 buying it fulfils the wish
 func winkel() -> Dictionary:
 	return {}
 
@@ -88,7 +92,7 @@ func definitie() -> Dictionary:
 		var p: Vector2 = Vector2(float(w.get("x", 0.0)), float(w.get("z", 0.0))) + (plekken[i] as Vector2)
 		rust.append({"id": "rust_%s_%d" % [str(w.get("id", "")), i],
 			"model": "waar_" + str(namen[i]), "x": p.x, "z": p.y, "y": float(w.get("top", 10.0))})
-	return {
+	var def := {
 		"naam": str(w.get("naam", name)),
 		"kamer": KAMER,
 		"stub": false,
@@ -98,6 +102,9 @@ func definitie() -> Dictionary:
 		"unlock": func(n: int, _band: int) -> bool: return n >= 1,
 		"kan": kan,
 	}
+	if not str(w.get("wens", "")).is_empty():
+		def["wens"] = str(w["wens"])
+	return def
 
 # ------------------------------------------------------------ start / stop
 
@@ -154,17 +161,36 @@ func stop() -> void:
 	_kaart_stap = ""
 
 ## Who shops: everyone with a bed.  Nobody yet: the game says so and closes.
+## A shop that fulfils a wish (`winkel().wens`, the souvenir stall) asks the
+## guests who have that wish first — the friendly fallback the garden stall
+## had: nobody wishes for it, then everyone with a bed.
 func _kandidaten() -> Array:
+	var alle := _met_bed()
+	var wens := _wens()
+	if wens.is_empty():
+		return alle
+	var met: Array = []
+	for g in alle:
+		if str(g.get("behoefte", "")) == wens and not bool(g.get("blij", false)):
+			met.append(g)
+	return met if not met.is_empty() else alle
+
+func _met_bed() -> Array:
 	var uit: Array = []
 	for g in ctx.state.s["gasten"]:
 		if not str(g.get("bed", "")).is_empty():
 			uit.append(g)
 	return uit
 
-## Who may shop when the child picks the animal (the game bar, world.md §5.8).
+## The wish this shop fulfils, or "".
+func _wens() -> String:
+	return str(_w("wens", ""))
+
+## Who may shop when the child picks the animal (the game bar, world.md §5.8):
+## everyone with a bed, with the wish or without (he then buys without one).
 func spelers() -> Array:
 	var uit: Array = []
-	for g in _kandidaten():
+	for g in _met_bed():
 		uit.append(str(g.get("id", "")))
 	return uit
 
@@ -177,21 +203,38 @@ func _meld_leeg() -> void:
 	ctx.ui.wolk_weg("wk_leeg")
 	ctx.sluit()
 
+## `wens` = 1 when this animal came for the shop's wish (`winkel().wens`), so
+## that buying fulfils it (the garden stall kept the same field).
 func _nieuwe_stand(g: Dictionary, n: int, band: int, dag: int) -> Dictionary:
+	var wens := _wens()
+	var wil: bool = not wens.is_empty() and str(g.get("behoefte", "")) == wens \
+		and not bool(g.get("blij", false))
 	return {"gast": str(g.get("id", "")), "dag": dag, "N": n, "band": band,
 		"stap": "kies", "waar": "", "plek": 0, "pog": 0, "missers": 0, "weg": 0, "ster": 0,
-		"keer": 0}
+		"keer": 0, "wens": 1 if wil else 0}
 
-## A turn that came through the save is JSON: every number a float.
-static func _normaliseer(st: Dictionary) -> Dictionary:
-	for k in ["dag", "N", "band", "pog", "missers", "weg", "ster", "keer", "plek"]:
-		st[k] = int(st.get(k, 0))
-	st["gast"] = str(st.get("gast", ""))
-	st["waar"] = str(st.get("waar", ""))
-	var stap := str(st.get("stap", "kies"))
+const GETALLEN := ["dag", "N", "band", "pog", "missers", "weg", "ster", "keer", "plek", "wens"]
+
+## A turn that came through the save is JSON: every number a float.  Only the
+## fields of a shop turn are kept: a turn of the old garden stall (games-b.md
+## §5 — coins on the counter: `gelegd`, `hand`, `zeg`, step `som` or `leg`)
+## in the souvenir stall's drawer becomes a fresh choice for the same animal,
+## with its wish (`wens`) but without the old stall's misses.
+static func _normaliseer(oud: Dictionary) -> Dictionary:
+	var st := {}
+	for k in GETALLEN:
+		st[k] = int(oud.get(k, 0))
+	st["gast"] = str(oud.get("gast", ""))
+	st["waar"] = str(oud.get("waar", ""))
+	var stap := str(oud.get("stap", "kies"))
 	st["stap"] = stap if stap in ["kies", "som", "half", "betaal", "terug", "af"] else "kies"
-	if st["stap"] != "kies" and not ArtGasten.KLEDING.has(st["waar"]):
+	if not st["stap"] in ["kies", "af"] and not ArtGasten.KLEDING.has(st["waar"]):
 		st["stap"] = "kies"
+	if st["stap"] == "kies" and stap != "kies":
+		# a step this shop cannot resume: a new choice, nothing counted yet
+		for k in ["pog", "missers", "weg", "keer", "plek"]:
+			st[k] = 0
+		st["waar"] = ""
 	return st
 
 func _stap() -> String:
@@ -507,6 +550,11 @@ func _klaar() -> void:
 	if int(S["ster"]) == 0:
 		S["ster"] = 1
 		ctx.taak_klaar(str(_w("id", "")), {"sterren": 1})
+	# first the task (that is also the star), THEN the wish: `wens_af` redraws
+	# the notice board straight away
+	if int(S.get("wens", 0)) == 1 and not _wens().is_empty() and not _gast().is_empty():
+		S["wens"] = 0
+		ctx.wereld.behoefte_klaar(id, _wens())
 	ctx.snd.tover()
 	ctx.snd.hoera()
 	_bewaar()

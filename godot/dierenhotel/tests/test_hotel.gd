@@ -259,7 +259,7 @@ func test_morgen_zonder_bed_wil_een_kamer() -> void:
 func test_nieuwe_wensen_dag_3_5_7() -> void:
 	_voor()
 	_meld("zwembad", {"naam": "Zwembad", "kamer": "zwembad", "wens": "zwemmen"})
-	_meld("kraam", {"naam": "Souvenirkraam", "kamer": "tuin", "wens": ["souvenir"]})
+	_meld("kraam", {"naam": "Souvenirkraam", "kamer": "winkels", "wens": ["souvenir"]})
 	var gasten := _gasten(3)
 	waar(Hotel.wens_mogelijk("zwemmen"), "zwemmen kan")
 	waar(Hotel.wens_mogelijk("souvenir"), "souvenir kan")

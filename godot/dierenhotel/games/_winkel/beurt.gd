@@ -13,8 +13,8 @@ extends RefCounted
 ## groot ze mogen zijn.  Hele euro's overal: geen kommageld (IDEAS.md), en echte
 ## munten en briefjes (€1, €2, €5, €10, €20, €50, €100).
 ##
-##   kraampjes (hoeden, sjaals)  één ding kiezen, dan
-##       groep 3: precies betalen tot €9 · groep 4: precies betalen tot €19 ·
+##   kraampjes (hoeden, sjaals, en de souvenirkraam `kraam`)  één ding kiezen,
+##       dan groep 3: precies betalen tot €9 · groep 4: precies betalen tot €19 ·
 ##       groep 5: betalen met €50, hoeveel terug?
 ##   schoenen   per schoentje, één per poot (4, de gans 2), dan
 ##       "hoeveel kosten 4 gympjes?" (groep 3 verdubbelen tot 8, groep 4 de
@@ -27,7 +27,7 @@ extends RefCounted
 ## winkel uit (eigenaar, 2026-09-24; `WinkelSpel._weggestuurd`).
 
 const ZAAD := 72421
-const WINKEL_NR := {"hoeden": 1, "sjaals": 2, "schoenen": 3, "luxe": 4}
+const WINKEL_NR := {"hoeden": 1, "sjaals": 2, "schoenen": 3, "luxe": 4, "kraam": 5}
 
 ## Wat elke winkel verkoopt, van goedkoop naar duur (k = 1, 2, 3, 4).
 const WAREN := {
@@ -35,6 +35,10 @@ const WAREN := {
 	"sjaals": ["das", "sjaaltje", "streepsjaal"],
 	"schoenen": ["sokjes", "gympjes", "laarsjes"],
 	"luxe": ["zonnebril", "slofjes", "parels", "kroon"],
+	# the souvenirs of the old garden stall (games-b.md §5, moved into the
+	# arcade on 2026-09-24): the same three pieces, so what an animal bought
+	# there is still the thing on the counter here
+	"kraam": ["sjaaltje", "hoedje", "bal"],
 }
 
 ## Munten en briefjes per groep, groot naar klein.

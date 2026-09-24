@@ -152,8 +152,7 @@ func definitie() -> Dictionary:
 	# The stones stay on the path while no turn runs (owner, 2026-09-23: "Dan
 	# hangt elk spel aan iets wat je echt ziet"): band 3's eleven plain stones —
 	# the big ones on 0, 5 and 10 — with no plates.  No staircase: it stands on
-	# the target of a turn, and at the end of the path the souvenir stall would
-	# hide it.  A turn replaces them by its own.
+	# the target of a turn.  A turn replaces them by its own.
 	var rust: Array = []
 	for i in int(m["stenen"]):
 		rust.append({"id": "rust_hk_steen%d" % i, "model": "hinkel_steen",
@@ -624,14 +623,10 @@ func _gras_plekken() -> Array:
 	if r == null:
 		return []
 	var z := _zone()
-	var kr: Dictionary = r.zones.get("kraam", {})
 	var uit: Array = []
 	for v in r.vrij:
 		if float(v["z"]) < float(z["z1"]) + 10.0:
 			continue                    # still too close to the path
-		if not kr.is_empty() and float(v["x"]) > float(kr["x0"]) - 8.0 \
-				and float(v["z"]) < float(kr["z1"]) + 8.0:
-			continue                    # and not at the souvenir stall
 		uit.append(v)
 	uit.sort_custom(func(a, b) -> bool:
 		return (float(a["x"]) - float(a["z"])) < (float(b["x"]) - float(b["z"])))

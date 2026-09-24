@@ -172,7 +172,7 @@ movable **dingen**: `balielamp` (receptie 15, 105, y 14) and `kar` (keuken 48, 6
 | kamer1 | `plant` @ 107,8 (was 102,12: it hid the door's corner) · `mand` @ 93,99 |
 | kamer2 | `plant` @ 12,99 · `mand` @ 93,99 |
 | keuken | `kast` @ 33,6 · `zak` @ 66,18 · `kar` @ 48,66 (→ ding `kar`) · `plant` @ 108,93 |
-| tuin | the lawn behind the hotel (owner 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk dat lijkt gewoon op een huis"): `gevel` `{wand: x, hoog: 34, stoep: 8}` — the hotel's back wall with the kitchen door and (R3) the kas's glass door with its glass canopy `kasluifelz` @ 1,68 y27 `ver` and a potted plant `kaspot` @ 4,58 (the kitchen window `gevelraamz` @ 1,70 made way for it: z ≤ 85 is all the facade in view), `luifelz` @ 1,40 y27 `ver`, `deurmatz` @ 5,40 · behind the back fence the pool (`uitzicht`, below) with `zwembadtrap` @ 31,−3 and `parasol` @ 66,0, seen through `zwembadpoort` @ 44,10 · `boom` @ 22,126 · `hok` @ 22,22 (the back corner against the hotel, where it also closes the gap between wall and fence; the hopscotch path starts in front of it) · `tobbe` @ 32,94 · `bal` @ 120,76 · `kist` @ 12,84 · plus the generated back fence and grass tufts (below), and the resting props of `hinkel` and `kraam` (§5.1) |
+| tuin | the lawn behind the hotel (owner 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk dat lijkt gewoon op een huis"): `gevel` `{wand: x, hoog: 34, stoep: 8}` — the hotel's back wall with the kitchen door and (R3) the kas's glass door with its glass canopy `kasluifelz` @ 1,68 y27 `ver` and a potted plant `kaspot` @ 4,58 (the kitchen window `gevelraamz` @ 1,70 made way for it: z ≤ 85 is all the facade in view), `luifelz` @ 1,40 y27 `ver`, `deurmatz` @ 5,40 · behind the back fence the pool (`uitzicht`, below) with `zwembadtrap` @ 31,−3 and `parasol` @ 66,0, seen through `zwembadpoort` @ 44,10 · `boom` @ 22,126 · `hok` @ 22,22 (the back corner against the hotel, where it also closes the gap between wall and fence; the hopscotch path starts in front of it) · `tobbe` @ 32,94 · `bal` @ 120,76 (the garden's own ball; the souvenir stall that stood behind it moved into the arcade on 2026-09-24, games-d.md §3) · `kist` @ 12,84 · plus the generated back fence and grass tufts (below), and the resting props of `hinkel` and `kraam` (§5.1) |
 | zwembad | `plant` @ 136,80 · `rozenboog` @ 4,66 (the gate back to the garden, 2026-09-23) with the garden beyond it: `boom` @ −22,46, `bloemstruik` @ −8,40 and −9,79 · one big `startblok` @ 14,28 (owner 2026-09-17: "Maak het startblok groter en doe 1 ipv 3"; the old `mat` entry plank is gone — "haal de oude houten plank weg") · plus the generated fence (along the back long side only, 2026-09-23) and grass tufts |
 | wasserij | `kast` @ 28,6 · `tobbe` @ 80,74 |
 | kas | (R3, games-c.md §1.4, `art/decor_kas.gd`) `zonnebloem` @ 6,6 · `moesbak` @ 28,10 `groei 3` and @ 86,10 `groei 2` · `potkast` @ 118,5 · `hangplant` @ 28,1 y22 `ver` · `hangplantz` @ 1,76 y22 `ver` · `aardbeienbakz` @ 7,38 · `gieter` @ 14,66 · `zaadkist` @ 118,20 · `pompoenen` @ 114,100 · `kruiwagen` @ 22,104 — plus the resting props of `oogst` (the picking table @ 30,38) and `weeg` (the balance @ 90,54 and its row of weights) |
@@ -212,7 +212,9 @@ The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and
   from every piece of fixed decor that stands on the lawn (every decor entry that is neither
   `ver` nor a fence post — so a prop that moves takes its clear patch along; until
   2026-09-23 this was the literal list `[(16,68),(67,19),(32,94),(120,76),(95,23)]`), and it
-  is outside both reserved zones inflated by 4 voxels. Model name is `'pol' + (i % 5)`.
+  is outside every reserved zone inflated by 4 voxels (only `hinkel` since 2026-09-24, when
+  the stall zone `kraam` went: two tufts, (108, 60) and (111, 39), grow where the stall
+  stood). Model name is `'pol' + (i % 5)`.
   The port must reproduce this PRNG bit-for-bit if the garden is to look identical
   (32-bit unsigned arithmetic, `Math.imul`).
 
@@ -221,7 +223,11 @@ The balie is an **L**: two `balie` pieces along x (35 voxels heart-to-heart) and
 | zone | rectangle | size |
 |---|---|---|
 | `hinkel` | x 24..100, z 34..50 | 76 × 16, running towards the doghouse in the far corner (moved there 2026-09-23) |
-| `kraam` | x 104..126, z 36..68 | 22 × 32, along the right edge |
+
+(`kraam`, x 104..126, z 36..68 along the right edge, was the souvenir stall's zone until
+2026-09-24 — owner: "De kraam in de tuin voelt nu dubbelop die kan verwerkt worden in de
+winkels"; the stall is the fourth stall of the arcade now, games-d.md §3.  The arcade has a
+zone `kraam` of its own: the floor in front of that stall, x 112..124, z 28..40.)
 
 **Pool** (`Rooms.get('zwembad')`):
 
@@ -751,7 +757,7 @@ need falls back to its own name and logs one console warning.
 | `bad` | tuin `(tobbe.x − 14, tobbe.z) = (18, 94)` |
 | `spelen` | `(mand.x − 12, mand.z) = (81, 99)` in its own room |
 | `zwemmen` | `zwembad` `dek.start` (12, 56); if the pool does not exist or is unreachable → tuin near (58, 106), snapped to a free cell |
-| `souvenir` | the point in front of the `kraam` zone (`voorRand`, 8 voxels off the side facing the room centre) → tuin (96, 52); fallback tuin near (106, 58) |
+| `souvenir` | **port (2026-09-24):** the middle of the arcade's zone `kraam` — the floor in front of the souvenir stall → winkels (118, 34), where its customer stands; fallback tuin near (106, 58). (Until 2026-09-24: the point in front of the garden's `kraam` zone, `voorRand` → tuin (96, 52).) |
 
 The guest walks there itself (`World.reis(..., na: 'wacht')`) and waits patiently. Nothing
 decays, nobody becomes sad from waiting.
@@ -1256,7 +1262,7 @@ Currently registered games:
 | `wekker` | Wekkerdienst | gang | fixed decor + offset ⏰, resting on `rust_wk_klok` — the corridor clock itself at 7 o'clock | N ≥ 1 | – | `wekker`, prio 3 |
 | `hinkel` | Hinkelpad | tuin | `hok` 🪨 (offset), resting on `rust_hk_steen0` — band 3's eleven plain stones | N ≥ 1 | `spelen` | prio 2 with a waiting guest, else 5 |
 | `was` | Wasmandtoren | wasserij | `tobbe` 🧺 (offset), resting on `rust_was_berg` — the pile at (60, 54) | N ≥ 1 | – | `was`, prio 8 |
-| `kraam` | Souvenirkraam | tuin | `bal` 🎁 (offset), resting on `rust_kr_toonbank` — the stall and its counter | N ≥ 1 | `souvenir` | `souvenir`, prio 1 |
+| `kraam` | Souvenirkraam | winkels (since 2026-09-24; was tuin) | `souvenirkraam` 🎁 Souvenirs — the fourth stall of the arcade, fixed decor, no resting prop (its goods stand on the counter at rest, like the other shops', games-d.md §4) | N ≥ 1 | `souvenir` | `souvenir`, prio 1 |
 | `oogst` | Aardbeien plukken | kas | `aardbeienbakz` 🍓 (offset), resting on `rust_og_tafel` — the picking table with five empty punnets (games-c.md §2) | N ≥ 1 | – | `oogst`, prio 6 |
 | `weeg` | Groenten wegen | kas | `pompoenen` ⚖️ (offset), resting on `rust_wg_schaal` — the level balance and its row of weights (games-c.md §3) | N ≥ 1 | – | `weeg`, prio 7 |
 
@@ -1598,7 +1604,7 @@ The contract a game with an animal of the turn keeps:
 | game | who may take the turn (`spelers()`) | its own choice without a pick | on a switch |
 |---|---|---|---|
 | `sleutels` | every guest with a bed and a room | keys in check-in order | the same board (the core seeds on day, N, band, round) laid out again, first key for the picked animal, the next keys round the list; who waited at the desk goes back to bed (its own `stop()`) |
-| `kraam` | every guest with a bed (also without the 🎁 wish: he buys without one) | the first with the 🎁 wish, else the first with a bed | fresh turn for the picked animal; the previous one `laat_gaan` (off the counter, or back to bed when still on his way) |
+| `kraam` | every guest with a bed (also without the 🎁 wish: he buys without one) | the guests with the 🎁 wish, else everyone with a bed, picked by day and N like every shop (`WinkelSpel`, games-d.md §4) | fresh turn for the picked animal; the previous one `laat_gaan` (off the counter, or back to bed when still on his way) |
 | `hinkel` | every guest with a bed | the wish 🧶 first, then who is in the garden | fresh turn from the start stone; the previous hopper `laat_gaan`, and on the stones he is sent to the grass like every guest who is not playing |
 | `zwembad` | every guest with a bed | §1.1 of games-b (wish, then nearest the start edge, then the first with a bed) | fresh lane from 0 m; the previous swimmer is put on the deck (`stop()`) and `laat_gaan` |
 | `wekker` | every guest who can be woken (sleepers with a bed, else everyone with a bed, else everyone) | the first three of that list | fresh round of at most three starting at the picked animal and going round; nobody is woken |
@@ -1628,7 +1634,7 @@ R1's "within a second" now counts from his arrival.
 | game | his place (`ctx.wacht_op`) | what waits |
 |---|---|---|
 | `sleutels` | the desk (`plek(0.75, 0.85)`, within 6 voxels) | the question, the hooks, the key — for EVERY key: after a hung key the next guest comes forward and the board waits for him |
-| `kraam` | in front of the counter (`P.gast`) | the card, the price tags, the coins, the ✔ |
+| `kraam` | in front of the souvenir stall's counter in the arcade (118, 34) | the card, its strip and the price tags (`WinkelSpel`, games-d.md §4.3) |
 | `hinkel` | his stone (`dierX(s)`, `zDier`, within 2.5 voxels; the card "komt eraan / Tel straks mee" is gone — PLAN N11 overruled) | the card, the strip, the number above his head |
 | `zwembad` | the deck at the start of the lane (`dek.start`; a half-swum lane: the deck `stop()` put him on) | the question and the number on his back; the stair, the dive and the swim are still what the first answer buys |
 | `oogst` | beside the picking table (64, 32) | the counting question |

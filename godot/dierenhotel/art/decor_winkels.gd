@@ -4,8 +4,9 @@ class_name ArtDecorWinkels
 ## De Winkelstraat 🛍 (eigenaar, 2026-09-24: "Maak een level in een winkel level
 ## in het hotel met kraampjes en een luxe winkel ... Maak verschillende winkels
 ## met verschillende items zoals hoeden sjalen, schoenen etc.").  Een overdekte
-## winkelgalerij naast de receptie: drie kraampjes met een gestreepte luifel
-## langs de achterwand (hoeden, sjaals, schoenen), een luxe winkel met een
+## winkelgalerij naast de receptie: vier kraampjes met een gestreepte luifel
+## langs de achterwand (hoeden, sjaals, schoenen en sinds 2026-09-24 de
+## souvenirkraam die uit de tuin kwam), een luxe winkel met een
 ## gouden pui en een glazen vitrine langs de linkerwand, en een paskamer met een
 ## grote spiegel.  Eigen namen en een eigen tabel, aangemeld bij
 ## `ArtDecor._extra()`; zelfde bouwstenen, palet en bakweg als de rest van het
@@ -36,11 +37,13 @@ const POT := ArtDecor.POT
 
 ## Per kraampje een eigen streep in de luifel, zodat een kind ze uit elkaar
 ## houdt zonder te lezen: roze voor de hoeden, mint voor de sjaals, blauw voor
-## de schoenen.
+## de schoenen, geel voor de souvenirs (de kraam die uit de tuin hierheen
+## verhuisde, eigenaar 2026-09-24).
 const STREEP := {"hoeden": Color("#F2A7B8"), "sjaals": Color("#9FD8C4"),
-	"schoenen": Color("#A9CDEE")}
+	"schoenen": Color("#A9CDEE"), "souvenirs": Color("#F5D37A")}
 const STREEP_D := {"hoeden": Color("#E38DA1"), "sjaals": Color("#83C6AE"),
-	"schoenen": Color("#8DB8E0")}
+	"schoenen": Color("#8DB8E0"), "souvenirs": Color("#E6BC55")}
+const CADEAU := Color("#F2A7B8")       ## het cadeautje op het bord van de souvenirkraam
 const LUIFEL_WIT := Color("#FFF7EC")
 const PAARS := Color("#A77DB6")       ## het fluweel van de luxe winkel
 const PAARS_D := Color("#8E66A0")
@@ -57,7 +60,7 @@ const TAS := [Color("#F2A7B8"), Color("#A9CDEE"), Color("#9FD8C4")]
 const KUSSEN := Color("#B98BC4")
 
 const NAMEN: Array[String] = ["hoedenkraam", "sjaalkraam", "schoenenkraam",
-	"luxepui", "luxepuiz", "vitrine", "vitrinez", "spiegel", "spiegelz",
+	"souvenirkraam", "luxepui", "luxepuiz", "vitrine", "vitrinez", "spiegel", "spiegelz",
 	"lantaarn", "winkelbord", "winkelbordz", "tassen", "bloembak", "cadeaudoos",
 	"waar_hoedje", "waar_sjaaltje", "waar_bal", "waar_pet", "waar_strohoed",
 	"waar_strik", "waar_kroon", "waar_streepsjaal", "waar_das", "waar_parels",
@@ -74,6 +77,11 @@ const VITRINE_TOP := 9
 ## achterwand staat: een houten toonbank met een gekleurde band aan de voorkant,
 ## vier palen, een schuine gestreepte luifel met een geschulpte rand, en achterin
 ## een rek met wat het kraampje verkoopt.  De streep en het rek volgen de soort.
+##
+## De souvenirkraam (`souvenirs`, de vierde in de rij, uit de tuin verhuisd)
+## heeft daarnaast een bordje op de luifel: een wit bord in een gouden lijst met
+## een roze cadeautje erop, het 🎁 van de knop — zo zie je zonder te lezen dat
+## hier de souvenirs zijn.  Op de plank het hoedje, het sjaaltje en de bal.
 static func kraam(soort: String) -> Array:
 	var v: Array = []
 	var kl: Color = STREEP.get(soort, STREEP["hoeden"])
@@ -120,6 +128,21 @@ static func kraam(soort: String) -> Array:
 			for p in paren:
 				ArtVorm.bx(v, p[0], p[1], -6, 3, 2, 1, p[2])
 				ArtVorm.bx(v, p[0], p[1], -4, 3, 2, 1, p[2])
+		"souvenirs":
+			ArtVorm.bx(v, -11, 14, -7, 22, 1, 4, HOUT_D)
+			# de drie souvenirs uit de tuin op de plank: hoedje, sjaaltje, bal
+			_zet(v, _op_hoofdje("hoedje", false), -7, 15, -5)
+			_zet(v, waar("sjaaltje"), 0, 15, -5)
+			_zet(v, waar("bal"), 7, 15, -5)
+			# het bordje boven op de luifel, tegen de achterste rand
+			# (the awning's back row is y 28, so the sign starts on top of it)
+			ArtVorm.bx(v, -7, 29, -8, 14, 10, 1, GOUD)
+			ArtVorm.bx(v, -6, 30, -7, 12, 8, 1, PAPIER)
+			ArtVorm.bx(v, -3, 31, -6, 6, 5, 1, CADEAU)
+			ArtVorm.verf(v, -1, 0, 31, 35, -6, -6, GOUD)
+			ArtVorm.verf(v, -3, 2, 33, 33, -6, -6, GOUD)
+			ArtVorm.bx(v, -2, 36, -6, 2, 1, 1, GOUD)
+			ArtVorm.bx(v, 0, 36, -6, 2, 1, 1, GOUD_D)
 		_:
 			ArtVorm.bx(v, -11, 14, -7, 22, 1, 4, HOUT_D)
 			# drie hoedjes op de plank: een pet, een strohoed, een strik
@@ -384,6 +407,7 @@ static func tabel() -> Dictionary:
 		"hoedenkraam": func(_p := {}): return kraam("hoeden"),
 		"sjaalkraam": func(_p := {}): return kraam("sjaals"),
 		"schoenenkraam": func(_p := {}): return kraam("schoenen"),
+		"souvenirkraam": func(_p := {}): return kraam("souvenirs"),
 		"luxepui": Callable(ArtDecorWinkels, "luxepui"),
 		"luxepuiz": func(_p := {}): return ArtVorm.draai(luxepui()),
 		"vitrine": Callable(ArtDecorWinkels, "vitrine"),
