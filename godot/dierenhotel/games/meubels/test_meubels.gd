@@ -398,7 +398,8 @@ func test_beurt_band_5() -> void:
 	# buidel(20) = precies te leggen; tel tot 9 met wat er in je hand zit
 	var gelegd := _leg_precies(9)
 	gelijk(gelegd, 9, "er ligt precies €9 op de toonbank")
-	var bedden_voor := State.max_gasten()
+	var bedden_voor := State.alle_bedden().size()
+	var cap_voor := State.max_gasten()
 	waar(_tik("mb_ok"), "klaar met tellen")
 	gelijk(int(State.s["munten"]), 11, "20 − 9 = 11 in de kassa")
 	await _wacht(1.4)
@@ -410,7 +411,11 @@ func test_beurt_band_5() -> void:
 			break
 		waar(_tik(vak), "zet neer (beurt %d)" % beurt)
 		await _tel_frames()
-	gelijk(State.max_gasten(), bedden_voor + 1, "het bed verhoogt de gastenlimiet")
+	gelijk(State.alle_bedden().size(), bedden_voor + 1, "het gekochte bed staat in de kamer")
+	# Sinds 2026-09-24 (bedden: een kamer kiezen bij het inchecken) is de vrije
+	# vloer de gastenlimiet: tot zes bedden per kamer zet de check-in ze zelf neer,
+	# dus een gekocht bed verhoogt de limiet pas boven die zes.
+	waar(State.max_gasten() >= cap_voor, "de gastenlimiet zakt er nooit door")
 	_af()
 
 ## Leg net zolang munten neer tot het bedrag klopt; kies zo nodig een andere

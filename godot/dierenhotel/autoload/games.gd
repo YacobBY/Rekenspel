@@ -98,6 +98,14 @@ func actief() -> String:
 func actieve_kamer() -> String:
 	return _actieve_kamer
 
+## The running game walks on with its animal (bedden: the guest walks from the
+## desk to his room and back, owner 2026-09-24): its room becomes `kamer`, so a
+## walk along (`Hotel.volg`) that ends there leaves the camera there instead of
+## taking it back to the room the game started in (world.md §6.3).
+func verhuis(kamer: String) -> void:
+	if _actief != "" and Rooms.bestaat(kamer):
+		_actieve_kamer = kamer
+
 ## `unlock(N, band)` — may it be played?  Absent means yes.
 func ontgrendeld(id: String) -> bool:
 	var def := definitie(id)

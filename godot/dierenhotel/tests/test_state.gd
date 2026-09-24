@@ -244,9 +244,14 @@ func test_dag_verbruik_en_bedden() -> void:
 		State.mk_gast("b", "B", "poes", "poes", 1, "Spelen", 15),
 	]
 	gelijk(State.dag_verbruik(), 3, "samen 3 scheppen per dag")
-	# the beds are the hard guest cap (world.md §5.3, HOTEL.md §2)
+	# the guest cap is the bedrooms (owner, 2026-09-24): every bed there is,
+	# plus the beds the check-in may still put down, up to MAX_BEDDEN a room
 	var bedden := State.alle_bedden()
-	gelijk(State.max_gasten(), bedden.size(), "max_gasten telt de bedden")
+	var cap := 0
+	for k in State.slaapkamers():
+		cap += Rooms.slots(k, "bed").size() + State.nieuwe_bedden(k)
+	gelijk(State.max_gasten(), cap, "max_gasten telt de bedden en de vloer voor nieuwe")
+	waar(State.max_gasten() > bedden.size(), "meer dan de bedden die er staan")
 	waar(bedden.size() >= 2, "het hotel heeft bedden (%d)" % bedden.size())
 	for b in bedden:
 		waar(not str(b["kamer"]).is_empty(), "elk bed weet in welke kamer het staat")
@@ -259,6 +264,79 @@ func test_dag_verbruik_en_bedden() -> void:
 	gelijk(State.gast_in_bed(str(eerste["kamer"]), str(eerste["slot"]))["id"], "a",
 		"en daarna ligt A erin")
 	waar(State.bed_vrij() != eerste, "bed_vrij() wijst het volgende aan")
+
+## The bedrooms and the room in them (owner, 2026-09-24: the check-in chooses a
+## ROOM and its beds are made for the guest): a room has room for one more
+## animal while it has a free bed, or floor where the check-in may still put a
+## new one — at most `MAX_BEDDEN` a room, and only on free floor.
+func test_plek_in_de_slaapkamers() -> void:
+	_voor()
+	Rooms.herstel()
+	gelijk(str(State.slaapkamers()), str(["kamer1", "kamer2"]), "de twee slaapkamers")
+	gelijk(State.slapers_in("kamer1").size(), 0, "nog niemand in kamer 1")
+	gelijk(State.vrije_bedden("kamer1").size(), 2, "twee vrije bedden")
+	var nieuw := State.nieuwe_bedden("kamer1")
+	waar(nieuw >= 1 and nieuw <= State.MAX_BEDDEN - 2, "en vloer voor nieuwe (%d)" % nieuw)
+	gelijk(State.plek_in("kamer1"), 2 + nieuw, "dieren die erin passen")
+	waar(State.plek_voor_gast(), "er mag een gast komen")
+	gelijk(str(State.kamers_met_plek()), str(["kamer1", "kamer2"]), "in allebei")
+	# the next new bed stands on free floor, far from the beds there are
+	var p := State.bed_plek("kamer1")
+	waar(not p.is_empty(), "er is een plek voor een nieuw bed")
+	waar(Rooms.vrij_vak("kamer1", float(p["x"]), float(p["z"])), "op vrije vloer (%s)" % str(p))
+	gelijk(State.bed_plekken("kamer1", nieuw).size(), nieuw, "en ook voor allemaal")
+	# a new bed stands on nothing: not on the bowl, the basket, a bed or a door
+	var r = Rooms.get_kamer("kamer1")
+	for q in State.bed_plekken("kamer1", nieuw):
+		var bed := Rect2((q as Vector2) + Vector2(-17.0, -8.0), Vector2(34.0, 17.0))
+		for stuk in r.decor:
+			if not bool(stuk.get("ver", false)):
+				waar(not bed.has_point(Vector2(float(stuk["x"]), float(stuk["z"]))),
+					"een nieuw bed op %s staat niet op %s" % [str(q), str(stuk["n"])])
+		for sid in r.slots:
+			var sl: Dictionary = r.slots[sid]
+			waar(not bed.grow(6.0).has_point(Vector2(float(sl["x"]), float(sl["z"]))),
+				"een nieuw bed op %s staat niet op %s" % [str(q), sid])
+		for naar in r.deur_punten:
+			var dp: Dictionary = r.deur_punten[naar]
+			waar(not bed.grow(6.0).has_point(Vector2(float(dp["ix"]), float(dp["iz"]))),
+				"een nieuw bed op %s staat niet in de deur" % str(q))
+	# two sleepers in kamer 1: no free bed, the floor still takes a new one
+	var a := State.mk_gast("a", "A", "hond", "puppy", 1, "Wandeling", 30)
+	var b := State.mk_gast("b", "B", "poes", "poes", 1, "Spelen", 15)
+	a["kamer"] = "kamer1"
+	a["bed"] = "bed1"
+	b["kamer"] = "kamer1"
+	b["bed"] = "bed2"
+	State.s["gasten"] = [a, b]
+	gelijk(State.slapers_in("kamer1").size(), 2, "twee slapers")
+	gelijk(State.vrije_bedden("kamer1").size(), 0, "geen vrij bed")
+	gelijk(State.bed_vrij("kamer1"), {}, "ook niet volgens bed_vrij")
+	waar(not State.bed_vrij("kamer2").is_empty(), "in kamer 2 wel")
+	gelijk(State.plek_in("kamer1"), nieuw, "alleen nog de nieuwe bedden")
+	# kamer 1 filled with every bed the check-in may put down, all taken: kamer 1
+	# is full, kamer 2 is not
+	var gasten: Array = [a, b]
+	while State.nieuwe_bedden("kamer1") > 0:
+		var q := State.bed_plek("kamer1")
+		var m := Rooms.meubel_zet("kamer1", "bed", float(q["x"]), float(q["z"]))
+		waar(not m.is_empty(), "een nieuw bed op %s" % str(q))
+		var g := State.mk_gast("g%d" % gasten.size(), "G", "hond", "puppy", 1, "Wandeling", 30)
+		g["kamer"] = "kamer1"
+		g["bed"] = str(m.get("id", ""))
+		gasten.append(g)
+	State.s["gasten"] = gasten
+	gelijk(State.nieuwe_bedden("kamer1"), 0, "de check-in zet er geen meer bij")
+	waar(Rooms.slots("kamer1", "bed").size() <= State.MAX_BEDDEN, "nooit meer dan zes")
+	gelijk(State.plek_in("kamer1"), 0, "kamer 1 is vol")
+	gelijk(str(State.kamers_met_plek()), str(["kamer2"]), "alleen kamer 2 heeft plek")
+	waar(State.plek_voor_gast(), "dus er mag nog een gast komen")
+	# a bed bought in the meubelboek (anywhere the grid takes it) is a free bed:
+	# room for one more after all
+	var extra := Rooms.meubel_zet("kamer1", "bed", 60.0, 60.0)
+	if not extra.is_empty():
+		gelijk(State.plek_in("kamer1"), 1, "een gekocht bed geeft plek")
+	Rooms.herstel()
 
 func test_reparaties_verliezen_nooit_een_gast() -> void:
 	_voor()

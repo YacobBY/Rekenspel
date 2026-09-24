@@ -208,8 +208,9 @@ func test_de_bel_haalt_de_gast_door_de_voordeur() -> void:
 	Ui.zet_rust_modus(was)
 	_na_afloop()
 
-## The child may answer while the guest is still on his way in: choosing a bed
-## sends him to it at once, and nothing of the arrival comes back afterwards.
+## The child may answer while the guest is still on his way in: the check-in
+## that ends in a bed (`Hotel.wijs_bed`, since 2026-09-24 the end of the beds
+## question) sends him to it at once, and nothing of the arrival comes back.
 func test_wie_snel_een_bed_kiest_hoeft_niet_te_wachten() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	var was := Ui.rust_modus()
@@ -229,7 +230,7 @@ func test_wie_snel_een_bed_kiest_hoeft_niet_te_wachten() -> void:
 			World._tik()
 		waar(World.komt_binnen(id), "hij is nog onderweg naar binnen")
 		v["stap"] = 3
-		waar(Hotel.wijs_bed("kamer1", "bed1"), "het kind kiest al een bed")
+		waar(Hotel.wijs_bed("kamer1", "bed1"), "de check-in geeft hem al een bed")
 		waar(not World.komt_binnen(id), "de binnenkomst houdt meteen op")
 		gelijk(d.slaap_doel, "bed1", "hij gaat naar zijn bed")
 		gelijk((d.komt as Array).size(), 0, "er blijft niets van de binnenkomst over")

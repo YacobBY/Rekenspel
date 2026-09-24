@@ -10,6 +10,7 @@ var _nep_ids: Array[String] = []
 
 func _voor() -> void:
 	alleen_spellen([])               # the real games are wave 2; these tests use stand-ins
+	Rooms.herstel()                  # the base beds: a test that filled the rooms leaves none
 	State.nieuw_spel()
 	State.start_gekozen()
 	Econ.rekening_stop()
@@ -55,10 +56,32 @@ func _gasten(n: int) -> Array:
 	State.s["gasten"] = uit
 	return uit
 
-## A guest in EVERY bed: no bed is free, so the prio-0 card `Nog een bed vrij`
-## does not take a place on a board that a test is measuring for other reasons.
-func _alle_bedden_bezet() -> Array:
-	return _gasten(State.alle_bedden().size())
+## A FULL hotel: every bedroom holds as many beds as the check-in puts down
+## (`State.MAX_BEDDEN`) and a guest sleeps in every one, so no room can take
+## another animal and the prio-0 card `Nog plek voor een gast` does not take a
+## place on a board that a test is measuring for other reasons.  Since
+## 2026-09-24 a free bed is not the guest cap any more: the free floor is.
+## Undo with `Rooms.herstel()`.
+func _hotel_vol() -> Array:
+	for k in State.slaapkamers():
+		while Rooms.slots(k, "bed").size() < State.MAX_BEDDEN:
+			var p := State.bed_plek(k)
+			if p.is_empty() or Rooms.meubel_zet(k, "bed", float(p["x"]), float(p["z"])).is_empty():
+				break
+	var pool := State.gasten_pool()
+	var bedden := State.alle_bedden()
+	var uit: Array = []
+	for i in bedden.size():
+		var g: Dictionary = (pool[i % pool.size()] as Dictionary).duplicate(true)
+		if i >= pool.size():
+			g["id"] = "%s_%d" % [str(g["id"]), i]
+		g["kamer"] = str(bedden[i]["kamer"])
+		g["bed"] = str(bedden[i]["slot"])
+		g["waar"] = g["kamer"]
+		g["nachten"] = 100
+		uit.append(g)
+	State.s["gasten"] = uit
+	return uit
 
 ## Fill every bowl, so the `🍪 Vul de voerkar` card does not take a place on
 ## the board in a test that is about something else.
@@ -319,7 +342,7 @@ func test_behoefte_klaar() -> void:
 
 # ------------------------------------------------------------- de check-in
 
-func test_check_in_twee_vragen_en_een_bed() -> void:
+func test_check_in_twee_vragen_dan_een_kamer() -> void:
 	_voor()
 	State.s["scoops"] = 20
 	State.s["levering"] = 4
@@ -336,8 +359,10 @@ func test_check_in_twee_vragen_en_een_bed() -> void:
 	gelijk(v["dagen"], 4, "vier dagen tot de levering")
 	gelijk(v["voorraad"], 20, "twintig in huis")
 	gelijk(v["stap"], 1, "vraag 1")
+	gelijk(v["kamer"], "", "nog geen kamer")
 
-	# vraag 1: fout mag, en kost niets behalve een regel hulp
+	# vraag 1: fout mag, en kost niets — en er komt ook geen hulp bij
+	# (eigenaar, 2026-09-24; zie de test hieronder)
 	v["invoer"] = "5"
 	Hotel.antwoord1()
 	gelijk(v["stap"], 1, "fout: nog steeds vraag 1")
@@ -355,20 +380,119 @@ func test_check_in_twee_vragen_en_een_bed() -> void:
 	gelijk(v["stap"], 2, "fout: nog steeds vraag 2")
 	gelijk(v["fouten2"], 1, "één misser")
 	Hotel.antwoord2("minder")
-	gelijk(v["stap"], 3, "goed: kies een bed")
+	gelijk(v["stap"], 3, "goed: nu een kamer, geen bed (eigenaar, 2026-09-24)")
 
-	# het bed
+	# de kamer.  Dit bestand meldt de echte spellen af, dus zonder beddenspel
+	# krijgt hij meteen het vrije bed van die kamer: de check-in loopt nooit vast
+	waar(State.kamers_met_plek().has("kamer2"), "kamer 2 heeft plek")
+	waar(not Hotel.kies_kamer("zolder"), "een kamer die er niet is gaat niet")
+	gelijk(v["stap"], 3, "en de vraag blijft")
 	var sterren_voor := int(State.s["sterren"])
 	State.s["ronde"] = "ochtend"
-	waar(Hotel.wijs_bed("kamer2", "bed1"), "het bed toewijzen lukt")
+	waar(Hotel.kies_kamer("kamer2"), "kamer 2 gekozen")
 	gelijk(State.s["checkin"], null, "de check-in is klaar")
 	gelijk(State.s["nieuweGast"], null, "niemand meer aan de balie")
 	gelijk((State.s["gasten"] as Array).size(), 2, "de gast slaapt nu in het hotel")
 	gelijk(nieuw["kamer"], "kamer2", "zijn kamer")
-	gelijk(nieuw["bed"], "bed1", "zijn bed")
+	gelijk(nieuw["bed"], "bed1", "het vrije bed van die kamer")
 	gelijk(nieuw["behoefte"], "eten", "en hij wil daarna eten")
 	gelijk(int(State.s["sterren"]), sterren_voor + 1, "één ster voor het meedoen")
 	gelijk(State.s["ronde"], "vrij", "ochtend wordt vrij spelen")
+
+## "Nee geef geen hulp na fouten. Kinderen moeten zelf leren rekenen. Fout
+## antwoord kiezen moet niet beloond worden met hulp maar juist een
+## teleurgesteld dier" (owner, 2026-09-24).  A slip on either question writes
+## nothing on the card — no spoon rows, no product — and toasts no answer: the
+## guest at the desk goes `sip`, the strip is shut for a moment (`Ui.misser`)
+## and the SAME question with the same choices stays up.
+func test_een_misser_bij_het_inchecken_geeft_geen_hulp() -> void:
+	_voor()
+	var boom := Engine.get_main_loop() as SceneTree
+	var laag := Control.new()
+	laag.size = Vector2(1000, 648)
+	boom.root.add_child(laag)
+	Ui.registreer_lagen(laag, laag, laag, laag, laag)
+	World.meet(Rect2(Vector2.ZERO, laag.size))
+	var rust := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	World.naar("receptie")
+	Hotel.bel()
+	var v = State.s["checkin"]
+	waar(v != null, "er checkt iemand in")
+	if v != null:
+		var gid := str(v["gastId"])
+		Hits.plaats()
+		var knoppen := _strook("ci_som_keuzes")
+		var mis := ""
+		for k in knoppen:
+			if k != "Kn%d" % int(v["nieuw"]):
+				mis = k
+		var kaart = Hits.spot("ci_som").knoop
+		waar(_druk("ci_som_keuzes", mis), "een fout getal: %s" % mis)
+		gelijk(int(v["stap"]), 1, "dezelfde vraag")
+		gelijk(int(v["fouten1"]), 1, "één misser")
+		waar(Hits.spot("ci_som").knoop == kaart, "dezelfde kaart blijft hangen")
+		gelijk((kaart as UiSomkaart).hulp_label.text, "", "zonder lepeltjes-hulp")
+		gelijk(str(_strook("ci_som_keuzes")), str(knoppen), "met dezelfde vier keuzes")
+		waar(Ui.kaart_van("ci_som").pauze, "de strook is even op slot")
+		gelijk(World.dier(gid).pose, "sip", "de gast is teleurgesteld")
+		waar(Hits.spot("mis_ci_som") != null, "met zijn wolkje")
+		waar(not _toast_tekst().contains("Tel ze samen"), "geen hulp-toast: %s" % _toast_tekst())
+		# vraag 2
+		Ui.kaart_van("ci_som").pauze = false
+		v["invoer"] = str(int(v["nieuw"]))
+		Hotel.antwoord1()
+		Hits.plaats()
+		var goed := Sommen.vergelijk(int(v["dagen"]), int(v["nieuw"]), int(v["voorraad"]))
+		var fout2 := "meer" if goed != "meer" else "minder"
+		var kaart2 = Hits.spot("ci_som").knoop
+		waar(_druk("ci_som_keuzes", "K" + fout2), "een fout antwoord op vraag 2")
+		gelijk(int(v["stap"]), 2, "dezelfde vraag")
+		gelijk(int(v["fouten2"]), 1, "één misser")
+		waar(Hits.spot("ci_som").knoop == kaart2, "dezelfde kaart")
+		gelijk((kaart2 as UiSomkaart).som_label.text, "%d × %d" % [int(v["dagen"]), int(v["nieuw"])],
+			"de som zonder het antwoord erachter")
+		gelijk((kaart2 as UiSomkaart).hulp_label.text, "", "en zonder hulpregel")
+		waar(Ui.kaart_van("ci_som").pauze, "de strook is even op slot")
+		gelijk(World.dier(gid).pose, "sip", "de gast is weer teleurgesteld")
+		waar(not _toast_tekst().contains("="), "geen toast met het antwoord: %s" % _toast_tekst())
+		World.weg(gid)
+	Hits.wis_alles()
+	Ui.registreer_lagen(null, null, null)
+	laag.queue_free()
+	Ui.zet_rust_modus(rust)
+	await boom.process_frame
+
+func _strook(id: String) -> Array[String]:
+	var uit: Array[String] = []
+	var s := Hits.spot(id)
+	if s == null or not is_instance_valid(s.knoop):
+		return uit
+	var rij := s.knoop.get_node_or_null("Rij")
+	if rij != null:
+		for k in rij.get_children():
+			if not k.is_queued_for_deletion():
+				uit.append(str(k.name))
+	return uit
+
+func _druk(strook: String, knop: String) -> bool:
+	var s := Hits.spot(strook)
+	if s == null or not is_instance_valid(s.knoop):
+		return false
+	var b := s.knoop.get_node_or_null("Rij/" + knop) as BaseButton
+	if b == null:
+		return false
+	b.emit_signal("pressed")
+	return true
+
+func _toast_tekst() -> String:
+	var t = Ui._toast
+	if t == null or not is_instance_valid(t):
+		return ""
+	for k in (t as Node).get_children():
+		if k is Label:
+			return (k as Label).text
+	return ""
 
 func test_bed_van_iemand_anders() -> void:
 	_voor()
@@ -383,25 +507,57 @@ func test_bed_van_iemand_anders() -> void:
 	waar(State.s["checkin"] != null, "de check-in loopt gewoon door")
 	waar(Hotel.wijs_bed("kamer1", "bed2"), "een vrij bed wel")
 
-## Every bed taken: a friendly bubble at the bell, and no half check-in
-## (world.md §3.3, first branch).
-func test_bel_met_volle_bedden_maakt_geen_check_in() -> void:
+## Every BED taken is not a full hotel any more: the check-in puts a new bed
+## down, so the bell still brings a guest while some bedroom has floor for one
+## (owner, 2026-09-24).  Every ROOM full: a friendly bubble at the bell, and no
+## half check-in (world.md §3.3, first branch).
+func test_bel_met_volle_kamers_maakt_geen_check_in() -> void:
 	_voor()
 	var bedden := State.alle_bedden()
 	waar(bedden.size() >= 2, "het hotel heeft bedden (%d)" % bedden.size())
-	_alle_bedden_bezet()
+	_gasten(bedden.size())
 	gelijk(State.bed_vrij(), {}, "geen bed meer vrij")
+	waar(State.plek_voor_gast(), "maar de kamers hebben nog vloer voor een nieuw bed")
+	Hotel.bel()
+	waar(State.s["checkin"] != null, "dus de bel haalt toch een gast")
+	State.s["checkin"] = null
+	State.s["nieuweGast"] = null
+	_hotel_vol()
+	waar(not State.plek_voor_gast(), "elke kamer vol: geen plek meer")
+	gelijk(State.kamers_met_plek().size(), 0, "geen kamer met plek")
 	var wacht_voor := (State.s["wachtlijst"] as Array).size()
 	Hotel.bel()
-	gelijk(State.s["checkin"], null, "geen check-in zonder vrij bed")
+	gelijk(State.s["checkin"], null, "geen check-in zonder plek")
 	gelijk(State.s["nieuweGast"], null, "en geen gast aan de balie")
 	gelijk((State.s["wachtlijst"] as Array).size(), wacht_voor,
 		"de wachtlijst blijft heel")
+	gelijk(Hotel.BEL_VOL, "alle kamers vol", "wat de bel dan zegt")
+	Rooms.herstel()
+
+## The bell's card on the board follows the same rule: "Bel een gast" for the
+## first guest, "Nog plek voor een gast" while a bedroom can take one more —
+## also with every bed taken — and nothing at all when every room is full.
+func test_belkaartje_volgt_de_plek_in_de_kamers() -> void:
+	_voor()
+	_bakken_vol()
+	Hotel.bouw_taken(true)
+	gelijk(_taak("bel").get("tekst", ""), "Bel een gast", "de eerste gast")
+	_gasten(State.alle_bedden().size())
+	State.s["taken"] = []
+	Hotel.bouw_taken(true)
+	gelijk(_taak("bel").get("tekst", ""), "Nog plek voor een gast",
+		"elk bed bezet, maar er is vloer voor een nieuw")
+	waar(Ui.keur_taak("bel", "Nog plek voor een gast"), "hooguit zes woorden")
+	_hotel_vol()
+	State.s["taken"] = []
+	Hotel.bouw_taken(true)
+	gelijk(_taak("bel"), {}, "een vol hotel: geen belkaartje")
+	Rooms.herstel()
 
 ## With a free bed the bell really does fetch the next guest.
 func test_bel_haalt_de_volgende_gast() -> void:
 	_voor()
-	waar(not State.bed_vrij().is_empty(), "er is een bed vrij")
+	waar(State.plek_voor_gast(), "er is plek voor een gast")
 	Hotel.bel()
 	var v = State.s["checkin"]
 	waar(v != null, "er staat een check-in klaar")
@@ -450,9 +606,13 @@ func _taak(id: String) -> Dictionary:
 func test_hotel_taken_op_volgorde() -> void:
 	_voor()
 	_bakken_vol()
-	# every bed taken plus one guest without one: no `bel` card competes, and
+	# a full hotel plus one guest without a bed: no `bel` card competes, and
 	# the three that are left are the ones this test is about
-	var gasten := _gasten(State.alle_bedden().size() + 1)
+	var gasten := _hotel_vol()
+	var zonder := State.mk_gast("zonder", "Zonder", "hond", "puppy", 1, "Wandeling", 30)
+	zonder["nachten"] = 100
+	gasten.append(zonder)
+	State.s["gasten"] = gasten
 	gasten[0]["behoefte"] = "spelen"
 	State.s["uitcheck"] = [str(gasten[0]["id"])]
 	var taken := Hotel.bouw_taken(true)
@@ -465,6 +625,7 @@ func test_hotel_taken_op_volgorde() -> void:
 	gelijk(_taak("uit").get("tekst", ""), "Reken af: %s" % gasten[0]["naam"], "de afrekenregel")
 	gelijk(_taak("spelen").get("tekst", ""), "%s wil spelen" % gasten[0]["naam"], "de speelregel")
 	gelijk(Hotel.open_taken(), 3, "drie open taakjes")
+	Rooms.herstel()
 
 ## An empty bowl in a room where guests sleep puts `Vul de voerkar` on the
 ## board, in front of every game chip (world.md §3.7).
@@ -507,7 +668,7 @@ func test_taak_af_op_id_en_op_spel_id() -> void:
 func test_prikbord_rotatie_over_zes_dagen() -> void:
 	_voor()
 	_bakken_vol()
-	_alle_bedden_bezet()
+	_hotel_vol()
 	_meld("bedden", {"naam": "Bedden op rij", "kamer": "kamer1",
 		"taak": {"id": "bedden", "icoon": "🛏", "tekst": "Zet de bedden op rij", "prio": 5}})
 	_meld("hinkel", {"naam": "Hinkelpad", "kamer": "tuin",
@@ -538,13 +699,14 @@ func test_prikbord_rotatie_over_zes_dagen() -> void:
 			gezien[id] = 1
 	for id in basis:
 		waar(gezien.has(id), "%s kwam binnen zes dagen aan de beurt" % id)
+	Rooms.herstel()
 	_na()
 
 ## A wish chip (prio 0..4) keeps its own place, in front of the ordinary ones.
 func test_wenskaartjes_houden_hun_volgorde() -> void:
 	_voor()
 	_bakken_vol()
-	_alle_bedden_bezet()
+	_hotel_vol()
 	State.s["gasten"][0]["behoefte"] = "bad"
 	_meld("tobbe", {"naam": "Tobbe-tijd", "kamer": "tuin", "wens": "bad"})
 	_meld("zwembad", {"naam": "Zwembad", "kamer": "zwembad", "wens": "zwemmen",
@@ -563,6 +725,7 @@ func test_wenskaartjes_houden_hun_volgorde() -> void:
 		waar(ids.size() == 3, "dag %d: en er past nog één klusje bij" % dag)
 	gelijk(_taak("bad").get("tekst", ""), "%s wil in bad" % State.s["gasten"][0]["naam"],
 		"de tobbe leent de naam van de gast")
+	Rooms.herstel()
 	_na()
 
 ## A ticked card keeps its ✅ for the rest of the day, also when it is no

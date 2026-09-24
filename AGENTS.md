@@ -38,13 +38,13 @@ buttons in the real export and writes a screenshot plus the game's own probe
 lines after every step.
 
 ```bash
-node tools/speel.js --kamer kamer1 --band 4 --toon        # wat valt hier te tikken?
-node tools/speel.js --kamer kamer1 --band 4 \
-  --doe "spel_bedden; bd_som_keuzes#2/4; bd_rij0; bd_klaar" --uit tmp/speel
+node tools/speel.js --kamer receptie --band 4 --toon      # wat valt hier te tikken?
+node tools/speel.js --kamer receptie --band 4 \
+  --doe "bel; wacht 4500; ci_som_keuzes#2/4" --uit tmp/speel
 ```
 
 A step is a hotspot id, `chip:<naam>` for the room bar, or `wacht <ms>`. A strip
-reports itself as ONE rectangle (`bd_som_keuzes`), so tap the k-th of n boxes
+reports itself as ONE rectangle (`ci_som_keuzes`), so tap the k-th of n boxes
 inside it with `id#k/n`, or a free spot with `id@0.5,0.8`. An unknown id stops
 the run and prints what the game did report — that answer is itself a finding.
 
@@ -175,7 +175,7 @@ main.py                   PyCharm leftover, ignore
 | `node tools/probe.js --viewport 1024x768@2:ipad --knop bel` | chromium finger probe of the export, screenshots + rapport.json | ≈ 60 s |
 | `node tools/kiek.js --kamer zwembad --tik spel_zwembad` | one screenshot of one room/game of the export (serves build/web itself, seeds a save) | ≈ 40 s |
 | `node tools/speel.js --kamer kamer1 --band 4 --toon` | list what is tappable in a room | ≈ 40 s |
-| `node tools/speel.js --kamer kamer1 --band 4 --doe "spel_bedden; bd_som_keuzes#2/4; bd_rij0"` | PLAY: tap a sequence, screenshot + report after every step | ≈ 60 s |
+| `node tools/speel.js --kamer receptie --band 4 --doe "bel; wacht 4500; ci_som_keuzes#2/4"` | PLAY: tap a sequence, screenshot + report after every step | ≈ 60 s |
 
 Godot is `~/.local/bin/godot` (4.7.2.stable); set `GODOT=` if it is not on
 `PATH`. Export templates: `~/.local/share/godot/export_templates/4.7.2.stable/`.
@@ -227,13 +227,13 @@ ones a game or a feature normally needs.
 | `Art` | voxel models, baking to plates (`Plaat`), golden-image cache | `registreer_model(naam, fn)` (namespace with your game id), `model`, `plaat`, `bak`, `dier(kind, pose, g)` |
 | `Rooms` | the rooms as data (`Kamer`, `lijst()` counts them), doors, paths, furniture slots | `get_kamer(id)`, `plek(kamer, fx, fz)`, `deur`, `pad(van, naar)`, `om_het_water`, `meubel_zet/meubel_weg/meubels`, `slots/slot`, `vrij_vak`, `ingang(kamer)` (the receptie's front door, outside the door graph) |
 | `Hits` | the hotspot layer: buttons/drop targets on world objects, band grid, 0 % overlap | `maak(o)`, `weg(id)`, `wis_eigenaar(door)`, `leen/geef_terug`, `spot(id)`, `dekking(id)`, `lijst()`; signal `hotspot_getikt` |
-| `World` | camera/room in view, guests (`Dier`), movement, decor, particles | `naar(kamer)`, `kamer_nu()`, `dier(id)`, `dieren(kamer)`, `await stappen(id, punten)`, `await ga(id, x, z)`, `reis(id, kamer)`, `kom_binnen(id, x, z)` (a new guest through the front door, per kind), `vlak_van_ingang()`, `slaap`, `pose`, `mood`, `decor(kamer, o)`, `decor_weg`, `zet_bak`, `spetter(kamer, x, z, n, kl)`, `scherm(x, z, y)`; signals `kamer_veranderd`, `getekend`, `reis_gestart` |
+| `World` | camera/room in view, guests (`Dier`), movement, decor, particles | `naar(kamer)`, `kamer_nu()`, `dier(id)`, `dieren(kamer)`, `await stappen(id, punten)`, `await ga(id, x, z)`, `reis(id, kamer)`, `kom_binnen(id, x, z)` (a new guest through the front door, per kind), `vlak_van_ingang()`, `slaap`, `pose`, `mood`, `decor(kamer, o)`, `decor_weg`, `zet_bak`, `spetter(kamer, x, z, n, kl)`, `scherm(x, z, y)`, `verberg_bed(kamer, slot)` (a free bed out of sight until the camera leaves the room); signals `kamer_veranderd`, `getekend`, `reis_gestart` |
 | `Snd` | 18 procedural sounds + per-room ambience loops | `tik plop ja hoera bel deur kar munt ster plons au klok hup tover dag brief terug zacht`, `sfeer(kamer)`, `dempt()` |
 | `Ui` | cards, bubbles, strips, toasts, sheets, theme, text rules | `somkaart(obj, som, o)`, `wolk(o)`, `wolk_weg`, `getal_tag(obj, n)`, `bron(obj, o)`, `toast(tekst)`, `blad_open/blad_dicht`, `naamplaat`, `keur_regel(id, zin)` |
-| `State` | the save (`State.s`, JSON in `user://dierenhotel.json`, atomic), band | `bewaar()`, `lees()`, `nieuw_spel()`, `spel_data(id)`, `band()`, `tel(goed, ms)`, `n_gasten()`, `max_gasten()`, `bed_vrij()`, `gasten_in(kamer)` |
+| `State` | the save (`State.s`, JSON in `user://dierenhotel.json`, atomic), band | `bewaar()`, `lees()`, `nieuw_spel()`, `spel_data(id)`, `band()`, `tel(goed, ms)`, `n_gasten()`, `max_gasten()`, `plek_voor_gast()`, `kamers_met_plek()`, `plek_in(kamer)`, `bed_plek(kamer)`, `bed_vrij(kamer?)`, `gasten_in(kamer)` — the guest cap is the bedrooms' free floor (2026-09-24) |
 | `Econ` | stars, coins, the bill | `sterren(n)`, `geef_munt(n)`, `buidel(totaal)`, `splits(n)`, `rekening(o)`; signals `sterren_veranderd`, `munten_veranderd` |
-| `Games` | registry of minigames, start/stop/supersede | `lijst()`, `definitie(id)`, `actief()`, `ontgrendeld(id)`, `start(id)`, `stop()`, `hersteek()`; signals `spel_gestart`, `spel_gestopt` |
-| `Hotel` | day cycle, wishes, board, check-in, evening round, letters, hotel buttons | `start()`, `bel()`, `morgen()`, `avondronde()`, `taak_af(id)`, `spel_taken()`, `wens_af(gast, welke)`, `komt_eraan()`, `volg(id)`, `stop_volgen()`, `hotspots()`, `naar_kamer(id)` |
+| `Games` | registry of minigames, start/stop/supersede | `lijst()`, `definitie(id)`, `actief()`, `ontgrendeld(id)`, `start(id)`, `stop()`, `hersteek()`, `verhuis(kamer)` (the running game's room walks along with its animal); signals `spel_gestart`, `spel_gestopt` |
+| `Hotel` | day cycle, wishes, board, check-in, evening round, letters, hotel buttons | `start()`, `bel()`, `morgen()`, `avondronde()`, `taak_af(id)`, `spel_taken()`, `wens_af(gast, welke)`, `kies_kamer(kamer)` / `checkin_terug()` / `wijs_bed(kamer, bed, {loop})` (check-in steps 3–4), `komt_eraan()`, `volg(id)`, `stop_volgen()`, `hotspots()`, `naar_kamer(id)` |
 
 Rooms (`Rooms.lijst()`): `receptie` (desk top-right, door top-left), `gang`,
 `kamer1`, `kamer2`, `keuken`, `tuin` (outdoor, zones `hinkel` and `kraam`),
@@ -285,7 +285,7 @@ Sounds: `ctx.snd.plop(i)`, `ja()`, `hoera()` … Particles: `World.spetter`.
 
 | id | naam | room | teaches | spec |
 |---|---|---|---|---|
-| `bedden` | Bedden op rij | kamer1/kamer2 | equal rows, multiplication as arrays | games-a §3 |
+| `bedden` | Verdeel bedden over de kamers | receptie → kamer1/kamer2 (step 4 of the check-in, no entry button) | adding on: the animals of the chosen room + the new guest; the guest walks there, camera along | games-a §3 |
 | `sleutels` | Het sleutelbord | receptie | number line / neighbours (missing numbers on a key board) | games-a §4 |
 | `meubels` | Het meubelboek | receptie → room | money, the growth loop (buy beds/furniture) | games-a §5 |
 | `tobbe` | Tobbe-tijd | tuin | fair sharing (division) of soap scoops | games-a §6 |

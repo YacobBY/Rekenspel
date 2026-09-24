@@ -1,67 +1,46 @@
 extends RefCounted
-## bedden — "Bedden op rij" (games-a.md §3), headless.
+## bedden — "Verdeel bedden over de kamers" (games-a.md §3), headless: step 4 of
+## the check-in (owner, 2026-09-24).
 ##
 ## LET OP — dit bestand hoort `extends Proef` te zijn en doet dat NIET, om een
-## bestaande fout in `res://tests/run_tests.gd` heen (die staat buiten de
-## schrijfset van dit ticket; zie "Contract gaps" in het rapport).
+## bestaande fout in `res://tests/run_tests.gd` heen.  De runner sorteert ÉÉN
+## lijst van `res://tests/test_*.gd` plus `res://games/<id>/test_*.gd`, en dit
+## bestand is daarin het eerste; het eerste bestand dat `proef.gd` erft laat
+## `res://core/sommen.gd` en `res://core/jsgetal.gd` bij het afsluiten achter
+## (`ERROR: 2 resources still in use at exit`).  De vier hulpjes van Proef
+## staan daarom hieronder.
 ##
-## De runner sorteert ÉÉN lijst van `res://tests/test_*.gd` plus
-## `res://games/<id>/test_*.gd`, en "res://games/..." sorteert altijd vóór
-## "res://tests/...".  Het bestand dat als EERSTE geladen wordt en `proef.gd`
-## erft, laat `res://core/sommen.gd` en `res://core/jsgetal.gd` bij het
-## afsluiten achter: `ERROR: 2 resources still in use at exit`, waar
-## `tools/test.sh` (terecht) op afgaat.  Nagemeten op de kale wave-1-boom, met
-## een leeg testbestand van vier regels:
+## Elke tik gaat via `pressed` op de echte knop (de kamerkeuze van de check-in,
+## de vier getallen van de beddenvraag).  De wandelingen worden met de hand
+## getikt (`World._tik()` en `Hotel._volg_stap()`, zoals tests/test_komt.gd):
+## de wereld staat stil (`World.pauzeer`), het spel kijkt elke 0,1 s echt.
 ##
-##   tests/test_aaa_lek.gd  extends Proef   (eerste)  -> 2 resources leaked
-##   tests/test_b_lek.gd    extends Proef   (tweede)  -> schoon
-##   tests/test_mmm_lek.gd  extends Proef   (midden)  -> schoon
-##   tests/test_zzz_lek.gd  extends Proef   (laatste) -> schoon
-##   tests/test_aaa_lek.gd  extends RefCounted        -> schoon
-##
-## Elk wave-2-spel loopt hier dus tegenaan.  Centrale oplossing: laat de runner
-## de `tests/`-bestanden apart sorteren en de spelbestanden daarachter plakken
-## in plaats van één gesorteerde lijst.  Zodra dat er is, mag dit bestand terug
-## naar `extends Proef` en mogen de vier hulpjes hieronder weg.
-##
-## De ronde wordt door de ctx heen gespeeld: elke tik gaat via `pressed` op de
-## echte hotspot, nooit via een interne functie.  Wat hier vastligt:
-##
-##   * aanmelding, ontgrendeling (N >= 1) en het prikbordkaartje;
-##   * één hele beurt op band 3, 4 en 5, met de opdracht die
-##     `Sommen.Bedden.opdracht` hoort te geven;
-##   * de misserweg: zacht wolkje, niets weg, geen ster, Wolkje na twee missers;
-##   * de beurt overleeft een echte herlaad (`State.bewaar()` -> `State.lees()`);
-##   * `stop()` laat de kamer schoon achter en geeft de deur terug;
-##   * elke kinderentekst van §3.7, letterlijk;
-##   * 0 % dekking in vier kadermaten, met dezelfde invarianten als
-##     `tests/test_hits.gd`.
+## Wat hier vastligt:
+##   * aanmelding: de naam, geen ingangsknop en geen prikbordkaartje, `kan`
+##     alleen tijdens een check-in bij zijn bedden, open vanaf de eerste gast;
+##   * de kamerkeuze biedt alleen kamers met plek;
+##   * de getallen van de vraag zijn de dieren van die kamer, plus hij;
+##   * goed: hij slaapt in zijn bed, een ster, de check-in is klaar, het spel
+##     sluit zichzelf — ook met een nieuw bed;
+##   * te weinig: geen bed, teleurgesteld, terug naar de balie, dezelfde vraag,
+##     niets kwijt — en de camera loopt heen en terug mee;
+##   * te veel: de bedden voor dat antwoord gaan weer weg, terug, dezelfde vraag;
+##   * nooit hulp: geen hulpregel, geen helper, geen antwoord op de kaart;
+##   * `⬅ Terug` midden in het spel, en een herlaad: de check-in gaat door;
+##   * rustmodus: niemand loopt, de uitkomst staat er meteen;
+##   * elke kindertekst letterlijk, in het budget, met glyphs.
 
 const SPEL := "bedden"
-const KAMER := "kamer1"
 const BRON := "res://games/bedden/spel.gd"
-
-## De vier kadermaten van de opdracht.
-const MATEN := [Vector2(1024, 768), Vector2(768, 1024), Vector2(360, 740),
-	Vector2(740, 360)]
-
-## En het wereldkader dat de échte schil bij die vier schermen overhoudt
-## (`tests/test_ui.gd::test_shell_op_vijf_schermen` drukt ze af; `test_hits.gd`
-## plakt dezelfde rij).  Op een telefoon scheelt dat 34 x 182 eenheden, en
-## precies daar wordt het krap.
-const KADERS := [Vector2(990, 637), Vector2(734, 788), Vector2(326, 558),
-	Vector2(558, 289)]
+const KADER := Vector2(1000, 648)
 
 var _laag: Control = null
 var _vp: SubViewport = null
 var _bewaard: Dictionary = {}
 var _bewaard_nr := 0
+var _rust := false
 
 # ------------------------------------------------- de vier hulpjes van Proef
-##
-## Woordelijk `res://tests/proef.gd`; alleen hier omdat dit bestand die niet
-## mag erven (zie de kop).  De runner leest `_fouten`, `_meldingen`, `_verwacht`
-## en zet `_runner` met `get()`/`set()`, dus de vorm is wat telt, niet de klasse.
 
 var _fouten := 0
 var _meldingen: Array[String] = []
@@ -89,15 +68,13 @@ func fout(melding: String) -> void:
 func _boom() -> SceneTree:
 	return Engine.get_main_loop() as SceneTree
 
-## De camera centreert een kamer alleen als er een viewport geregistreerd is
-## (`World.cam_doel` geeft anders de oorsprong terug), en zonder camera staat
-## elk wereldankerpunt op de linkerrand — dan bewijst een dekkingsmeting niets
-## over de kamer die het kind ziet (dezelfde reden als
-## `tests/test_hits.gd::_hotel_op`).  Deze opzet is de kale versie daarvan:
-## een SubViewport en een Node2D, zonder de hele schil.
-func _op(kader := Vector2(1000, 648)) -> void:
+## A button layer, a viewport with a camera, the world measured — the bare
+## shell `Hotel.scherm_klaar()` and `Hits` need (as tests/test_hits.gd does).
+func _op(kader := KADER) -> void:
 	_bewaard = State.s.duplicate(true)
 	_bewaard_nr = Rooms.nr_stand()
+	_rust = Ui.rust_modus()
+	Rooms.herstel()
 	_laag = Control.new()
 	_laag.size = kader
 	_boom().root.add_child(_laag)
@@ -112,15 +89,15 @@ func _op(kader := Vector2(1000, 648)) -> void:
 
 func _af() -> void:
 	Games.stop()
-	# De kamerscene van `test_de_kamer_wordt_leeg_gemaakt` maakt naamplaten van
-	# de gasten; die leven in `Ui._naamplaten` en in `Hits` en moeten vóór het
-	# wissen van de hotspots weg, anders houdt de Ui ze vast en meldt de motor
-	# bij het afsluiten "resources still in use" (zoals in `test_hits.gd`).
+	Hotel.stop_volgen()
+	World.pauzeer(false)
+	World.toon_bedden()
 	Ui.naamplaten_leeg()
 	Hits.wis_alles()
 	World.sync([])
 	Rooms.herstel()
 	Rooms.zet_nr(_bewaard_nr)
+	World.naar("receptie")
 	Ui.registreer_lagen(null, null, null)
 	World.registreer_viewport(null, null)
 	if _vp != null:
@@ -130,69 +107,115 @@ func _af() -> void:
 		_laag.queue_free()
 		_laag = null
 	State.s = _bewaard
-	# één beeld verder, zodat de viewport en zijn textuur echt weg zijn: anders
-	# meldt de motor bij het afsluiten "resources still in use at exit", en dat
-	# is een ERROR-regel die `tools/test.sh` (terecht) niet toestaat
+	Ui.zet_rust_modus(_rust)
+	# one frame on, so the viewport and its texture are really gone
 	await _boom().process_frame
 
-## Een hotel met `n` gasten zonder bed in kamer 1, op dag `dag`, met `kunnen`
-## als plafond van de band.  Band = max(3, min(bandVanN(N), kunnen + 1)).
-func _hotel(n: int, kunnen: int, dag: int, kader := Vector2(1000, 648)) -> void:
+## A hotel with `in1` animals asleep in kamer 1 and `in2` in kamer 2 (−1: as
+## many as the room takes), each in a real bed (new ones where the base room
+## has too few), and the next guest of
+## the pool — Stampertje when `stamp` — at the desk, the check-in on the room
+## question (step 3).  Reduced motion while the guest comes in, so he stands at
+## the desk at once; `rust` is what the rest of the test runs in.
+func _hotel(in1: int, in2: int, rust := true, stamp := false) -> Dictionary:
 	State.nieuw_spel()
-	State.s["dag"] = dag
-	State.s["kunnen"] = kunnen
-	var pool := State.gasten_pool()
+	State.s["taken"] = []
 	var gasten: Array = []
-	for i in n:
-		var g: Dictionary = (pool[i % pool.size()] as Dictionary).duplicate(true)
-		g["id"] = "g%d" % i
-		g["waar"] = KAMER
-		g["kamer"] = ""
-		g["bed"] = ""
-		gasten.append(g)
+	var pool := State.gasten_pool()
+	var nr := 0
+	for paar in [["kamer1", in1], ["kamer2", in2]]:
+		var kamer: String = paar[0]
+		var aantal := int(paar[1]) if int(paar[1]) >= 0 else State.plek_in(kamer)
+		for i in aantal:
+			var bed := State.bed_vrij(kamer)
+			if bed.is_empty():
+				var p := State.bed_plek(kamer)
+				if p.is_empty():
+					break
+				bed = {"kamer": kamer, "slot": str(Rooms.meubel_zet(kamer, "bed",
+					float(p["x"]), float(p["z"])).get("id", ""))}
+			var g: Dictionary = (pool[nr % pool.size()] as Dictionary).duplicate(true)
+			g["id"] = "bg%d" % nr
+			g["kamer"] = kamer
+			g["bed"] = str(bed["slot"])
+			g["waar"] = kamer
+			g["behoefte"] = "eten"
+			g["gegeten"] = true
+			g["nachten"] = 100
+			gasten.append(g)
+			State.s["gasten"] = gasten
+			nr += 1
 	State.s["gasten"] = gasten
-	World.sync(gasten)
-	World.naar(KAMER)
-	World.meet(Rect2(Vector2.ZERO, kader))
-	Hotel.render()
+	State.herbereken()
+	if stamp:
+		var st: Dictionary = {}
+		for q in State.s["wachtlijst"]:
+			if str(q.get("naam", "")) == "Stampertje":
+				st = q
+		(State.s["wachtlijst"] as Array).erase(st)
+		(State.s["wachtlijst"] as Array).push_front(st)
+	World.sync(Hotel.alle_dieren())
+	for g in gasten:
+		World.slaap(str(g["id"]), str(g["kamer"]), str(g["bed"]))
+	World.naar("receptie")
+	State.s["kamerNu"] = "receptie"
+	Ui.zet_rust_modus(true)
+	Hotel.bel()
+	var v = State.s["checkin"]
+	if v != null:
+		v["invoer"] = str(int(v["nieuw"]))
+		Hotel.antwoord1()
+		Hotel.antwoord2(Sommen.vergelijk(int(v["dagen"]), int(v["nieuw"]), int(v["voorraad"])))
+	Ui.zet_rust_modus(rust)
+	Hits.plaats()
+	return {} if v == null else v
+
+func _gid() -> String:
+	var v = State.s["checkin"]
+	return "" if v == null else str(v["gastId"])
 
 func _d() -> Dictionary:
 	return State.spel_data(SPEL)
 
-func _tik(id: String) -> bool:
-	var s := Hits.spot(id)
-	if s == null or not is_instance_valid(s.knoop) or not (s.knoop is BaseButton):
-		return false
-	(s.knoop as BaseButton).emit_signal("pressed")
-	return true
-
-func _titel(id: String) -> String:
-	var s := Hits.spot(id)
+## The buttons of a strip, by name ("Kkamer1", "Kn3").
+func _knoppen(strook_id: String) -> Array[String]:
+	var uit: Array[String] = []
+	var s := Hits.spot(strook_id)
 	if s == null or not is_instance_valid(s.knoop):
-		return ""
-	return s.knoop.tooltip_text
-
-func _tekst(id: String) -> String:
-	var s := Hits.spot(id)
-	if s == null or not is_instance_valid(s.knoop):
-		return ""
-	if s.knoop.has_method("inhoud_tekst"):
-		return str(s.knoop.call("inhoud_tekst"))
-	return _zoek_label(s.knoop)
-
-func _zoek_label(k: Node) -> String:
-	var uit := ""
-	if k is Label:
-		uit = (k as Label).text
-	elif k is Button and not (k as Button).text.is_empty():
-		uit = (k as Button).text
-	for kind in k.get_children():
-		var diep := _zoek_label(kind)
-		if not diep.is_empty():
-			uit = (uit + " " + diep).strip_edges()
+		return uit
+	var rij := s.knoop.get_node_or_null("Rij")
+	if rij == null:
+		return uit
+	for k in rij.get_children():
+		if not k.is_queued_for_deletion():
+			uit.append(str(k.name))
 	return uit
 
-## Wacht tot `klaar` waar is, of tot `sec` seconden verstreken zijn.
+func _druk(strook_id: String, knop: String) -> bool:
+	var s := Hits.spot(strook_id)
+	if s == null or not is_instance_valid(s.knoop):
+		return false
+	var kn := s.knoop.get_node_or_null("Rij/" + knop)
+	if kn == null or not (kn is BaseButton):
+		return false
+	(kn as BaseButton).emit_signal("pressed")
+	return true
+
+func _kaart(id: String) -> UiSomkaart:
+	var s := Hits.spot(id)
+	return null if s == null or not is_instance_valid(s.knoop) else s.knoop as UiSomkaart
+
+func _wolk_tekst(id: String) -> String:
+	var s := Hits.spot(id)
+	if s == null or not is_instance_valid(s.knoop):
+		return ""
+	var w := s.knoop as UiWolk
+	if w == null:
+		return ""
+	return ("%s %s" % [w.icoon_label.text if w.icoon_label != null else "",
+		w.zeg_label.text if w.zeg_label != null else ""]).strip_edges()
+
+## Wait (real time, the world standing still) until `klaar` is true.
 func _wacht(klaar: Callable, sec: float) -> bool:
 	var t := Time.get_ticks_msec()
 	while Time.get_ticks_msec() - t < int(sec * 1000.0):
@@ -201,579 +224,424 @@ func _wacht(klaar: Callable, sec: float) -> bool:
 		await _boom().process_frame
 	return bool(klaar.call())
 
-## Drukt op één knop van de keuzestrook onder de vraagkaart.
-func _kies_getal(n: int) -> bool:
-	var s := Hits.spot("bd_som_keuzes")
-	if s == null or not is_instance_valid(s.knoop):
-		return false
-	var rij := s.knoop.get_node_or_null("Rij")
-	if rij == null:
-		return false
-	var kn := rij.get_node_or_null("Kn%d" % n)
-	if kn == null or not (kn is BaseButton):
-		return false
-	(kn as BaseButton).emit_signal("pressed")
-	return true
-
-## Drukt op een knop van de strook die níét het goede antwoord is.
-func _kies_fout() -> bool:
-	var s := Hits.spot("bd_som_keuzes")
-	if s == null or not is_instance_valid(s.knoop):
-		return false
-	var rij := s.knoop.get_node_or_null("Rij")
-	if rij == null:
-		return false
-	var goed := "Kn%d" % int(_d()["doel"])
-	for k in rij.get_children():
-		if k.name != goed and k is BaseButton:
-			(k as BaseButton).emit_signal("pressed")
+## Drive the world by hand until `klaar` is true: ticks and the walk along, one
+## real frame every few ticks so the game's own looks (every 0,1 s) keep up.
+## `kamers` collects every room the camera stood in, and every tick checks that
+## the camera is where the guest is while it walks along with him.
+func _loop(klaar: Callable, kamers: Array, max_tikken := 4000) -> bool:
+	var gid := _gid() if not _gid().is_empty() else str(_d().get("gast", ""))
+	for i in max_tikken:
+		if bool(klaar.call()):
 			return true
-	return false
+		World._tik()
+		Hotel._volg_stap()
+		if kamers.is_empty() or kamers.back() != World.kamer_nu():
+			kamers.append(World.kamer_nu())
+		var d = World.dier(gid)
+		if Hotel.volgt() == gid and d != null and d.kamer != World.kamer_nu():
+			fout("de camera loopt met hem mee: %s tegen %s" % [World.kamer_nu(), d.kamer])
+			return false
+		if i % 6 == 5:
+			await _boom().process_frame
+	return bool(klaar.call())
 
-## Wacht de mispauze af die `Ui.misser()` op de strook legt (S5), plus lucht.
-func _wacht_mispauze() -> void:
-	var boom := Engine.get_main_loop() as SceneTree
-	var eind := Time.get_ticks_msec() + int(Ui.MIS_PAUZE * 1000.0) + 250
-	while Time.get_ticks_msec() < eind:
-		await boom.process_frame
+## He stands still in `kamer`, done walking.
+func _staat_in(kamer: String) -> Callable:
+	var gid := _gid()
+	return func() -> bool:
+		var d = World.dier(gid)
+		return d != null and d.kamer == kamer and str(d.reis_doel).is_empty() \
+			and (d.route as Array).is_empty() and (d.punten as Array).is_empty()
 
-## Beantwoordt de openingsvraag goed; daarna pas begint het leggen (N9).
-func _beantwoord() -> bool:
-	if str(_d().get("fase", "leg")) != "vraag":
-		return true
-	if not _kies_getal(int(_d()["doel"])):
+## The room question answered: the beds game runs with its question up.
+func _kies_kamer(kamer: String) -> bool:
+	if not _druk("ci_som_keuzes", "K" + kamer):
 		return false
-	Hits.plaats()
-	return str(_d().get("fase", "")) == "leggen"
-
-## Legt de opdracht helemaal goed neer en tikt op het pootje.
-func _speel_uit() -> void:
-	_beantwoord()
-	var d := _d()
-	var rijen := int(d["rijen"])
-	var per := int(d["perRij"])
-	for r in rijen:
-		for _i in per:
-			_tik("bd_rij%d" % r)
-	_tik("bd_klaar")
+	if Games.actief() != SPEL:
+		return false
+	return await _wacht(func() -> bool: return Hits.spot("bd_som_keuzes") != null, 3.0)
 
 # ------------------------------------------------------- aanmelding, toegang
 
-func test_aanmelding_en_ontgrendeling() -> void:
+func test_aanmelding_zonder_ingang_en_zonder_kaartje() -> void:
 	var def := Games.definitie(SPEL)
 	gelijk(def.get("id", ""), SPEL, "de mapnaam IS het spel-id")
-	gelijk(def.get("naam", ""), "Bedden op rij", "definitie().naam")
-	gelijk(def.get("kamer", ""), KAMER, "definitie().kamer")
+	gelijk(def.get("naam", ""), "Verdeel bedden over de kamers", "definitie().naam, letterlijk")
+	gelijk(def.get("kamer", ""), "receptie", "het spel speelt aan de balie")
 	var hs: Dictionary = def.get("hotspot", {})
-	gelijk(hs.get("obj", ""), "mand", "het icoontje hangt op de speelmand")
-	gelijk(hs.get("icoon", ""), "🛏", "hotspot.icoon")
-	gelijk(hs.get("label", ""), "Bedden", "hotspot.label")
-	gelijk(hs.get("hoog", 0), 14, "hotspot.hoog")
-	gelijk(hs.get("dx", 0), -4, "hotspot.dx")
-	gelijk(hs.get("dz", 0), -4, "hotspot.dz")
+	gelijk(hs.get("icoon", ""), "🛏", "het pictogram van de spelbalk")
+	gelijk(str(hs.get("obj", "")), "", "geen ding om een ingangsknop aan te hangen")
+	waar(not def.has("taak"), "geen eigen prikbordkaartje")
+	waar(not def.has("rust"), "geen rustspul (de dekenkist hoorde bij de oude ingang)")
 	var slot: Callable = def.get("unlock", Callable())
-	waar(slot.is_valid(), "er is een unlock")
-	waar(not slot.call(0, 3), "zonder gasten is bedden dicht")
-	waar(slot.call(1, 3), "vanaf één gast mag het")
-	var taak: Dictionary = def.get("taak", {})
-	gelijk(taak.get("id", ""), "bedden", "taak.id")
-	gelijk(taak.get("icoon", ""), "🛏", "taak.icoon")
-	gelijk(taak.get("tekst", ""), "Zet de bedden op rij", "taak.tekst, letterlijk")
-	gelijk(taak.get("prio", 0), 5, "taak.prio")
-	waar(Ui.keur_taak("bedden", str(taak.get("tekst", ""))),
-		"het taakkaartje blijft onder de zes woorden")
-	var wanneer: Callable = taak.get("wanneer", Callable())
-	waar(not wanneer.call({"gasten": []}), "zonder gasten geen kaartje")
-	waar(not wanneer.call({"gasten": [{}]}), "met één gast nog niet")
-	waar(wanneer.call({"gasten": [{}, {}]}), "vanaf twee gasten wel")
-
-## Het kaartje staat echt op het prikbord, met zijn eigen tekst.
-func test_prikbordkaartje_staat_er() -> void:
-	_op()
-	_hotel(2, 3, 3)
-	var gevonden := ""
+	waar(slot.is_valid() and slot.call(0, 3), "open vanaf de allereerste gast (N = 0)")
+	var kan: Callable = def.get("kan", Callable())
+	waar(kan.is_valid(), "er is een `kan`")
+	waar(not kan.call({"checkin": null}), "zonder check-in niets te doen")
+	waar(not kan.call({"checkin": {"stap": 3, "kamer": ""}}), "bij de kamerkeuze nog niet")
+	waar(kan.call({"checkin": {"stap": 4, "kamer": "kamer1"}}), "bij zijn bedden wel")
 	for q in Hotel.spel_taken():
-		if str(q.get("spel", "")) == SPEL:
-			gevonden = str(q.get("tekst", ""))
-			gelijk(q.get("kamer", ""), KAMER, "het kaartje wijst naar kamer 1")
-			gelijk(q.get("actie", ""), "game:bedden", "en start het spel")
-	gelijk(gevonden, "Zet de bedden op rij", "het prikbordkaartje van bedden")
+		waar(str(q.get("spel", "")) != SPEL, "geen taakkaartje van bedden op het prikbord")
+
+## Nowhere in the hotel hangs an entry: the game begins at the desk, from the
+## room question.
+func test_geen_ingangsknop_in_de_kamers() -> void:
+	_op()
+	_hotel(1, 0)
+	for kamer in ["kamer1", "kamer2", "receptie"]:
+		Hotel.naar_kamer(kamer)
+		Games.hersteek()
+		waar(Hits.spot("spel_" + SPEL) == null, "geen ingangsknop in %s" % kamer)
 	await _af()
 
-# -------------------------------------------------------- de opdracht per band
+# ------------------------------------------------------------- de kamerkeuze
 
-## De kamer is de baas: `Sommen.Bedden.opdracht` mag nooit meer bedden beloven
-## dan er passen.  Deze drie zijn met de hand nagerekend uit `Sommen.tafel`.
-func test_opdracht_per_band() -> void:
-	for geval in [
-			{"n": 2, "kunnen": 3, "dag": 3, "band": 3, "per": 2, "rijen": 2, "doel": 4},
-			{"n": 4, "kunnen": 3, "dag": 3, "band": 4, "per": 2, "rijen": 3, "doel": 6},
-			{"n": 7, "kunnen": 4, "dag": 5, "band": 5, "per": 3, "rijen": 2, "doel": 6}]:
-		_op()
-		_hotel(int(geval["n"]), int(geval["kunnen"]), int(geval["dag"]))
-		gelijk(State.band(), int(geval["band"]), "de band bij N=%d" % int(geval["n"]))
-		waar(Games.start(SPEL), "bedden start op band %d" % int(geval["band"]))
-		Hits.plaats()
-		waar(_beantwoord(), "de vraag is beantwoord op band %d" % int(geval["band"]))
-		var d := _d()
-		gelijk(int(d["cap"]), 6, "kamer 1 heeft plek voor zes bedden erbij")
-		gelijk(int(d["perRij"]), int(geval["per"]), "perRij op band %d" % int(geval["band"]))
-		gelijk(int(d["rijen"]), int(geval["rijen"]), "rijen op band %d" % int(geval["band"]))
-		gelijk(int(d["doel"]), int(geval["doel"]), "doel op band %d" % int(geval["band"]))
-		waar(int(d["perRij"]) <= int(d["cap"]),
-			"een rij is nooit breder dan wat er past")
-		waar(int(d["doel"]) <= int(d["cap"]),
-			"de opdracht belooft nooit meer bedden dan er passen")
-		# de schuifwand is er alleen in groep 5
-		var wand := int(d["wand"])
-		if int(geval["band"]) >= 5 and int(geval["rijen"]) >= 2:
-			gelijk(wand, int(geval["rijen"]) - 1, "de schuifwand hoort bij groep 5")
-			waar(Hits.spot("bd_wand") != null, "en staat er als knop")
-		else:
-			gelijk(wand, 0, "geen schuifwand onder groep 5")
-			waar(Hits.spot("bd_wand") == null, "en dus ook geen knop")
-		await _af()
-
-# ------------------------------------------------------------ één hele beurt
-
-func test_hele_beurt_op_drie_banden() -> void:
-	for geval in [
-			{"n": 2, "kunnen": 3, "dag": 3, "band": 3},
-			{"n": 4, "kunnen": 3, "dag": 3, "band": 4},
-			{"n": 7, "kunnen": 4, "dag": 5, "band": 5}]:
-		_op()
-		_hotel(int(geval["n"]), int(geval["kunnen"]), int(geval["dag"]))
-		var bedden_voor := Rooms.slots(KAMER, "bed").size()
-		var sterren_voor := int(State.s["sterren"])
-		waar(Games.start(SPEL), "bedden start")
-		Hits.plaats()
-		var d := _d()
-		var doel := int(d["doel"])
-		_speel_uit()
-		gelijk(bool(_d().get("klaar", false)), true,
-			"de beurt is goed op band %d" % int(geval["band"]))
-		var af := func() -> bool: return int(_d().get("nieuw", 0)) > 0
-		waar(await _wacht(af, 8.0), "de dekengolf legt echte bedden neer")
-		var nieuw := int(_d().get("nieuw", 0))
-		gelijk(nieuw, doel, "alle %d bedden pasten er echt bij" % doel)
-		gelijk(Rooms.slots(KAMER, "bed").size(), bedden_voor + nieuw,
-			"de kamer heeft er %d bedden bij" % nieuw)
-		gelijk(int(State.s["sterren"]), sterren_voor + 1,
-			"precies één ster voor het meedoen")
-		# de eindkaart telt de rijen uit
-		gelijk(_tekst("bd_som").contains("%d × %d =" % [int(d["rijen"]), int(d["perRij"])]),
-			true, "de eindkaart schrijft de som uit")
-		await _af()
-
-# --------------------------------------------------------- de misserweg
-
-## Nooit straffen: geen kruis, geen teller in beeld, niets wordt weggehaald.
-func test_misser_straft_nooit_en_helpt_zacht() -> void:
+## Step 3 is a room, and only the rooms where one more animal fits: a free bed
+## or floor for a new one.  A room full of sleepers and beds is not offered.
+func test_kamerkeuze_biedt_alleen_kamers_met_plek() -> void:
 	_op()
-	_hotel(4, 3, 3)
-	var sterren_voor := int(State.s["sterren"])
-	waar(Games.start(SPEL), "bedden start")
-	Hits.plaats()
-	waar(_beantwoord(), "de vraag is beantwoord, het leggen begint")
-	var d := _d()
-	var per := int(d["perRij"])
-	# één rij half vol: dat is een scheve rij
-	_tik("bd_rij0")
-	var voor: Array = (_d()["rij"] as Array).duplicate()
-	_tik("bd_klaar")
-	gelijk(int(_d()["missers"]), 1, "een misser is geteld, meer niet")
-	gelijk(str((_d()["rij"] as Array)), str(voor), "er is niets weggehaald")
-	gelijk(int(State.s["sterren"]), sterren_voor, "en er is geen ster afgegaan")
-	gelijk(bool(_d().get("klaar", false)), false, "de beurt is niet klaar")
-	Hits.plaats()
-	var fout := Hits.spot("bd_fout")
-	waar(fout != null, "er staat één zacht wolkje")
-	if fout != null:
-		waar(_tekst("bd_fout").contains("+%d" % (per - 1)),
-			"het wijst aan hoeveel er nog bij mogen: kreeg '%s'" % _tekst("bd_fout"))
-		waar(not _tekst("bd_fout").contains("✗") and not _tekst("bd_fout").contains("!"),
-			"nooit een kruis")
-	waar(Hits.spot("bd_hulp") == null, "na één misser is er nog geen hulpknop")
-	# tweede misser: de hulpknop komt, en Wolkje komt na 900 ms vanzelf
-	_tik("bd_klaar")
-	gelijk(int(_d()["missers"]), 2, "twee missers")
-	Hits.plaats()
-	waar(Hits.spot("bd_hulp") != null, "vanaf twee missers staat kamerhulp Wolkje er")
-	gelijk(_titel("bd_hulp"), "kamerhulp Wolkje", "de titel van de hulpknop")
-	var wolkje := func() -> bool: return Hits.spot("bd_wolkje") != null
-	waar(await _wacht(wolkje, 4.0), "Wolkje komt na twee missers vanzelf")
-	waar(bool(_d().get("spook", false)), "de spookbedjes staan aan")
-	waar(Hits.spot("bd_spook") != null, "en het spookcijfer ligt naast de rij")
-	gelijk(_titel("bd_spook"), "zoveel in een rij", "de titel van het spookcijfer")
-	waar(State.gezien("bedden_wolkje"), "dat Wolkje geweest is, staat in de save")
-	# tikken op Wolkje legt de rij écht neer
-	var lege := -1
-	var lijst: Array = (_d()["rij"] as Array).duplicate()
-	for r in mini(4, int(d["rijen"]) + 1):
-		var n := 0 if r >= lijst.size() else int(lijst[r])
-		if n < per:
-			lege = r
-			break
-	_tik("bd_wolkje")
-	var lijst2: Array = _d()["rij"]
-	gelijk(int(lijst2[lege]), int(lijst[lege]) + 1,
-		"Wolkje legt één bedje bij, niet de hele rij")
+	var v := _hotel(1, 0)
+	waar(not v.is_empty(), "er checkt iemand in")
+	gelijk(int(v.get("stap", 0)), 3, "de check-in staat bij de kamer")
+	var k := _kaart("ci_som")
+	waar(k != null, "de vraag hangt aan de balie")
+	if k != null:
+		gelijk(k.regel_label.text, "🛏 Welke kamer voor %s?" % Hotel.gast_bij_id(_gid())["naam"],
+			"de vraag, met het pictogram vooraan")
+	gelijk(str(_knoppen("ci_som_keuzes")), str(["Kkamer1", "Kkamer2"]), "twee kamers met plek")
+	await _af()
+	# kamer 2 vol: elk bed dat erin past, en in elk een slaper
+	_op()
+	_hotel(1, -1)
+	gelijk(State.plek_in("kamer2"), 0, "kamer 2 heeft geen plek meer")
+	gelijk(str(_knoppen("ci_som_keuzes")), str(["Kkamer1"]), "alleen kamer 1 wordt aangeboden")
 	await _af()
 
-## Kist leeg en rij vol zijn allebei een zacht "nee", geen fout.
-func test_rij_vol_en_kist_leeg_zeggen_zacht_nee() -> void:
+## The room buttons carry pictogram and word (HOTEL.md §9).
+func test_kamerknoppen_hebben_pictogram_en_woord() -> void:
 	_op()
-	_hotel(4, 3, 3)
-	waar(Games.start(SPEL), "bedden start")
-	Hits.plaats()
-	waar(_beantwoord(), "de vraag is beantwoord, het leggen begint")
-	var per := int(_d()["perRij"])
-	var doel := int(_d()["doel"])
-	for _i in per:
-		_tik("bd_rij0")
-	_tik("bd_rij0")                       # deze rij is al vol
-	Hits.plaats()
-	var lijst: Array = _d()["rij"]
-	gelijk(int(lijst[0]), per, "een volle rij groeit niet door")
-	waar(Hits.spot("bd_op") != null, "er staat een zacht wolkje bij die rij")
-	# de kist leeg maken en dan nog eens
-	var gelegd := per
-	var r := 1
-	while gelegd < doel and r < 4:
-		for _i in per:
-			if gelegd >= doel:
-				break
-			_tik("bd_rij%d" % r)
-			gelegd += 1
-		r += 1
-	gelijk(_d().get("laatste", -1) != null, true, "de laatst geraakte rij is bekend")
-	_tik("bd_rij0")
-	gelijk(int((_d()["rij"] as Array)[0]), per, "uit een lege kist komt niets")
-	# terug: eentje terug in de kist, nooit meer
-	var voor := 0
-	for v in (_d()["rij"] as Array):
-		voor += int(v)
-	waar(_tik("bd_undo"), "de terugknop staat er")
-	var na_ := 0
-	for v in (_d()["rij"] as Array):
-		na_ += int(v)
-	gelijk(na_, voor - 1, "er gaat er precies één terug in de kist")
+	_hotel(0, 0)
+	var s := Hits.spot("ci_som_keuzes")
+	waar(s != null, "de kamerstrook staat er")
+	if s != null:
+		var kn := s.knoop.get_node_or_null("Rij/Kkamer1") as Button
+		waar(kn != null, "de knop van kamer 1")
+		if kn != null:
+			gelijk(kn.text, "🛏 Kamer 1", "pictogram en woord")
 	await _af()
 
-# -------------------------------------------------------------- herlaad
+# ----------------------------------------------------------- de getallen
 
-## Beloftes en timers overleven een herlaad niet, de stand wel.  De save is
-## JSON, en JSON kent geen gehele getallen: de heenweg gaat daarom echt door
-## `JSON.stringify`/`parse_string`, precies zoals `State.bewaar()`/`lees()`.
-## (Het bestand in `user://` blijft met rust: `State.start_gekozen()` zou de
-## hele suite daarna laten schrijven en de saves van andere tests overschrijven.)
-func test_beurt_overleeft_een_herlaad() -> void:
+## The numbers are the animals: the ones whose bed is in the chosen room, plus
+## the new guest.  Kamer 2 with three sleepers asks "3 + 1 =".
+func test_de_vraag_telt_de_dieren_van_die_kamer() -> void:
 	_op()
-	_hotel(4, 3, 3)
-	waar(Games.start(SPEL), "bedden start")
+	_hotel(1, 3)
+	waar(await _kies_kamer("kamer2"), "kamer 2 gekozen, het spel vraagt")
+	gelijk(Games.actief(), SPEL, "het beddenspel loopt")
+	gelijk(int(State.s["checkin"]["stap"]), 4, "de check-in staat bij zijn bedden")
+	gelijk(str(State.s["checkin"]["kamer"]), "kamer2", "in kamer 2")
+	var k := _kaart("bd_som")
+	waar(k != null, "de beddenvraag hangt aan de balie")
+	if k != null:
+		gelijk(k.regel_label.text, "🛏 In kamer 2 slapen al 3 dieren", "wie er al slapen")
+		gelijk(k.regel2_label.text, "%s komt erbij. Hoeveel bedden?" % Hotel.gast_bij_id(_gid())["naam"],
+			"en wie erbij komt")
+		gelijk(k.som_label.text, "3 + 1 =", "de som")
+	var knoppen := _knoppen("bd_som_keuzes")
+	gelijk(knoppen.size(), 4, "vier getallen")
+	waar(knoppen.has("Kn4"), "het goede antwoord staat erbij: %s" % str(knoppen))
+	waar(knoppen.has("Kn3"), "en de kamer zonder hem: %s" % str(knoppen))
+	gelijk(Hits.spot("bd_som").kamer, "receptie", "aan de balie")
+	await _af()
+	# and kamer 1 with nobody in it yet
+	_op()
+	_hotel(0, 2)
+	waar(await _kies_kamer("kamer1"), "kamer 1 gekozen")
+	var k1 := _kaart("bd_som")
+	if k1 != null:
+		gelijk(k1.regel_label.text, "🛏 In kamer 1 slaapt nog niemand", "nog niemand")
+		gelijk(k1.som_label.text, "0 + 1 =", "0 + 1")
+	waar(_knoppen("bd_som_keuzes").has("Kn1"), "met 1 bed als antwoord")
+	await _af()
+
+func test_een_slaper_is_enkelvoud() -> void:
+	var spel: GDScript = load(BRON)
+	gelijk(spel.regel_slapers("kamer1", 0), "In kamer 1 slaapt nog niemand", "0")
+	gelijk(spel.regel_slapers("kamer1", 1), "In kamer 1 slaapt al 1 dier", "1")
+	gelijk(spel.regel_slapers("kamer2", 5), "In kamer 2 slapen al 5 dieren", "5")
+	gelijk(spel.regel_erbij("Boef"), "Boef komt erbij. Hoeveel bedden?", "erbij")
+
+# --------------------------------------------------------------------- goed
+
+## Right: he walks to his free bed (the camera along), lies in it, the
+## check-in ends with its star, and the game closes itself.
+func test_goed_hij_slaapt_en_de_check_in_is_klaar() -> void:
+	_op()
+	_hotel(1, 0, false)
+	World.pauzeer(true)
+	var gid := _gid()
+	var sterren := int(State.s["sterren"])
+	var gasten := (State.s["gasten"] as Array).size()
+	waar(await _kies_kamer("kamer1"), "kamer 1 gekozen")
+	waar(_druk("bd_som_keuzes", "Kn2"), "2 bedden: 1 slaper + hij")
+	gelijk(State.s["checkin"], null, "de check-in is klaar")
+	gelijk(int(State.s["sterren"]), sterren + 1, "één ster voor het meedoen")
+	gelijk((State.s["gasten"] as Array).size(), gasten + 1, "hij logeert in het hotel")
+	var g := State.gast_van(gid)
+	gelijk(str(g.get("kamer", "")), "kamer1", "in kamer 1")
+	gelijk(str(g.get("bed", "")), "bed2", "in het vrije bed")
+	gelijk(Hotel.volgt(), gid, "de camera loopt met hem mee")
+	var kamers: Array = []
+	waar(await _loop(func() -> bool: return World.slaapt(gid), kamers), "hij slaapt")
+	gelijk(kamers, ["receptie", "gang", "kamer1"], "door elke deur mee")
+	gelijk(World.kamer_nu(), "kamer1", "de camera staat bij zijn bed")
+	waar(await _wacht(func() -> bool: return Hits.spot("bd_slaap") != null, 2.0),
+		"💤 welterusten")
+	gelijk(_wolk_tekst("bd_slaap"), "💤 welterusten", "de woorden")
+	waar(await _wacht(func() -> bool: return Games.actief().is_empty(), 6.0),
+		"het spel sluit zichzelf")
+	gelijk(World.kamer_nu(), "kamer1", "en de camera blijft bij hem")
+	waar(World.slaapt(gid), "hij slaapt nog")
+	await _af()
+
+## Every bed full: the right answer puts a NEW bed down where the floor has
+## room, and he sleeps in it.
+func test_goed_met_een_nieuw_bed() -> void:
+	_op()
+	_hotel(2, 0)
+	var gid := _gid()
+	var voor := Rooms.slots("kamer1", "bed").size()
+	waar(await _kies_kamer("kamer1"), "kamer 1 gekozen")
+	waar(_druk("bd_som_keuzes", "Kn3"), "3 bedden")
+	gelijk(Rooms.slots("kamer1", "bed").size(), voor + 1, "er staat een bed bij")
+	var g := State.gast_van(gid)
+	waar(str(g.get("bed", "")).begins_with("m"), "hij slaapt in het nieuwe bed (%s)" % g.get("bed", ""))
+	waar(World.slaapt(gid), "in rust meteen")
+	gelijk(World.kamer_nu(), "kamer1", "en de camera staat bij hem")
+	await _af()
+
+# ----------------------------------------------------------------- te weinig
+
+## Too few: no bed for him.  He walks to the room (the camera along), finds
+## none, is sad, walks back (the camera along) and the same question comes back
+## with the same four numbers.  Nothing is lost, no help appears.
+func test_te_weinig_geen_bed_teleurgesteld_terug_en_opnieuw() -> void:
+	_op()
+	_hotel(1, 0, false)
+	World.pauzeer(true)
+	var gid := _gid()
+	var sterren := int(State.s["sterren"])
+	var gasten := (State.s["gasten"] as Array).size()
+	waar(await _kies_kamer("kamer1"), "kamer 1 gekozen")
+	var eerst := _knoppen("bd_som_keuzes")
+	waar(_druk("bd_som_keuzes", "Kn1"), "1 bed: te weinig")
+	waar(Hits.spot("bd_som") == null, "de vraag gaat weg terwijl hij loopt")
+	waar(World.bed_verborgen("kamer1", "bed2"), "het vrije bed staat er niet")
+	gelijk(Hotel.volgt(), gid, "de camera loopt met hem mee")
+	var heen: Array = []
+	waar(await _loop(_staat_in("kamer1"), heen), "hij is in kamer 1")
+	gelijk(heen, ["receptie", "gang", "kamer1"], "heen: door elke deur mee")
+	gelijk(World.kamer_nu(), "kamer1", "de camera blijft bij hem in de kamer")
+	waar(await _wacht(func() -> bool: return Hits.spot("bd_nee") != null, 2.0), "hij zegt het")
+	gelijk(_wolk_tekst("bd_nee"), "🛏 geen bed", "geen bed")
+	gelijk(World.dier(gid).staat, "sip", "en hij is teleurgesteld")
+	gelijk(State.gast_van(gid), {}, "hij heeft geen bed gekregen")
+	waar(State.s["checkin"] != null and str(State.s["checkin"]["gastId"]) == gid,
+		"de check-in loopt nog")
+	# back to the desk
+	waar(await _wacht(func() -> bool: return str(World.dier(gid).reis_doel) == "receptie", 5.0),
+		"hij loopt terug naar de balie")
+	gelijk(Hotel.volgt(), gid, "de camera loopt weer mee")
+	var terug: Array = []
+	waar(await _loop(_staat_in("receptie"), terug), "hij is terug in de receptie")
+	gelijk(terug, ["kamer1", "gang", "receptie"], "terug: door elke deur mee")
+	waar(not World.bed_verborgen("kamer1", "bed2"), "het vrije bed is terug zodra de kamer uit beeld is")
+	waar(await _wacht(func() -> bool: return Hits.spot("bd_som_keuzes") != null, 3.0),
+		"dezelfde vraag komt terug")
+	gelijk(str(_knoppen("bd_som_keuzes")), str(eerst), "met dezelfde vier getallen")
+	var p := Hotel.balieplek()
+	var d = World.dier(gid)
+	waar(Vector2(d.x, d.z).distance_to(Vector2(float(p["x"]), float(p["z"]))) <= 6.0,
+		"hij staat weer aan de balie")
+	# nothing lost, nothing given, no help
+	gelijk(int(State.s["sterren"]), sterren, "geen ster erbij, geen ster eraf")
+	gelijk((State.s["gasten"] as Array).size(), gasten, "niemand weg")
+	gelijk(int(_d().get("missers", 0)), 1, "één misser")
+	var k := _kaart("bd_som")
+	waar(k != null and k.hulp_label.text.is_empty(), "geen hulpregel op de kaart")
+	waar(k != null and k.vak_label.text.is_empty(), "en geen antwoord erop")
+	for id in Hits.lijst():
+		waar(not id.contains("wolkje") and not id.contains("hulp") and not id.contains("spook"),
+			"geen helper of hulpknop: %s" % id)
+	await _af()
+
+# -------------------------------------------------------------------- te veel
+
+## Too many: the room gets the beds he asked for (the free one and new ones),
+## he sees the empty ones, is sad, the beds made for this answer go again, and
+## he walks back to the same question.
+func test_te_veel_bedden_gaan_weer_weg_en_opnieuw() -> void:
+	_op()
+	_hotel(1, 0, false)
+	World.pauzeer(true)
+	var gid := _gid()
+	var bedden := Rooms.slots("kamer1", "bed").size()
+	waar(await _kies_kamer("kamer1"), "kamer 1 gekozen")
+	waar(_druk("bd_som_keuzes", "Kn4"), "4 bedden: te veel")
+	var nep := World.decor_lijst("kamer1").filter(func(s): return s["door"] == SPEL)
+	gelijk(nep.size(), 2, "twee bedden erbij, voor dit antwoord (1 slaper + 3 vrij)")
+	waar(not World.bed_verborgen("kamer1", "bed2"), "het vrije bed staat er ook")
+	gelijk(Rooms.slots("kamer1", "bed").size(), bedden, "niets in de save: de echte bedden blijven twee")
+	var heen: Array = []
+	waar(await _loop(_staat_in("kamer1"), heen), "hij is in kamer 1")
+	gelijk(heen, ["receptie", "gang", "kamer1"], "de camera loopt mee")
+	waar(await _wacht(func() -> bool: return Hits.spot("bd_nee") != null, 2.0), "hij zegt het")
+	gelijk(_wolk_tekst("bd_nee"), "🛏 te veel bedden", "te veel bedden")
+	gelijk(World.dier(gid).staat, "sip", "teleurgesteld")
+	waar(await _wacht(func() -> bool:
+			return World.decor_lijst("kamer1").filter(func(s): return s["door"] == SPEL).is_empty(), 3.0),
+		"de bedden voor dit antwoord gaan weer weg")
+	waar(World.bed_verborgen("kamer1", "bed2"), "ook het vrije bed staat er niet meer")
+	var terug: Array = []
+	waar(await _wacht(func() -> bool: return str(World.dier(gid).reis_doel) == "receptie", 5.0),
+		"hij loopt terug")
+	waar(await _loop(_staat_in("receptie"), terug), "terug aan de balie")
+	gelijk(terug, ["kamer1", "gang", "receptie"], "de camera loopt terug mee")
+	waar(await _wacht(func() -> bool: return Hits.spot("bd_som_keuzes") != null, 3.0),
+		"dezelfde vraag")
+	gelijk(State.gast_van(gid), {}, "hij heeft nog geen bed")
+	waar(State.s["checkin"] != null, "de check-in loopt nog")
+	# and now right
+	waar(_druk("bd_som_keuzes", "Kn2"), "2 bedden")
+	gelijk(State.s["checkin"], null, "nu is de check-in klaar")
+	await _af()
+
+# --------------------------------------------------------------- rustmodus
+
+## Reduced motion: nobody walks.  Wrong: the sad bubble at the desk and the
+## question again; right: in his bed at once.
+func test_rustmodus_meteen() -> void:
+	_op()
+	_hotel(1, 0, true)
+	var gid := _gid()
+	waar(await _kies_kamer("kamer1"), "kamer 1 gekozen")
+	waar(_druk("bd_som_keuzes", "Kn1"), "te weinig")
+	gelijk(World.dier(gid).kamer, "receptie", "hij loopt nergens heen")
+	gelijk(World.kamer_nu(), "receptie", "en de camera ook niet")
+	gelijk(_wolk_tekst("bd_nee"), "🛏 geen bed", "de uitkomst meteen, aan de balie")
+	gelijk(World.dier(gid).staat, "sip", "teleurgesteld")
+	gelijk(Hotel.volgt(), "", "niemand om te volgen")
+	waar(await _wacht(func() -> bool: return Hits.spot("bd_som_keuzes") != null, 4.0),
+		"de vraag komt terug")
+	waar(Hits.spot("bd_nee") == null, "het wolkje is weg")
+	waar(_druk("bd_som_keuzes", "Kn2"), "goed")
+	waar(World.slaapt(gid), "hij ligt meteen in zijn bed")
+	gelijk(World.kamer_nu(), "kamer1", "en de camera is bij hem")
+	gelijk(State.s["checkin"], null, "de check-in is klaar")
+	await _af()
+
+# ------------------------------------------------------------ terug en herlaad
+
+## `⬅ Terug` while he walks to the room: the check-in is not over.  He walks
+## back to the desk, the room question hangs there again, nothing is lost.
+func test_terug_midden_in_het_spel() -> void:
+	_op()
+	_hotel(1, 0, false)
+	World.pauzeer(true)
+	var gid := _gid()
+	var gasten := (State.s["gasten"] as Array).size()
+	waar(await _kies_kamer("kamer1"), "kamer 1 gekozen")
+	waar(_druk("bd_som_keuzes", "Kn3"), "te veel")
+	for i in 30:
+		World._tik()
+		Hotel._volg_stap()
+	Games.stop()                          # ⬅ Terug
+	gelijk(Games.actief(), "", "het spel is weg")
+	gelijk(Hotel.volgt(), "", "het volgen ook")
+	var v = State.s["checkin"]
+	waar(v != null and str(v["gastId"]) == gid, "de check-in loopt nog")
+	gelijk(int(v["stap"]) if v != null else 0, 3, "terug bij de kamer")
+	waar(State.s["nieuweGast"] != null, "hij staat nog op de lijst van de balie")
+	gelijk((State.s["gasten"] as Array).size(), gasten, "niemand weg")
+	gelijk(World.decor_lijst("kamer1").filter(func(s): return s["door"] == SPEL).size(), 0,
+		"de bedden van dat antwoord zijn weg")
+	waar(Hits.spot("ci_som_keuzes") != null, "de kamervraag hangt weer aan de balie")
+	var d = World.dier(gid)
+	waar(d.kamer == "receptie" or str(d.reis_doel) == "receptie", "hij gaat terug naar de balie")
+	# he walks back to his place at the desk — and stays in the receptie: no
+	# door of the walk he broke off comes back
+	var kamers: Array = []
+	var p := Hotel.balieplek()
+	var plek := Vector2(float(p["x"]), float(p["z"]))
+	waar(await _loop(func() -> bool:
+			var dd = World.dier(gid)
+			return dd != null and dd.kamer == "receptie" and (dd.punten as Array).is_empty() \
+				and (dd.route as Array).is_empty() and Vector2(dd.x, dd.z).distance_to(plek) <= 3.0,
+			kamers), "hij staat weer aan de balie")
+	gelijk(World.dier(gid).kamer, "receptie", "in de receptie, niet ergens in de gang")
+	# the child chooses again and the beds question is back
 	Hits.plaats()
-	waar(_beantwoord(), "de vraag is beantwoord, het leggen begint")
-	var per := int(_d()["perRij"])
-	for _i in per:
-		_tik("bd_rij0")
-	_tik("bd_rij1")
-	var voor: Array = (_d()["rij"] as Array).duplicate()
-	var sig := str(_d()["sig"])
-	Games.stop()
+	waar(await _kies_kamer("kamer1"), "opnieuw kamer 1")
+	waar(Hits.spot("bd_som") != null, "en de beddenvraag is terug")
+	await _af()
+
+## A reload in the middle: timers and walks are gone, the save is not.  The
+## check-in comes back at the room question; choosing the room brings the beds
+## question back.
+func test_herlaad_midden_in_de_check_in() -> void:
+	_op()
+	_hotel(1, 0)
+	var gid := _gid()
+	waar(await _kies_kamer("kamer1"), "kamer 1 gekozen")
+	gelijk(int(State.s["checkin"]["stap"]), 4, "bij zijn bedden")
 	var doc := JSON.stringify({"v": State.VERSIE, "s": State.s})
+	Games.stop()
+	Hits.wis_alles()
 	State.s = State.standaard()
 	var terug = JSON.parse_string(doc)
-	waar(typeof(terug) == TYPE_DICTIONARY, "de save is weer in te lezen")
 	State.s = (terug as Dictionary)["s"]
-	waar(typeof(State.spel_data(SPEL).get("rijen", null)) == TYPE_FLOAT,
-		"JSON geeft de tellers als float terug (dat is de hele test)")
-	World.sync(State.s["gasten"])
-	World.naar(KAMER)
-	World.meet(Rect2(Vector2.ZERO, Vector2(1000, 648)))
-	Hotel.render()
-	waar(Games.start(SPEL), "bedden hervat")
+	State.s["checkin"]["stap"] = 4          # as it was saved
+	Hotel.herstel_wereld()
+	Hotel.paint_checkin()                  # what `Hotel.start()` does
+	var v = State.s["checkin"]
+	waar(v != null and str(v["gastId"]) == gid, "de check-in is er nog, van hem")
+	gelijk(int(v["stap"]) if v != null else 0, 3, "terug bij de kamer")
 	Hits.plaats()
-	gelijk(str(_d()["sig"]), sig, "dezelfde opdracht, dus dezelfde signatuur")
-	gelijk(str(_d().get("fase", "")), "leggen", "en de fase overleeft het herlaad")
-	gelijk(str((_d()["rij"] as Array)), str(voor), "de rijen staan er nog precies zo")
-	gelijk(typeof(_d()["rijen"]), TYPE_INT, "en het laatje telt weer in hele getallen")
-	gelijk(_titel("bd_rij0"), "rij 1: %d van %d" % [per, per],
-		"en het strookje zegt het ook")
-	await _af()
-
-# ------------------------------------------------ de openingsvraag (N9)
-
-## Het spel begint met een vraag: de kaart met vier knoppen, en van het
-## leggen zelf is dan nog niets te zien.
-func test_het_spel_begint_met_een_vraag() -> void:
-	_op()
-	_hotel(4, 3, 3)
-	waar(Games.start(SPEL), "bedden start")
-	Hits.plaats()
-	gelijk(str(_d().get("fase", "")), "vraag", "de eerste fase is 'vraag'")
-	var strook := Hits.spot("bd_som_keuzes")
-	waar(strook != null, "er hangt een keuzestrook onder de kaart")
-	if strook != null:
-		var rij := strook.knoop.get_node_or_null("Rij")
-		waar(rij != null, "de strook heeft een rij knoppen")
-		if rij != null:
-			gelijk(rij.get_child_count(), 4, "het zijn er vier")
-	gelijk(Hits.spot("bd_rij0"), null, "er zijn nog geen strookjes")
-	gelijk(Hits.spot("bd_kist"), null, "er is nog geen dekenkist")
-	gelijk(Hits.spot("bd_undo"), null, "er is nog geen 🔄")
-	gelijk(Hits.spot("bd_klaar"), null, "er is nog geen 🐾")
-	var kaart := _tekst("bd_som")
-	waar(kaart.contains("Hoeveel bedden heb je nodig?"),
-		"de vraag staat op de kaart: kreeg '%s'" % kaart)
-	waar(kaart.contains("%d × %d =" % [int(_d()["rijen"]), int(_d()["perRij"])]),
-		"de som staat erbij: kreeg '%s'" % kaart)
-	waar(_beantwoord(), "het goede antwoord zet de fase op 'leggen'")
-	waar(Hits.spot("bd_rij0") != null, "nu verschijnen de strookjes")
-	waar(Hits.spot("bd_klaar") != null, "en het pootje")
-	await _af()
-
-# ------------------------------------------- de lege kamer bij de vraag
-#
-# Eigenaarsduw 2026-09-21: de kamer moet LEEG zijn op het moment dat de gast
-# aankomt en de kaart vraagt "Hoeveel bedden heb je nodig?".  Daarvoor
-# bleven de bedden van eerdere beurten met hun slapers gewoon staan, en kon
-# het kind ze aflezen in plaats van te rekenen.
-#
-# De kamerkant van die wens (dat `verberg_bedden` het bed en zijn slaper
-# écht wegkrijgt) staat in `tests/test_zzz_kamer_leeg.gd` en niet hier: dit
-# is het eerst geladen testbestand van de suite, en vandaaruit
-# `res://scenes/kamer.gd` laden zet diens hele preloadketen vast — dan meldt
-# de motor `7 resources still in use at exit` en valt de suite af.  Zie de
-# kop van dat bestand voor de meting.  Wat hier wél staat is de spelkant: dat
-# `bedden` op het juiste moment vraagt.
-
-## Een kamertje dat onthoudt welke verberg-verzoeken het kreeg.
-class _TelKamer extends Node2D:
-	var verzoeken: Array = []
-
-	func verberg_bedden(aan: bool) -> void:
-		verzoeken.append(aan)
-
-## Het spel vraagt dit zelf, op de juiste momenten: weg bij de vraag, terug
-## na het goede antwoord, en terug als het spel ophoudt.
-func test_bedden_maken_de_kamer_leeg_rond_de_vraag() -> void:
-	_op()
-	_hotel(4, 3, 3)
-	var tel := _TelKamer.new()
-	_vp.add_child(tel)
-	World.registreer_viewport(_vp, tel)
-	waar(Games.start(SPEL), "bedden start")
-	Hits.plaats()
-	gelijk(str(_d().get("fase", "")), "vraag", "de eerste fase is 'vraag'")
-	waar(tel.verzoeken.size() >= 1, "het spel doet een verzoek bij de kamer")
-	waar(bool(tel.verzoeken[tel.verzoeken.size() - 1]),
-		"bij de vraag gaan de bedden weg")
-	waar(_beantwoord(), "het goede antwoord zet de fase op 'leggen'")
-	waar(not bool(tel.verzoeken[tel.verzoeken.size() - 1]),
-		"na het goede antwoord komen de bedden terug")
-	Games.stop()
-	waar(not bool(tel.verzoeken[tel.verzoeken.size() - 1]),
-		"stop laat de kamer niet verborgen achter")
-	tel.queue_free()
-	await _af()
-
-## Wolkje legt één bedje bij, niet een hele rij (N9).
-func test_wolkje_legt_een_bedje() -> void:
-	_op()
-	_hotel(4, 3, 3)
-	waar(Games.start(SPEL), "bedden start")
-	Hits.plaats()
-	waar(_beantwoord(), "de vraag is beantwoord")
-	_tik("bd_klaar")                       # lege vloer: misser 1
-	_tik("bd_klaar")                       # misser 2 -> Wolkje komt
-	var wolkje := func() -> bool: return Hits.spot("bd_wolkje") != null
-	waar(await _wacht(wolkje, 4.0), "Wolkje komt vanzelf")
-	gelijk(_titel("bd_wolkje"), "nog een bedje erbij", "de titel van het wolkje")
-	var per := int(_d()["perRij"])
-	var lijst: Array = (_d()["rij"] as Array).duplicate()
-	var lege := -1
-	for r in mini(4, int(_d()["rijen"]) + 1):
-		var n := 0 if r >= lijst.size() else int(lijst[r])
-		if n < per:
-			lege = r
-			break
-	waar(lege >= 0, "er is een rij die nog niet vol is")
-	var voor := 0 if lege >= lijst.size() else int(lijst[lege])
-	_tik("bd_wolkje")
-	var lijst2: Array = (_d()["rij"] as Array).duplicate()
-	gelijk(int(lijst2[lege]), voor + 1,
-		"het zijn er precies één meer, niet perRij")
-	await _af()
-
-## Fout antwoord op de vraag kost niets: geen ster, geen misser-teller, de
-## tel-ladder helpt en dezelfde vier knoppen blijven staan.
-func test_twee_missers_en_hulp_geven_geen_ster() -> void:
-	_op()
-	_hotel(4, 3, 3)
-	var sterren_voor := int(State.s["sterren"])
-	waar(Games.start(SPEL), "bedden start")
-	Hits.plaats()
-	waar(_kies_fout(), "eerste fout antwoord")
-	await _wacht_mispauze()
-	waar(_kies_fout(), "tweede fout antwoord")
-	gelijk(str(_d().get("fase", "")), "vraag", "de vraag blijft staan")
-	gelijk(int(_d().get("missers", 0)), 0,
-		"fouten op de vraag tellen niet als leg-missers")
-	gelijk(int(State.s["sterren"]), sterren_voor, "er is geen ster bijgekomen")
-	waar(_tekst("bd_som").contains("tel mee"),
-		"de tel-ladder staat als hulp op de kaart: kreeg '%s'" % _tekst("bd_som"))
-	await _af()
-
-## De deur is geen klaar-knop meer (N9): een tik verlaat de kamer en telt
-## geen misser; de beurt staat in `ctx.data()`.
-func test_de_deur_verlaat_de_kamer() -> void:
-	_op()
-	_hotel(4, 3, 3)
-	waar(Games.start(SPEL), "bedden start")
-	Hits.plaats()
-	waar(_beantwoord(), "de vraag is beantwoord")
-	var deur := Hits.spot("deur_kamer1_gang")
-	waar(deur != null, "de deur van kamer1 hangt er")
-	if deur != null:
-		waar(deur.geleend_door != SPEL, "de deur is niet door bedden geleend")
-	waar(_tik("deur_kamer1_gang"), "de deur is aan te tikken")
-	gelijk(int(_d().get("missers", 0)), 0, "de tik op de deur is geen misser")
-	gelijk(str(_d().get("fase", "")), "leggen", "de beurt staat nog in het laatje")
-	await _af()
-
-# ---------------------------------------------------------------- opruimen
-
-func test_stop_laat_de_kamer_schoon_achter() -> void:
-	_op()
-	_hotel(4, 3, 3)
-	waar(Games.start(SPEL), "bedden start")
-	Hits.plaats()
-	waar(_beantwoord(), "de vraag is beantwoord, het leggen begint")
-	# de kamer is rustig gemaakt: de knoppen die op de rijen vallen zijn weg
-	waar(Hits.spot("mand_%s" % KAMER) == null, "de speelmandknop staat even uit")
-	waar(Hits.spot("bed_%s_bed1" % KAMER) == null, "en een vrij bed ook")
-	waar(Hits.spot("bd_rij0") != null, "de strookjes staan er")
-	# N9: de deur wordt niet meer geleend — 🐾 is de enige klaar-controle
-	var deur := Hits.spot("deur_%s_gang" % KAMER)
-	waar(deur == null or deur.geleend_door != SPEL, "de deur is niet geleend")
-	Games.stop()
-	Hits.plaats()
-	for id in Hits.lijst():
-		waar(Hits.spot(id).door != SPEL, "geen hotspot van bedden bleef staan: %s" % id)
-	for id in ["bd_rij0", "bd_rij1", "bd_kist", "bd_klaar", "bd_som", "bd_wolk",
-			"bd_spook", "bd_undo", "bd_hulp", "bd_wand", "bd_goed"]:
-		waar(Hits.spot(id) == null, "%s is weg" % id)
-	gelijk(World.decor_lijst().filter(func(d): return d["door"] == SPEL).size(), 0,
-		"en het losse decor van bedden is weg")
-	var deur2 := Hits.spot("deur_%s_gang" % KAMER)
-	waar(deur2 == null or deur2.geleend_door == "", "de deur is weer gewoon de deur")
-	# de kamer is weer van het hotel: zijn deurbordje staat er, en de
-	# speelmand heeft een knop precies als hier iemand wil spelen (eigenaar,
-	# 2026-09-23: geen knop die bij een tik niets kan)
-	waar(deur2 != null and deur2.door == Hotel.EIGENAAR, "en de kamer is weer van het hotel")
-	var wil := false
-	for g in State.s["gasten"]:
-		if str(g.get("kamer", "")) == KAMER and str(g.get("behoefte", "")) == "spelen" \
-				and not g.get("blij", false):
-			wil = true
-	gelijk(Hits.spot("mand_%s" % KAMER) != null, wil,
-		"de speelmand heeft een knop als hier iemand wil spelen")
-	await _af()
-
-## De kamer zit vol: één vriendelijk kaartje, geen opdracht, geen ster.
-func test_volle_kamer_belooft_niets() -> void:
-	_op()
-	_hotel(2, 3, 3)
-	# elk vrij vakje van beide slaapkamers volzetten
-	for kamer in ["kamer1", "kamer2"]:
-		for _i in 40:
-			var r := Rooms.get_kamer(kamer)
-			if r == null or r.vrij.is_empty():
-				break
-			var cel: Dictionary = r.vrij[0]
-			if Rooms.meubel_zet(kamer, "bed", float(cel["x"]), float(cel["z"])).is_empty():
-				break
-	var sterren_voor := int(State.s["sterren"])
-	waar(Games.start(SPEL), "bedden start ook in een volle kamer")
-	Hits.plaats()
-	gelijk(str(_d().get("fase", "")), "vol", "de fase is 'vol'")
-	gelijk(int(_d().get("vol", 0)), 1, "en dat staat in het laatje")
-	waar(_tekst("bd_vol").contains("vol ✓"), "het wolkje zegt 'vol ✓'")
-	waar(Hits.spot("bd_som") == null, "geen sommenkaart")
-	waar(Hits.spot("bd_rij0") == null, "geen strookjes")
-	gelijk(int(State.s["sterren"]), sterren_voor, "en geen ster")
+	waar(Hits.spot("ci_som_keuzes") != null, "de kamervraag hangt aan de balie")
+	waar(await _kies_kamer("kamer1"), "kamer 1 opnieuw")
+	var k := _kaart("bd_som")
+	waar(k != null and k.som_label.text == "1 + 1 =", "de beddenvraag is terug")
 	await _af()
 
 # ----------------------------------------------------------------- teksten
 
-## F3: elke kindertekst van §3.7, letterlijk, en in beeld.
-func test_alle_kinderteksten() -> void:
+## Every sentence on the longest guest name stays within 8 words and 40
+## characters (HOTEL.md §9), and every glyph is in the bundled subset.
+func test_teksten_in_het_budget_op_stampertje() -> void:
 	_op()
-	_hotel(4, 3, 3)
-	waar(Games.start(SPEL), "bedden start")
-	Hits.plaats()
-	var d := _d()
-	var per := int(d["perRij"])
-	var rijen := int(d["rijen"])
-	var doel := int(d["doel"])
-	# N9: eerst staat de openingsvraag op de kaart, met vier knoppen
-	gelijk(_tekst("bd_som").contains("Hoeveel bedden heb je nodig?"), true,
-		"de vraagkaart: kreeg '%s'" % _tekst("bd_som"))
-	waar(Hits.spot("bd_som_keuzes") != null, "onder de vraag staan vier knoppen")
-	waar(_beantwoord(), "de vraag is goed beantwoord, het leggen begint")
-	gelijk(_titel("bd_rij0"), "rij 1: 0 van %d" % per, "strookje, titel")
-	gelijk(_titel("bd_kist"), "dekenkist met %d bedjes" % doel, "dekenkist, titel")
-	gelijk(_titel("bd_klaar"), "%d gasten mogen erin" % doel, "klaar-knop, titel")
-	gelijk(_tekst("bd_wolk"), "🛏 %d bedden maken" % doel, "wolkje boven de gast")
-	var kaart := _tekst("bd_som")
-	waar(kaart.contains("Leg %d rijen van %d bedden" % [rijen, per]),
-		"sommenkaart, regel 1: kreeg '%s'" % kaart)
-	waar(kaart.contains("Zo veel bedden staan er nu"), "sommenkaart, regel 2")
-	waar(kaart.contains("? × %d =" % per), "sommenkaart, som zonder volle rij")
-	_tik("bd_rij0")
-	Hits.plaats()
-	gelijk(_titel("bd_rij0"), "rij 1: 1 van %d" % per, "strookje telt mee")
-	gelijk(_titel("bd_undo"), "eentje terug in de kist", "undo, titel")
-	for _i in per - 1:
-		_tik("bd_rij0")
-	Hits.plaats()
-	waar(_tekst("bd_som").contains("1 × %d =" % per), "de som telt de volle rijen")
-	gelijk(_titel("bd_kist"), "dekenkist met %d bedjes" % (doel - per),
-		"de dekenkist telt af")
+	_hotel(2, 0, true, true)
+	gelijk(str(Hotel.gast_bij_id(_gid()).get("naam", "")), "Stampertje", "de langste naam")
+	var ci := _kaart("ci_som")
+	waar(ci != null and Ui.keur_regel("ci", ci.regel_label.text), "de kamervraag: %s"
+		% (ci.regel_label.text if ci != null else ""))
+	waar(await _kies_kamer("kamer1"), "kamer 1 gekozen")
+	var k := _kaart("bd_som")
+	waar(k != null, "de beddenvraag")
+	if k != null:
+		gelijk(k.regel2_label.text, "Stampertje komt erbij. Hoeveel bedden?", "letterlijk")
+		for zin in [k.regel_label.text, k.regel2_label.text]:
+			waar(Ui.keur_regel("bd", zin), "'%s' past (%d tekens)" % [zin, zin.length()])
+	for zin in ["In kamer 2 slapen al 5 dieren", "In kamer 1 slaapt nog niemand",
+			"In kamer 1 slaapt al 1 dier", "Welke kamer voor Stampertje?",
+			"Stampertje komt erbij. Hoeveel bedden?"]:
+		waar(Ui.keur_regel("bd", zin), "'%s' past in het budget" % zin)
+	for zin in ["🛏 geen bed", "🛏 te veel bedden", "💤 welterusten", "🛏 Kamer 1",
+			"Verdeel bedden over de kamers", "🔄 Nog een keer"]:
+		gelijk(str(Ui.mist_tekens(zin)), "[]", "elke glyph van '%s' is er" % zin)
 	await _af()
 
-## Op een telefoon houdt het wolkje boven de gast zijn pictogram én zijn getal,
-## maar niet meer zijn woorden: "🛏 6 bedden maken" is 164 eenheden breed en die
-## drie kolommen zijn naast een wandelende gast niet vrij.  Op een kort kader
-## (compact landschap) blijft het helemaal weg, net als de kaart boven de rijen.
-func test_wolkje_krimpt_op_een_telefoon() -> void:
-	for geval in [
-			{"kader": Vector2(990, 637), "wolk": "🛏 6 bedden maken"},
-			{"kader": Vector2(326, 558), "wolk": "🛏 6"},
-			{"kader": Vector2(558, 289), "wolk": ""}]:
-		var kader: Vector2 = geval["kader"]
-		_op(kader)
-		_hotel(4, 3, 3, kader)
-		waar(Games.start(SPEL), "bedden start bij %s" % str(kader))
-		Hits.plaats()
-		waar(_beantwoord(), "de vraag is beantwoord bij %s" % str(kader))
-		gelijk(_tekst("bd_wolk"), str(geval["wolk"]),
-			"het wolkje bij kader %s" % str(kader))
-		if not str(geval["wolk"]).is_empty():
-			gelijk(_titel("bd_wolk"), "6 bedden maken",
-				"de woorden blijven in de titel bij %s" % str(kader))
-		await _af()
-
-## Enkelvoud en meervoud: nooit "van 1 bedden".
-func test_enkelvoud_en_meervoud() -> void:
-	var spel: GDScript = load(BRON)
-	gelijk(spel.mv(1, "bed", "bedden"), "1 bed", "mv(1)")
-	gelijk(spel.mv(3, "bed", "bedden"), "3 bedden", "mv(3)")
-	gelijk(spel.mv(1, "bedje", "bedjes"), "1 bedje", "mv(1) voor de kist")
-	gelijk(spel.mv(0, "rij", "rijen"), "0 rijen", "mv(0)")
-
-## De bron draagt elke letterlijke tekst van §3.7 die niet in elke beurt
-## voorkomt (de eindkaart, het eindwolkje, Wolkje, de schuifwand).
+## The source carries every child-facing string of games-a.md §3 verbatim.
 func test_bron_draagt_de_letterlijke_teksten() -> void:
 	var f := FileAccess.open(BRON, FileAccess.READ)
 	waar(f != null, "de bron is te lezen")
@@ -781,150 +649,10 @@ func test_bron_draagt_de_letterlijke_teksten() -> void:
 		return
 	var bron := f.get_as_text()
 	f.close()
-	for zin in ['"Bedden op rij"', '"Zet de bedden op rij"', '"Bedden"',
-			'"Hoeveel bedden heb je nodig?"', '"nog een bedje erbij"',
-			'"rij %d: %d van %d"', '"dekenkist met "', '"bedje", "bedjes"',
-			'"eentje terug in de kist"', '"Leg %s van %s"',
-			'"Zo veel bedden staan er nu"', '"bed maken"', '"bedden maken"',
-			'"1 gast mag erin"', '"%d gasten mogen erin"', '"kamerhulp Wolkje"',
-			'"zoveel in een rij"', '"in elke rij"', '"Nu staat er "',
-			'"Nu staan er "', '"vol ✓"', '"%d × %d + %d × %d"']:
+	for zin in ['"Verdeel bedden over de kamers"', '"%s slaapt nog niemand"',
+			'"%s slaapt al 1 dier"', '"%s slapen al %d dieren"',
+			'"%s komt erbij. Hoeveel bedden?"', '"geen bed"', '"te veel bedden"',
+			'"welterusten"', '"hoeveel bedden?"']:
 		waar(bron.contains(zin), "de bron draagt %s" % zin)
-
-## Elk pictogram dat een kind ziet heeft een glyph in de meegeleverde subset.
-func test_elk_pictogram_heeft_een_glyph() -> void:
-	for zin in ["🛏", "🛌", "🧺", "🔄", "🐾", "🐑", "🚧", "⭐", "×", "−", "✓",
-			"vol ✓", "Zo veel bedden staan er nu"]:
-		var mist := Ui.mist_tekens(zin)
-		gelijk(str(mist), "[]", "geen ontbrekende tekens in '%s'" % zin)
-
-## F4: elke zin op de kaart blijft onder de acht woorden en veertig tekens.
-func test_kaartzinnen_passen_in_het_budget() -> void:
-	for zin in ["Leg 3 rijen van 10 bedden", "Zo veel bedden staan er nu",
-			"Hoeveel bedden heb je nodig?",
-			"Nu staan er 10 bedden", "Nu staat er 1 bed"]:
-		waar(Ui.keur_regel("bd_som", zin), "'%s' past in het budget" % zin)
-
-# ------------------------------------------------------ dekking in vier maten
-
-## Dezelfde twee invarianten als `tests/test_hits.gd`: niets overlapt iets
-## anders, en geen knop staat op een voorwerp in beeld.
-func _keur(kader: Vector2, wat: String) -> void:
-	var dbg := Hits.debug()
-	var ids: Array = dbg.keys()
-	for i in ids.size():
-		var a: Dictionary = dbg[ids[i]]
-		var ra: Rect2 = a["rect"]
-		waar(ra.position.x >= 0.0 and ra.position.y >= 0.0
-			and ra.end.x <= kader.x + 0.01 and ra.end.y <= kader.y + 0.01,
-			"%s: %s binnen het kader" % [wat, ids[i]])
-		waar(not a["krap"], "%s: %s vond een echte plek" % [wat, ids[i]])
-		if int(a["laag"]) != Hits.Laag.VAST:
-			for j in ids.size():
-				var v: Rect2 = dbg[ids[j]]["vlak"]
-				if v.size.x <= 0.0:
-					continue
-				if str(a.get("op", "")) == "aan" and v.is_equal_approx(a["vlak"]):
-					continue          # a hotel button ON its own thing
-				var snij := ra.intersection(v)
-				gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
-					"%s: %s dekt voorwerp van %s" % [wat, ids[i], ids[j]])
-		for j in range(i + 1, ids.size()):
-			var rb: Rect2 = dbg[ids[j]]["rect"]
-			var s2 := ra.intersection(rb)
-			gelijk(maxf(0.0, s2.size.x) * maxf(0.0, s2.size.y), 0.0,
-				"%s: %s en %s overlappen" % [wat, ids[i], ids[j]])
-
-func test_geen_knop_dekt_een_voorwerp_in_vier_maten() -> void:
-	for kader in MATEN + KADERS:
-		_op(kader)
-		_hotel(4, 3, 3, kader)
-		waar(Games.start(SPEL), "bedden start bij %s" % str(kader))
-		Hits.plaats()
-		_keur(kader, "%s in de vraagfase" % str(kader))
-		waar(_beantwoord(), "de vraag is beantwoord bij %s" % str(kader))
-		var eigen := 0
-		for id in Hits.lijst():
-			var s := Hits.spot(id)
-			if s == null or s.door != SPEL:
-				continue
-			eigen += 1
-			gelijk(Hits.dekking(id), 0.0,
-				"%s: %s dekt 0 %% van zijn voorwerp" % [str(kader), id])
-			var r: Rect2 = Hits.debug().get(id, {}).get("rect", Rect2())
-			if s.kind != "tag" and s.kind != "naam":
-				waar(r.size.x >= 48.0 and r.size.y >= 48.0,
-					"%s: %s is een tikdoel van 48 px (%s)" % [str(kader), id, str(r)])
-		waar(eigen >= 6, "%s: bedden plaatste %d eigen hotspots" % [str(kader), eigen])
-		_keur(kader, str(kader))
-		# en na een misser komen er wolkjes bij die ook een plek moeten vinden
-		_tik("bd_rij0")
-		_tik("bd_klaar")
-		Hits.plaats()
-		_keur(kader, "%s na een misser" % str(kader))
-		await _af()
-
-## "Nette rijen" is de hele opdracht: strookje 1 staat boven strookje 2, altijd,
-## en ze staan even ver uit elkaar.  Gemeten in de browser op band 4 stond rij 0
-## op y 621 en rij 1 op y 353 — vier banden lager dan de rest, omdat de
-## sommenkaart (prio 14) de band van rij 0 innam en het raster rij 0 daarna naar
-## beneden schoof.  De kaart wijkt nu voor de rijen (prio 13 tegen 14).
-func test_de_rijen_staan_netjes_onder_elkaar() -> void:
-	for geval in [
-			{"n": 2, "kunnen": 3, "dag": 3},
-			{"n": 4, "kunnen": 3, "dag": 3},
-			{"n": 7, "kunnen": 4, "dag": 5}]:
-		for kader in MATEN + KADERS:
-			_op(kader)
-			_hotel(int(geval["n"]), int(geval["kunnen"]), int(geval["dag"]), kader)
-			waar(Games.start(SPEL), "bedden start bij %s" % str(kader))
-			Hits.plaats()
-			waar(_beantwoord(), "de vraag is beantwoord bij %s" % str(kader))
-			var stroken := mini(4, int(_d()["rijen"]) + 1)
-			var vorige := -1.0
-			var stap := -1.0
-			for r in stroken:
-				var dbg: Dictionary = Hits.debug().get("bd_rij%d" % r, {})
-				waar(not dbg.is_empty(), "%s: strookje %d staat er" % [str(kader), r])
-				if dbg.is_empty():
-					continue
-				var y: float = (dbg["rect"] as Rect2).get_center().y
-				if vorige >= 0.0:
-					waar(y > vorige,
-						"%s: rij %d staat onder rij %d (%.0f na %.0f)"
-							% [str(kader), r, r - 1, y, vorige])
-					var d := y - vorige
-					if stap >= 0.0:
-						waar(absf(d - stap) <= Hits.RIJ + 0.01,
-							"%s: rij %d staat even ver (%.0f tegen %.0f)"
-								% [str(kader), r, d, stap])
-					stap = d
-				vorige = y
-			# en de kaart staat niet op een strookje
-			var kr: Rect2 = Hits.debug().get("bd_som", {}).get("rect", Rect2())
-			for r in stroken:
-				var sr: Rect2 = Hits.debug().get("bd_rij%d" % r, {}).get("rect", Rect2())
-				var snij := kr.intersection(sr)
-				gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
-					"%s: de kaart staat niet op rij %d" % [str(kader), r])
-			await _af()
-
-## Het kader bepaalt hoeveel strookjes er passen; nooit minder dan drie en
-## nooit meer dan vier, dus `rijen` blijft tussen 1 en 3.
-func test_max_stroken_volgt_het_kader() -> void:
-	for kader in MATEN + KADERS:
-		_op(kader)
-		_hotel(4, 3, 3, kader)
-		waar(Games.start(SPEL), "bedden start bij %s" % str(kader))
-		Hits.plaats()
-		waar(_beantwoord(), "de vraag is beantwoord bij %s" % str(kader))
-		var d := _d()
-		var stroken := mini(4, int(d["rijen"]) + 1)
-		waar(int(d["rijen"]) >= 1 and int(d["rijen"]) <= 3,
-			"%s: rijen blijft 1..3 (kreeg %d)" % [str(kader), int(d["rijen"])])
-		for r in stroken:
-			waar(Hits.spot("bd_rij%d" % r) != null,
-				"%s: strookje %d staat er" % [str(kader), r])
-		waar(Hits.spot("bd_rij%d" % stroken) == null,
-			"%s: en er staat er niet één te veel" % str(kader))
-		await _af()
+	for oud in ["Bedden op rij", "Zet de bedden op rij", "Wolkje", "tel mee", "Hoeveel bedden heb je nodig?"]:
+		waar(not bron.contains('"%s"' % oud), "de oude tekst %s is weg" % oud)

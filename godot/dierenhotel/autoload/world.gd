@@ -605,6 +605,8 @@ func naar(kamer_id: String) -> void:
 		return
 	var oud := _kamer_nu
 	_kamer_nu = kamer_id
+	# the beds a game hid in the room you leave are back when you look again
+	_bed_weg.erase(oud)
 	_bereken_schaal()
 	hermeet()
 	_cam_doel = cam_doel(Rooms.get_kamer(kamer_id))
@@ -1323,6 +1325,11 @@ func _breek(d: Dier, gehaald: bool) -> void:
 	d.punten = []
 	d.per_stap = Callable()
 	d.reis_doel = ""
+	# the journey is over, so are its doors: a route left behind made the next
+	# walk end with a step through a door of the old one (`_aangekomen`), and a
+	# guest sent back to the desk from halfway to his room turned up in the
+	# corridor instead (bedden, 2026-09-24)
+	d.route = []
 	if d.staat == "slaap":
 		# out of bed: the next order is never "lie down again", and the bed
 		# target must go with it or he would climb back in on arrival
@@ -1450,6 +1457,34 @@ func plaats_meubel(kamer_id: String, type: String, x: float = NAN, z: float = NA
 func bedden_verberg(aan: bool) -> void:
 	if _kamerscene != null and _kamerscene.has_method("verberg_bedden"):
 		_kamerscene.verberg_bedden(aan)
+
+## Single FREE beds out of sight for a while (owner, 2026-09-24): when the child
+## says how many beds a room needs, the guest walks in and finds exactly that
+## many — the bed he did not get is not standing there after all.  kamer ->
+## {slot: true}; nothing is saved.  Hidden beds stay hidden while the camera
+## looks at their room, and come back the moment it leaves it (`naar`), so
+## nobody ever sees a bed pop up again.
+var _bed_weg: Dictionary = {}
+
+func verberg_bed(kamer_id: String, slot: String, aan := true) -> void:
+	if aan:
+		if not _bed_weg.has(kamer_id):
+			_bed_weg[kamer_id] = {}
+		(_bed_weg[kamer_id] as Dictionary)[slot] = true
+	elif _bed_weg.has(kamer_id):
+		(_bed_weg[kamer_id] as Dictionary).erase(slot)
+	vuil()
+
+func bed_verborgen(kamer_id: String, slot: String) -> bool:
+	return _bed_weg.has(kamer_id) and (_bed_weg[kamer_id] as Dictionary).has(slot)
+
+## Every hidden bed of this room back, or of every room ("").
+func toon_bedden(kamer_id := "") -> void:
+	if kamer_id.is_empty():
+		_bed_weg.clear()
+	else:
+		_bed_weg.erase(kamer_id)
+	vuil()
 
 ## `wereld.getalTag(obj, n, o)` — a bare number ON an object.
 func getal_tag(obj: Variant, n: Variant, o: Dictionary = {}) -> String:

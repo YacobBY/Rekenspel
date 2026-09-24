@@ -1310,9 +1310,11 @@ func test_de_gast_checkt_in_aan_de_balie() -> void:
 ## Owner, 2026-09-23: "actions such as a blank bed are available after entering
 ## a guest but when you click on them you can't execute them ... this provides
 ## visual clutter".  Outside a game a hotel button stands only where a tap does
-## something: a free bed while a guest waits for one, the play basket while
-## somebody here wants to play, a bowl with food while somebody here still has
-## to eat, the bell while a free bed waits and nobody stands at the desk.
+## something: the play basket while somebody here wants to play, a bowl with
+## food while somebody here still has to eat, the bell while a bedroom can take
+## one more guest and nobody stands at the desk.  A bed never has one: since
+## 2026-09-24 the check-in chooses a ROOM at the desk (owner: "Je moet bij
+## bellen van het dier een kamer voor het dier kiezen").
 func test_een_knop_staat_er_alleen_als_hij_iets_doet() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	var boom := Engine.get_main_loop() as SceneTree
@@ -1342,20 +1344,25 @@ func test_een_knop_staat_er_alleen_als_hij_iets_doet() -> void:
 	Hotel.naar_kamer("receptie")
 	for _f in 2:
 		await boom.process_frame
-	waar(Hits.spot("bel") != null, "met een vrij bed staat de bel er")
+	waar(Hits.spot("bel") != null, "met plek in een kamer staat de bel er")
 	Hotel.bel()
 	for _f in 2:
 		await boom.process_frame
 	waar(Hits.spot("bel") == null, "met een gast aan de balie niet meer")
-	# the check-in reaches the bed: now a free bed is something to tap
+	# the check-in reaches its room: the question hangs at the desk, and a free
+	# bed is still nothing to tap
 	var v = State.s["checkin"]
 	waar(v != null, "de gast checkt in")
 	if v != null:
 		v["stap"] = 3
+		Hotel.paint_checkin()
+		for _f in 2:
+			await boom.process_frame
+		waar(Hits.spot("ci_som_keuzes") != null, "de kamervraag hangt aan de balie")
 		Hotel.naar_kamer("kamer1")
 		for _f in 2:
 			await boom.process_frame
-		waar(Hits.spot("bed_kamer1_bed2") != null, "bij het kiezen van een bed heeft het vrije bed een knop")
+		waar(Hits.spot("bed_kamer1_bed2") == null, "ook bij de kamerkeuze heeft een vrij bed geen knop")
 		waar(Hits.spot("bed_kamer1_bed1") == null, "een bezet bed nooit")
 	await _hotel_af(h)
 	State.s = bewaard

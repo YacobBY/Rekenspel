@@ -25,13 +25,13 @@ Een spel meldt zich aan met een definitie:
 | veld | bedden | sleutels | meubels | tobbe | voerkar |
 |---|---|---|---|---|---|
 | `id` | `bedden` | `sleutels` | `meubels` | `tobbe` | `voerkar` |
-| `naam` | `Bedden op rij` | `Het sleutelbord` | `Het meubelboek` | `Tobbe-tijd` | `De voerkar` |
-| `kamer` | `kamer1` | `receptie` | `receptie` | `tuin` | `keuken` |
-| `hotspot.obj` | `mand` | `sleutelbordz` | `boek` | `tobbe` | `kar` |
-| `hotspot.icoon` | `🛏` | `🔑` | `📖` | `🛁` | `🛒` |
-| `hotspot.label` | `Bedden` | `Sleutels` | `Boek` | `Tobbe` | `Voerkar` |
-| `hotspot` offset | `hoog:14, dx:-4, dz:-4` | `hoog:13, dz:6` | `hoog:16` | `hoog:12` | `hoog:16` |
-| `unlock` | `N >= 1` | `N >= 2` | `N >= 3` | `N >= 1` | `N >= 1` |
+| `naam` | `Verdeel bedden over de kamers` | `Het sleutelbord` | `Het meubelboek` | `Tobbe-tijd` | `De voerkar` |
+| `kamer` | `receptie` | `receptie` | `receptie` | `tuin` | `keuken` |
+| `hotspot.obj` | — (geen ingang: stap 4 van de check-in, §3.1) | `sleutelbordz` | `boek` | `tobbe` | `kar` |
+| `hotspot.icoon` | `🛏` (alleen voor de spelbalk) | `🔑` | `📖` | `🛁` | `🛒` |
+| `hotspot.label` | — | `Sleutels` | `Boek` | `Tobbe` | `Voerkar` |
+| `hotspot` offset | — | `hoog:13, dz:6` | `hoog:16` | `hoog:12` | `hoog:16` |
+| `unlock` | altijd (ook N = 0) | `N >= 2` | `N >= 3` | `N >= 1` | `N >= 1` |
 
 `N` = aantal gasten in het hotel (`State.N()`). Een niet-ontgrendeld spel heeft
 géén icoontje in de wereld.
@@ -45,8 +45,9 @@ Volgorde bij `Games.start(id)`:
    geen van deze vijf zet `blijf`.
 5. `World.naar(def.kamer)` als je er nog niet bent, dan `def.start(ctx)`.
 6. Gooit `start()` een fout → `actief = null` en één toast: **"💛 Probeer iets anders"**.
-7. Een spel mág onderweg van kamer wisselen (bedden doet dat); de motor neemt
-   dan die kamer over als spelkamer.
+7. Een spel mág onderweg van kamer wisselen; de motor neemt dan die kamer over
+   als spelkamer.  **Poort (2026-09-24):** bedden loopt met zijn gast mee naar zijn
+   kamer en terug en zegt dat met `Games.verhuis(kamer)` (§3.4).
 
 `stop()` (via `ctx.sluit()`, een ander spel, of de motor): `def.stop()`,
 `Hits.wisEigenaar(id)` (alle knoppen, wolkjes, sommenkaarten, cijfers van dít
@@ -81,8 +82,8 @@ Regels die het gedrag van deze spellen sturen:
   heen. Sommenkaart, cijferpad en keuzestrook zijn altijd `vast` (prio 14).
 * Knoppen die elkaar afdekken worden uit elkaar geschoven; elke knop wordt
   binnen het kader geklemd (2 px marge) zodra kader > 78 px.
-* `Hits.pak(id, eigenaar, fn)` = een knop van het hotel lenen (bedden leent de
-  deur, voerkar leent de voerbakjes); `Hits.laat(eigenaar)` geeft hem terug.
+* `Hits.pak(id, eigenaar, fn)` = een knop van het hotel lenen (voerkar leent de
+  voerbakjes en de deuren); `Hits.laat(eigenaar)` geeft hem terug.
 * `volg()` = een callback die elk beeld de nieuwe plek levert (voor dingen die
   bewegen: de voerkar, de doos van het meubelboek, een dier).
 
@@ -105,9 +106,10 @@ uitdrukkingen staan. Overtreding = één `console.warn` per kaartje, de kaart
 tekent wél door.
 
 **Hulpladder, overal gelijk:** 1e poging samen doortellen, 2e poging nog eens,
-pas bij de **3e** poging spookvormen. (bedden/sleutels/tobbe zetten hun
+pas bij de **3e** poging spookvormen. (sleutels/tobbe zetten hun
 helper-knop al na 2 missers neer; meubels/voerkar volgen de 3-ladder in de
-kaart zelf. Zie per spel.)
+kaart zelf. Zie per spel.  **bedden geeft geen hulp** — eigenaar 2026-09-24,
+§3.4 — alleen een teleurgesteld dier en dezelfde vraag.)
 
 ### 1.4 Geluiden (snd.js) — namen zoals aangeroepen
 
@@ -127,9 +129,10 @@ Hoogstens 3 kaartjes, pictogram + ≤ 6 woorden. Wensen van dieren gaan vóór
 |---|---|---|---|---|---|
 | hotel zelf | `voer` | 🍪 | `Vul de voerkar` | een bakje in een kamer mét gasten staat leeg | 0 |
 | tobbe (`SPEL_TAAK`) | `bad` | 🛁 | `<naam> wil in bad`, anders `Tobbe-tijd` | er is een gast met wens `bad` die nog niet blij is | 1 |
-| bedden | `bedden` | 🛏 | `Zet de bedden op rij` | `gasten.length >= 2` | 5 |
 | sleutels | `sleutels` | 🔑 | `Hang de sleutels op` | `gasten.length >= 2` | 5 |
 | meubels | `meubels` | 📖 | `Koop iets moois` | `munten >= 5` | 5 |
+
+(bedden heeft sinds 2026-09-24 geen kaartje meer: het is stap 4 van de check-in.)
 
 Alle prio-5-kaartjes ("gewone klusjes") tellen even zwaar en **rouleren per
 dag**: dag *d* begint bij index `(d - 1) mod n`. Een taakje aantikken doet
@@ -238,6 +241,9 @@ Nagerekend:
 | 7 | 5 | 5 | 36 | 5 | 1 |
 
 ### 2.4 `sommen.tafel(band)` — bedden
+
+(Blijft byte-identiek in de kern, maar het spel gebruikt het sinds 2026-09-24 niet
+meer: de getallen van "Verdeel bedden over de kamers" zijn de dieren zelf, §3.3.)
 
 ```
 band = (band <= 3) ? 3 : (band >= 5) ? 5 : 4
@@ -372,247 +378,166 @@ munt(v, extra, id): het HTML-muntje ('note' bij 10 of 20, anders 'c<v>')
 
 ---
 
-## 3. BEDDEN OP RIJ (`bedden.js`)
+## 3. VERDEEL BEDDEN OVER DE KAMERS (`games/bedden`)
 
-### 3.1 Verhaal, kamer, gast
+**Eigenaarswensen 2026-09-24, letterlijk en in volgorde.** (1) "Waarom zijn er 5
+bedden nodig voor 1 dier?" — over het oude spel "Bedden op rij": zijn wolkje
+`🛏 5 bedden maken` hing boven één dier, en die 5 was een tafelsom (rijen ×
+bedden per rij) die niets met de dieren te maken had. (2) "En het moet heten
+"verdeel bedden over de kamers" met kamer 1 en kamer 2 waar de bedden geplaatst
+moeten worden op basis van waar het dier gaat slapen. Je moet bij bellen van het
+dier een kamer voor het dier kiezen en daarna moet dat spel plaatsvinden op basis
+van hoeveel dieren je hebt op basis van welke kamers ze zitten". (3) "En wanneer dat
+bedden spel fout is dan moet het dier naar de kamer lopen, teleurgesteld zijn dat
+er geen bed is, en teruglopen naar de balie en dan moet het opnieuw. Het dier moet
+gevolgd worden met de camera nadat het aantal bedden geselecteerd is". (4) "Nee geef
+geen hulp na fouten. Kinderen moeten zelf leren rekenen. Fout antwoord kiezen moet
+niet beloond worden met hulp maar juist een teleurgesteld dier of andere
+"bestraffing" in het spel".
 
-De vloer van slaapkamer 1 wordt een bedplan. Uit de dekenkist komen bedjes; die
-leg je in **nette rijen** — elke rij is even breed, en het kind zoekt uit hoeveel
-rijen er nodig zijn. Elk bedje dat je neerlegt wordt een **echt bed** via
-`wereld.voegBed`, en bedden zijn de harde gastenlimiet: dit is het spel dat het
-hotel laat groeien.
+Het oude spel (rijen × bedden, dekenkist, strookjes, schuifwand, kamerhulp
+Wolkje, spookbedjes, `Sommen.Bedden.opdracht`) is weg; `core/sommen.gd` blijft
+byte-identiek, alleen gebruikt dit spel `Sommen.Bedden` niet meer. Wat hieronder
+staat is de hele beurt.
 
-Wie in beeld staat: de **eerste gast zonder bed** in de spelkamer krijgt het
-opdrachtwolkje boven zijn kop. Bij een misser loopt de **laatste** gast zonder
-bed naar de deuropening en wacht daar geduldig (`reis(..., na:'wacht')`).
-Kamerhulp is **Wolkje** (🐑, het konijn uit de gastenpool).
+### 3.1 Waar het in het hotel zit
 
-### 3.2 Start, kamerkeuze en "vol"
+* Het spel is **stap 4 van de check-in** (world.md §3.3).  De bel haalt een gast,
+  hij beantwoordt aan de balie de twee schepvragen, dan kiest het kind **een kamer**
+  voor hem (`🛏 Welke kamer voor <naam>?`, knoppen `🛏 Kamer 1` / `🛏 Kamer 2`,
+  alleen kamers met plek).  Die tik (`Hotel.kies_kamer`) zet `checkin.kamer` en
+  `stap: 4` en start dit spel voor die gast en die kamer.
+* **Geen ingangsknop en geen prikbordkaartje.**  `definitie()`: `naam` `Verdeel
+  bedden over de kamers`, `kamer` `receptie`, `hotspot` alleen `{icoon: 🛏}` (het
+  pictogram van de spelbalk; zonder `obj` hangt het register nergens een ingang),
+  `unlock` altijd (de allereerste gast checkt in met N = 0), `kan` alleen zolang
+  een check-in bij stap 4 met een kamer staat, geen `taak`, geen `rust` (de
+  dekenkist in kamer 1 hoorde bij de oude ingang en is weg).
+* Geen dier van de beurt (`spelers()` leeg): de gast is het onderwerp van de som.
 
-* Het icoontje hangt op de speelmand (`mand`) in kamer 1, `hoog 14, dx -4, dz -4`.
-* Bij `start()`: `kiesKamer()` neemt kamer 1 als die capaciteit ≥ 2 heeft;
-  anders de slaapkamer (kamer mét bed-slots) met de hoogste capaciteit.
-* Capaciteit `capaciteit(k) = min(MAX_CAP=6, ruweCapaciteit(k))`.
-  `ruweCapaciteit` speelt de greedy plaatsing droog na: neem steeds het vrije
-  vakje dat (manhattan) het verst van alle bestaande bedden ligt, zet daar een
-  bed, en gooi alle vrije vakjes binnen **18 voxels** (manhattan) weg. Het
-  aantal ronden = de capaciteit.
-* **Capaciteit < 2 → het spel belooft niets:** wolkje op de mand,
-  `🛏 "vol ✓"` (klas `goed`, prio 14, tikken sluit), `Snd.zacht()`, en na
-  **2600 ms** sluit het spel zichzelf. Géén opdracht, géén ster.
+### 3.2 Plek: wie mag er nog komen (`State`)
 
-### 3.3 De opdracht per band
+De gastengrens is niet meer "een vrij bed" maar **vrije vloer**:
+* `State.slaapkamers()` — de kamers met minstens één bed (kamer 1, kamer 2).
+* `State.plek_in(k)` = vrije bedden in `k` + `State.nieuwe_bedden(k)`; dat laatste is
+  `min(MAX_BEDDEN − bedden in k, wat de vloer nog draagt)`, met **`MAX_BEDDEN` = 6**
+  (een bovengrens: zes bedden laten een kamer van 114 × 114 nog zijn kleed, bakje en
+  mand).  Een bed uit het meubelboek telt mee voor die zes en is zolang het leeg staat
+  gewoon een vrij bed; wie er een koopt boven de zes (waar het raster het toelaat) heeft
+  een extra plek.
+* De vloer is de oude droogplaatsing (`bed_plekken`): elk nieuw bed op het vrije vakje
+  dat het verst van alle bedden ligt, en de vakjes binnen **18 voxels** (Manhattan)
+  vallen weg — precies wat `Rooms` doet als het bed er echt komt.  **Nieuw
+  (2026-09-24):** een vakje telt alleen als het **hele bed** er past (`_bed_past`): een
+  bed is 34 × 17 voxels (`_voet("bed")`), met een voxel lucht eromheen, binnen de muren,
+  op geen enkel ding (vloerdecor, slots — een bed op zijn eigen model, een bakje als blok
+  van 16 — en de stap binnen elke deur, ook de voordeur, 20 × 20) en met de staplek
+  ernaast (`x + 2, z + 12`) vrij.  De oude regel alleen zette nieuwe bedden dwars door
+  het bakje, de speelmand en de deuropening.  In de twee basiskamers passen zo **drie**
+  nieuwe bedden: vijf per kamer, tien gasten in het hotel.
+* `State.plek_voor_gast()` (bel, prikbord) = een slaapkamer met een vrij bed, of met
+  vloer voor een heel nieuw bed en minder dan zes bedden.  `State.kamers_met_plek()` = de kamerkeuze.
+* Elke ingecheckte gast heeft daarna een bed: alles wat "gasten met een bed" filtert
+  blijft werken.
 
-```
-s = ctx.state.sommen.tafel(band)                     # §2.4
-set    = s.tafels, oplopend gesorteerd (fallback [1,2,5,10])
-perRij = clamp(s.a, 1, MAX_PER_RIJ = 10)
-rijen  = clamp(s.b, 1, MAX_RIJEN = 3)
+### 3.3 De vraag (aan de balie)
 
-# de kamer is de baas: eerst de tafel omlaag naar een tafel die de BAND kent,
-# daarna het aantal rijen
-while perRij > cap:
-    kleiner = grootste getal in set met (getal < perRij en getal <= cap)
-    als er geen is: perRij = max(1, min(perRij, cap)) ; break
-    perRij = kleiner
-rijen = max(1, min(rijen, floor(cap / perRij) of 1, 3, maxStroken() - 1))
-doel  = rijen * perRij
-```
+Het spel begint pas als de gast op zijn plek aan de balie staat (`Hotel.balieplek()`,
+binnen 6 voxels, `ctx.wacht_op`; world.md §5.8): hij kan nog binnenkomen of
+teruglopen.  Dan hangt de kaart waar de check-in-kaarten hingen (`Hotel.balie_anker`,
+`Hotel.balie_hoog`):
 
-Per band (uit `TAFEL_SET`, §2.4):
+| deel | tekst |
+|---|---|
+| regel (🛏 vooraan) | `<In kamer 1> slaapt nog niemand` / `<In kamer 1> slaapt al 1 dier` / `<In kamer 1> slapen al <n> dieren` |
+| regel 2 | `<naam> komt erbij. Hoeveel bedden?` |
+| som | `<n> + 1 =` |
+| strook | vier getallen (`goed: n + 1`, `liever: [n, n + 2]`, `min: 0`, `max_getal: n + 5`), elk `🛏 <getal>`, titel `hoeveel bedden?` |
 
-| band | toegestane rij-breedtes | plafond product | schuifwand |
-|---|---|---|---|
-| groep 3 | 1, 2, 5, 10 (rijtjes, **geen tafels**) | 20 | nee |
-| groep 4 | 1, 2, 3, 4, 5, 10 | 100 | nee |
-| groep 5 | 1 t/m 10 | 100 | **ja** |
+`<In kamer 1>` is `UiTekst.in_kamer` met een hoofdletter.  `n` = de gasten wier bed in
+die kamer staat (`State.slapers_in`).  Op de langste naam: `Stampertje komt erbij.
+Hoeveel bedden?` = 5 woorden, 38 tekens.  Zelfde kaart-id, zelfde antwoord: na elke
+misser komen dezelfde vier getallen in dezelfde volgorde terug.
 
-**Schuifwand (alleen groep 5):** `D.wand = (band >= 5 && rijen >= 2) ? rijen - 1 : 0`.
-De knop 🚧 splitst de rijen in twee stukken: `a = D.wand`, `b = rijen - a`,
-label `a × perRij + b × perRij`, weergegeven als twee getallen onder elkaar
-(`a*perRij` boven, `+b*perRij` eronder). Tikken verlaagt `D.wand` met 1 en
-wikkelt om: `wand - 1 < 1 ? rijen - 1 : wand - 1`. Dit is de verdeelstrategie
-"3 rijen van 7 = 2 × 7 + 1 × 7".
+### 3.4 Het antwoord: de kamer krijgt precies zoveel bedden
 
-Verse opdracht zodra de **signatuur** verandert:
-`[band, dag, N, kamer, cap, rijen, perRij].join('|')`. Anders wordt de bewaarde
-stand hervat.
+Na de tik gaat de kaart weg (hij komt terug als de gast weer aan de balie staat) en
+krijgt de gekozen kamer precies het gekozen aantal bedden, zo ver dat kan:
+* de bedden van de slapers blijven altijd staan (een bezet bed gaat nooit weg);
+* daarna de vrije bedden die er staan, daarna nieuwe;
+* een vrij bed boven het aantal gaat **uit het zicht** (`World.verberg_bed`) en komt
+  terug zodra de camera die kamer verlaat — het kind ziet nooit een bed opduiken.
 
-Nieuwe opdracht zet: `rij = []`, `missers = 0`, `klaar = false`, `nieuw = 0`,
-`over = 0`, `spook = false`, `fase = 'leg'`, `vol = 0`.
+Dan loopt hij erheen (`World.reis`) en **loopt de camera mee** (`Hotel.volg`; het spel
+wacht op hem, `Games.verwacht`, en `Games.verhuis(kamer)` maakt die kamer even de
+kamer van het spel, zodat het meelopen daar eindigt en niet terugspringt naar de
+receptie).
 
-**Worked example.** band 4, dag 3, N 5, cap 6 → `tafel` geeft a 3, b 5 →
-perRij 3, rijen min(5, 3) = 3 → `perRij(3) <= cap(6)` dus geen tafelverlaging →
-`rijen = max(1, min(3, floor(6/3)=2, 3, maxStroken()-1))`; op een staand kader
-van 478 px is `maxStroken() = 4`, dus rijen = **2**, doel = **6**.
+* **Goed** (`n + 1`): zijn bed is het eerste vrije bed van die kamer, of een nieuw
+  (`voeg_bed` op de verste plek, `Snd.plop`).  De check-in eindigt meteen in
+  `Hotel.wijs_bed(kamer, bed, {loop: true})`: bed, `Snd.tover`, één ster
+  (`checkin`), taakje `bed`, ochtend → vrij, opslaan; hij loopt naar zijn bed en
+  springt erin, de camera erachteraan.  Ligt hij: `💤 welterusten` (klas `goed`)
+  boven hem, `State.tel(missers == 0, ms)`, en na **3,2 s** sluit het spel zich.
+  Het spel geeft zelf geen tweede ster.
+* **Te weinig** (minder dan `n + 1`): er is geen bed voor hem.  Hij loopt het midden van
+  de kamer in (het vrije vakje het dichtst bij het midden: de verste vrije vloer lag
+  vlak voor het bakje) en kijkt rond, is teleurgesteld
+  (`World.blijf(gast, "sip")`, `Snd.zacht`, wolkje `🛏 geen bed`), en na **2,4 s**
+  loopt hij terug naar zijn plek aan de balie — de camera loopt terug mee — en
+  daar komt dezelfde vraag.
+* **Te veel**: de vrije bedden en de nieuwe voor dit antwoord staan er (de nieuwe
+  als los decor van het spel: ze komen niet in de opslag); hij loopt naar het bed
+  dat het zijne zou zijn, is teleurgesteld (wolkje `🛏 te veel bedden`), na **1 s**
+  gaan de bedden van dit antwoord weer weg (`Snd.terug`) en loopt hij terug naar de
+  balie en dezelfde vraag.  De bedden gaan álle weg, niet alleen de extra: anders
+  stond precies het goede aantal er en was het wegnemen het antwoord.
 
-### 3.4 Beeldopbouw en maten (alles in css-pixels, dan terug naar voxels)
+**Nooit hulp** (eigenaar, wens 4): geen hulpregel, geen telrij, geen spookbedjes, geen
+helper (Wolkje is weg), geen antwoord op de kaart, geen hint-toast.  Een misser kost
+ook niets: geen ster eraf, geen bed of gast weg; alleen `missers` in het laatje telt
+mee voor de eerste-poging-regel van `State.tel`.
 
-Constanten: `MAX_RIJEN 3`, `MAX_PER_RIJ 10`, `MAX_CAP 6`, `GOLF 260 ms`,
-`STAP_PX 50` (rij→rij omlaag), `BOVEN_PX 80`, `ONDER_PX 66`, `KNOP_PX 48`,
-`KAART_PX 92`, `MIN_BOVEN 74`, `MIN_ONDER 52`, `goot` start 132.
+### 3.5 Rustmodus
 
-```
-frameHoogte()  = hoogte van #world, fallback 480
-maxStroken()   = max(3, min(4, floor((frameHoogte - 200) / 50) + 1))
-                 (200 = 74 + 46 - 24 + 52 + 48 + 4)
-                 kader 200/228/282/320 -> 3 ; 379/405/478/715 -> 4
-aantalStroken()= min(4, rijen + 1)          # altijd één lege reserverij
-marges():
-   rij   = (n - 1)*50 + 48
-   over  = max(0, frameHoogte - rij - 4) ; nodig = 96
-   extra = max(0, over - nodig)
-   boven = min(80, 74 + extra*0.6)
-   onder = min(66, 52 + extra*0.4)
-   (kader 478 met 4 stroken -> 80 / 66)
-rijStap()   = max(50 / (2 * pxPerVoxelY), 24)          # NIET afronden
-rijPlek(r)  = { x: begin + r*stap, z: begin + r*stap }
-              met breed = kamerbreedte (114) en
-              begin = max(2, (breed - (n-1)*stap) / 2)
-plekPx(r, dx, dy) = rijPlek(r) verschoven dx px opzij en dy px omhoog:
-              d = dx / (2 * pxPerVoxelX)
-              { x: p.x + d, z: p.z - d, y: 6 + dy / pxPerHoogte }
-goot        = max(88, breedte van strook 0 / 2 + 52), na elke tekenbeurt gemeten
-```
+Niemand loopt.  Goed: `wijs_bed` legt hem meteen in zijn bed en de camera gaat naar de
+kamer (`💤 welterusten`, na 2,6 s dicht).  Fout: aan de balie `sip` en het wolkje
+`🛏 geen bed` / `🛏 te veel bedden`, en na 2,2 s dezelfde vraag.
 
-De rijen liggen dus op de diagonaal `x = z` van de kamervloer, netjes onder
-elkaar op precies 50 css-px.
+### 3.6 Stoppen, herladen
 
-**Objecten in beeld (id → wat):**
+* `stop()` (`⬅ Terug`, een ander spel) vóór het goede antwoord: de check-in is niet
+  af.  `Hotel.checkin_terug()` laat hem teruglopen naar zijn plek aan de balie, zet
+  `stap` terug op 3 en hangt de kamervraag weer op.  Nooit een verdwenen gast, nooit
+  een check-in die vastzit.  Losse bedden van het spel gaan weg; verborgen bedden in
+  een kamer die niet in beeld is komen meteen terug.
+* Na het goede antwoord is de check-in al af: een stop laat hem gewoon naar zijn bed
+  lopen.
+* **Herladen**: timers en wandelingen overleven het niet, de opslag wel.
+  `Hotel.paint_checkin()` ziet `stap: 4` zonder draaiend spel en zet hem terug op de
+  kamervraag; de gast staat aan de balie (`herstel_wereld`).  Het laatje
+  (`{gast, kamer, slapers, missers, fase, keus}`) wordt hervat als dezelfde gast
+  dezelfde kamer kiest.
 
-| id | plek | wat |
-|---|---|---|
-| `bd_rij0..N` | `rijPlek(r)`, y 6, **`vast`**, prio 13, klas `hotbron`, `kind:'drop'`, `drop:'bedrij'` | het strookje: `n` bedjes + `perRij - n` spookbedjes + het getal `n` |
-| `bd_kist` | `plekPx(laatste, 0, -marges().onder)`, prio 12 | de dekenkist 🧺, sleepbron, teller = `doel - totaal` |
-| `bd_undo` | `plekPx(laatste, -goot, 0)`, prio 11, klas `hotwolk` | ↩ eentje terug (alleen als er iets ligt en niet klaar) |
-| `bd_som` | `plekPx(0, 0, marges().boven + somLift)` of ernaast | de sommenkaart |
-| `bd_wolk` | boven de gast zonder bed, hoog 52, prio 12 | 🛏 `doel` + tekst |
-| `bd_wand` | `plekPx(D.wand, goot, 25)`, prio 11, klas `hotwolk hulp` | 🚧 schuifwand (alleen groep 5) |
-| `bd_klaar` | `plekPx(0, goot, 56)`, prio 14, klas `hotwolk goed` | 🐾 `doel`, de controle |
-| `bd_hulp` | `plekPx(laatste, -goot, -50)`, prio 11, klas `hotwolk hulp` | 🐑 kamerhulp Wolkje (pas vanaf 2 missers) |
-| `bd_spook` | `plekPx(r, -(goot-26), 0)` | spookcijfer `perRij` op de eerste lege rij |
-
-Strookje-HTML: bedjes op `.95rem`, of `.8rem` zodra `perRij >= 10`. Gevulde
-plekken zijn `🛏`, na afloop `🛌`; lege plekken zijn `🛏` met opacity **.22**,
-of **.62** als het spookvoorbeeld aan staat op déze rij.
-
-**De kamer rustig maken.** Bij elke tekenbeurt haalt bedden de hotel-knoppen weg
-die op de rijen zouden vallen: `bed_<kamer>_bed1`, `bed_<kamer>_bed2`,
-`mand_<kamer>`, `bak_<kamer>_bak` en `bed_<kamer>_<id>` voor elk eigen bed-meubel.
-`stop()` zet ze terug met `Hotel.render()`.
-
-**Sommenkaart vrijmaken (3 meetronden, teller buiten `teken()`):**
-ronde 0 = raakt de kaart rij 0? til hem precies genoeg op (`somLift += ceil(overlap)`).
-ronde 1 = nog steeds? dan is er boven de rij geen kader meer → kaart **ernaast**
-(links van rij 0, `plekPx(0, -(rijbreedte/2 + 8 + kaartbreedte/2), 0)`).
-ronde 2 = is ernaast slechter? dan tóch weer erboven. Daarna staat het vast;
-`somOpnieuw()` reset bij nieuw kader, nieuwe opdracht of nieuwe start.
-Meetvertraging telkens **90 ms**.
-
-### 3.5 Beurtverloop
-
-**Bedje leggen** — sleep uit de kist naar een strookje, of tik het strookje aan.
-* Rij al vol → `Snd.zacht()`, wolkje `bd_op` op `plekPx(r, -goot, 0)` met
-  icoon 🛏 en getal `perRij`, klas `hulp`, na **1800 ms** weg.
-* Kist leeg → `Snd.zacht()`, wolkje `bd_op` bij de kist met icoon 🧺 en getal 0,
-  na **1800 ms** weg.
-* Anders: `rij[r]++`, wolkjes weg, `Snd.plop(1)`, opslaan (debounce 400 ms),
-  hertekenen.
-
-**Terug** (`bd_undo`): haalt er één weg uit de laatst aangeraakte rij, anders uit
-de hoogste rij die iets bevat; `Snd.terug()`. Niets te halen → `Snd.zacht()`.
-
-**Controleren** (🐾 `bd_klaar`, of tikken op de deur van de kamer — bedden leent
-elke deur van de kamer via `hotspots.pak('deur_<kamer>_<naar>', check)`):
-
-```
-tel per strook: vol (== perRij), oneven (0 < n < perRij), leeg (n == 0)
-over = doel - totaal
-GOED als: over == 0 en er is geen oneven rij en vol == rijen
-```
-
-Anders `missers++` en **één** zacht wolkje `bd_fout` (klas `hulp`, prio 14),
-op de plek van het probleem — nooit een kruis, nooit een stap terug:
-
-| situatie | plek | icoon | getal |
-|---|---|---|---|
-| scheve rij `oneven` | `plekPx(oneven, -goot, 0)` | 🛏 | `+ (perRij - n)` |
-| er kan nog een héle rij bij | `plekPx(leeg, -goot, 0)` | 🛏 | `+ min(over, perRij)` |
-| nog bedjes in de kist | bij de kist | 🛏 | `+ over` |
-| een rij te veel | `plekPx(max(0, vol-1), -goot, 0)` | ↩ | `- max(1, (vol - rijen) * perRij)` |
-
-Daarna: het laatste dier zonder bed loopt naar de deuropening en wacht; 2000 ms
-later nog een tekenbeurt. Bij **misser 2** verschijnt Wolkje na 900 ms vanzelf.
-
-**Kamerhulp Wolkje** (🐑): zet `spook = true` (spookbedjes op de eerste lege
-rij), legt het spookcijfer `perRij` naast die rij (`getalTag`, klas `hotspook`,
-titel `"zoveel in een rij"`), en zet een wolkje `bd_wolkje` met icoon 🐑, getal
-`perRij`, tekst `"in elke rij"`. **Tikken op dat wolkje legt de rij écht neer**
-(`rij[r] = perRij`, `Snd.ja()`). Verder: `zetGezien('bedden_wolkje')`,
-`Snd.brief()`.
-
-### 3.6 Gelukt — de dekengolf
-
-```
-klaar = true ; fase = 'feest' ; spook = false ; bezig = true
-state.tel(missers === 0, nu - t0)
-Snd.tover()
-somAf()                       # de kaart wordt de eindkaart, afgevinkt
-wolkje bd_goed: ⭐ + doel, klas 'goed', prio 14, op plekPx(0, goot, 0)
-bouwBedden(doel, ...)         # één bed per 260 ms
-```
-
-`bouwBedden` zet per stap het **vrije vakje dat het verst van alle bedden af
-ligt** (zelfde greedy als `ruweCapaciteit`), via `wereld.voegBed(K, {x, z})`,
-`Snd.plop(1)` per bed. Past er geen bed meer bij, dan stopt het — **nooit een
-half bed**.
-
-Daarna:
-* `nieuw = aantal echt gelegde bedden`, `over = doel - nieuw`.
-* Alleen als er echt een bed bij kwam: `taakKlaar('bedden', {sterren: 1})`.
-  Kwam er niets bij → geen ster, en het wolkje zegt `🛏 "vol ✓"`.
-* Anders `bd_goed` = `🛏 +<nieuw>`, klas `goed`.
-* `hotspots.laat()` — de deur is weer gewoon de deur.
-* De gasten zonder bed lopen naar hun nieuwe bed: per bed `reis(gast, K, {x: slot.sx, z: slot.sz, na:'blij'})` en `setMood(gast, 'bouncy')`, gestart op **300 + i·480 ms**. Ze gaan er blij *naast* staan — slapen doet het dier pas als de check-in dat bed aan die gast geeft.
-* Na **2600 ms**: `fase = 'af'` → alle strookjes, kist, undo, wand, klaar-knop en
-  hulp verdwijnen; alleen de eindkaart en één wolkje blijven. Dat is de beloning:
-  je ziet de kamer zoals hij nu is.
-* Na nog **3400 ms**: `ctx.sluit()`. Tikken op het wolkje sluit meteen.
-
-### 3.7 Alle kinderteksten van bedden, in volgorde van verschijnen
+### 3.7 Alle kinderteksten, in volgorde van verschijnen
 
 | waar | tekst |
 |---|---|
-| icoontje | `Bedden` |
-| strookje (titel) | `rij ` + (r+1) + `: ` + n + ` van ` + perRij |
-| dekenkist (titel) | `dekenkist met ` + mv(n, `bedje`, `bedjes`) |
-| undo (titel) | `eentje terug in de kist` |
-| sommenkaart, som | `<volle rijen of "?">` + ` × ` + perRij + ` =` |
-| sommenkaart, regel 1 | `Leg ` + mv(rijen, `rij`, `rijen`) + ` van ` + mv(perRij, `bed`, `bedden`) |
-| sommenkaart, regel 2 | `Zo veel bedden staan er nu` |
-| wolkje boven de gast | 🛏 + doel + ` ` + (`bed maken` als doel = 1, anders `bedden maken`) |
-| schuifwand (titel) | a + ` × ` + perRij + ` + ` + b + ` × ` + perRij |
-| klaar-knop (titel) | `1 gast mag erin` (doel = 1) / doel + ` gasten mogen erin` |
-| hulp-knop (titel) | `kamerhulp Wolkje` |
-| spookcijfer (titel) | `zoveel in een rij` |
-| wolkje van Wolkje | 🐑 + perRij + ` ` + `in elke rij` |
-| eindkaart, som | rijen + ` × ` + perRij + ` =` |
-| eindkaart, regel | `Nu staat er ` + mv(doel,…) (doel = 1) / `Nu staan er ` + mv(doel, `bed`, `bedden`) |
-| eindwolkje | 🛏 `+<nieuw>` — of 🛏 `vol ✓` als er niets meer bij kon |
-| kamer vol bij start | 🛏 `vol ✓` |
+| check-in stap 3, regel | `🛏 Welke kamer voor <naam>?` (hotel.gd `KAMER_VRAAG`) |
+| check-in stap 3, knoppen | `🛏 Kamer 1` / `🛏 Kamer 2` (kort `🛏 1` / `🛏 2`), titel `kies een kamer` |
+| spelbalk | `🛏 Verdeel bedden over de kamers` |
+| vraag, regel | `<In kamer 1> slaapt nog niemand` · `<In kamer 1> slaapt al 1 dier` · `<In kamer 1> slapen al <n> dieren` |
+| vraag, regel 2 | `<naam> komt erbij. Hoeveel bedden?` |
+| vraag, som | `<n> + 1 =` |
+| strook | `🛏 <getal>` × 4, titel `hoeveel bedden?` |
+| te weinig | wolkje `🛏 geen bed` |
+| te veel | wolkje `🛏 te veel bedden` |
+| goed | wolkje `💤 welterusten` |
 
-Enkelvoud/meervoud: `mv(n, enk, mv) = n + ' ' + (n === 1 ? enk : mv)` — dus
-"1 bed" en "3 bedden", nooit "van 1 bedden".
-
-### 3.8 Herstellen, kader, stoppen
-
-* `ctx.ui.opKader(fn)` = de opmaat-bus: één melding per échte kaderverandering.
-  bedden reageert met: schaal-cache leeg, `somOpnieuw()`, en **260 ms** later
-  opnieuw tekenen.
-* `stop()` ruimt op: alle timers, de sommenkaart, de wolkjes
-  (`bd_wolk, bd_fout, bd_goed, bd_op, bd_wolkje, bd_vol`), het spookcijfer,
-  `state.bewaar()`, `hotspots.wisAlles()` (geeft ook de geleende deur terug) en
-  `Hotel.render()`.
+Proeflijnen: `[probe] spel=start id=bedden kamer=<k> gast=<id> slapers=<n>`,
+`[probe] bedden keus=<g> goed=<n+1> uitkomst=goed|weinig|veel`,
+`[probe] bedden sip=weinig|veel kamer=<k>`, `[probe] bedden bed=<slot> kamer=<k>`,
+`[probe] spel=klaar id=bedden …`, `[probe] bd_som…=<rect>` voor `tools/speel.js`.
 
 ---
 
@@ -734,10 +659,9 @@ De receptie is 120 × 120. Alles staat als breuk (`Rooms.plek`,
 De diepte `x + z` blijft dus altijd 150: de rij houdt haar plek in de
 tekenvolgorde en staat vóór de balie en de gast.
 
-**Poort (eigenaar 2026-09-23): `kan` — geen knop zonder iets te doen.**  `bedden`:
-alleen als ergens nog plek is voor twee bedden en de beurt van vandaag niet al af is
-(`kan_nu`, statisch; de capaciteit, `kies_kamer`, `max_stroken` en de signatuur zijn
-daarvoor statisch gemaakt).  `voerkar`: alleen als er een leeg bakje is in een kamer
+**Poort (eigenaar 2026-09-23): `kan` — geen knop zonder iets te doen.**  `bedden`
+(sinds 2026-09-24): alleen zolang een check-in bij stap 4 staat, met een kamer
+(`kan_nu`, statisch) — en ook dan zonder ingang of kaartje, §3.1.  `voerkar`: alleen als er een leeg bakje is in een kamer
 waar iemand slaapt (`Hotel.lege_bakken()`); en een kar in het laatje van een andere dag
 telt niet meer — `Hotel.morgen()` zette alleen `state.kar` op null, dus de volgende
 ochtend zei het spel "Alle bakjes vol!" terwijl elk bakje leeg was; een nieuwe kar
@@ -1651,11 +1575,12 @@ pictogram van de kamer.
 
 1. **Nooit straffen.** Er is geen rood kruis, geen fouten-teller in beeld, geen
    klok, geen terugzetten. Een misser is `Snd.zacht()` plus één pictogram met
-   een getal, precies bij het plekje waar het over gaat.
+   een getal, precies bij het plekje waar het over gaat. (bedden, 2026-09-24:
+   een teleurgesteld dier met `🛏 geen bed` / `🛏 te veel bedden`, en dezelfde vraag.)
 2. **Eén ster per ronde**, voor het meedoen. `state.tel()` loopt apart en raakt
    nooit sterren, munten of toegang.
-3. **De hulp komt na twee pogingen** als knop (bedden 🐑, sleutels/tobbe/voerkar
-   🩺) en blijft daarna staan; binnen een kaart is het 1e/2e keer samen
+3. **De hulp komt na twee pogingen** als knop (sleutels/tobbe/voerkar 🩺; bedden
+   geeft sinds 2026-09-24 geen hulp meer) en blijft daarna staan; binnen een kaart is het 1e/2e keer samen
    doortellen en pas de **3e** keer spookvormen (meubels, voerkar).
 4. **Alles hangt in de wereld.** Eén sommenkaart tegelijk; het cijferpad is het
    enige 2D-ding; het meubelboek-overzicht is de enige toegestane uitzondering.
@@ -1666,8 +1591,9 @@ pictogram van de kamer.
 7. **Supersede = stop.** Een ander spel starten, een taakje aantikken of
    `ctx.sluit()` roept `stop()` aan; die maakt de wereld leeg, geeft geleende
    knoppen terug en tekent het hotel opnieuw. Er is geen pauzestand.
-8. **Kader verandert → opnieuw indelen** via `ui.opKader` (bedden 260 ms,
-   sleutels 220 ms, voerkar en tobbe elke tekenbeurt, meubels niet).
+8. **Kader verandert → opnieuw indelen** via `ui.opKader` (sleutels 220 ms,
+   voerkar en tobbe elke tekenbeurt, meubels niet; bedden hangt zijn ene kaart aan
+   de balie en laat de plaatsing aan `Hits`).
 
 ---
 
@@ -1688,10 +1614,8 @@ pictogram van de kamer.
    gasten spelen er dus hooguit 3 mee — wie de andere gasten zijn is de
    volgorde van `state.gasten`. Moet dat een expliciete keuze worden (bijv. de
    gasten die net zijn ingecheckt)?
-5. **Bedden: de opdracht mag krimpen tot 1 × 1.** Als de kamer bijna vol is
-   zakt `perRij` naar 1 en `rijen` naar 1; er staat dan `1 × 1 =` op de kaart.
-   Is dat een acceptabele opdracht of hoort het spel dan al "vol ✓" te zeggen
-   (de grens ligt nu op capaciteit < 2)?
+5. ~~**Bedden: de opdracht mag krimpen tot 1 × 1.**~~ Vervallen (2026-09-24): het
+   spel rekent niet meer met rijen, de som is de dieren in de gekozen kamer plus één.
 6. **Tobbe band 5, `half`, N ≥ 7:** `per` kan 10 of hoger worden (`T = 21` →
    `per = 10`) terwijl het peilglaasje op `per + 2` schaalt. Er is geen bovengrens
    op `per` behalve `PLAFOND[5] = 36`; hoe leesbaar is een tobbe met 16 schepjes

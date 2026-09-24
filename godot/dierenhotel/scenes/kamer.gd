@@ -142,12 +142,13 @@ func _bouw_slot(r: Rooms.Kamer, sid: String) -> void:
 	if String(slot.get("soort", "")) == "bed":
 		_bed_nodes[sid] = b
 
-## Zet álle bedden van deze kamer in het zicht of weg (zie `verberg_bedden`).
+## Zet álle bedden van deze kamer in het zicht of weg (zie `verberg_bedden`),
+## en houd elk los verborgen vrij bed weg (`World.verberg_bed`, bedden).
 func _zet_bedden(zichtbaar: bool) -> void:
 	for sid in _bed_nodes:
 		var nd = _bed_nodes[sid]
 		if is_instance_valid(nd):
-			nd.visible = zichtbaar
+			nd.visible = zichtbaar and not World.bed_verborgen(_kamer, String(sid))
 
 ## Eigenaarsduw (2026-09-21): op het moment dat de gast aankomt en de kaart
 ## vraagt hoeveel bedden er nodig zijn, moet de kamer leeg zijn. Zolang dit
@@ -286,6 +287,8 @@ func _ververs() -> void:
 	_ververs_dieren()
 	_ververs_dingen()
 	_ververs_los()
+	# a bed the beds game hides or gives back (`World.verberg_bed`)
+	_zet_bedden(not _bedden_verborgen)
 	# the front door stands open while a guest comes in (World.kom_binnen);
 	# its plate follows its params, like every model's
 	if _ingang != null:

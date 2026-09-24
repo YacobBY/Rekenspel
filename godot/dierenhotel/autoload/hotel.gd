@@ -67,6 +67,17 @@ const BORD_LEEG := "Speel lekker rond"
 const AVOND := "avond"
 const CHECKIN := "checkin"
 
+## The check-in's third step (owner, 2026-09-24: "Je moet bij bellen van het
+## dier een kamer voor het dier kiezen"): a room, not a bed.  The beds that room
+## needs are the game `bedden` ("Verdeel bedden over de kamers"), which starts
+## the moment a room is chosen.  "Welke kamer voor Stampertje?" is 4 words and
+## 28 characters on the longest guest name (HOTEL.md §9).
+const KAMER_VRAAG := "Welke kamer voor %s?"
+const KAMER_TITEL := "kies een kamer"
+const BEDDEN_SPEL := "bedden"
+## The bell when no bedroom can take one more guest (world.md §7.4).
+const BEL_VOL := "alle kamers vol"
+
 var _bord_open := false
 var _bord_blad = null          ## the open board sheet (UiBlad), or null
 var _dag_bericht: Array = []
@@ -547,17 +558,10 @@ func bel() -> void:
 		paint_checkin()
 		Ui.toast("🛎️ Er staat al iemand", "kind")
 		return
-	var vrij := State.bed_vrij()
-	if vrij.is_empty():
-		# friendly and without reading: one bubble at the bell (HOTEL.md §9)
-		Snd.zacht()
-		if scherm_klaar():
-			var bp := decor_plek("receptie", "bel")
-			Ui.wolk({"id": "bel_vol", "door": "wolk", "kamer": "receptie",
-				"x": bp.get("x", 0), "z": bp.get("z", 0), "hoog": 26,
-				"icoon": "🛏", "getal": State.max_gasten(),
-				"tekst": "alle bedden vol", "klas": "hulp", "prio": 12})
-			Econ.na(3.2, _wolk_weg.bind("bel_vol"))
+	# A guest may come while some bedroom can take one more animal: a free bed,
+	# or floor for the bed the check-in puts down for him (owner, 2026-09-24).
+	if not State.plek_voor_gast():
+		_bel_vol()
 		return
 	bord_dicht()                              # the board closes: now the guest
 	var g := State.pak_gast()
@@ -586,7 +590,21 @@ func bel() -> void:
 	State.bewaar()
 	Ui.toast("%s staat aan de balie! 🔔" % g["naam"], "happy")
 
-## The two gate questions of the check-in — both frozen sums (world.md §3.3).
+## Every bedroom is full: friendly and without reading, one bubble at the bell
+## (HOTEL.md §9) — `🛏 <n> alle kamers vol`.
+func _bel_vol() -> void:
+	Snd.zacht()
+	if not scherm_klaar():
+		return
+	var bp := decor_plek("receptie", "bel")
+	Ui.wolk({"id": "bel_vol", "door": "wolk", "kamer": "receptie",
+		"x": bp.get("x", 0), "z": bp.get("z", 0), "hoog": 26,
+		"icoon": "🛏", "getal": State.max_gasten(),
+		"tekst": BEL_VOL, "klas": "hulp", "prio": 12})
+	Econ.na(3.2, _wolk_weg.bind("bel_vol"))
+
+## The check-in (world.md §3.3): two gate questions — both frozen sums — then
+## the room (step 3) and the beds that room needs (step 4, the game `bedden`).
 func init_checkin(g: Dictionary) -> void:
 	var samen := State.dag_verbruik()
 	var extra := int(g.get("scoops", 0))
@@ -595,7 +613,7 @@ func init_checkin(g: Dictionary) -> void:
 		"samen": samen, "extra": extra, "nieuw": samen + extra,
 		"dagen": int(State.s["levering"]), "voorraad": int(State.s["scoops"]),
 		"stap": 1, "fouten1": 0, "fouten2": 0, "invoer": "", "keuze": null,
-		"weg": false, "t0": Time.get_ticks_msec(),
+		"weg": false, "t0": Time.get_ticks_msec(), "kamer": "",
 	}
 	checkin_veranderd.emit()
 
@@ -607,15 +625,13 @@ func scheppen(n: int) -> String:
 func dagen(n: int) -> String:
 	return Ui.meervoud(n, "dag", "dagen")
 
-## Short, wordless help: pictograms and numbers.
-func scoopjes(n: int) -> String:
-	if n > 8:
-		return "%d 🥄" % n
-	var s := ""
-	for i in n:
-		s += "🥄"
-	return s if not s.is_empty() else "0"
-
+## "Nee geef geen hulp na fouten. Kinderen moeten zelf leren rekenen. Fout
+## antwoord kiezen moet niet beloond worden met hulp maar juist een
+## teleurgesteld dier" (owner, 2026-09-24).  A slip on either question writes no
+## worked example, no product and no hint on the card: the guest at the desk is
+## sad for a moment (`Ui.misser`: he goes `sip`, `🔄 Nog een keer` hangs by him
+## and the strip is shut for ~1,2 s), a soft sound, and then the SAME question
+## with the same four choices.  Nothing is taken away.
 func paint_checkin() -> void:
 	if _ci_kaart != null:
 		_ci_kaart.weg()
@@ -628,6 +644,20 @@ func paint_checkin() -> void:
 	if g.is_empty():
 		State.s["checkin"] = null
 		return
+	# Step 4 is the beds game: it hangs its own question at the desk while it
+	# runs.  Without it — `⬅ Terug`, a reload — the check-in is back at the room.
+	if int(v["stap"]) >= 4:
+		if Games.actief() == BEDDEN_SPEL:
+			checkin_veranderd.emit()
+			return
+		v["stap"] = 3
+	var kamers: Array[String] = []
+	if int(v["stap"]) == 3:
+		kamers = State.kamers_met_plek()
+		if kamers.is_empty():
+			# the floor filled up while he waited (furniture): another day
+			_checkin_vol.call_deferred()
+			return
 	checkin_veranderd.emit()
 	if not scherm_klaar():
 		return
@@ -638,7 +668,8 @@ func paint_checkin() -> void:
 	# tekst geplaatst is").  It keeps the guest's box free at that spot — not
 	# the guest itself, or the card would walk in with it from the door.
 	var plek := _balieplek()
-	var volg := _volg_balieplek(str(g["id"]))
+	var gid := str(g["id"])
+	var volg := _volg_balieplek(gid)
 	if int(v["stap"]) == 1:
 		# two short lines: what goes out every day, and what this guest eats
 		# on top of it — plus the question itself.  Worded as a child counts
@@ -652,52 +683,30 @@ func paint_checkin() -> void:
 			"id": "ci_som", "door": CHECKIN, "kamer": "receptie",
 			"goed": int(v["nieuw"]), "liever": [int(v["samen"]), int(v["extra"]),
 				int(v["samen"]) + int(v["extra"]) + 1],
-			"max": 2, "hoog": _ci_hoog(), "icoon": "🥄", "volg": volg,
+			"max": 2, "hoog": _ci_hoog(), "icoon": "🥄", "volg": volg, "dier": gid,
 			"regel": "Elke dag eten de gasten %s" % scheppen(int(v["samen"])),
 			"regel2": "%s wil er %d bij. Hoeveel samen?" % [g["naam"], int(v["extra"])],
 			"on_ok": op_ok})
-		if int(v["fouten1"]) > 0:
-			_ci_kaart.hulp("%s + %s" % [scoopjes(int(v["samen"])), scoopjes(int(v["extra"]))])
 	elif int(v["stap"]) == 2:
-		# after a slip the product is written out on the card itself.  The first
-		# line says what the food is FOR (the days until the next delivery),
-		# the second where it is: "in de kast" is a place a child can picture,
-		# "in huis" was not (owner, 2026-09-23)
-		var tot := int(v["dagen"]) * int(v["nieuw"])
-		var som := "%d × %d" % [int(v["dagen"]), int(v["nieuw"])]
-		if int(v["fouten2"]) > 0:
-			som += " = %d" % tot
-		_ci_kaart = Ui.somkaart(plek, som, {
+		# The first line says what the food is FOR (the days until the next
+		# delivery), the second where it is: "in de kast" is a place a child can
+		# picture, "in huis" was not (owner, 2026-09-23).  The product is never
+		# written out after a slip (owner, 2026-09-24).
+		_ci_kaart = Ui.somkaart(plek, "%d × %d" % [int(v["dagen"]), int(v["nieuw"])], {
 			"id": "ci_som", "door": CHECKIN, "kamer": "receptie", "pad": false,
-			"hoog": _ci_hoog(), "icoon": "🥄", "volg": volg,
+			"hoog": _ci_hoog(), "icoon": "🥄", "volg": volg, "dier": gid,
 			"regel": "Voer voor %s: elke dag %s" % [dagen(int(v["dagen"])), scheppen(int(v["nieuw"]))],
 			"regel2": "📦 In de kast: %s. Genoeg?" % scheppen(int(v["voorraad"])),
 			"keuze_titel": "is er genoeg voer?",
 			"keuzes": _checkin_keuzes()})
 	else:
-		var vrij := State.bed_vrij()
-		var naar_bed := func() -> void:
-			if not vrij.is_empty():
-				naar_kamer(str(vrij["kamer"]))
-		Ui.wolk({"id": "ci_vraag", "door": CHECKIN, "kamer": "receptie",
-			"volg": _volg_dier(str(g["id"])), "hoog": 54, "icoon": "🛏", "prio": 11,
-			"tekst": "Kies een bed" if not vrij.is_empty() else "Alles bezet",
-			"tik": naar_bed})
-		if not vrij.is_empty() and World.kamer_nu() != str(vrij["kamer"]):
-			var doel = Rooms.get_kamer(str(vrij["kamer"]))
-			# "🛏️ Kamer 1" hangs at the door the way to that room starts with
-			# — the corridor door — and not on the wall behind the desk where
-			# it used to float (owner, 2026-09-23)
-			var weg := Rooms.pad(World.kamer_nu(), str(vrij["kamer"]))
-			var eerste := str(weg[1]) if weg.size() > 1 else str(vrij["kamer"])
-			var dp := Rooms.deur(World.kamer_nu(), eerste)
-			if doel != null and not dp.is_empty():
-				var nu := World.kamer_nu()
-				Ui.wolk({"id": "ci_wijs", "door": CHECKIN, "kamer": nu,
-					"x": dp.get("x", 0), "z": dp.get("z", 0), "hoog": 9,
-					"volg": _volg_deur(nu, eerste),
-					"icoon": doel.icoon, "tekst": doel.naam, "prio": 10,
-					"tik": naar_bed})
+		# Step 3 — a room, not a bed (owner, 2026-09-24): only the rooms where one
+		# more animal still fits, a free bed or floor for a new one.
+		_ci_kaart = Ui.somkaart(plek, "", {
+			"id": "ci_som", "door": CHECKIN, "kamer": "receptie", "pad": false,
+			"hoog": _ci_hoog(), "icoon": "🛏", "volg": volg, "dier": gid,
+			"regel": KAMER_VRAAG % g["naam"],
+			"keuze_titel": KAMER_TITEL, "keuzes": _kamer_keuzes(kamers)})
 	World.vuil()
 
 ## The three choices of question 2.  Note the link with the frozen `vergelijk`:
@@ -713,6 +722,18 @@ func _checkin_keuzes() -> Array:
 		{"id": "minder", "icoon": "⬆", "tekst": "blijft over", "kort": "over",
 			"kies": func(k): antwoord2(str(k))},
 	]
+
+## The rooms of step 3, one button each: "🛏 Kamer 1" (short: "🛏 1").
+func _kamer_keuzes(kamers: Array) -> Array:
+	var uit: Array = []
+	for k in kamers:
+		var kid := str(k)
+		var r = Rooms.get_kamer(kid)
+		var naam: String = str(r.naam) if r != null else kid
+		var kort: String = naam.get_slice(" ", naam.get_slice_count(" ") - 1)
+		uit.append({"id": kid, "icoon": "🛏", "tekst": naam, "kort": kort, "titel": naam,
+			"kies": func(_id) -> void: kies_kamer(kid)})
+	return uit
 
 ## In a LOW frame the card and its choice strip must fit under each other;
 ## one height step is 2k screen pixels (world.md §5.5).
@@ -741,9 +762,7 @@ func antwoord1() -> void:
 	else:
 		v["fouten1"] = int(v["fouten1"]) + 1
 		v["invoer"] = ""
-		paint_checkin()
-		Snd.zacht()
-		Ui.toast("🥄 Tel ze samen", "kind")
+		_teleurgesteld(str(v["gastId"]))
 	State.bewaar()
 
 func antwoord2(keus: String) -> void:
@@ -754,36 +773,129 @@ func antwoord2(keus: String) -> void:
 	if keus == goed:
 		v["stap"] = 3
 		paint_checkin()
-		hotspots()          # now a free bed is something to tap
 		Snd.ja()
 		Ui.toast("Goed gerekend! 🎉", "happy")
 		State.tel(int(v["fouten2"]) == 0, Time.get_ticks_msec() - int(v["t0"]))
 	else:
 		v["fouten2"] = int(v["fouten2"]) + 1
-		paint_checkin()
-		Snd.zacht()
-		Ui.toast("🥄 %d × %d = %d" % [int(v["dagen"]), int(v["nieuw"]),
-			int(v["dagen"]) * int(v["nieuw"])], "kind")
+		_teleurgesteld(str(v["gastId"]))
 	State.bewaar()
+
+## A slip at the desk: the card stays as it is — no help line, no product, no
+## toast with the answer — and the guest shows it (`Ui.misser`, S5; a number
+## strip has already called it itself, a second call does nothing).  A sad pose
+## cuts a walk short, so afterwards he steps back to his place at the desk.
+func _teleurgesteld(gast_id: String) -> void:
+	Snd.zacht()
+	# only on the card that is really up (headless there is none, and a handle
+	# from an earlier check-in may still be lying about)
+	if not scherm_klaar() or _ci_kaart == null or Hits.spot(str(_ci_kaart.id)) == null:
+		return
+	Ui.misser(_ci_kaart, gast_id)
+	Econ.na(Ui.MIS_PAUZE + 0.4, _naar_balie.bind(gast_id))
+
+## Back to his place at the desk, when he stands somewhere else in the receptie
+## and no game has him.
+func _naar_balie(gast_id: String) -> void:
+	var v = State.s["checkin"]
+	var d = World.dier(gast_id)
+	if v == null or str(v["gastId"]) != gast_id or d == null or d.kamer != "receptie" \
+			or not Games.actief().is_empty() or not (d.punten as Array).is_empty():
+		return
+	var p := _balieplek()
+	if Vector2(d.x, d.z).distance_to(Vector2(float(p["x"]), float(p["z"]))) > 3.0:
+		World.ga(gast_id, float(p["x"]), float(p["z"]), "wacht")
+
+# ------------------------------------------------------------ de kamer kiezen
+
+## A room was chosen for the guest at the desk: step 4, and the beds game
+## "Verdeel bedden over de kamers" (`games/bedden`, games-a.md §3) starts at the
+## desk for this guest and this room.  A registry without that game (a narrowed
+## test) does not leave the check-in stuck: he gets the room's free bed, or a
+## new one, at once.
+func kies_kamer(kamer_id: String) -> bool:
+	var v = State.s["checkin"]
+	if v == null or int(v["stap"]) != 3:
+		return false
+	if State.plek_in(kamer_id) <= 0:
+		paint_checkin()               # out of date: offer what fits now
+		return false
+	v["kamer"] = kamer_id
+	v["stap"] = 4
+	if _ci_kaart != null:
+		_ci_kaart.weg()
+		_ci_kaart = null
+	Hits.wis_eigenaar(CHECKIN)
+	State.bewaar()
+	checkin_veranderd.emit()
+	if not Games.definitie(BEDDEN_SPEL).is_empty() and Games.start(BEDDEN_SPEL):
+		return true
+	return _bed_zonder_spel(kamer_id)
+
+func _bed_zonder_spel(kamer_id: String) -> bool:
+	var slot := str(State.bed_vrij(kamer_id).get("slot", ""))
+	if slot.is_empty():
+		var p := State.bed_plek(kamer_id)
+		if not p.is_empty():
+			slot = str(World.voeg_bed(kamer_id, {"x": p["x"], "z": p["z"]}).get("id", ""))
+	if slot.is_empty() or not wijs_bed(kamer_id, slot):
+		checkin_terug()
+		return false
+	return true
+
+## The beds game stopped before the room had its beds (`⬅ Terug`, another game
+## started): the check-in is not over.  The guest comes back to his place at the
+## desk and waits there, and the room question is up again — never a guest lost,
+## never a check-in that cannot go on (owner, 2026-09-24).
+func checkin_terug() -> void:
+	var v = State.s["checkin"]
+	if v == null:
+		return
+	if int(v["stap"]) >= 4:
+		v["stap"] = 3
+	var gid := str(v["gastId"])
+	var d = World.dier(gid)
+	if d != null:
+		var p := _balieplek()
+		if d.kamer != "receptie":
+			World.reis(gid, "receptie", {"x": p["x"], "z": p["z"], "na": "wacht"})
+		elif Vector2(d.x, d.z).distance_to(Vector2(float(p["x"]), float(p["z"]))) > 3.0:
+			World.ga(gid, float(p["x"]), float(p["z"]), "wacht")
+	State.bewaar()
+	paint_checkin()
+
+## No bedroom can take him any more (the floor filled up with furniture while he
+## waited): he goes back to the front of the waiting list — not lost — and the
+## bell says why.
+func _checkin_vol() -> void:
+	var v = State.s["checkin"]
+	var nieuw = State.s["nieuweGast"]
+	if v == null or not State.kamers_met_plek().is_empty():
+		return
+	if _ci_kaart != null:
+		_ci_kaart.weg()
+		_ci_kaart = null
+	Hits.wis_eigenaar(CHECKIN)
+	State.s["checkin"] = null
+	if nieuw != null:
+		(State.s["wachtlijst"] as Array).push_front(nieuw)
+		State.s["nieuweGast"] = null
+	World.sync(alle_dieren())
+	State.bewaar()
+	checkin_veranderd.emit()
+	_bel_vol()
+	render()
 
 # ------------------------------------------------------------ het bed geven
 
-func tik_bed(kamer_id: String, slot_id: String) -> void:
-	var er := State.gast_in_bed(kamer_id, slot_id)
-	if not er.is_empty():
-		Ui.toast("%s slaapt hier. 💤" % er["naam"], "kind")
-		return
-	var v = State.s["checkin"]
-	if v != null and int(v["stap"]) == 3:
-		wijs_bed(kamer_id, slot_id)
-		return
-	Ui.toast("🛏 Bel eerst een gast", "kind")
-
 ## The end of the check-in: a bed, a star for taking part, and the round flips
-## from `ochtend` to `vrij`.
-func wijs_bed(kamer_id: String, slot_id: String) -> bool:
+## from `ochtend` to `vrij`.  The beds game calls it the moment the child gave
+## the room the right number of beds, with `o.loop`: the guest WALKS to his bed
+## while the camera walks along, and the game says "welterusten" once he lies
+## in it.  Without `o.loop` the camera goes to the room at once.
+func wijs_bed(kamer_id: String, slot_id: String, o: Dictionary = {}) -> bool:
 	var v = State.s["checkin"]
-	if v == null or int(v["stap"]) != 3:
+	if v == null or int(v["stap"]) < 3:
 		return false
 	var g := gast_bij_id(str(v["gastId"]))
 	if g.is_empty():
@@ -791,6 +903,7 @@ func wijs_bed(kamer_id: String, slot_id: String) -> bool:
 	if not State.gast_in_bed(kamer_id, slot_id).is_empty():
 		Ui.toast("💤 Hier slaapt iemand", "kind")
 		return false
+	var loop := bool(o.get("loop", false))
 	g["kamer"] = kamer_id
 	g["bed"] = slot_id
 	var nieuw = State.s["nieuweGast"]
@@ -812,9 +925,12 @@ func wijs_bed(kamer_id: String, slot_id: String) -> bool:
 	if str(State.s["ronde"]) == "ochtend":
 		State.s["ronde"] = "vrij"
 	State.bewaar()
-	naar_kamer(kamer_id)
+	if loop:
+		render()
+	else:
+		naar_kamer(kamer_id)
 	checkin_veranderd.emit()
-	if scherm_klaar():
+	if scherm_klaar() and not loop:
 		Ui.wolk({"id": "ci_af", "door": "wolk", "kamer": kamer_id,
 			"volg": _volg_dier(str(g["id"])), "hoog": 54, "icoon": "💤",
 			"tekst": "welterusten", "klas": "goed", "prio": 12})
@@ -943,8 +1059,9 @@ func _bouw_spel_taak() -> void:
 		"voerkar": null,                     # already has its own 'voer' card
 		"tobbe": {"id": "bad", "prio": 1, "icoon": "🛁",
 			"wanneer": _wanneer_bad, "tekst": _tekst_bad},
-		"bedden": {"icoon": "🛏", "tekst": "Zet de bedden op rij",
-			"wanneer": _wanneer_twee_gasten},
+		# `bedden` has no card of its own any more: it is step 4 of the check-in
+		# and starts from the room question at the desk (owner, 2026-09-24)
+		"bedden": null,
 		"sleutels": {"icoon": "🔑", "tekst": "Hang de sleutels op",
 			"wanneer": _wanneer_twee_gasten},
 		"meubels": {"icoon": "📖", "tekst": "Koop iets moois",
@@ -989,7 +1106,7 @@ func doe_taak(q: Dictionary) -> void:
 		naar_kamer(kamer)
 	var actie := str(q.get("actie", ""))
 	if actie == "bel":
-		if (State.s["gasten"] as Array).is_empty() or not State.bed_vrij().is_empty():
+		if (State.s["gasten"] as Array).is_empty() or State.plek_voor_gast():
 			bel()
 	elif actie == "avond":
 		avondronde()
@@ -1199,8 +1316,8 @@ const KOMT := "komt"           ## owner of the "X komt eraan" bubbles
 const DIER_ICOON := {"hond": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆"}
 var _komt: Dictionary = {}     ## guest id -> spot id of its bubble
 
-## A guest walking in from a room you cannot see — after "Kies een bed", or on
-## his way to a wish — gets a bubble at the door he will come through, with his
+## A guest walking in from a room you cannot see — back to the desk, or on his
+## way to a wish — gets a bubble at the door he will come through, with his
 ## pictogram, his name and a bar that fills until he steps into view (owner,
 ## 2026-09-14).  Gone the moment he is in the room.  Owned by the hotel, so a
 ## game's `wis_alles` and the hotel's own `render()` leave it alone.
@@ -1359,13 +1476,14 @@ func hotspots() -> void:
 	var spel := not Games.actief().is_empty()
 	if nu == "receptie":
 		var bp := decor_plek("receptie", "bel")
-		# Only where ringing brings a guest: a free bed and nobody at the desk
-		# yet.  With the beds full or a guest still checking in, a tap only said
-		# "alle bedden vol" or "Er staat al iemand" (owner, 2026-09-23:
+		# Only where ringing brings a guest: room for one more animal in some
+		# bedroom (a free bed, or floor for a new one) and nobody at the desk
+		# yet.  With every room full or a guest still checking in, a tap only
+		# said "alle kamers vol" or "Er staat al iemand" (owner, 2026-09-23:
 		# "actions ... are available ... but when you click on them you can't
 		# execute them ... this provides visual clutter").
-		var vrij := not State.bed_vrij().is_empty() and State.s["nieuweGast"] == null \
-			and State.s["checkin"] == null
+		var vrij := State.s["nieuweGast"] == null and State.s["checkin"] == null \
+			and State.plek_voor_gast()
 		if bp.is_empty() or not (vrij or spel):
 			Hits.weg("bel")
 		else:
@@ -1398,22 +1516,11 @@ func hotspots() -> void:
 				"aan": func(_s): avondronde()})
 		else:
 			Hits.weg("lamp")
-	# an OCCUPIED bed gets no button: the sleeping animal with its name plate
-	# already says it, and the room stays quiet to look at.  A FREE bed gets
-	# one only while a guest waits for a bed (check-in step 3): at any other
-	# time a tap only said "🛏 Bel eerst een gast" (owner, 2026-09-23).
-	var kiest := spel or (State.s["checkin"] != null and int(State.s["checkin"].get("stap", 0)) == 3)
-	for slot in _slots(nu, "bed"):
-		var sid := str(slot.get("id", ""))
-		if not kiest or not State.gast_in_bed(nu, sid).is_empty():
-			Hits.weg("bed_%s_%s" % [nu, sid])
-			continue
-		Hits.maak({"id": "bed_%s_%s" % [nu, sid], "door": EIGENAAR, "kamer": nu,
-			"x": slot.get("x", 0), "z": slot.get("z", 0), "y": 13,
-			"icoon": "🛏", "label": "Vrij bed", "titel": "Een vrij bed", "op": "aan",
-			"kind": "drop", "drop": "bed", "data": {"kamer": nu, "slot": sid},
-			"klas": "hotbed vrij", "prio": 7,
-			"aan": func(_s): tik_bed(nu, sid)})
+	# A bed has no button at all.  An OCCUPIED bed never had one: the sleeping
+	# animal with its name plate already says it.  A FREE bed had one while a
+	# guest waited for a bed; since 2026-09-24 the check-in chooses a ROOM and the
+	# beds game gives that room its beds (owner: "Je moet bij bellen van het dier
+	# een kamer voor het dier kiezen"), so a tap on a bed has nothing to do.
 	var mp := decor_plek(nu, "mand")
 	if not mp.is_empty():
 		var wil := 0
@@ -1657,6 +1764,18 @@ func _plek(fx: float, fz: float) -> Dictionary:
 ## `Kamer.balie` footprint, so a desk that moves takes its spot along.
 const BALIE_VOOR := 17          ## voxels in front of the desk's front edge
 const BALIE_NAAST := 20         ## between two guests at the desk
+
+## The same three for the beds game, which asks its question at the desk as
+## step 4 of the check-in: where the guest stands, the anchor its card shares
+## with the check-in's own card, and that card's height.
+func balieplek(i: int = 0) -> Dictionary:
+	return _balieplek(i)
+
+func balie_anker(id: String) -> Callable:
+	return _volg_balieplek(id)
+
+func balie_hoog() -> int:
+	return _ci_hoog()
 
 func _balieplek(i: int = 0) -> Dictionary:
 	var r = Rooms.get_kamer("receptie")

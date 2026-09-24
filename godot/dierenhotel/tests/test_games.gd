@@ -244,8 +244,11 @@ func test_elk_spel_hangt_aan_zijn_eigen_rustspul() -> void:
 		if str(hs.get("rust", "")).is_empty():
 			continue
 		met_rust.append(id)
-	for moet in ["hinkel", "kraam", "was", "wekker", "bedden"]:
+	for moet in ["hinkel", "kraam", "was", "wekker"]:
 		waar(met_rust.has(moet), "%s hangt aan een rustspul" % moet)
+	# bedden has no entry any more: it is step 4 of the check-in (2026-09-24),
+	# so the blanket chest it hung on in kamer 1 went with it
+	waar(not met_rust.has("bedden"), "bedden heeft geen ingang en dus geen rustspul")
 	Games.hersteek()
 	for id in met_rust:
 		var def := Games.definitie(id)
@@ -271,8 +274,6 @@ func test_elk_spel_hangt_aan_zijn_eigen_rustspul() -> void:
 	Games.stop()
 	waar(not World.decor_plek("rust_wk_klok", "gang").is_empty(),
 		"na het spel hangt de klok weer in de gang")
-	waar(not World.decor_plek("rust_bd_kist", "kamer1").is_empty(),
-		"en staat de dekenkist weer tussen de bedden")
 	State.s = bewaard
 	Games.hersteek()
 	_af()
@@ -300,20 +301,24 @@ func test_een_spel_zonder_iets_te_doen_heeft_geen_knop() -> void:
 	waar(not Games.speelbaar_nu("meubels"), "meubels: zonder munten en sterren niets te kopen")
 	State.s["munten"] = 2
 	waar(Games.speelbaar_nu("meubels"), "meubels: met munten wel")
-	# bedden: today's turn already done
-	var d := State.spel_data("bedden")
-	waar(Games.speelbaar_nu("bedden"), "bedden: een nieuwe beurt kan")
-	d["klaar"] = true
-	var keus := (load("res://games/bedden/spel.gd") as GDScript).call("kies_kamer") as Dictionary
-	var o := Sommen.Bedden.opdracht(State.band(), int(State.s["dag"]), State.n_gasten(),
-		int(keus["cap"]), (load("res://games/bedden/spel.gd") as GDScript).call("max_stroken"))
-	d["sig"] = (load("res://games/bedden/spel.gd") as GDScript).call("_signatuur_van", o, str(keus["kamer"]))
-	waar(not Games.speelbaar_nu("bedden"), "bedden: de beurt van vandaag is al af")
-	# and the task card goes with the entry
+	# bedden (2026-09-24): step 4 of the check-in, so only something to do while
+	# a check-in stands at its beds — and even then no entry and no card
+	waar(not Games.speelbaar_nu("bedden"), "bedden: zonder check-in niets te doen")
+	State.s["checkin"] = {"gastId": "kn9", "stap": 3, "kamer": ""}
+	waar(not Games.speelbaar_nu("bedden"), "bedden: bij de kamervraag nog niet")
+	State.s["checkin"] = {"gastId": "kn9", "stap": 4, "kamer": "kamer1"}
+	waar(Games.speelbaar_nu("bedden"), "bedden: bij zijn bedden wel")
 	var kaarten := []
 	for q in Hotel.spel_taken():
 		kaarten.append(str(q["spel"]))
-	waar(not kaarten.has("bedden"), "geen taakkaartje voor een spel zonder iets te doen")
+	waar(not kaarten.has("bedden"), "maar nooit een taakkaartje: het begint aan de balie")
+	State.s["checkin"] = null
+	# and the task card goes with the entry
+	State.s["munten"] = 0
+	kaarten = []
+	for q in Hotel.spel_taken():
+		kaarten.append(str(q["spel"]))
+	waar(not kaarten.has("meubels"), "geen taakkaartje voor een spel zonder iets te doen")
 	State.s = bewaard
 	_af()
 

@@ -19,6 +19,10 @@ extends RefCounted
 
 const LAAG := 5           ## from this priority up, a game chip is "ordinary"
 const PLEKKEN := 3        ## the board holds three cards
+## The bell's card (world.md §7.7): the first guest, and then while some
+## bedroom can take one more animal.
+const BEL_EERST := "Bel een gast"
+const BEL_PLEK := "Nog plek voor een gast"
 
 var _sig := ""
 
@@ -28,7 +32,7 @@ func signatuur() -> String:
 	var d := PackedStringArray([
 		str(s["dag"]), str(s["ronde"]), str((s["gasten"] as Array).size()),
 		str(s["munten"]), str((s["uitcheck"] as Array).size()),
-		"1" if not State.bed_vrij().is_empty() else "0",
+		"1" if State.plek_voor_gast() else "0",
 		"1" if s["nieuweGast"] != null else "0"])
 	for q in Hotel.spel_taken():
 		d.append("sp:%s:%s" % [q["id"], q["tekst"]])
@@ -58,11 +62,13 @@ func bouw(forceer := false) -> Array:
 		if str(g.get("bed", "")).is_empty():
 			zonder_bed.append(g)
 	var lege_bak := Hotel.lege_bakken()
-	var vrij := State.bed_vrij()
-	if not vrij.is_empty() and (s["gasten"] as Array).is_empty():
-		t.append(_kaart("bel", "🔔", "Bel een gast", "receptie", "bel"))
-	elif not vrij.is_empty():
-		t.append(_kaart("bel", "🔔", "Nog een bed vrij", "receptie", "bel"))
+	# Room for one more guest: a free bed, or floor where the check-in puts a
+	# new bed down (owner, 2026-09-24).  "Nog een bed vrij" was the old rule.
+	var plek := State.plek_voor_gast()
+	if plek and (s["gasten"] as Array).is_empty():
+		t.append(_kaart("bel", "🔔", BEL_EERST, "receptie", "bel"))
+	elif plek:
+		t.append(_kaart("bel", "🔔", BEL_PLEK, "receptie", "bel"))
 	if not zonder_bed.is_empty():
 		t.append(_kaart("bed", "🛏", "%s wil een bed" % zonder_bed[0]["naam"],
 			"receptie", "bel"))

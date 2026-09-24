@@ -577,6 +577,12 @@ Practical speed: **20–35 voxels/s in a `loop 1.5` room**.
 `na` values on arrival: `eet`, `sip`, `wacht`, `snuif`, `blij`, `slaap`, `deur`, anything
 else → `stil` for `round((10 + r()·40) · rustig)` ticks.
 
+**Port (2026-09-24): an order that supersedes a journey ends its doors too.**  Every new
+order above clears the door route along with `reis_doel`.  Before, a guest who was sent
+back to the desk (`ga`) halfway to his room kept the doors of that first walk, and the new
+walk ended with a step through one of them — he turned up in the corridor (found by the
+beds game's `⬅ Terug`, games-a.md §3.6).
+
 **Promises** (`stappen`, `loopNaar`): options `{pose: null|'zwem'|'spring', tempo: 1,
 perStap(i, punt), na}`. The promise resolves `true` when the last point is reached (exactly
 on the point, in end pose `na`, default `wacht`, or `zwem` when `pose: 'zwem'`), and
@@ -781,8 +787,16 @@ the ordinary morning bubble.
 `Hotel.bel()`:
 
 * a check-in already running → repaint it and toast `🛎️ Er staat al iemand`;
-* no free bed → soft sound and a bubble at the bell: icon 🛏, number `maxGasten()`,
-  text `alle bedden vol`, class `hulp`, height 26, removed after 3200 ms;
+* no bedroom can take one more guest → soft sound and a bubble at the bell: icon 🛏,
+  number `maxGasten()`, text `alle kamers vol` (the HTML: `alle bedden vol`), class
+  `hulp`, height 26, removed after 3200 ms.
+  **Port (owner 2026-09-24: "Je moet bij bellen van het dier een kamer voor het dier
+  kiezen"):** the guest cap is the free FLOOR, not the free beds.  `State.plek_voor_gast()`:
+  some bedroom (a room with a bed, `State.slaapkamers()`) has a free bed, or free floor
+  where a whole new bed fits (games-a.md §3.2) and fewer than `State.MAX_BEDDEN` (6)
+  beds — in the two base rooms five beds a room, ten guests.
+  `maxGasten()` = every bed plus every bed the check-in may still put down.  The same
+  rule decides the bell button (§6.3) and the board card (§3.7);
 * otherwise: close the prikbord, take the next guest, compute
   `geld = sommen.geld(band)` and store `nachten`, `prijs`, `betaald`, `dagIn = dag`;
   reset `kamer/bed/behoefte/geslapen/gegeten/blij`; put the guest in `state.nieuweGast`;
@@ -799,14 +813,15 @@ the ordinary morning bubble.
   makes his way round the end of the desk to the counter with an entrance of his own kind —
   the puppy bounds, the cat slinks and stretches, the rabbit hops, the goose waddles
   flapping (art-sound-rules.md §11.8), three to four seconds.  Nothing waits for him: the
-  check-in card is up at once, as before, and a bed chosen while he is still on his way
-  sends him to it.  The families of §3.5 do not walk — they are the `👪` bubbles at the desk
+  check-in card is up at once, as before, and a check-in that ends while he is still on
+  his way sends him to his bed.  The families of §3.5 do not walk — they are the `👪` bubbles at the desk
   and the guest they fetch walks down from his own room — so check-out is unchanged.
 
 **Check-in state** (`state.checkin`): `{gastId, samen, extra, nieuw: samen+extra,
 dagen: state.levering, voorraad: state.scoops, stap: 1, fouten1: 0, fouten2: 0, invoer: '',
 keuze: null, weg: false, t0}` where `samen = Σ scoops of the current guests` and
-`extra = the new guest's scoops`.
+`extra = the new guest's scoops`.  **Port (2026-09-24):** plus `kamer: ''`, the room of
+step 3; `stap` runs 1 (samen) → 2 (genoeg) → 3 (the room) → 4 (the beds game).
 
 **Step 1 — "Samen?"** One sum card at (105, 30), height 24 (lifted when the frame is under
 300 px high, by `ceil(20/(2k))` height steps), icon 🥄, with two lines — **port:** the card
@@ -823,32 +838,66 @@ After a wrong answer (`fouten1 > 0`) the help line is the spoon rows
 Correct → `Snd.ja()`, toast `Precies! 🎉`, `State.tel(fouten1 === 0, elapsed)`, step 2.
 Wrong → `Snd.zacht()`, toast `🥄 Tel ze samen`, `fouten1++`.
 Empty input → toast `👆 Tik eerst een getal`.
+**Port (owner 2026-09-24: "Nee geef geen hulp na fouten. Kinderen moeten zelf leren
+rekenen. Fout antwoord kiezen moet niet beloond worden met hulp maar juist een
+teleurgesteld dier"):** after a wrong answer the card gets NO help line (the spoon rows
+are gone) and there is no hint toast; the guest at the desk is disappointed instead —
+`Ui.misser` with the guest as the card's animal: he goes `sip`, `🔄 Nog een keer` hangs
+by him, the strip is shut for `MIS_PAUZE` (1,2 s) — `Snd.zacht()`, `fouten1++`, and the
+SAME card with the same four numbers stays up.  When the sad pose cut his walk to the
+desk short, he steps back to his place afterwards (`Hotel._naar_balie`).
 
 **Step 2 — "Genoeg?"** Same card, no keypad, one choice strip. Lines:
 
 > `Elke dag <nieuw> schep|scheppen, <dagen> dag|dagen lang`
 > `📦 In huis: <voorraad> schep|scheppen. Genoeg?`
 
-Sum text `"<dagen> × <nieuw>"`, and after a first mistake `"<dagen> × <nieuw> = <product>"`.
+Sum text `"<dagen> × <nieuw>"`, and after a first mistake `"<dagen> × <nieuw> = <product>"`
+(**port, owner 2026-09-24:** never — the product is not written out after a slip).
 Choice strip title `is er genoeg eten?`, three buttons:
 `⬇ te weinig` (= `meer`), `⚖ precies`, `⬆ blijft over` (= `minder`).
 The frozen comparison is `vergelijk(v)`: `dagen · nieuw > voorraad` → `'meer'`,
 `<` → `'minder'`, `=` → `'precies'`. Correct → `Snd.ja()`, toast `Goed gerekend! 🎉`,
 `State.tel(fouten2 === 0, elapsed)`, step 3. Wrong → `fouten2++`, `Snd.zacht()`, toast
-`🥄 <dagen> × <nieuw> = <product>`.
+`🥄 <dagen> × <nieuw> = <product>` (**port, owner 2026-09-24:** no toast with the answer;
+the guest is disappointed, `Ui.misser`, and the same question stays, as in step 1).
 
-**Step 3 — the bed.** A bubble over the guest: icon 🛏, text `Kies een bed` (or
-`Alles bezet`), tapping it travels to the room of the first free bed. When that room is not
-in view, a second bubble at (93, 6) shows that room's icon and name and travels there too —
-**port:** that bubble hangs at the door the way to that room starts with (`Rooms.pad`), the
-corridor door from the receptie, not on the wall behind the desk.
-Tapping a free bed calls `wijsBed`: set `kamer`/`bed`, move the guest from `nieuweGast` into
-`gasten`, recompute the band, `World.slaap`, `behoefte = 'eten'`, clear the check-in,
-`Snd.tover()`, **one star** (`Econ.sterren(1, 'checkin')`), tick off the `bed` task, flip
-`ochtend → vrij`, save, travel to that room, and show a bubble
-`💤 welterusten` (class `goed`) for 3600 ms.
-Tapping an occupied bed → toast `<naam> slaapt hier. 💤`; tapping a free bed without a
-check-in → toast `🛏 Bel eerst een gast`.
+**Step 3 — the bed** (the HTML).  A bubble over the guest: icon 🛏, text `Kies een bed` (or
+`Alles bezet`), tapping it travels to the room of the first free bed, a second bubble at the
+door shows that room; tapping a free bed calls `wijsBed`; tapping an occupied bed → toast
+`<naam> slaapt hier. 💤`; a free bed without a check-in → toast `🛏 Bel eerst een gast`.
+**Port (owner 2026-09-24): all of that is gone** — "En het moet heten "verdeel bedden over
+de kamers" met kamer 1 en kamer 2 waar de bedden geplaatst moeten worden op basis van waar
+het dier gaat slapen. Je moet bij bellen van het dier een kamer voor het dier kiezen en
+daarna moet dat spel plaatsvinden op basis van hoeveel dieren je hebt op basis van welke
+kamers ze zitten".  No bed has a button (§6.3).
+
+**Step 3 (port) — the room.**  The same card at the desk, no sum: `🛏 Welke kamer voor
+<naam>?` (4 words, 28 characters on `Stampertje`), a strip of the bedrooms where one more
+animal fits (`State.kamers_met_plek()`), each `🛏 Kamer 1` (short `🛏 1`), title
+`kies een kamer`.  A tap: `Hotel.kies_kamer(k)` → `checkin.kamer = k`, `stap = 4`, save,
+and the game `bedden` starts (games-a.md §3).  A registry without that game (a narrowed
+test) gives him the room's free bed, or a new one, at once — the check-in never gets stuck.
+With no room left (the floor filled up with furniture while he waited) he goes back to the
+front of the waiting list — never lost — and the bell says `alle kamers vol`.
+
+**Step 4 (port) — the beds: "Verdeel bedden over de kamers"** (games-a.md §3).  At the desk
+`<In kamer 1> slapen al <n> dieren` / `<naam> komt erbij. Hoeveel bedden?`, `<n> + 1 =` and
+four numbers; the room gets that many beds, he walks there with the camera along, and a
+right answer ends the check-in, a wrong one brings him back to the desk and to the same
+question.  While the game runs, `paint_checkin` paints nothing (the game owns the desk).
+`⬅ Terug` (any stop before the right answer) and a reload: `Hotel.checkin_terug()` /
+`paint_checkin` see step 4 without the game, the guest walks back to his place at the desk,
+`stap = 3`, and the room question hangs there again.
+
+**The end — `Hotel.wijs_bed(kamer, bed, o)`:** set `kamer`/`bed`, move the guest from
+`nieuweGast` into `gasten`, recompute the band, `World.slaap`, `behoefte = 'eten'`, clear
+the check-in, `Snd.tover()`, **one star** (`Econ.sterren(1, 'checkin')`), tick off the `bed`
+task, flip `ochtend → vrij`, save.  The beds game passes `{loop: true}`: he WALKS to his
+bed, the camera walks along, and the game shows `💤 welterusten` (class `goed`) once he lies
+in it.  Without `loop` (the fallback): travel to that room and the bubble `💤 welterusten`
+for 3600 ms, as the HTML did.  An occupied bed → toast `💤 Hier slaapt iemand`, nothing
+else happens.
 
 ### 3.4 Feeding and playing (hotel-resolved wishes)
 
@@ -944,15 +993,16 @@ Coin markup: `€10` and `€20` render as a note, others as a coin.
 ### 3.7 The prikbord (task board)
 
 Tasks are rebuilt whenever a fingerprint changes (`taakSignatuur` = day, round, guest
-count, coins, checkout count, free bed yes/no, pending guest, every game task id+text, and
+count, coins, checkout count, room for a guest yes/no (**port 2026-09-24:** `plek_voor_gast`, was
+"free bed"), pending guest, every game task id+text, and
 per guest `id:bed:behoefte:gegeten:blij`, and every bowl level).
 
 Hotel tasks, in this order:
 
 | id | icoon | tekst | kamer | actie | when |
 |---|---|---|---|---|---|
-| `bel` | 🔔 | `Bel een gast` | receptie | `bel` | free bed and **no** guests |
-| `bel` | 🔔 | `Nog een bed vrij` | receptie | `bel` | free bed and guests present |
+| `bel` | 🔔 | `Bel een gast` | receptie | `bel` | room for a guest (§3.3) and **no** guests |
+| `bel` | 🔔 | `Nog plek voor een gast` (HTML: `Nog een bed vrij`) | receptie | `bel` | room for a guest and guests present |
 | `bed` | 🛏 | `<naam> wil een bed` | receptie | `bel` | a guest without a bed |
 | `voer` | 🍪 | `Vul de voerkar` | keuken | `game:voerkar` | a room with guests has an empty bowl |
 | `uit` | 💰 | `Reken af: <naam>` | receptie | `avond` | `uitcheck` not empty |
@@ -960,7 +1010,8 @@ Hotel tasks, in this order:
 
 All hotel tasks have `prio = 0`. Game tasks come from `def.taak` (or the default table
 `SPEL_TAAK`: `voerkar → none`, `tobbe → {id:'bad', prio:1, 🛁, "<naam> wil in bad"` /
-`"Tobbe-tijd"}`, `bedden → {🛏, "Zet de bedden op rij", when ≥2 guests}`,
+`"Tobbe-tijd"}`, `bedden → none` (**port 2026-09-24:** it is step 4 of the check-in; the HTML
+had `{🛏, "Zet de bedden op rij", when ≥2 guests}`),
 `sleutels → {🔑, "Hang de sleutels op", when ≥2 guests}`,
 `meubels → {📖, "Koop iets moois", when ≥5 coins}`) and default to `prio = 5`.
 
@@ -1167,7 +1218,7 @@ half-loaded.
 | `hotspot` | optional | `{obj, icoon, label, hoog, dx, dz, blijf, rust}` — the entry button; `rust` names the resting prop it hangs on |
 | `modellen` | optional | `{naam: builder}` — the game's own models, registered at the scan; the builders are STATIC (a function of the game's script, `Callable(get_script(), …)`), because the scanned instance is freed |
 | `rust` | optional | loose decor entries `{id, model, x, z, y?, params?}` that stand in the room whenever the game may be played and NO game runs (owner 2026-09-23: "Dan hangt elk spel aan iets wat je echt ziet"); owner `rust:<id>`, put down and taken away by `hersteek`, all of them cleared when any game starts |
-| `kan` | optional | **port:** `func(s) -> bool` — has the game something to do right now?  Absent = yes.  False hides the entry button and the game's task card (`Games.speelbaar_nu`): a game that would only say "vol ✓", "Alle bakjes vol!" or "Nog geen munten" is an action that cannot be carried out (owner 2026-09-23: "actions ... are available ... but when you click on them you can't execute them ... this provides visual clutter").  STATIC like `taak.wanneer` (autoloads and literals only).  bedden: room for two beds and today's turn not done; voerkar: `Hotel.lege_bakken()` not empty; meubels: coins, a star, or something still to place |
+| `kan` | optional | **port:** `func(s) -> bool` — has the game something to do right now?  Absent = yes.  False hides the entry button and the game's task card (`Games.speelbaar_nu`): a game that would only say "vol ✓", "Alle bakjes vol!" or "Nog geen munten" is an action that cannot be carried out (owner 2026-09-23: "actions ... are available ... but when you click on them you can't execute them ... this provides visual clutter").  STATIC like `taak.wanneer` (autoloads and literals only).  bedden (2026-09-24): a check-in stands at its beds (step 4, with a room); voerkar: `Hotel.lege_bakken()` not empty; meubels: coins, a star, or something still to place |
 | `unlock(N, band)` | optional | may it be played? (`true` when absent; a throw counts as `true`) |
 | `wens` | optional | which wish it fulfils: a name or an array of names |
 | `taak` | optional | prikbord card `{id?, icoon, tekst (string or fn(state)), wanneer(state), kamer?, prio?}` |
@@ -1197,7 +1248,7 @@ Currently registered games:
 | id | naam | kamer | hotspot obj (icoon) | unlock | wens | taak |
 |---|---|---|---|---|---|---|
 | `voerkar` | De voerkar | keuken | `kar` 🛒 | N ≥ 1 | – | (hotel task `voer`) |
-| `bedden` | Bedden op rij | kamer1 | `mand` 🛏, resting on `rust_bd_kist` — the blanket chest between the beds (`dekenkist`, art/decor_slaapkamer.gd) | N ≥ 1 | – | default `bedden` |
+| `bedden` | Verdeel bedden over de kamers | receptie | none — step 4 of the check-in (§3.3); `hotspot` carries only 🛏 for the game bar, no `obj`, no `rust` (the blanket chest `rust_bd_kist` went with the old entry, 2026-09-24) | always (the first guest checks in with N = 0) | – | none |
 | `sleutels` | Het sleutelbord | receptie | `sleutelbordz` 🔑 | N ≥ 2 | – | default `sleutels` |
 | `tobbe` | Tobbe-tijd | tuin | `tobbe` 🛁 | N ≥ 1 | (`bad` via `WENS_SPEL`) | `bad`, prio 1 |
 | `meubels` | Het meubelboek | receptie | `boek` 📖 | N ≥ 3 | – | default `meubels` |
@@ -1252,6 +1303,10 @@ game keeps its priority until it stops itself.
 One ctx per game, built once and cached. `ctx.id`, `ctx.naam`, `ctx.kamer`.
 
 `ctx.wereld`: `kamers()`, `kamer(id)`, `pad(a,b)`, `slots(kamer, soort)`,
+**port (2026-09-24):** `verberg_bed(kamer, slot, aan)`, `bed_verborgen(kamer, slot)`,
+`toon_bedden(kamer?)` — a FREE bed out of sight for a while (bedden: the room holds exactly
+the beds the child asked for); hidden beds come back the moment the camera leaves their
+room, and nothing is saved;
 `slot(kamer, slotId)`, `actief()`, `naar(kamer)`, `dieren(kamer?)` (guest **records**,
 filtered on `waar`), `dier(id)` (the live animal: `x, z, kamer, staat, pose, hoogte`),
 `ga`, `reis`, `slaap`, `setMood`, `setFood`, `setBak`, `bakStand`, `feest(ids)`,
@@ -1550,8 +1605,8 @@ The contract a game with an animal of the turn keeps:
 | `oogst` | every guest with a bed | games-c §2.6 (by day and N round the list) | fresh turn from the counting question; the previous picker `laat_gaan` (off the table) |
 | `weeg` | every guest with a bed | games-c §3.6 (by day and N round the list) | fresh turn from the first reading; the previous weigher `laat_gaan` (off the scale) |
 
-No button: `bedden` (its card's animal is the guest who still needs a bed — the subject of
-the sum, not a player), `meubels`, `was`, `voerkar` (serves everybody at once) and `tobbe`
+No button: `bedden` (its guest is the one checking in — the subject of the sum, not a
+player), `meubels`, `was`, `voerkar` (serves everybody at once) and `tobbe`
 (the sum is about soap and tubs; afterwards every waiting animal has its own button in the
 bath step, and since 2026-09-23 a tap on it bathes THAT animal — games-a §6.5 E — so the
 child picks who bathes there).
@@ -1580,6 +1635,7 @@ R1's "within a second" now counts from his arrival.
 | `weeg` | beside the balance (62, 88) | the first reading |
 | `tobbe` | (no animal of the turn) each bather who comes from elsewhere after the sum, beside the first tub | his own bath button — the sum itself needs nobody |
 | `wekker` | nobody walks: the sleepers are woken where they lie | nothing — the card comes at once |
+| `bedden` | his place at the desk (`Hotel.balieplek()`, within 6 voxels) — he may still be coming in, or walking back after a wrong answer | the beds question, every time it comes |
 
 ---
 
@@ -1719,11 +1775,19 @@ gebruiker moet gewoon op de bel drukken"). `ui/intro.gd` (`UiIntro`), started by
   in a room whose doors the game hides.  While the camera is away, the game's own things
   are simply not in view (they belong to its room); back in the room `Hits` lays them out
   again.
+* **Port (owner 2026-09-24: "Het dier moet gevolgd worden met de camera nadat het aantal
+  bedden geselecteerd is"): a game that walks its animal somewhere else.**  The beds game
+  (games-a.md §3) sends the guest from the desk to his room and back.  It says so with
+  `Games.verhuis(kamer)` — the room the game "is in" moves along — registers him as awaited
+  (`Games.verwacht`) and calls `Hotel.volg`: the camera walks along through every door, and
+  because the walk now ends in the game's (moved) room, `stop_volgen(true)` leaves it
+  there instead of jumping back to the desk.
 * **Port (owner 2026-09-23): a hotel button stands only where a tap does something**
   ("actions such as a blank bed are available ... but when you click on them you can't
-  execute them ... this provides visual clutter").  Outside a game: the bell only with a
-  free bed and nobody at the desk or checking in; a free bed only while a guest waits for
-  one (check-in step 3 — the step repaints the buttons); the play basket only while a guest
+  execute them ... this provides visual clutter").  Outside a game: the bell only while a
+  bedroom can take one more guest (`State.plek_voor_gast()`, §3.3) and nobody is at the
+  desk or checking in; a bed never (since 2026-09-24 the check-in chooses a room at the
+  desk, not a bed in the room); the play basket only while a guest
   in that room wants to play; a bowl only with food in it and a guest there that has not
   eaten (the tap feeds).  Doors, the prikbord and the lamp keep their rules.  While a game
   runs every hotel button is made as before: `Hits` keeps them off the glass anyway, and a
@@ -1862,10 +1926,10 @@ characters.
 ### 7.4 Receptie: hotspots and the bell
 
 `Bel` (title `Bel voor de volgende gast`) · `Prikbord` (title `Het prikbord met de taakjes`) ·
-`Avond` (title `De avondronde`) · `Vrij bed` (title `Een vrij bed`) ·
+`Avond` (title `De avondronde`) · (`Vrij bed` / `Een vrij bed`: gone 2026-09-24) ·
 `Speelmand` (title `De speelmand`) · `Vol` / `Leeg`
 (titles `Er ligt eten in het bakje` / `Het bakje is nog leeg`) ·
-`Ga naar <kamernaam>` · bell-full bubble `🛏 <maxGasten> alle bedden vol` ·
+`Ga naar <kamernaam>` · bell-full bubble `🛏 <maxGasten> alle kamers vol` ·
 toast `🛎️ Er staat al iemand` · toast `<naam> staat aan de balie! 🔔`
 
 ### 7.5 Check-in
@@ -1876,10 +1940,13 @@ duidelijk ... die niet veel langer is"):** `Elke dag eten de gasten <n> schep|sc
 `📦 In de kast: <n> schep|scheppen. Genoeg?` · choice title `is er genoeg voer?` (the HTML
 had `De gasten eten … per dag` · `<naam> eet <n> erbij. Samen?` · `Elke dag …, … lang` ·
 `📦 In huis: …` · `is er genoeg eten?`) · `te weinig` `precies` `blijft over` ·
-`Kies een bed` · `Alles bezet` · `welterusten` ·
-toasts: `👆 Tik eerst een getal` · `Precies! 🎉` · `🥄 Tel ze samen` · `Goed gerekend! 🎉` ·
-`🥄 <dagen> × <nieuw> = <product>` · `<naam> slaapt hier. 💤` · `🛏 Bel eerst een gast` ·
-`💤 Hier slaapt iemand`
+**port (owner 2026-09-24):** `Welke kamer voor <naam>?` · `Kamer 1` / `Kamer 2` (short
+`1` / `2`) · choice title `kies een kamer` · `welterusten` · the beds game's own words
+(games-a.md §3.7) · after a slip the house miss bubble `🔄 Nog een keer` (`UiTekst`) ·
+toasts: `👆 Tik eerst een getal` · `Precies! 🎉` · `Goed gerekend! 🎉` · `💤 Hier slaapt iemand`.
+Gone with the room choice and the no-help rule: `Kies een bed` · `Alles bezet` ·
+`🥄 Tel ze samen` · `🥄 <dagen> × <nieuw> = <product>` · `<naam> slaapt hier. 💤` ·
+`🛏 Bel eerst een gast`.
 
 ### 7.6 Feeding, playing, wishes
 
@@ -1897,13 +1964,14 @@ Toasts: `Smakelijk eten! 😋` · `🍪 Vul eerst de voerkar` · `🍽 Hier slaa
 
 ### 7.7 Prikbord
 
-`Bel een gast` · `Nog een bed vrij` · `<naam> wil een bed` · `Vul de voerkar` ·
+`Bel een gast` · `Nog plek voor een gast` (the HTML: `Nog een bed vrij`; port 2026-09-24,
+§3.3) · `<naam> wil een bed` · `Vul de voerkar` ·
 `Reken af: <naam>` · `<naam> wil spelen` · `Speel lekker rond` ·
 sheet (port, owner 2026-09-23) `📋 Prikbord` · `Tik op een taakje om erheen te gaan.` ·
 under a card `in de <kamer>` · `in kamer 1` / `in kamer 2` · `bij het zwembad` · `Sluiten` ·
 day messages `voer: <n> 🥄` · `Els bracht 10 🥄` · `<naam> gaat naar huis`
-(game cards: `<naam> wil in bad` / `Tobbe-tijd` · `Zet de bedden op rij` ·
-`Hang de sleutels op` · `Koop iets moois` · plus the golf-3 cards from their own files)
+(game cards: `<naam> wil in bad` / `Tobbe-tijd` · `Hang de sleutels op` · `Koop iets moois` ·
+plus the golf-3 cards from their own files; `Zet de bedden op rij` is gone, 2026-09-24)
 
 ### 7.8 Evening, bill and letters
 
