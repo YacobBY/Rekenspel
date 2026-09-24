@@ -228,7 +228,9 @@ func test_ctx_stempelt_de_eigenaar() -> void:
 ## elk spel aan iets wat je echt ziet").  The wekker's clock and the bedden
 ## blanket chest joined the stones, the stall and the pile of washing: before
 ## them "⏰ Wekker" hung on the paw poster and "🛏 Bedden" on the play basket,
-## next to that basket's own "Speelmand".
+## next to that basket's own "Speelmand".  (The souvenir stall left the garden
+## on 2026-09-24: in the arcade it hangs on its own fixed stall, like the
+## other shops, and has no resting prop any more.)
 func test_elk_spel_hangt_aan_zijn_eigen_rustspul() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	_op()
@@ -244,7 +246,7 @@ func test_elk_spel_hangt_aan_zijn_eigen_rustspul() -> void:
 		if str(hs.get("rust", "")).is_empty():
 			continue
 		met_rust.append(id)
-	for moet in ["hinkel", "kraam", "was", "wekker"]:
+	for moet in ["hinkel", "was", "wekker"]:
 		waar(met_rust.has(moet), "%s hangt aan een rustspul" % moet)
 	# bedden has no entry any more: it is step 4 of the check-in (2026-09-24),
 	# so the blanket chest it hung on in kamer 1 went with it

@@ -134,9 +134,10 @@ func test_deurpunten() -> void:
 		# hing, en de tuindeur van de kas midden in haar achterwand
 		["tuin", "kas", 0, 68, 8, 68],
 		["kas", "tuin", 58, 0, 58, 8],
-		# 2026-09-24: de winkelstraat, in de achterwand rechts van de balie
+		# 2026-09-24: de winkelstraat, in de achterwand rechts van de balie; in de
+		# winkels zelf sinds de souvenirkraam (de vierde in de rij) in de linkerwand
 		["receptie", "winkels", 112, 0, 112, 8],
-		["winkels", "receptie", 120, 0, 120, 8],
+		["winkels", "receptie", 0, 30, 8, 30],
 	]
 	for rij in verwacht:
 		var dp := Rooms.deur(rij[0], rij[1])
@@ -270,12 +271,15 @@ func test_tuin_is_deterministisch() -> void:
 			pollen.append([String(stuk["n"]), stuk["x"], stuk["z"]])
 	gelijk(hekz, 0, "geen zijhek: daar staat de achtergevel van het hotel")
 	gelijk(hekx, 8, "acht hekpalen langs x, de eerste bij de hoek van de gevel")
+	# 2026-09-24: the souvenir stall left the garden for the arcade, and with
+	# its zone gone two tufts grow where it stood: (108, 60) and (111, 39)
 	var verwacht := [
 		["pol0", 60.5, 125.5], ["pol2", 92.0, 14.0], ["pol4", 169.5, 29.5],
 		["pol0", 159.5, 40.5], ["pol1", 138.5, 68.5], ["pol4", 52.5, 65.5],
-		["pol0", 117.5, 123.5], ["pol2", 50.5, 142.5], ["pol4", 62.5, 142.5],
-		["pol2", 145.0, 57.0], ["pol0", 111.0, 16.0], ["pol1", 132.5, 100.5],
-		["pol4", 24.0, 154.0], ["pol0", 150.5, 35.5], ["pol3", 45.0, 128.0],
+		["pol0", 117.5, 123.5], ["pol2", 50.5, 142.5], ["pol3", 108.0, 60.0],
+		["pol4", 62.5, 142.5], ["pol2", 145.0, 57.0], ["pol0", 111.0, 16.0],
+		["pol1", 132.5, 100.5], ["pol4", 24.0, 154.0], ["pol0", 150.5, 35.5],
+		["pol3", 45.0, 128.0], ["pol4", 111.0, 39.0],
 	]
 	gelijk(pollen.size(), verwacht.size(), "aantal graspollen")
 	for i in mini(pollen.size(), verwacht.size()):

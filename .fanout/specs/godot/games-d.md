@@ -15,6 +15,9 @@ Geschreven 2026-09-24 bij de bouw.  De eigenaar vroeg:
 > te gokken"
 
 Net als games-c is dit geen port: de kamer, de kleding en de vijf spellen zijn nieuw.
+Later dezelfde dag kwam er een zesde bij, de **souvenirkraam** (`kraam`), die uit de tuin
+verhuisde (eigenaar, 2026-09-24: "De kraam in de tuin voelt nu dubbelop die kan verwerkt
+worden in de winkels"; §4.7).
 De regels zijn die van games-b.md §0, HOTEL.md §9 en PLAN.md §1.  Waar iets daarvan
 afwijkt staat het er met reden bij.  De getallen komen uit `games/_winkel/beurt.gd`
 (gezaaid met `Sommen.Prng`, dat alleen gelezen wordt: `core/sommen.gd` blijft
@@ -77,19 +80,38 @@ zonder heeft een lege kast) plus wat hij draagt (`State.kast_van`).  `State.in_k
 | kader | `[-234, 274, -120, 254]` |
 | mat | een warme loper x 0..132, z 28..42 (`#E9C2B4` / `#E2B5A6`): de straat |
 | `kijk` | (96, 34): door de deur zie je de loper en de schoenenkraam |
-| `mijd` | x 8..100 z 22..36 (voor de kraampjes) · x 20..40 z 50..74 (voor de vitrine) · x 8..26 z 84..102 (voor de spiegel) |
-| deur | receptie ↔ winkels: in de receptie in de achterwand **rechts van de balie** (z, at 106, deurpunt (112, 0)), waar de pootjesposter hing; in de winkels in de achterwand (z, at 114, deurpunt (120, 0)) |
+| `mijd` | x 8..126 z 22..36 (voor de vier kraampjes) · x 34..58 z 50..74 (voor de vitrine) · x 0..24 z 38..84 (de strook tussen de pui en de vitrine) · x 26..76 z 76..104 (de vloer die de vitrine voor de deur verbergt) · x 8..26 z 84..102 (voor de spiegel) |
+| zone | `kraam` x 112..124, z 28..40: de klant van de souvenirkraam, en waar een gast met de wens 🎁 wacht (`Hotel.plek_van_behoefte`) |
+| deur | receptie ↔ winkels: in de receptie in de achterwand **rechts van de balie** (z, at 106, deurpunt (112, 0)), waar de pootjesposter hing; in de winkels sinds de souvenirkraam **in de linkerwand** (x, at 24, deurpunt (0, 30), binnen (8, 30)) — tot 2026-09-24 in de achterwand (z, at 114), waar nu de vierde kraam staat |
 | geluid | `SFEER["winkels"] = "speeldoos"` (hergebruik: een winkel met muziek) |
 | plattegrond | vak `[1, 3]`, onder de receptie |
 
-**Decor** (`art/decor_winkels.gd`): drie **kraampjes** met een schuine gestreepte luifel
+**Decor** (`art/decor_winkels.gd`): vier **kraampjes** met een schuine gestreepte luifel
 en een geschulpte rand — `hoedenkraam` (roze) @ (22, 12), `sjaalkraam` (mint) @ (54, 12),
-`schoenenkraam` (blauw) @ (86, 12) —, de **luxe pui** `luxepuiz` @ (1, 62) (paars
-sokkeltje, roomwitte pilaren met gouden kapitelen, twee etalages met een kroon en een
-parelketting, een paars uithangbord met een gouden kroontje en een luifel met gouden
-franje), de glazen **vitrine** `vitrinez` @ (16, 62), de **spiegel** van de paskamer
-`spiegelz` @ (1, 94) met een roze gordijntje, een **lantaarn** @ (8, 30), een stapel
-**tassen** @ (108, 16), een plant @ (124, 58) en een **bloembak** @ (90, 104).  In de
+`schoenenkraam` (blauw) @ (86, 12), `souvenirkraam` (geel, met een bordje met een roze
+cadeautje op de luifel en een hoedje, sjaaltje en bal op de plank) @ (118, 12) —, de
+**luxe pui** `luxepuiz` @ (1, 62) (paars sokkeltje, roomwitte pilaren met gouden
+kapitelen, twee etalages met een kroon en een parelketting, een paars uithangbord met een
+gouden kroontje en een luifel met gouden franje), de glazen **vitrine** `vitrinez` @
+(30, 62), de **spiegel** van de paskamer `spiegelz` @ (1, 94) met een roze gordijntje, een
+**lantaarn** @ (4, 18) naast de deur, een stapel **tassen** @ (122, 102), een plant @
+(124, 76) en een **bloembak** @ (90, 104).
+
+**De vierde kraam en de lopen (2026-09-24).**  Elke wand was vol, dus de souvenirkraam
+kwam in de rij langs de achterwand, op de plek van de deur; de deur ging naar de linkerwand,
+waar de lantaarn stond.  Daardoor loopt elke klant van de deur **langs de straat** naar
+zijn kraam (daarvoor sneed de loop van de deur naar de hoeden- en de sjaalkraam door de
+toonbank van de schoenenkraam).  De vitrine staat 14 verder van de pui (x 30): de loop van
+de deur naar de spiegel gaat tussen de pui en de vitrine door, en de klant van de luxe
+winkel (52, 62) en het doosje (40, 46) schoven mee.  De wegstuurplekken liggen zo dat de
+weg erheen én terug naar de deur vrij is: hoeden (66, 50), sjaals (74, 80), schoenen
+(92, 90), luxe (84, 64), souvenirs (108, 86).  Een los ding (eerst voorgesteld: een
+souvenirkraam vrij op de vloer) maakte een hoekje waaruit elke wandeling door de kraam liep;
+de gebouwde rij heeft dat niet.  *Nagerekend* (`games/kraam/test_kraam.gd`): geen loop van
+een spel (deur → toonbank, toonbank → buiten, buiten → deur, deur → spiegel) gaat door een
+kraam, de vitrine, de pot of de tassen, en geen wandeling tussen twee dwaalplekken ook
+niet; één klant loopt echt van zijn kamer naar de souvenirkraam en komt nergens over een
+kraam.  In de
 receptie hangt boven de nieuwe deur het **winkelbord** met een roze tas (`winkelbord` @
 (112, 1), y 29, `ver`); de pootjesposter schoof naar (88, 1), y 36.
 
@@ -109,9 +131,9 @@ een opgevouwen sjaal, een paar schoentjes, een kroon op een kussen); de hoeden z
 dezelfde functies getekend als op het dier.  In rust staan ze op de toonbanken
 (`definitie().rust`), in een beurt zet het spel ze er zelf neer.
 
-## 4. De winkels: `hoeden`, `sjaals`, `schoenen`, `luxe`
+## 4. De winkels: `hoeden`, `sjaals`, `schoenen`, `kraam`, `luxe`
 
-Vier spellen met één gedeeld spel `games/_winkel/winkel.gd` (`WinkelSpel`); elk spel
+Vijf spellen met één gedeeld spel `games/_winkel/winkel.gd` (`WinkelSpel`); elk spel
 zegt alleen wélke winkel het is (`winkel()`: kraam, plekken van de waren, waar de klant
 staat, waar hij heen sjokt).  `games/_winkel/` heeft geen `spel.tscn`, dus de scan ziet
 het niet als spel.
@@ -123,10 +145,12 @@ het niet als spel.
 | `hoeden` | Hoedenkraam | 🎩 Hoeden, op `hoedenkraam` | strik, pet, strohoed |
 | `sjaals` | Sjaalkraam | 🧣 Sjaals, op `sjaalkraam` | das, sjaaltje, streepsjaal |
 | `schoenen` | Schoenenkraam | 👟 Schoenen, op `schoenenkraam` | sokjes, gympjes, laarsjes (per schoentje) |
+| `kraam` | Souvenirkraam | 🎁 Souvenirs, op `souvenirkraam` | sjaaltje, hoedje, bal (de souvenirs van de tuinkraam) |
 | `luxe` | Luxe winkel | 💎 Luxe, op `luxepuiz` | zonnebril, gouden slofjes, parelketting, kroon (drie per dag op de vitrine) |
 
 `unlock`: N ≥ 1.  `kan`: er is een gast met een bed (anders geen knop).  Geen taak op het
-prikbord (het bord houdt ≤ 3 kaartjes).  Wat een dier al heeft ligt niet op de toonbank,
+prikbord (het bord houdt ≤ 3 kaartjes) — behalve de souvenirkraam, die de wens 🎁 en haar
+kaartje uit de tuin meenam (§4.7).  Wat een dier al heeft ligt niet op de toonbank,
 tenzij hij alles al heeft.
 
 ### 4.2 Het rekenen
@@ -136,7 +160,7 @@ teruggevouwen in het bereik van de groep.  Hele euro's, echte munten en briefjes
 
 | winkel | groep 3 | groep 4 | groep 5 |
 |---|---|---|---|
-| kraampjes | €2–9 · **betaal precies** | €6–19 · **betaal precies** | €12–39 · **betaalt €50, hoeveel terug?** |
+| kraampjes (hoeden, sjaals, souvenirs) | €2–9 · **betaal precies** | €6–19 · **betaal precies** | €12–39 · **betaalt €50, hoeveel terug?** |
 | schoenen (per schoentje; 4 poten, de gans 2) | €1–2 · **4 × €2** (verdubbelen, ≤ 8) · betaal | €2–5 · **4 × €5** (≤ 20) · betaal | €3–9 · **4 × €9** (≤ 36) · terug van €50 |
 | luxe (+ cadeaudoosje) | €5–10, doosje €1–3 · **samen** (≤ 13) · betaal | €20–60 per 5, doosje €2–9 · **samen** (≤ 69) · **terug** van €50/€100 | €40–98 even · **halve prijs** · **samen** met het doosje · **terug** |
 
@@ -183,7 +207,8 @@ bewust níet gebruikt: de winkels bouwen hun eigen strook.)
 
 | waar | tekst |
 |---|---|
-| ingangen | "🎩 Hoeden" · "🧣 Sjaals" · "👟 Schoenen" · "💎 Luxe" · "🪞 Paskamer" |
+| ingangen | "🎩 Hoeden" · "🧣 Sjaals" · "👟 Schoenen" · "🎁 Souvenirs" · "💎 Luxe" · "🪞 Paskamer" |
+| taakkaart (souvenirkraam) | "🎁 %s wil een souvenir" · anders "🎁 Souvenir" |
 | kiezen | "Wat kiest %s?" |
 | schoenen | "Hoeveel kosten %d %s?" · som "4 × €3 =" |
 | luxe | "Hoeveel samen met het doosje?" · som "€35 + €4 =" · "Halve prijs! Hoeveel is dat?" · som "€48 / 2 =" |
@@ -199,8 +224,39 @@ emoji-subset: 🛍 🧢 👒 🎀 👔 📿 👟 👢 🥿 🕶 💎 🪞 😞.
 ### 4.6 Stoppen en herstellen
 
 `ctx.data().stand` = `{gast, dag, N, band, stap, waar, plek, pog, missers, weg, ster,
-keer}`, na elke stap bewaard.  Dezelfde dag, N en band en een stap die niet `af` is:
-verder waar het kind was, ook na het wegsturen.
+keer, wens}`, na elke stap bewaard (`wens` = 1 als het dier kwam voor de wens van de
+winkel, §4.7).  Dezelfde dag, N en band en een stap die niet `af` is: verder waar het kind
+was, ook na het wegsturen.  Bij het lezen blijven alleen deze velden over
+(`WinkelSpel._normaliseer`); een stap die de winkel niet kent, of een rekenstap zonder
+gekozen ding, wordt een nieuwe keuze voor hetzelfde dier, zonder missers.
+
+### 4.7 De souvenirkraam (`kraam`, uit de tuin, 2026-09-24)
+
+Eigenaar: "De kraam in de tuin voelt nu dubbelop die kan verwerkt worden in de winkels".
+De souvenirkraam van games-b.md §5 (munten op een toonbank in de tuin slepen) is nu de
+**vierde kraam** van de winkelstraat en een `WinkelSpel` zoals de andere: kiezen, precies
+betalen (groep 3–4) of wisselgeld van €50 (groep 5), en een verkeerd bedrag stuurt het dier
+de winkel uit (§4.4).  Eén manier van betalen in één straat.  Wat bleef:
+
+- **het spel-id `kraam`**: de la in de save, de ster van de dag en `ontgrendeld` werken
+  door.  Een oude beurt in die la (`stap` `som`/`leg`, `gelegd`, `hand`, `zeg` …) wordt een
+  nieuwe keuze voor hetzelfde dier, met zijn `wens`; een afgemaakte beurt blijft af;
+- **de souvenirs zelf**: sjaaltje, hoedje en bal (`Beurt.WAREN["kraam"]`, goedkoop → duur),
+  dezelfde kledingstukken; wat een dier in de tuin kocht is van hem (`State.kast_van` telt
+  wat hij draagt) en ligt dus niet op de toonbank.  De tas (🎒, alleen een prijskaartje in
+  de tuin) viel weg: geen kledingstuk;
+- **de wens 🎁 en haar kaartje**: `definitie().wens = "souvenir"` en `taak {id: souvenir,
+  prio 1, icoon 🎁, "%s wil een souvenir"}` (alleen voor een gast met een bed).  Wie de wens
+  heeft koopt eerst (`WinkelSpel._kandidaten`, `winkel().wens`); zijn aankoop vervult de
+  wens (`behoefte_klaar`, na `taak_klaar`).  Zonder wens koopt iedereen met een bed.  De
+  gast met de wens wacht in de zone `kraam` van de winkelstraat (118, 34); een oud
+  kaartje dat nog naar de tuin wees krijgt bij de eerste herbouw van het bord de kamer
+  `winkels`, en `Games.start` gaat hoe dan ook naar de winkelstraat.
+
+Weg: de kraam, de toonbank, de zone en de knop in de tuin (daar groeit nu gras,
+world.md §1), `games/kraam/modellen.gd`, het slepen van munten en de `kr_`-knoppen.
+`Sommen.Kraam` blijft in `core/sommen.gd` staan (bevroren, met zijn vingerafdruk in
+`tests/test_sommen_kruis.gd`), maar geen spel leest het nog.
 
 ## 5. De paskamer (`paskamer`)
 
@@ -212,6 +268,10 @@ met een bed heeft iets in zijn kast.  Regel "🪞 Wat trekt %s aan?".
 
 ## 6. Tests
 
+`games/kraam/test_kraam.gd`: de souvenirkraam — de tuin zonder kraam, de vierde kraam in de
+rij, geen loop door een kraam, wens en kaartje, wegsturen en terugkomen, een echte loop van
+de klant, en een oude save (een muntbeurt in de la, een tuinkaartje, een hoedje uit de tuin)
+via `State.lees()`.
 `games/_winkel/test_winkel.gd`: aanmelding, prijzen en sommen per winkel/groep/N/dag,
 betalen met echt geld, elke zin past, een hele beurt in elke winkel en groep via de echte
 knoppen, **verkeerd geld stuurt het dier de winkel uit** (en dezelfde vraag daarna), een

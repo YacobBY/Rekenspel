@@ -1,5 +1,8 @@
 # Godot-portspecificatie — games B: zwembad, wekker, hinkel, was, kraam
 
+> 2026-09-24: de souvenirkraam (`kraam`, §5) is verhuisd naar de Winkelstraat en rekent
+> daar als een winkel (games-d.md §4.7); wat hieronder over de kraam staat is historisch.
+
 Bron: `demos/dierenhotel/games/{zwembad,wekker,hinkel,was,kraam}.js` (staat van
 commit `e8c9bd2`), met de motorcontracten uit `demos/dierenhotel/GAMES-API.md`,
 `demos/dierenhotel/games/registry.js`, `rooms.js`, `state.js`, `ui.js`,
@@ -1184,8 +1187,8 @@ gang.
 ### 3.1 Verhaal, kamer en gast
 
 In de **tuin**, in de strook `Rooms.get('tuin').zones.hinkel` = `{x0: 24,
-x1: 100, z0: 34, z1: 50}` (76 × 16 voxels vlak vóór het hok, met 4 voxels lucht
-tot de souvenirkraam), ligt een **getallenlijn van stapstenen** van 0 tot `E`.
+x1: 100, z0: 34, z1: 50}` (76 × 16 voxels vlak vóór het hok; tot 2026-09-24 met 4
+voxels lucht tot de souvenirkraam, die naar de winkelstraat verhuisde), ligt een **getallenlijn van stapstenen** van 0 tot `E`.
 Bij het doel staat een houten trapje met het doelgetal erin gebakken. De gast
 staat op een startsteen, het kind kiest eerst de **sprongmaat** en dan het
 **aantal sprongen**, en het dier hupt steen voor steen mee-tellend naar het
@@ -1414,7 +1417,8 @@ bestaat niet meer. Staat hij op zijn steen, dan komt de kaart met de eerste vraa
 (`x` binnen `zone.x0 − 10 … zone.x1 + 10`, `z` binnen `zone.z0 − 7 … zone.z1 + 7`)
 wordt naar een vrij grasvak vóór de strook gestuurd met `na: 'wacht'`, zodat hij
 niet terugdwaalt. De grasvakken zijn de vrije vakjes van de tuin met
-`z ≥ zone.z1 + 10`, niet in de kraamzone, gesorteerd op `(x − z)`. Dit wordt elke
+`z ≥ zone.z1 + 10` (tot 2026-09-24 ook niet in de kraamzone, die er niet meer is),
+gesorteerd op `(x − z)`. Dit wordt elke
 **2000 ms** herhaald zolang de beurt loopt. `stop()` geeft ze hun eigen gang
 terug met `pose('rust')`.
 
@@ -1901,49 +1905,43 @@ hulp (die bestaat sinds 2026-09-24 niet meer).
 
 ---
 
-## 5. G5 — DE SOUVENIRKRAAM (`kraam`)
+## 5. G5 — DE SOUVENIRKRAAM (`kraam`) — VERHUISD NAAR DE WINKELSTRAAT (2026-09-24)
 
-### 5.1 Verhaal en kamer
+> Eigenaar, 2026-09-24: "De kraam in de tuin voelt nu dubbelop die kan verwerkt worden in
+> de winkels".
 
-In de **tuin**, in de zone `Rooms.get('tuin').zones.kraam` = `{x0: 104, x1: 126,
-z0: 36, z1: 68}` (22 × 32 langs de rechter zijrand), staat een marktkraam met een
-toonbank en drie of vier uitgestalde spullen, elk met zijn prijs als kaartje. De
-gast met de wens 🎁 loopt ernaartoe en gaat ervóór staan. Het kind rekent (band 4
-en 5) en legt daarna munten op de toonbank. Gelukt: het gekochte komt **zichtbaar
-op het dier** en blijft daar tot uitchecken.
+De souvenirkraam staat niet meer in de tuin. Ze is de **vierde kraam van de Winkelstraat**
+en een `WinkelSpel` zoals de hoeden-, sjaal- en schoenenkraam: **games-d.md §4**, en voor
+wat alleen deze kraam heeft **games-d.md §4.7**. In het kort:
 
-Alle stukken van de kraam zijn **los decor** van dit spel: ze staan er alleen
-zolang je speelt, en nooit in de hinkelzone ernaast (`hinkel` x ≤ 100 < 104
-`kraam`).
+- **Weg uit de tuin**: de kraam, de toonbank, de zone `kraam` (x 104..126, z 36..68), het
+  knopje op de bal en de losse rustspullen. De bal blijft (die is van de tuin); waar de
+  kraam stond groeit gras (world.md §1).
+- **Hetzelfde id `kraam`**, dezelfde naam "Souvenirkraam", dezelfde souvenirs (sjaaltje,
+  hoedje, bal — de tas viel weg, die was geen kledingstuk), dezelfde wens 🎁 `souvenir` en
+  hetzelfde kaartje "`<naam>` wil een souvenir" (prio 1).
+- **Eén manier van betalen in één straat**: kiezen wat het dier koopt, dan precies betalen
+  met echte munten en briefjes (groep 3–4) of wisselgeld van €50 (groep 5), elk een strook
+  van vier. Het munten slepen op de toonbank, het optellen van twee souvenirs (groep 4) en
+  het wisselgeld van €10/€20 (groep 5) vielen weg; optellen doet de luxe winkel (samen met
+  het doosje).
+- **Een verkeerd bedrag stuurt het dier de winkel uit** (games-d.md §4.4) in plaats van de
+  S5-misser met `🔄 Nog een keer`: het dier sjokt weg, het spel sluit, en een tik op de
+  kraam brengt dezelfde vraag terug.
+- **Oude saves**: de la `kraam` blijft. Een onafgemaakte muntbeurt (`stap` `som`/`leg`,
+  `gelegd`, `hand`, `zeg` …) wordt een nieuwe keuze voor hetzelfde dier met zijn wens; een
+  kaartje dat nog naar de tuin wees gaat bij de eerste herbouw van het bord naar de
+  winkelstraat; wat een dier in de tuin kocht draagt en houdt hij.
 
-**Wie koopt** (`kandidaten`): gasten met een bed én `behoefte === 'souvenir'` én
-`!blij`; is die lijst leeg, dan alle gasten met een bed (dezelfde vriendelijke
-terugval als de tobbe). Is ook dát leeg: wolkje `🎁 'nog geen gasten'` bij
-`(zone.x0, zone.z1)` en na 1800 ms sluiten.
+De tekst die hier stond (§5.1–§5.12: de zone, de modellen, de kaartmeting, de munten, de
+zinnen) is vervallen; hij staat in de git-geschiedenis tot en met de commit vóór de
+verhuizing.
 
-**Het dier van de beurt** (Godot-poort, §0.12). `spelers()` = elke gast met een bed,
-in check-in volgorde — ook een gast zonder de wens 🎁: die koopt gewoon iets zonder
-wens (`wens: 0`, dus ook geen wens ingelost). Een gekozen dier dat erop staat koopt,
-vóór `kandidaten`; een bewaarde beurt van een ander dier wordt niet hervat. Wie bij de
-wissel nog aan de toonbank wachtte loopt naar een vrij plekje in de tuin, en wie nog
-onderweg was gaat terug naar bed (`ctx.laat_gaan`, nadat de nieuwe gast op weg is
-gestuurd; een slaper wordt nooit gewekt) — anders stonden er twee dieren op dezelfde
-plek.
+### 5.3 De bevroren rekenkern `Sommen.Kraam` (historisch)
 
-### 5.2 Aanmelding en start
-
-```
-id: 'kraam'   naam: 'Souvenirkraam'   kamer: 'tuin'   stub: false
-hotspot: { obj: 'bal', dx: −5, dz: −18, icoon: '🎁', label: 'Kraam', hoog: 14 }
-          // bal staat op (120, 76) → knop op (115, 58): op de toonbank
-unlock: N >= 1
-wens: 'souvenir'
-taak: { id: 'souvenir', prio: 1, icoon: '🎁',
-        wanneer: er is een gast met behoefte 'souvenir' en !blij,
-        tekst: '<naam> wil een souvenir'  of  'Souvenir' }
-```
-
-### 5.3 De waren, de munten en het rekenen per band
+Dit is wat de tuinkraam rekende. `core/sommen.gd` is bevroren, dus de kern blijft
+byte-gelijk staan en `tests/test_sommen_kruis.gd` houdt haar vingerafdruk; geen spel leest
+haar nog sinds 2026-09-24.
 
 ```
 WAREN (basisprijs uit de spec):  hoedje 🎩 'het' acc:hoedje   basis 4
@@ -2008,267 +2006,6 @@ munten te leggen, en vier is precies wat er naast elkaar past. Met alleen €1 e
 €2 zou €9 vijf munten kosten en werd er €8 voorgedaan waar €9 hoort (G5-F1).
 `splitsMet(bedrag, munten)` is de gewone gulzige verdeling (grootste munt eerst).
 
-### 5.4 De modellen en waar alles staat
-
-```
-xm     = round((zone.x0 + zone.x1)/2) = 115
-kraamZ = zone.z0 + 4  = 40        (achterschot z 36…42)
-bankZ  = zone.z1 − 12 = 56        (blad z 48…64)
-bankD  = xm + bankZ   = 171       (de diepte-lijn waarop de spullen liggen)
-```
-
-* **kraam** (`kr_kraam`) op (115, 40) — langs de achterrand, dus achter de
-  toonbank: zo dekt hij noch de toonbank noch de gast af. Achterschot
-  `bx(−10, 0, 0, 21, 24, 2)` in `#D0A87A` met een plankenlijn
-  (`verf(−10…10, 10…11, 0…1)` in `#B98F62`), twee staanders
-  `bx(∓10/9, 0, −2, 2, 27, 2)`, en een gestreepte luifel: voor `i = 0…5`
-  `bx(−10, 27 − floor(i/2), 1 − i, 21, 2, 1)`, om en om `#F5A8BE` en `#FFFDF6`.
-* **toonbank** (`kr_bank`) op (115, 56) — een **vierkante** markttafel, want de
-  spullen moeten op het scherm naast elkaar staan, en dat is in isometrie de lijn
-  `x + z = vast`, die dwars over een vierkant blad loopt. Blok
-  `bx(−10, 0, −7, 21, 11, 15)`, groef `verf(−10…10, 4…5, −7…7)` donker, blad
-  `bx(−11, 11, −8, 23, 2, 17)` licht.
-* **de spullen** liggen op `hoog: 13` (op het blad), op de lijn `x + z = 171`,
-  van `(xm − 8, bankZ + 8)` naar `(xm + 8, bankZ − 8)`:
-  `f = (n == 1) ? 0,5 : i/(n−1)`, `x = round(107 + 16f)`, `z = 171 − x`.
-  Dat is de breedste lijn die helemaal op het blad past (16 voxels in `x`, dus
-  32 in `x − z` = 64 css-px in portret).
-
-  | n | plekken (x, z) | tagY per stuk |
-  |---|---|---|
-  | 3 | (107, 64), (115, 56), (123, 48) | 2, 26, 2 |
-  | 4 | (107, 64), (112, 59), (118, 53), (123, 48) | 2, 26, 2, 26 |
-
-  De **prijskaartjes** hangen om en om **26** en **2** voxels boven het blad. Dat
-  moet: alle spullen staan op dezelfde diepte, dus zonder dat hoogteverschil
-  zouden de kaartjes elkaar raken (band 5 heeft er vier, op 320 × 640 maar 16 px
-  uit elkaar, en een kaartje is 33–42 px breed en 23 px hoog). 16 voxels is daar
-  26 px, dus ze staan altijd los. Op 18 voxels lag het kaartje precies op het
-  hoedje (gemeten: allebei py 220–232, dus het spulletje was onvindbaar).
-* **het geld** (het sleep-doel) op `(115, zone.z1 − 4 = 64)`, `y = 13`,
-  `op: 'onder'` — boven het blad staan de prijskaartjes (die wijken niet uit) en
-  dan zou de laag deze knop een halve tuin naar links schuiven.
-* **de gast** op `(zone.x0 − 4, zone.z1 + 26)` = **(100, 94)**: dichter bij de
-  kijker dan de tafel en links van de bal. 26 voxels vóór de voorrand van de
-  zone, want op 320 × 640 raakte de sommenkaart hem nog bij +10 (gemeten: kaart
-  tot 133 px, gast vanaf 125 px).
-* **de buidel en het klaar-knopje** staan op een vast plankje op het gras vóór
-  de kraam, uitgerekend in **schermpixels**:
-
-  ```
-  opGras(uPx, dPx):  d   = zone.x1 + zone.z1 − 22 = 172   (+ round(dPx / pxPerVoxelY))
-                     ver = round(uPx / pxPerVoxelX)
-                     → { x: round((d + ver)/2), z: round((d − ver)/2) }
-  ```
-
-  De hele kraamzone is in portret (420 × 860) maar ≈ 108 px breed en 54 px hoog,
-  en één knop is al 84 × 48 px: twee knoppen naast elkaar passen daar niet (de
-  laag schoof de buidel naar x = 90). Muntknoppen staan op
-  `opGras(−60 − i·62)` (een muntknop is ≈ 56 px breed omdat er alleen "€2" in
-  staat) en het klaar-knopje op `opGras(−160)` (tot 2026-09-24 lagen daar ook de
-  spookmunten, `opGras(−160 + i·40, 32)`). Dat gras ligt met `z ≥ 100` ruim
-  buiten de hinkelzone.
-
-**De uitgestalde spullen zijn met opzet flink** (op de tuinschaal is één voxel
-maar 2 css-px): `kr_hoedje` (mint `#6BC5A4`, brede rand
-`ell(0,1,0, 4.6,1.8,4.6, {ymin:0})` + hoge bol `ell(0,6,0, 3,4.6,3, {ymin:2})` +
-wit lintje), `kr_sjaaltje` (oranje `#F6A957`, drie opgevouwen lagen
-`bx(−4,0,−3, 9,4,7)`, `bx(−3,4,−2, 7,4,5)`, `bx(−2,8,−1, 5,2,3)` + witte franje),
-`kr_bal` (roze `#F5A8BE`, `ell(0,4.4,0, 4.4,4.4,4.4, {e: 2.0})` + witte
-evenaar), `kr_tas` (leer `#B4744A` / `#8E5B3A`, `bx(−4,0,−3, 9,8,6)` + flap +
-hengsel). Alles blijft binnen 21 voxels in x en 11 in z, zodat elk stuk met zijn
-anker midden in de zone helemaal binnen die zone valt.
-
-### 5.5 De gast halen
-
-Staat de gast in een andere kamer, dan `reis(id, 'tuin', {x, z, na: 'wacht'})` —
-**één keer**, want onderweg opnieuw sturen begint zijn route opnieuw — en daarna
-elke **700 ms** opnieuw kijken, hooguit **24** keer. Zodra hij in de tuin is,
-`loopNaar(P.gast.x, P.gast.z, {na: 'wacht'})`; op zijn aankomst wordt de
-sommenkaart opnieuw nagemeten, want pas dan weten we waar hij staat en **de kaart
-mag nooit over hem heen liggen**.
-
-**Godot-poort (eigenaar 2026-09-23, §0.12):** het halen is `ctx.wacht_op(gast, P.gast)`
-(world.md §5.3) — ook die stuurt een reis maar één keer en laat een gast die al onderweg
-is zijn route houden. De kraam, de toonbank en de waren staan er meteen; de sommenkaart,
-de prijskaartjes, de munten en de ✔ komen pas als hij voor de toonbank staat. Tot dan
-hangt het hotelwolkje `🐶 Boef komt eraan` met zijn balk en `👀 Volg` bij de tuindeur. Er
-hoeft dus niets meer nagemeten te worden: de kaart wordt pas getekend als hij er staat.
-
-### 5.6 De kaart, het cijferpad en de nameting (bindend — G5-F2)
-
-* **`kortKader()`**: kaderhoogte < **340** of kaderbreedte < **360**. Dan draagt
-  de kaart alleen de **eerste** zin (die noemt het spulletje en de prijs) en doet
-  de somregel eronder de vraag. Een kaartje met twee zinnen is op 320 × 640
-  129 px hoog en past samen met de gast (83 px) en de knoppen niet meer in
-  304 px.
-* **`padPlek()`**: is de **strookvrije** kaderhoogte kleiner dan
-  `KADER_PADRUIM = 360` px, dan komt het cijferpad als **strook onder het kader**
-  (`'buiten'`), anders `'auto'`. Strookvrij meten wil zeggen: staat onze eigen
-  strook (`#padstrip` met `data-hot="kr_som_pad"`) er al, tel dan zijn hoogte
-  plus 4 px kier bij de kaderhoogte op — anders hangt de meting van onze eigen
-  keuze af en kan het pad heen en weer springen.
-  Gemeten: op 860 × 420 (kader 682 × 340) lag het pad op 55…693 × 333…399, dus
-  over de prijskaartjes (320…344) en over de gast (269…367); staand op 320 × 640
-  (kader 304 px) lag het pad op 349…451 en de gast op 285…357, 8 px eroverheen.
-  Boven de 360 px is er wél ruimte onder de kraam (360 × 740, kader 395: pad
-  399…509, gast tot 383; 420 × 860, kader 468: pad 447…565, gast tot 429).
-* **Kaarthoogte**: `kaartHoog() = round(145 / pxPerHoogte) + kaartLift`.
-* **Nameten** (`kaartPast`, elke **120 ms**, hooguit **7** rondes):
-
-  ```
-  de harde regel gaat voor: raakt de kaart de gast (marge 2 px), dan
-      stap = ceil((kaart.onder − (gast.boven − 6)) / pxPerHoogte)      // omhoog
-  anders: valt de kaart boven de kaderrand + 4 px   → stap omlaag
-          valt de kaart onder de kaderrand − 4 px   → stap omhoog
-  kaartLift = klem(kaartLift + stap, −60, 80)
-  ```
-
-  Het gastvak volgt uit zijn **naamplaatje**: de onderrand van dat plaatje staat
-  op zijn kop (30 voxels boven de vloer), dus `vloer = plaatje.bottom +
-  30·pxPerHoogte`, halve breedte `max(24, 27·pxPerVoxelX/2)`.
-  Nameten verandert alleen de hoogte van één hotspot en meldt dus niets terug —
-  **hier nooit opnieuw `teken()`**, want een hertekening haalt de oude kaart weg
-  en zet een nieuwe neer, dat zijn twee kaderveranderingen, dus twee meldingen,
-  dus een lus (nagemeten: 86 busslagen in 2,6 s).
-* **Bij een kadermelding** (`ctx.ui.opKader`): meteen nameten, én nog een keer na
-  **560 ms** — voorbij de 400 ms die de mobiele schil zichzelf gunt, want bij een
-  kadermelding zet de schil de kaart zelf terug op de hoogte waarmee hij gemaakt
-  is en ging onze correctie eronderdoor. De luisteraar wordt **vóór** de eerste
-  `teken()` aangemeld: de strook vraagt zelf meteen een hermeting aan en die bus
-  slaat nog tijdens diezelfde `teken()` (gemeten op 860 × 420: 7 ms na
-  `Games.start`).
-* Extra nametingen na de start op **1500 ms** en **3200 ms**, voor het geval de
-  gast nog uit een andere kamer onderweg is.
-
-### 5.7 De zinnen op de kaart
-
-```
-band 3:  '<naam> wil <lid> <spul> van €<prijs>'
-         'Leg de munten op de toonbank'
-band 4, stap 'som':   '<Spul1> €<p1> en <spul2> €<p2>'     (eerste woord met hoofdletter)
-                      'Hoeveel euro samen?'
-band 4, stap 'leg':   'Samen kost het €<kosten>'
-                      'Leg de munten op de toonbank'
-band 5, stap 'som':   '<naam> gaf €<betaald>, het kost €<kosten>'
-                      'Hoeveel krijgt hij terug?'
-band 5, stap 'leg':   '<naam> krijgt €<wissel> terug'
-                      'Leg het wisselgeld neer'
-stap 'af':            'Veel plezier ermee!'
-```
-
-Somregel: bij de vraag de som zelf (`'€4 + €5 ='` of `'€20 − €13 ='`), bij het
-betalen het **doelbedrag** (`'€7'`). Het antwoordvakje ernaast vult de kaart zelf
-met wat er **nu** op de toonbank ligt, zodat er nooit een leeg vakje staat waar
-je niets mee kunt. Icoon: `✅` (af), `👛` (band 5), anders `🎁`.
-
-### 5.8 De munten
-
-* **Elke munt heeft zijn eigen sleepbron** (`kr_m1`, `kr_m2`, `kr_m5`): €1 en €2
-  in groep 3 en 4, en €1, €2 en €5 in groep 5. Eén knop met een wisselaar zou in
-  groep 5 drie standen hebben, en dan is "welke munt heb ik in mijn hand" precies
-  de fout die je bij het wisselgeld niet wil maken. De munt in je hand krijgt
-  `hand: '☝'` en `prio + 1`.
-* **Tikken** (`pakMunt`) pakt de munt in je hand: `snd.tik()` en het wolkje
-  `🪙 '€<v>' 'in je hand'`. **Slepen** legt hem meteen op de toonbank
-  (`dropSel '[data-drop="kr_geld"]'`, sleepplaatje `ctx.econ.munt(v)`, `canDrag`
-  alleen in de stap `leg`).
-* **De toonbank** (`kr_geld`, `prio 11`, klas `hotbron`) draagt `🧾` + `'€<som>'`
-  met titel `'op de toonbank ligt €<som> van €<doel>'`; het vangvlak van de laag
-  dekt knop én blad, dus je kunt ook gewoon naar de tafel slepen.
-* **Te veel gelegd** (`som + v > doel`): de munt gaat er even op en **schuift na
-  750 ms terug**; `snd.munt()` bij het leggen, `snd.terug()` bij het
-  terugschuiven, `missers++`, en de klant is even sip met `🔄 Nog een keer`
-  (`ctx.ui.misser`, geen slot: de munten liggen niet op een strook). Er komt
-  géén wolkje meer dat zegt hoeveel te veel het was (tot 2026-09-24
-  `🪙 '€<teveel>' 'terug'`). Zolang er een munt terugschuift neemt de kraam er
-  geen nieuwe aan (dan alleen `snd.zacht()`) — zonder die poort legt elke tik in
-  dat halve seconde-venster een munt bij terwijl er maar één terugkomt.
-  **De geweigerde munt ligt alleen op het beeld, nooit in de opslag**: `gelegd`
-  houdt altijd een geldige stand (`≤ doel`). Anders bleef een herlaad midden in
-  die halve seconde met een volle toonbank zitten en weigerde elke tik — de beurt
-  liep vast (G5-F1 punt 1). `herstelBank()` haalt bij het starten een
-  eventueel teveel gewoon van de toonbank af.
-* **✔ klaar** (`klaarMetTellen`): klopt het bedrag, dan `gelukt()`. Klopt het
-  niet: `legPog++`, `missers++`, `snd.zacht()` en de klant is even sip met
-  `🔄 Nog een keer`. Nooit rood, nooit een kruis — en nooit een hint (eigenaar
-  2026-09-24): geen `'+€<verschil>' 'erbij'`, geen hulpregel
-  `'€2 + €2 + €1'`, geen spookmunten. De tweede kaartregel blijft de opdracht
-  (`'Leg de munten op de toonbank'` / `'Leg het wisselgeld neer'`): de regel
-  `'Nog €<rest> erbij'` (N7), die vanaf de eerste munt het verschil voorrekende,
-  is weg (eigenaar 2026-09-24: "Haal die hints weg") — hoeveel er nog bij moet
-  rekent het kind zelf uit de prijs en wat er op de toonbank ligt.
-
-### 5.9 Het cijferpad (band 4 en 5)
-
-`antwoordSom(n, k)`:
-
-* `n == null` (op OK getikt zonder cijfer): wolkje `☝ 'tik een getal'`;
-* fout: `somPog++`, `missers++`, `snd.zacht()`, en de misser van `Ui` via de
-  kaart (die sinds 2026-09-24 `dier` = de klant meekrijgt): hij is even sip met
-  `🔄 Nog een keer`, de strook staat 1,2 s op slot en dezelfde vier bedragen
-  komen terug. De kaart wordt daarvoor niet opnieuw gebouwd. Geen hulpregel (tot
-  2026-09-24: `telVanaf(prijs1, prijs2)` en `'€<kosten> → €<betaald>'`) en geen
-  spookmunten.
-* goed: `state.tel(somPog == 0, ms)`, `snd.ja()`, het vakje krijgt `'€<n>'`, stap
-  → `leg`, wolkje leeg, en na **600 ms** opnieuw tekenen.
-
-### 5.10 Gelukt
-
-1. stap → `af`, wolkje leeg;
-2. het gekochte gaat **zichtbaar op het dier**: voor elk gekocht stuk met een
-   accessoire `ctx.wereld.accessoire(gastId, acc)` — eenmalig, en het blijft
-   staan tot uitchecken;
-3. `state.tel(missers == 0, ms)`;
-4. **eerst** `ster()` (= `taakKlaar('souvenir', {sterren: 1})`), **dán**
-   `behoefteKlaar(gast, 'souvenir')` — `behoefteKlaar` tekent het prikbord
-   meteen opnieuw;
-5. `snd.tover()` en `snd.hoera()`, bewaren, `Hotel.render()`, opnieuw tekenen;
-6. `setMood(gast, 'bouncy')`;
-7. het souvenirtje komt **naast** de gast als `getalTag` `🎁` op
-   `(P.gast.x − 11, P.gast.z + 11)`, `y = 14`, `prio 12`, titel
-   `'<naam> heeft zijn souvenir'`. Een cijfertag en geen wolkje: een wolkje van
-   163 px werd door de laag 115 px de tuin in geschoven (de sommenkaart hangt er
-   pal boven) en dan staat het praatje niet meer bij zijn eigen dier. Hij hangt
-   links op borsthoogte en níet op de kop, want daar staat zijn naamplaatje.
-8. na **3400 ms** sluit het spel zichzelf.
-
-### 5.11 Kindtekst, letterlijk
-
-| moment | tekst |
-|---|---|
-| icoontje / prikbord | label `'Kraam'`, `'<naam> wil een souvenir'` of `'Souvenir'`, icoon `🎁` |
-| geen gasten | `'nog geen gasten'` |
-| prijskaartje | `'€<prijs>'`, titel `'<lid> <spul> kost <prijs> euro'`; wat de gast wil krijgt de klasse `veel` (roze cijfer) |
-| kaart band 3 | `'<naam> wil <lid> <spul> van €<p>'` / `'Leg de munten op de toonbank'` |
-| kaart band 4, som | `'<Spul1> €<p1> en <spul2> €<p2>'` / `'Hoeveel euro samen?'` |
-| kaart band 4, leggen | `'Samen kost het €<kosten>'` / `'Leg de munten op de toonbank'` |
-| kaart band 5, som | `'<naam> gaf €<betaald>, het kost €<kosten>'` / `'Hoeveel krijgt hij terug?'` |
-| kaart band 5, leggen | `'<naam> krijgt €<wissel> terug'` / `'Leg het wisselgeld neer'` |
-| eind | `'Veel plezier ermee!'` |
-| toonbank | `🧾 '€<som>'`, titel `'op de toonbank ligt €<som> van €<doel>'` |
-| munt | `'€<v>'`, titel `'munt van <v> euro'` (+ `', in je hand'`) |
-| klaar-knop | `✔ 'klaar'`, titel `'klaar met tellen'` |
-| wolkjes | `🪙 '€<v>' 'in je hand'`, `☝ 'tik een getal'` |
-| misser | de klant sip met `🔄 Nog een keer` (geen hulpregel, geen spookmunten, geen `'terug'`/`'erbij'`-wolkje: eigenaar 2026-09-24) |
-
-Alle uitgestalde spullen houden altijd hun prijskaartje.
-
-### 5.12 Stoppen en herstellen
-
-`stop()`: tikjes af, kader-luisteraar op, alle hotspots weg, geleende knoppen
-terug, al het eigen decor weg, en alle beeldstanden (kaartlift, terugschuivende
-munt, gastteller) op nul.
-
-`start()` hergebruikt de bewaarde stand alleen als hij bestaat, de gast nog
-bestaat, `dag`, `N` en `band` nog kloppen, de stap niet `af` is en hij niet van een
-ander dier is dan het gekozen dier (§5.1). `O` (de opzet)
-en `P` (de plekken) worden altijd opnieuw berekend — ze zijn puur een functie van
-N, band en dag. Zit er een munt in de hand die in deze band niet bestaat, dan
-wordt de kleinste munt gepakt.
-
----
-
 ## 6. Open questions for the port
 
 1. **Het bovenste zwembadvenster.** De koptekst van `zwembad.js` zegt dat groep 5
@@ -2318,11 +2055,11 @@ wordt de kleinste munt gepakt.
    als "geen melding"; de port kan dat veld weglaten. **(inferred)** Sinds
    2026-09-24 kent `zinnen()` ook `'ver'` en `'kort'` niet meer (geen hint na een
    foute landing, §3.8); `melding` blijft leeg.
-10. **`kraam`: `€10` wisselgeld.** Bij `kosten = 10` wordt er met €20 betaald en
+10. *(Vervallen 2026-09-24: de kraam rekent als een winkel, §5.)* **`kraam`: `€10` wisselgeld.** Bij `kosten = 10` wordt er met €20 betaald en
     is het wisselgeld ook €10 — hetzelfde bedrag als de kosten. Dat is
     curriculair prima, maar het maakt de vraag "€20 − €10" wel de makkelijkste
     van de reeks. Bewust?
-11. **`kraam`: de tas (🎒 €12) is nooit te koop.** Zij staat alleen als vierde
+11. *(Vervallen 2026-09-24: de tas viel weg, §5.)* **`kraam`: de tas (🎒 €12) is nooit te koop.** Zij staat alleen als vierde
     prijskaartje op de kraam omdat de accessoirelaag haar niet kent. Moet de port
     een tas-accessoire toevoegen (en de tas dan ook koopbaar maken), of blijft
     zij decor?
