@@ -433,6 +433,29 @@ func test_kort_kader_laat_de_kaart_drijven() -> void:
 		waar(not dbg["k1"]["krap"], "%s: niet krap" % wat)
 		_af()
 
+## In the tall bar the answers stand centred under the card, so the card's own
+## lines stand centred over them (owner, 2026-09-24: "De text onderaan is niet
+## goed gecentreerd"); in the low bar the card is the left block beside its
+## strip and keeps to the left.
+func test_de_kaart_in_de_balk_staat_in_het_midden() -> void:
+	for kader in [Vector2(1000, 648), Vector2(700, 430)]:
+		_op(kader)
+		var kaart := Ui.somkaart({"x": 20.0, "z": 20.0}, "3 + 2 =", {
+			"id": "mid", "regel": "Hondje telt 3 + 2", "goed": 5, "door": "test"})
+		Hits.plaats()
+		var knoop := Hits.spot("mid").knoop as UiSomkaart
+		var hoog := UiThema.balk_vorm(kader) != "laag"
+		gelijk(Ui.balk_kaart(), "mid", "%s: de kaart staat in de balk" % str(kader))
+		if knoop != null and knoop.in_balk:
+			var verwacht := HORIZONTAL_ALIGNMENT_CENTER if hoog else HORIZONTAL_ALIGNMENT_LEFT
+			gelijk(knoop.regel_label.horizontal_alignment, verwacht,
+				"%s: de zin staat %s" % [str(kader), "in het midden" if hoog else "links"])
+			gelijk((knoop.get_node("Kolom/Rij") as HBoxContainer).alignment,
+				BoxContainer.ALIGNMENT_CENTER if hoog else BoxContainer.ALIGNMENT_BEGIN,
+				"%s: de som ook" % str(kader))
+		kaart.weg()
+		_af()
+
 ## The LOW bar has room for one line of words.  A card whose second line holds
 ## half of the question does not go into it — there the check-in lost "📦 In de
 ## kast: 40 scheppen. Genoeg?" and its strip asked about nothing (owner,

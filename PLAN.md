@@ -1519,6 +1519,8 @@ regel blijft zoals hij is; de balk geeft de knoppen zoveel extra breedte dat het
 
 - 2026-09-24 (Claude Opus) — **Na een duik loopt hij weer op de vloer.** Bestanden: `autoload/world.gd`, `tests/test_world.gd`. De zwembad-tak vond het: `World._aangekomen` gebruikte de landingsdiepte van de laatste sprong (`spring_land`) bij ELKE volgende aankomst, dus wie uit het water klom stond daarna 7 voxels in het dek. Nu alleen bij een sprong die nu landt. Nieuwe test `test_na_een_duik_loopt_hij_weer_op_de_vloer` (faalt zonder de fix: −7 in plaats van 0).
 
+- 2026-09-24 (Claude Opus) — **De kaart in de rekenbalk staat in het midden.** Bestanden: `ui/kaart.gd`, `tests/test_balk.gd`, spec `world.md` §5.5. **De melding:** "De text onderaan is niet goed gecentreerd" (schermafdruk van de balk met de scheppenvraag). In de hoge balk is de kaart zo breed als het kader en stonden de zin, de tweede regel en de som links tegen de rand, terwijl de antwoordknoppen in het midden staan. Nu staan ze in de hoge balk gecentreerd boven de knoppen; in de lage balk (kaart links, strook rechts) blijven ze links. Nieuwe test `test_de_kaart_in_de_balk_staat_in_het_midden`. (De schermafdruk toonde nog de vorige versie — "In huis", "weinig/over" — dus die browser had de nieuwe build nog niet geladen.)
+
 Vink aan wat gemerged is op `main`. Zet erachter wie het deed en op welke datum.
 
 | batch | taken | klaar |

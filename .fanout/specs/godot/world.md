@@ -1444,7 +1444,10 @@ card moved by the pair broke that row in two on a phone.  The low bar (`vorm laa
 words, so a card with a second line (`regel2`) is not docked there: it floats with its
 strip (the check-in lost "📦 In de kast: … Genoeg?" in the low bar).  In the bar the strip
 tries its long words first ("te weinig", "blijft over") and takes the short ones only when
-the long strip does not fit its block.  A toast stands just above the bar while the bar is
+the long strip does not fit its block.  In the tall bar (`vorm hoog`) the card's sentence,
+second line, sum row and help line stand centred over the centred strip (owner 2026-09-24:
+"De text onderaan is niet goed gecentreerd"); in the low bar the card is the left block
+beside the strip and keeps to the left.  A toast stands just above the bar while the bar is
 on, never over the answers.
 
 A card, its pad and its choice strip are **fixed**: they never give way, everything else

@@ -238,6 +238,16 @@ func _bouw(balk: bool) -> void:
 		# the sentence, the sum and the buttons all fit in the bar's height.
 		for l in [regel_label, regel2_label, som_label, hulp_label]:
 			l.add_theme_constant_override("line_spacing", 0)
+		# In the tall bar the answer strip stands centred under the card, so the
+		# sentence, the sum and the help line stand centred over it: flush left
+		# on a paper the width of the frame they hugged its edge, far from the
+		# buttons (owner, 2026-09-24: "De text onderaan is niet goed
+		# gecentreerd").  In the low bar the card is the left block beside the
+		# strip, and there it keeps to the left.
+		if str(_balk.get("vorm", "hoog")) != "laag":
+			for l in [regel_label, regel2_label, hulp_label]:
+				l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			rij.alignment = BoxContainer.ALIGNMENT_CENTER
 	max_cijfers = int(_o.get("max", 2))
 	# The sentence decides the width: it wraps at the card maximum instead of
 	# being cut, and nothing forces the card wider than the sentence needs.
