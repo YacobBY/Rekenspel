@@ -22,6 +22,8 @@ extends ScrollContainer
 
 signal kamer_gekozen(kamer: String)
 signal kaart_gevraagd()
+## The chips stepped aside for a sum, or came back (`verstop`).
+signal verstopt_veranderd(aan: bool)
 
 const GAT := 4
 const RAIL_KOLOMMEN := 3
@@ -39,6 +41,12 @@ var _strook := false
 var _rolt := false            ## the rail ran out of height and scrolls (R1)
 var _maten: Dictionary = {}
 var _raster: GridContainer = null
+var _verstopt := false        ## a sum is being answered: the chips step aside
+var _muis := Control.MOUSE_FILTER_STOP   ## the bar's own filter, while shown
+var _vervaag: Tween = null
+
+## How long the chips take to fade out and back in (not in reduced motion).
+const VERVAAG_S := 0.15
 
 func bouw(mt: Dictionary) -> void:
 	name = "Kamerbalk"
@@ -113,11 +121,14 @@ func _chip(id: String, icoon: String, naam: String, titel: String) -> Button:
 	bdg.visible = false
 	rij.add_child(bdg)
 	b.pressed.connect(func() -> void:
+		if _verstopt:
+			return            # a chip that stepped aside does nothing
 		Snd.tik()
 		if id == "":
 			kaart_gevraagd.emit()
 		else:
 			kamer_gekozen.emit(id))
+	_zet_chip(b, _verstopt)
 	return b
 
 func _tekst(naam: String, tekst: String, maat: int) -> Label:
@@ -168,6 +179,61 @@ func _toon_huidige() -> void:
 		var boven := b.position.y - scroll_vertical
 		if boven < 0.0 or boven + b.size.y > size.y:
 			ensure_control_visible(b)
+
+# ------------------------------------------------------------ een som in beeld
+
+## Owner, 2026-09-24: "Kan je tijdens een rekensom de hotkeys voor mappen
+## verbergen".  While a sum is being answered (`Ui.som_in_beeld()`, the one
+## rule, shared with the door signs in `Hits`) every chip — the map chip too —
+## fades out and can be neither tapped nor focused: disabled,
+## `MOUSE_FILTER_IGNORE`, `FOCUS_NONE`, and the bar itself lets the finger
+## through.  The chips keep their place and their size, so the shell measures
+## the same bar and the world frame does not move by a unit.  When the sum is
+## answered or closed they come back exactly as they were.
+##
+## The bar asks once per drawn frame instead of listening to every card event:
+## the answer also changes when the camera changes room (a card in another room
+## does not count), and one question over the few open cards costs nothing.
+func _process(_delta: float) -> void:
+	verstop(Ui.som_in_beeld())
+
+func verstopt() -> bool:
+	return _verstopt
+
+func verstop(aan: bool) -> void:
+	if aan == _verstopt:
+		return
+	_verstopt = aan
+	for b in _chips.values():
+		_zet_chip(b, aan)
+	if aan:
+		_muis = mouse_filter
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+	else:
+		mouse_filter = _muis
+	_vervaag_naar(0.0 if aan else 1.0)
+	verstopt_veranderd.emit(aan)
+
+func _zet_chip(b: Button, aan: bool) -> void:
+	if b == null or not is_instance_valid(b):
+		return
+	if aan and b.has_focus():
+		b.release_focus()
+	b.disabled = aan
+	b.focus_mode = Control.FOCUS_NONE if aan else Control.FOCUS_ALL
+	b.mouse_filter = Control.MOUSE_FILTER_IGNORE if aan else Control.MOUSE_FILTER_STOP
+
+## A short fade, so the row does not blink; at once in reduced motion and
+## headless, where a test reads the state on the next line.
+func _vervaag_naar(alfa: float) -> void:
+	if _vervaag != null and _vervaag.is_valid():
+		_vervaag.kill()
+	_vervaag = null
+	if Ui.rust_modus() or DisplayServer.get_name() == "headless" or not is_inside_tree():
+		modulate.a = alfa
+		return
+	_vervaag = create_tween()
+	_vervaag.tween_property(self, "modulate:a", alfa, VERVAAG_S)
 
 ## Lay the chips out for the space they got.  `rail` is the compact landscape
 ## shell: three fixed columns of 48 units beside the frame (§16.4), the word

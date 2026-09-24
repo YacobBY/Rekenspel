@@ -455,6 +455,56 @@ func balk_kandidaat() -> String:
 ## wins, so `balk_kandidaat()` walks this backwards.
 var _balk_volgorde: Array[String] = []
 
+# ------------------------------------------------------------ de som in beeld
+#
+# Owner, 2026-09-24: "Kan je tijdens een rekensom de hotkeys voor mappen
+# verbergen".  While the child answers a sum, the ways OUT of the room step
+# aside so the sum is the only thing to do: the room bar's chips (and the
+# map chip) fade out and cannot be tapped or focused (`UiKamerbalk.verstop`),
+# and the hotel's door signs leave the glass (`Hits.plaats`) — except a door a
+# running game has BORROWED (`ctx.hotspots.pak`): that door is the game's
+# own tool (the voerkar pushes its trolley through it) and stays.  When the
+# sum is answered (ticked) or closed, everything comes back.  Nothing moves:
+# the chips keep their place in the shell, so the world frame keeps its size.
+#
+# The rule, in one place so the bar and the doors can never disagree: a card
+# counts while it is open, stands in the room in view, is not ticked yet
+# (`klaar()`), and asks a SUM — it asks for a number (`goed`: its strip is
+# four numbers) or it carries a sum line (`som`: "2 + 1 =", "3 × 4",
+# "€8 − €6 =").  A card with only word choices and no sum line — the
+# check-in's room question, a card that only says what happens — asks
+# something, but no sum: the room shortcuts stay.  A card in another room
+# never counts, so a child who followed a guest out of the receptie is never
+# left in a room without doors.
+
+## Is a sum being answered on the glass right now?
+func som_in_beeld() -> bool:
+	return som_kaart_in_beeld() != ""
+
+## The id of the card that makes it so (the newest), or "" — for the probe.
+func som_kaart_in_beeld() -> String:
+	var nu := World.kamer_nu()
+	for i in range(_balk_volgorde.size() - 1, -1, -1):
+		var id: String = _balk_volgorde[i]
+		if is_som(id, nu):
+			return id
+	return ""
+
+## Does card `id` count as a sum in room `kamer` ("" = the room in view)?
+func is_som(id: String, kamer := "") -> bool:
+	var k = _kaarten.get(id)
+	if k == null or not is_instance_valid(k):
+		return false
+	var s = Hits.spot(id)
+	if s == null or not is_instance_valid(s.knoop):
+		return false
+	if str(s.kamer) != (kamer if kamer != "" else World.kamer_nu()):
+		return false
+	var kn := s.knoop as UiSomkaart
+	if kn == null or kn.is_af():
+		return false
+	return (k as Kaart).getal_vraag or not kn.som_tekst().strip_edges().is_empty()
+
 # ------------------------------------------------------------------- thema
 
 func _bouw_thema(basis: int, ruim := false) -> void:
@@ -845,6 +895,7 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 	kaart.door = o.get("door", "")
 	kaart.dier = _dier_van(obj, o)
 	kaart.geen_balk = not bool(o.get("balk", true))
+	kaart.getal_vraag = o.has("goed")
 	var keuzes: Array = o.get("keuzes", [])
 	var vak := keuzes.is_empty()
 	if keuzes.is_empty() and o.has("goed"):
@@ -1151,6 +1202,9 @@ class Kaart extends RefCounted:
 	## game whose whole layout hangs on one wall and must not jump when the
 	## world shrinks for the bar between two steps (the key board, 2026-09-23).
 	var geen_balk := false
+	## `somkaart(..., {goed: n})`: the card asks for a number, so it is a sum
+	## even without a sum line (`Ui.is_som`, owner 2026-09-24).
+	var getal_vraag := false
 	var _getikt := ""            ## what the child chose, never what a game wrote
 
 	func _knoop() -> UiSomkaart:

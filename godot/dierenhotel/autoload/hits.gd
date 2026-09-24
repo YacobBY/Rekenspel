@@ -341,6 +341,7 @@ func plaats() -> void:
 	# from it (owner, 2026-09-23).
 	_kaart_vrij.clear()
 	_kaart_vrij.append_array(World.vlakken_van_balie())
+	var som_nu := Ui.som_in_beeld()     # asked once per pass (door signs, below)
 	var lijstje: Array[Spot] = []
 	for id in _volgorde.duplicate():
 		var s: Spot = _spots[id]
@@ -372,6 +373,12 @@ func plaats() -> void:
 		if _voorrang != "" and s.laag in [Laag.WENS, Laag.HOTEL] \
 				and s.geleend_door != _voorrang \
 				and str(s.data.get("spel", "")) != _voorrang:
+			s.zichtbaar = false
+		# While a sum is being answered the hotel's door signs step aside too
+		# (owner, 2026-09-24: "Kan je tijdens een rekensom de hotkeys voor
+		# mappen verbergen"); the rule is `Ui.is_som`.  A BORROWED door is the
+		# game's own tool and stays.
+		if som_nu and s.zichtbaar and s.klas.contains("hotdeur") and s.geleend_door == "":
 			s.zichtbaar = false
 		if s.zichtbaar:
 			lijstje.append(s)

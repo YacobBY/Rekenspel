@@ -267,3 +267,262 @@ func test_de_rail_blijft_binnen_zijn_hoogte() -> void:
 				"de laatste chip rolt in beeld (%s in %s)"
 					% [str(laatste.get_global_rect()), str(_balk.get_global_rect())])
 		_af()
+
+# ------------------------------------------------------- een som in beeld
+
+## The whole shell in a SubViewport with a fresh hotel in the receptie — the
+## same fixture as `test_hits.gd::_hotel_op`: the room bar, the frame and the
+## door signs are only real in the real shell.
+func _schil_op(maat: Vector2i) -> Dictionary:
+	var boom := Engine.get_main_loop() as SceneTree
+	var vp := SubViewport.new()
+	vp.size = maat
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	boom.root.add_child(vp)
+	var scene: PackedScene = load("res://scenes/main.tscn")
+	var shell := scene.instantiate()
+	shell.set_meta("geen_start", true)     # never touch the save from a test
+	vp.add_child(shell)
+	await _beelden(4)
+	State.nieuw_spel()
+	Hotel.start()
+	await _beelden(4)
+	return {"vp": vp, "shell": shell}
+
+func _schil_af(h: Dictionary) -> void:
+	Games.stop()
+	Ui.naamplaten_leeg()
+	Hits.wis_alles()
+	(h["vp"] as SubViewport).queue_free()
+	await _beelden(1)
+	Ui.registreer_lagen(null, null, null)
+	Ui.vergeet_scherm()
+	State.nieuw_spel()
+
+func _beelden(n: int) -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	for _f in n:
+		await boom.process_frame
+
+## A real tap, through the viewport's own input path: a disabled chip with
+## `MOUSE_FILTER_IGNORE` must not be reachable by a finger at all, which an
+## `emit_signal("pressed")` would never prove.
+func _tik_op(vp: SubViewport, punt: Vector2) -> void:
+	for druk in [true, false]:
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = druk
+		ev.button_mask = MOUSE_BUTTON_MASK_LEFT if druk else 0
+		ev.position = punt
+		ev.global_position = punt
+		vp.push_input(ev, true)
+		await _beelden(1)
+
+## The hotel's door signs in a room: every hotspot with the `hotdeur` class.
+func _deurbordjes(kamer: String) -> Array[String]:
+	var uit: Array[String] = []
+	for id in Hits.lijst():
+		var s := Hits.spot(id)
+		if s != null and s.kamer == kamer and s.klas.contains("hotdeur"):
+			uit.append(id)
+	return uit
+
+func _op_het_glas(id: String) -> bool:
+	var s := Hits.spot(id)
+	return s != null and is_instance_valid(s.knoop) and s.zichtbaar \
+		and s.knoop.is_visible_in_tree()
+
+## Every chip is back: on the glass, tappable, focusable.
+func _chips_terug(balk: UiKamerbalk, wat: String) -> void:
+	waar(not balk.verstopt(), "%s: de kamerbalk is terug" % wat)
+	gelijk(balk.modulate.a, 1.0, "%s: de chips zijn weer te zien" % wat)
+	for id in balk.chips():
+		var b: Button = balk.chips()[id]
+		waar(not b.disabled and b.mouse_filter == Control.MOUSE_FILTER_STOP
+			and b.focus_mode == Control.FOCUS_ALL,
+			"%s: chip %s is weer te tikken" % [wat, id if id != "" else "kaart"])
+
+## Owner, 2026-09-24: "Kan je tijdens een rekensom de hotkeys voor mappen
+## verbergen".  The check-in in the receptie: while its two sums are up the
+## room chips (the map chip too) and the door signs step aside — invisible,
+## not tappable, not focusable — and the world frame does not move by a unit.
+## The room question after them asks no sum: everything is back, and a tap on
+## a chip goes to that room again.
+func test_tijdens_een_som_wijken_de_kamerknoppen() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var rust := Ui.rust_modus()
+	Ui.zet_rust_modus(true)                 # a walk is a teleport: no waiting
+	var h: Dictionary = await _schil_op(Vector2i(1024, 768))
+	var vp: SubViewport = h["vp"]
+	var shell: Node = h["shell"]
+	var balk: UiKamerbalk = shell.kamerbalk
+	var kader: Control = shell.kader
+	gelijk(World.kamer_nu(), "receptie", "we staan in de receptie")
+	var kader_voor := kader.size
+	var wereld_voor := World.kader_rect()
+	var balk_voor := balk.get_global_rect()
+	var deuren := _deurbordjes("receptie")
+	waar(deuren.size() >= 2, "de receptie heeft deurbordjes (%s)" % str(deuren))
+	waar(not Ui.som_in_beeld(), "nog geen som")
+	_chips_terug(balk, "voor de bel")
+	for d in deuren:
+		waar(_op_het_glas(d), "voor de bel: %s staat er" % d)
+
+	# vraag 1 van de check-in is een som
+	Hotel.bel()
+	await _beelden(4)
+	var v = State.s["checkin"]
+	waar(v != null, "er checkt iemand in")
+	if v == null:
+		await _schil_af(h)
+		Ui.zet_rust_modus(rust)
+		State.s = bewaard
+		return
+	waar(Ui.is_som("ci_som"), "vraag 1 is een som")
+	gelijk(Ui.som_kaart_in_beeld(), "ci_som", "en het is de check-in die hem stelt")
+	waar(balk.verstopt(), "de kamerbalk wijkt")
+	gelijk(balk.modulate.a, 0.0, "de chips zijn niet te zien")
+	gelijk(balk.mouse_filter, Control.MOUSE_FILTER_IGNORE, "de balk laat de vinger door")
+	for id in balk.chips():
+		var b: Button = balk.chips()[id]
+		var naam: String = id if id != "" else "kaart"
+		waar(b.disabled, "chip %s staat uit" % naam)
+		gelijk(b.mouse_filter, Control.MOUSE_FILTER_IGNORE, "chip %s vangt geen vinger" % naam)
+		gelijk(b.focus_mode, Control.FOCUS_NONE, "chip %s krijgt geen focus" % naam)
+		waar(not b.has_focus(), "chip %s heeft geen focus" % naam)
+	for d in deuren:
+		waar(Hits.spot(d) != null, "%s bestaat nog (een spel mag hem lenen)" % d)
+		waar(not _op_het_glas(d), "tijdens de som: %s is weg" % d)
+	# nothing moved: the chips keep their place, the frame keeps its size
+	gelijk(kader.size, kader_voor, "de wereld houdt haar kader")
+	gelijk(World.kader_rect(), wereld_voor, "World meet hetzelfde kader")
+	gelijk(balk.get_global_rect(), balk_voor, "de kamerbalk houdt zijn plek")
+	# a real tap on the hidden gang chip goes nowhere
+	var gang: Button = balk.chips()["gang"]
+	await _tik_op(vp, gang.get_global_rect().get_center())
+	gelijk(World.kamer_nu(), "receptie", "een tik op een verstopte chip doet niets")
+	waar(Hits.spot("ci_som") != null, "en de som hangt er nog")
+	# no game bar: the check-in is no game, answering its sum is the way on
+	waar(not shell.spelbalk.visible, "geen spelbalk tijdens de check-in")
+
+	# vraag 2 is ook een som
+	v["invoer"] = str(int(v["nieuw"]))
+	Hotel.antwoord1()
+	await _beelden(3)
+	gelijk(int(v["stap"]), 2, "vraag 2")
+	waar(Ui.is_som("ci_som"), "vraag 2 is een som")
+	waar(balk.verstopt(), "de kamerbalk blijft weg")
+	for d in deuren:
+		waar(not _op_het_glas(d), "vraag 2: %s is weg" % d)
+
+	# de kamervraag is geen som: alles komt terug
+	Hotel.antwoord2(Sommen.vergelijk(int(v["dagen"]), int(v["nieuw"]), int(v["voorraad"])))
+	await _beelden(3)
+	gelijk(int(v["stap"]), 3, "nu de kamer")
+	waar(Hits.spot("ci_som") != null, "de kamervraag hangt er")
+	waar(not Ui.is_som("ci_som"), "maar dat is geen som")
+	waar(not Ui.som_in_beeld(), "er staat geen som meer")
+	_chips_terug(balk, "na de som")
+	for d in deuren:
+		waar(_op_het_glas(d), "na de som: %s staat er weer" % d)
+	gelijk(kader.size, kader_voor, "de wereld houdt haar kader, ook na de som")
+	gelijk(balk.get_global_rect(), balk_voor, "de kamerbalk staat nog op zijn plek")
+	# and a real tap on a chip works again
+	gang = balk.chips()["gang"]
+	await _tik_op(vp, gang.get_global_rect().get_center())
+	gelijk(World.kamer_nu(), "gang", "een tik op de gang-chip gaat weer naar de gang")
+	Hotel.naar_kamer("receptie")
+	await _beelden(2)
+	await _schil_af(h)
+	Ui.zet_rust_modus(rust)
+	State.s = bewaard
+
+## The same on the other three shapes of the bar — two rows on the upright
+## tablet, the scrolling row on the phone, the rail beside the frame in the
+## compact landscape shell: the chips step aside, and neither the bar nor the
+## world frame moves by a unit.
+func test_de_som_verschuift_geen_enkele_balkvorm() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var rust := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	for maat in [Vector2i(768, 1024), Vector2i(360, 740), Vector2i(740, 360)]:
+		var h: Dictionary = await _schil_op(maat)
+		var shell: Node = h["shell"]
+		var balk: UiKamerbalk = shell.kamerbalk
+		var kader: Control = shell.kader
+		var kader_voor := kader.size
+		var balk_voor := balk.get_global_rect()
+		Hotel.bel()
+		await _beelden(4)
+		waar(State.s["checkin"] != null, "%s: er checkt iemand in" % str(maat))
+		waar(Ui.som_in_beeld(), "%s: de som staat in beeld" % str(maat))
+		waar(balk.verstopt(), "%s: de kamerbalk wijkt" % str(maat))
+		gelijk(kader.size, kader_voor, "%s: de wereld houdt haar kader" % str(maat))
+		gelijk(balk.get_global_rect(), balk_voor, "%s: de balk houdt zijn plek" % str(maat))
+		for id in balk.chips():
+			var b: Button = balk.chips()[id]
+			waar(b.disabled and b.mouse_filter == Control.MOUSE_FILTER_IGNORE
+				and b.focus_mode == Control.FOCUS_NONE,
+				"%s: chip %s is niet te tikken" % [str(maat), id if id != "" else "kaart"])
+		for d in _deurbordjes("receptie"):
+			waar(not _op_het_glas(d), "%s: %s is weg" % [str(maat), d])
+		await _schil_af(h)
+	Ui.zet_rust_modus(rust)
+	State.s = bewaard
+
+## The child is never stuck behind a sum.  In a game the sum's way out is the
+## game bar's `⬅ Terug`, which never steps aside: the beds game of the
+## check-in asks a sum at the desk, `⬅ Terug` is on the glass and tappable,
+## and a tap on it brings the check-in back to its room question
+## (`Hotel.checkin_terug`) — with the room chips back.
+func test_terug_blijft_tijdens_de_som_van_een_spel() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var rust := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	var h: Dictionary = await _schil_op(Vector2i(1024, 768))
+	var vp: SubViewport = h["vp"]
+	var shell: Node = h["shell"]
+	var balk: UiKamerbalk = shell.kamerbalk
+	var kader_voor: Vector2 = (shell.kader as Control).size
+	Hotel.bel()
+	await _beelden(3)
+	var v = State.s["checkin"]
+	waar(v != null, "er checkt iemand in")
+	waar(not Games.definitie("bedden").is_empty(), "het beddenspel is er")
+	if v == null or Games.definitie("bedden").is_empty():
+		await _schil_af(h)
+		Ui.zet_rust_modus(rust)
+		State.s = bewaard
+		return
+	v["stap"] = 3
+	Hotel.paint_checkin()
+	await _beelden(2)
+	var kamer: String = str(State.kamers_met_plek()[0])
+	waar(Hotel.kies_kamer(kamer), "een kamer gekozen: het beddenspel begint")
+	var boom := Engine.get_main_loop() as SceneTree
+	var t := 0.0
+	while t < 3.0 and Hits.spot("bd_som") == null:
+		await boom.create_timer(0.05).timeout
+		t += 0.05
+	await _beelden(3)
+	gelijk(Games.actief(), "bedden", "het beddenspel loopt")
+	waar(Ui.is_som("bd_som"), "de beddenvraag is een som")
+	waar(Ui.som_in_beeld(), "er staat een som in beeld")
+	var terug: Button = shell.spelbalk.terug_knop
+	waar(shell.spelbalk.visible and terug != null and terug.is_visible_in_tree(),
+		"⬅ Terug staat op het glas")
+	if terug != null:
+		waar(not terug.disabled and terug.mouse_filter == Control.MOUSE_FILTER_STOP,
+			"en is te tikken")
+		gelijk((shell.kader as Control).size, kader_voor, "de spelbalk houdt het kader")
+		await _tik_op(vp, terug.get_global_rect().get_center())
+		await _beelden(3)
+	gelijk(Games.actief(), "", "⬅ Terug stopt het spel")
+	v = State.s["checkin"]
+	waar(v != null and int(v["stap"]) == 3, "de check-in staat weer bij de kamervraag")
+	waar(Hits.spot("ci_som") != null and not Ui.som_in_beeld(),
+		"de kamervraag hangt er, en die is geen som")
+	_chips_terug(balk, "na ⬅ Terug")
+	await _schil_af(h)
+	Ui.zet_rust_modus(rust)
+	State.s = bewaard
