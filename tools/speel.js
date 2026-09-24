@@ -36,6 +36,7 @@ function hulp() {
 
   --kamer ID          receptie | gang | kamer1 | kamer2 | keuken | tuin | zwembad | wasserij  (standaard receptie)
   --doe "a; b; c"     de reeks stappen: een knop-id, chip:<naam>,
+                      "veeg chip:<naam> <dx>" (een vinger veegt de kamerbalk),
                       chroom:<naam> (Munt/Brieven/Geluid/Prikbord/Avond),
                       of "wacht <ms>"
   --toon              speel niets; meld alleen wat er in deze kamer te tikken valt
@@ -275,6 +276,33 @@ const midden = (l) => {
       await page.waitForTimeout(parseInt(pauze[1], 10));
       console.log(`\nstap ${nr - 2}: wacht ${pauze[1]} ms`);
       await foto(`${nr}-wacht`);
+      continue;
+    }
+    // `veeg chip:<naam> <dx>`: een echte vinger die vanaf die chip dx
+    // eenheden opzij veegt (touchStart, tien touchMoves, touchEnd) — de
+    // kamerbalk van een staande telefoon is één rij die je moet kunnen vegen
+    // (eigenaar 2026-09-24).  Daarna meldt de balk zijn chips opnieuw.
+    const veeg = stap.match(/^veeg\s+chip[:\s]+(\S+)\s+(-?\d+)$/i);
+    if (veeg) {
+      const regel = await wacht(() => laatste(`[probe] chip ${veeg[1]}=`), 8000);
+      if (!regel) await stop(`stap ${nr - 2}: chip "${veeg[1]}" wordt niet gemeld`);
+      const p0 = midden(regel);
+      const dx = +veeg[2];
+      const cdp = await page.context().newCDPSession(page);
+      const punt = (x) => [{ x: Math.round(x), y: Math.round(p0.y), id: 1 }];
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: punt(p0.x) });
+      for (let i = 1; i <= 10; i++) {
+        await page.waitForTimeout(16);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: punt(p0.x + dx * i / 10) });
+      }
+      await page.waitForTimeout(16);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await page.waitForTimeout(opt.stapWacht);
+      const f = await foto(`${nr}-veeg-${veeg[1]}`);
+      console.log(`\nstap ${nr - 2}: veeg vanaf chip ${veeg[1]} ${dx}  →  ${path.basename(f)}`);
+      const m = meldingenSinds(merk);
+      if (m.length) console.log('  meldingen:\n    ' + m.slice(-20).join('\n    '));
+      merk = logs.length;
       continue;
     }
     const chip = stap.match(/^chip[:\s]+(\S+)$/i);

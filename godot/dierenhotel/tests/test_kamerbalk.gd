@@ -338,7 +338,9 @@ func _chips_terug(balk: UiKamerbalk, wat: String) -> void:
 	gelijk(balk.modulate.a, 1.0, "%s: de chips zijn weer te zien" % wat)
 	for id in balk.chips():
 		var b: Button = balk.chips()[id]
-		waar(not b.disabled and b.mouse_filter == Control.MOUSE_FILTER_STOP
+		# PASS since 2026-09-24: the chip takes its tap AND lets the row be
+		# swiped on a phone
+		waar(not b.disabled and b.mouse_filter == Control.MOUSE_FILTER_PASS
 			and b.focus_mode == Control.FOCUS_ALL,
 			"%s: chip %s is weer te tikken" % [wat, id if id != "" else "kaart"])
 
@@ -526,3 +528,36 @@ func test_terug_blijft_tijdens_de_som_van_een_spel() -> void:
 	await _schil_af(h)
 	Ui.zet_rust_modus(rust)
 	State.s = bewaard
+
+## Owner, 2026-09-24: "Op mobile kan ik de map shortcuts niet swipen onderaan
+## het scherm."  Godot's ScrollContainer only scrolls under a finger when the
+## touch reaches IT, so every chip passes it on (MOUSE_FILTER_PASS), the row has
+## a small dead zone so a trembling tap stays a tap, and the chip under the
+## finger that ends a swipe does not navigate.  (The swipe itself only happens
+## where the device has a touch screen; it is played in the web export with
+## `tools/speel.js --doe "veeg chip:receptie -250"`.)
+func test_de_rij_laat_zich_vegen() -> void:
+	var balk := UiKamerbalk.new()
+	var boom := Engine.get_main_loop() as SceneTree
+	boom.root.add_child(balk)
+	balk.bouw(Ui.maten)
+	waar(balk.scroll_deadzone >= 8, "een trillende tik is geen veeg (%d)" % balk.scroll_deadzone)
+	for id in balk.chips():
+		var b: Button = balk.chips()[id]
+		gelijk(b.mouse_filter, Control.MOUSE_FILTER_PASS,
+			"chip %s geeft de vinger door aan de rij" % (id if id != "" else "kaart"))
+	var gekozen: Array[String] = []
+	balk.kamer_gekozen.connect(func(k: String) -> void: gekozen.append(k))
+	var chip: Button = balk.chips()["gang"]
+	# a swipe that ends on the chip: no room
+	balk.scroll_started.emit()
+	chip.pressed.emit()
+	gelijk(gekozen.size(), 0, "het einde van een veeg is geen tik")
+	balk.scroll_ended.emit()
+	await boom.process_frame
+	waar(not balk.veegt(), "na de veeg is de rij weer gewoon")
+	# and a plain tap still goes to the room
+	chip.pressed.emit()
+	gelijk(gekozen, ["gang"] as Array[String], "een gewone tik gaat naar de kamer")
+	balk.queue_free()
+	await boom.process_frame

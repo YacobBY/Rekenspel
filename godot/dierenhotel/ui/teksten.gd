@@ -41,31 +41,11 @@ static func start_stand(dagen: int, gasten: int, munten: int, sterren: int) -> S
 		Ui.meervoud(munten, "munt", "munten"), Ui.meervoud(sterren, "ster", "sterren")]
 
 # ------------------------------------------------------------ §7.2 de intro
-## The intro of a FRESH game (owner, 2026-09-23: "Maak ook een leuke intro voor
-## de game"), `ui/intro.gd`.  One sentence per step, each with its pictogram in
-## front on the same card, and every one within HOTEL.md §9 counted the way
-## `Ui.keur_regel` counts: at most 8 words WITH the pictogram as a word, at most
-## 40 characters.  The last step names the first guest on the waiting list — the
-## child has just watched that animal walk in and out again — and points at the
-## bell; `INTRO_BEL_LEEG` is only for a waiting list that is somehow empty.
-##
-## 👑 and ➕ were added to `fonts/tekens.txt` for this: the crown is what "de
-## baas" looks like to a six-year-old (🎩 is the souvenir hat of the kraam), and
-## the plus is the one picture of "sommen" that needs no reading.
+## The welcome of a FRESH game, `ui/intro.gd`: one card that goes by itself
+## (owner, 2026-09-24: "geen intro waar je 5x door moet klikken … zonder
+## tutorial").  The five tutorial sentences and the `Verder ▸` / `Overslaan ▸▸`
+## buttons of the 2026-09-23 story are gone.
 const INTRO_WELKOM := "👋 Welkom in het Dierenhotel!"
-const INTRO_BAAS := "👑 Jij bent de baas van het hotel!"
-const INTRO_GASTEN := "🐾 Kijk, daar komen de gasten!"
-const INTRO_WENS := "✨ Elk dier heeft een wens."
-const INTRO_SOMMEN := "➕ Met sommen help je de dieren!"
-const INTRO_BEL_LEEG := "🔔 Druk op de bel voor je gast!"
-const INTRO_VERDER := "Verder ▸"
-const INTRO_VERDER_TITEL := "Volgende plaatje"
-## ▸▸ is "snel vooruit", the picture every video player uses for skipping.
-const INTRO_OVERSLAAN := "Overslaan ▸▸"
-const INTRO_OVERSLAAN_TITEL := "Sla het verhaaltje over"
-## `🔔 Druk op de bel voor Boef!` — the name of the guest the bell brings.
-static func intro_bel(naam: String) -> String:
-	return INTRO_BEL_LEEG if naam.strip_edges().is_empty() else "🔔 Druk op de bel voor %s!" % naam
 
 ## The v5 shelter branch of world.md §6.2 cannot happen in this build: the Godot
 ## export lives on another origin and cannot read the HTML game's localStorage,

@@ -42,6 +42,13 @@ var _rolt := false            ## the rail ran out of height and scrolls (R1)
 var _maten: Dictionary = {}
 var _raster: GridContainer = null
 var _verstopt := false        ## a sum is being answered: the chips step aside
+## A finger is swiping the row (`scroll_started` .. `scroll_ended`): the chip it
+## lifts off from is not a tap (owner, 2026-09-24: "Op mobile kan ik de map
+## shortcuts niet swipen onderaan het scherm").
+var _veegt := false
+## How far (units) a finger may tremble on a chip before the row scrolls; under
+## it a tap stays a tap.
+const VEEG_DODE_ZONE := 10
 var _muis := Control.MOUSE_FILTER_STOP   ## the bar's own filter, while shown
 var _vervaag: Tween = null
 
@@ -59,6 +66,14 @@ func bouw(mt: Dictionary) -> void:
 	_raster.add_theme_constant_override("v_separation", GAT)
 	_raster.columns = 1
 	follow_focus = true
+	# Swiping (owner, 2026-09-24): Godot's ScrollContainer scrolls under a
+	# finger only when the touch reaches IT — the chips let it through
+	# (`_zet_chip`: MOUSE_FILTER_PASS) — and it tells us when a swipe starts
+	# and ends, so the chip under the lifting finger does not navigate.
+	scroll_deadzone = VEEG_DODE_ZONE
+	if not scroll_started.is_connected(_op_veeg_begin):
+		scroll_started.connect(_op_veeg_begin)
+		scroll_ended.connect(_op_veeg_eind)
 	_zet_rollen(false)
 	vul()
 
@@ -123,6 +138,8 @@ func _chip(id: String, icoon: String, naam: String, titel: String) -> Button:
 	b.pressed.connect(func() -> void:
 		if _verstopt:
 			return            # a chip that stepped aside does nothing
+		if _veegt:
+			return            # the end of a swipe, not a tap
 		Snd.tik()
 		if id == "":
 			kaart_gevraagd.emit()
@@ -200,6 +217,25 @@ func _process(_delta: float) -> void:
 func verstopt() -> bool:
 	return _verstopt
 
+func _op_veeg_begin() -> void:
+	_veegt = true
+
+## A frame later: the chip under the lifting finger hears its release first
+## (a child before its parent), and has to find `_veegt` still set.
+func _op_veeg_eind() -> void:
+	set_deferred("_veegt", false)
+	if OS.has_feature("web"):
+		# the browser probe steers on these: where the chips are after the swipe
+		print("[probe] kamerbalk veeg scroll=", scroll_horizontal, ",", scroll_vertical)
+		for id in _chips:
+			var b: Button = _chips[id]
+			if is_instance_valid(b):
+				print("[probe] chip ", id if id != "" else "kaart", "=", b.get_global_rect())
+
+## Is a finger swiping the row right now?  (For the probe and the tests.)
+func veegt() -> bool:
+	return _veegt
+
 func verstop(aan: bool) -> void:
 	if aan == _verstopt:
 		return
@@ -221,7 +257,9 @@ func _zet_chip(b: Button, aan: bool) -> void:
 		b.release_focus()
 	b.disabled = aan
 	b.focus_mode = Control.FOCUS_NONE if aan else Control.FOCUS_ALL
-	b.mouse_filter = Control.MOUSE_FILTER_IGNORE if aan else Control.MOUSE_FILTER_STOP
+	# PASS, not STOP: a chip still takes its tap, and the touch goes on to the
+	# ScrollContainer, which is what lets a finger swipe the row on a phone
+	b.mouse_filter = Control.MOUSE_FILTER_IGNORE if aan else Control.MOUSE_FILTER_PASS
 
 ## A short fade, so the row does not blink; at once in reduced motion and
 ## headless, where a test reads the state on the next line.

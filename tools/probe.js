@@ -230,23 +230,23 @@ function opVoorkeur(knoppen) {
     await page.screenshot({ path: `${uit}/${p.naam}-1-boot.png` });
     zet('boot', klaar, klaar ? '' : '"[probe] klaar" bleef uit');
 
-    // ---- intro: a fresh game (no save yet) starts under the intro of
-    // ui/intro.gd, which lies over every button of the hotel and hides them.
-    // Skip it with its own button; the shell reports the hotel's buttons again
-    // once it is gone ("[probe] intro=klaar", then "[probe] knop <id>="), and
-    // from then on the probe steers on those lines.
+    // ---- intro: a fresh game (no save yet) starts under the welcome card of
+    // ui/intro.gd (one card since 2026-09-24, no buttons), which lies over the
+    // hotel and eats the first tap.  It goes by itself after 2.5 s; wait for
+    // "[probe] intro=klaar" and steer on the button lines the shell prints
+    // after it ("[probe] knop <id>=").
     const bootRegels = logs.filter(l => l.includes('[probe]'));
     let knopRegels = bootRegels;
-    const introKnop = laatste(bootRegels, '[probe] introknop Koverslaan=');
-    if (introKnop) {
-      const v = vlakVan(introKnop);
+    if (laatste(bootRegels, '[probe] intro=stap')) {
       const n0 = logs.length;
-      if (v) await page.touchscreen.tap(v.x + v.w / 2, v.y + v.h / 2);
-      for (let i = 0; i < 40 && !logs.slice(n0).some(l => l.includes('[probe] intro=klaar')); i++) {
+      await page.waitForTimeout(600);        // past its pop-in: the card as a child sees it
+      await page.screenshot({ path: `${uit}/${p.naam}-1a-welkom.png` });
+      for (let i = 0; i < 60 && !logs.some(l => l.includes('[probe] intro=klaar')); i++) {
         await page.waitForTimeout(100);
       }
       await page.waitForTimeout(700);        // the button lines follow two frames later
-      knopRegels = logs.slice(n0).filter(l => l.includes('[probe]'));
+      const na = logs.slice(n0).filter(l => l.includes('[probe]'));
+      if (na.some(l => l.includes('[probe] knop '))) knopRegels = na;
       await page.screenshot({ path: `${uit}/${p.naam}-1b-na-intro.png` });
     }
 

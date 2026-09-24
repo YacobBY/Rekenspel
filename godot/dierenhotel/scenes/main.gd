@@ -187,19 +187,13 @@ func _intro_start() -> void:
 func intro_loopt() -> bool:
 	return intro != null and is_instance_valid(intro) and not intro.is_dicht()
 
-## One `[probe]` line per page, and where its two buttons are, so the browser
-## probe can skip the intro before it goes looking for the hotel's buttons.
+## One `[probe]` line when the welcome card is up, and where it is: a probe
+## taps it away (any tap does) or waits for "[probe] intro=klaar".
 func _intro_stap(stap: int, aantal: int) -> void:
 	print("[probe] intro stap=%d/%d" % [stap + 1, aantal])
 	await _na_plaatsing()
-	if not intro_loopt():
-		return
-	for k in [intro.knop_overslaan(), intro.knop_verder()]:
-		var b := k as Control
-		if b != null and b.is_visible_in_tree():
-			print("[probe] introknop ", b.name, "=", b.get_global_rect())
-	if intro.gat().size.x > 0.0:
-		print("[probe] intro bel=", intro.gat())
+	if intro_loopt():
+		print("[probe] introkaart=", intro.kaart_rect())
 
 func _intro_klaar(hoe: String) -> void:
 	print("[probe] intro=klaar hoe=", hoe)
@@ -587,10 +581,7 @@ func _meld_later() -> void:
 	# a fresh game is under the intro: say so, and where its buttons are
 	if intro_loopt():
 		print("[probe] intro=stap %d/%d" % [intro.stap() + 1, intro.aantal()])
-		for k in [intro.knop_overslaan(), intro.knop_verder()]:
-			var b := k as Control
-			if b != null and b.is_visible_in_tree():
-				print("[probe] introknop ", b.name, "=", b.get_global_rect())
+		print("[probe] introkaart=", intro.kaart_rect())
 	else:
 		print("[probe] intro=geen")
 	print("[probe] klaar")
