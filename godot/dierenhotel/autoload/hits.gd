@@ -33,6 +33,27 @@ var _voorrang: String = ""         ## the game that picks its places first
 var _bezet: Dictionary = {}        ## "rij|kol" -> true, rebuilt every placement
 var _geplaatst: Array[Rect2] = []  ## the rectangles already handed out this pass
 var _vakken: Array[Rect2] = []     ## object boxes in view; a button avoids all of them
+var _vakken_mee: Array[Rect2] = [] ## ... the ones that walk with a guest (a name plate, a wish bubble)
+## The boxes of the guests in view, this pass.  A guest walks: a button that
+## hangs on a thing that stands still does not step aside for him (owner,
+## 2026-09-24: "Wanneer boef binnenkomt wisselen de gang en prikbord icoontjes
+## supervaak. Ik zie dat icoon indeling en consistentie nog steeds niet gefixt
+## is") — `_negeer_dieren` is set while such a button chooses its place.
+var _dieren_vak: Array[Rect2] = []
+var _staande_vak: Array[Rect2] = []  ## ... of the ones that stand still (not walking)
+## Which guests a check ignores right now: GEEN (none), LOPERS (the ones that
+## walk) or ALLE.
+enum Negeer {GEEN, LOPERS, ALLE}
+var _negeer_dieren := Negeer.GEEN
+## A button that stepped aside for a guest standing on its place goes back
+## once that place is this far clear of him: a guest who stands still still
+## blinks, wags and turns, and his box breathes with it.
+const STIL_MARGE := 24.0
+## A guest counts as standing still once he has not walked for this many think
+## ticks (World.TIK, 15 a second): a guest between two legs of his walk, or one
+## who looks round for a moment on his way, has not stopped.
+const STIL_TIKKEN := 8
+var _liep_op: Dictionary = {}   ## guest id -> the last think tick he was seen walking
 var _mijd_balie_nu := false        ## while placing a hotel element: the desk is a box too
 var _kaart_vrij: Array[Rect2] = [] ## boxes a fixed card may not cover either (the desk)
 var _strook_van: Dictionary = {}   ## card id -> the answer strip glued to it, this pass
@@ -321,6 +342,7 @@ func plaats() -> void:
 	_bezet.clear()
 	_geplaatst.clear()
 	_vakken.clear()
+	_vakken_mee.clear()
 	# The maths bar is walled off before anything chooses a place: the paper is
 	# off limits to every band and every button (PLAN.md §3.1).  Its cells go
 	# into `_bezet` so the band grid never hands one out, and the rectangle
@@ -399,8 +421,14 @@ func plaats() -> void:
 		var bd := _is_deurbord(b)
 		if ad != bd:
 			return ad
-		if a.laag != b.laag:
-			return a.laag < b.laag
+		# A name plate is information that walks with its guest: it gives way
+		# to the buttons of the game and the hotel instead of pushing them
+		# along (owner, 2026-09-24, see `_dieren_vak`), and goes before the
+		# wish bubbles, which walk as well.
+		var al := _sorteer_laag(a)
+		var bl := _sorteer_laag(b)
+		if al != bl:
+			return al < bl
 		var ak := a.kleef_aan != ""
 		var bk := b.kleef_aan != ""
 		if ak != bk:
@@ -439,7 +467,10 @@ func plaats() -> void:
 	# every object still in view is a box that a button must stay off
 	for s in lijstje:
 		if s.zichtbaar and s.vlak_nu.size.x > 0.0 and s.vlak_nu.size.y > 0.0:
-			_vakken.append(s.vlak_nu)
+			if s.kind == "naam" or s.laag == Laag.WENS:
+				_vakken_mee.append(s.vlak_nu)
+			else:
+				_vakken.append(s.vlak_nu)
 	# The front door of the receptie is a thing as well, though no button hangs
 	# on it: without its box the evening's 🌙 button covered up to 69 % of it and
 	# the bill's buttons 42 % (2026-09-23, the entrance of `Rooms.ingang`).
@@ -464,9 +495,13 @@ func plaats() -> void:
 		# plates on the desk (the key board's hooks, I2); everything of the
 		# hotel stays off it.
 		_mijd_balie_nu = s.laag != Laag.SPEL and s.op != "aan"
-		var uit := _blijf_staan(s, mik, maat, kader)
-		if uit.is_empty():
-			uit = _kies_plek(s, mik, maat, kader, rijen, kolommen)
+		var uit := {}
+		if _staat_stil(s) and not _is_deurbord(s):
+			uit = _plek_stilstaand(s, mik, maat, kader, rijen, kolommen)
+		else:
+			uit = _blijf_staan(s, mik, maat, kader)
+			if uit.is_empty():
+				uit = _kies_plek(s, mik, maat, kader, rijen, kolommen)
 		var rect: Rect2 = uit["rect"]
 		s.knoop.custom_minimum_size = maat
 		s.knoop.size = maat
@@ -669,6 +704,130 @@ func _laag_van(s: Spot) -> int:
 		return Laag.WENS
 	return Laag.HOTEL
 
+## The place of a button on a thing that stands still (`_staat_stil`): its
+## place as if no guest were in the room — so it is the same in every frame a
+## guest walks — and when that place is on a guest: the place it already had,
+## as long as that is still right for everything that stands still.  Only a
+## button that had no place yet (the room just came into view) steps aside for
+## the guests themselves too, and it goes back to its own place once that is
+## free of them.  Before (owner, 2026-09-24: "Wanneer boef binnenkomt wisselen
+## de gang en prikbord icoontjes supervaak") every button stepped aside for
+## every guest in every frame, and a guest walking past made them jump.
+func _plek_stilstaand(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int,
+		kolommen: int) -> Dictionary:
+	var bezet := _bezet.duplicate()
+	var n := _geplaatst.size()
+	_negeer_dieren = Negeer.ALLE
+	var eigen := _blijf_staan(s, mik, maat, kader)
+	if eigen.is_empty():
+		eigen = _kies_plek(s, mik, maat, kader, rijen, kolommen)
+	_negeer_dieren = Negeer.GEEN
+	if bool(eigen.get("krap", false)):
+		return eigen
+	# At its own place last pass (or placed for the first time): it leaves it
+	# only for a guest who stands still ON it.  Stepped aside: it goes back
+	# once the place is `STIL_MARGE` clear of every guest who stands still.
+	var l: Dictionary = _laatste.get(s.id, {})
+	var thuis := l.is_empty() or not l.has("rect") \
+		or (l["rect"] as Rect2).is_equal_approx(eigen["rect"])
+	if not _raakt_dier(eigen["rect"], true, 0.0 if thuis else STIL_MARGE):
+		return eigen
+	# a guest stands on it: hand the place back and see what else there is
+	_bezet = bezet.duplicate()
+	_geplaatst.resize(n)
+	var gehouden := _houd_vorige(s, mik, maat, kader)
+	if not gehouden.is_empty():
+		if not _raakt_dier(gehouden["rect"], true):
+			return gehouden
+		_bezet = bezet.duplicate()
+		_geplaatst.resize(n)
+	_negeer_dieren = Negeer.LOPERS
+	var uit := _kies_plek(s, mik, maat, kader, rijen, kolommen)
+	_negeer_dieren = Negeer.GEEN
+	return uit
+
+## Last pass's place of a button, when it is still right for everything that
+## stands still: the same size, the same aim point, inside the frame, on
+## nothing placed before it this pass and on no thing but its own.  It is
+## reserved when it is handed back.
+func _houd_vorige(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2) -> Dictionary:
+	var l: Dictionary = _laatste.get(s.id, {})
+	if l.is_empty() or not l.has("mik") or bool(l.get("krap", false)):
+		return {}
+	var r: Rect2 = l["rect"]
+	if not r.size.is_equal_approx(maat) or (l["mik"] as Vector2).distance_to(mik) > BLIJF_MIK:
+		return {}
+	if r.position.x < KRAP - 0.01 or r.position.y < KRAP - 0.01 \
+			or r.end.x > kader.size.x - KRAP + 0.01 or r.end.y > kader.size.y - KRAP + 0.01:
+		return {}
+	_negeer_dieren = Negeer.ALLE
+	var vrij := not _botst(r) and _vak_kosten(r, s.vlak_nu) <= 0.0
+	_negeer_dieren = Negeer.GEEN
+	if not vrij:
+		return {}
+	_reserveer(r, kader)
+	return {"rect": r, "op": str(l["op"]), "krap": false,
+		"gestapeld": bool(l.get("gestapeld", false)), "deurplek": str(l.get("deurplek", ""))}
+
+## Does this rectangle, grown by `marge`, cover part of a guest in view — of any
+## guest, or only of one who stands still (`alleen_staand`)?
+func _raakt_dier(r: Rect2, alleen_staand := false, marge := 0.0) -> bool:
+	var q := r.grow(marge)
+	for d in (_staande_vak if alleen_staand else _dieren_vak):
+		var snij := q.intersection(d)
+		if snij.size.x > 0.001 and snij.size.y > 0.001:
+			return true
+	return false
+
+## Does a check skip this box that walks with a guest (`_vakken_mee`) right now?
+func _mee_telt_niet(v: Rect2) -> bool:
+	match _negeer_dieren:
+		Negeer.ALLE:
+			return true
+		Negeer.LOPERS:
+			return not _in(v, _staande_vak)
+	return false
+
+## Does a check skip this thing's box (`_dingen_vak`) right now — is it a guest
+## that `_negeer_dieren` leaves out?
+func _telt_niet(v: Rect2) -> bool:
+	match _negeer_dieren:
+		Negeer.ALLE:
+			return _is_dier_vak(v)
+		Negeer.LOPERS:
+			return _is_dier_vak(v) and not _in(v, _staande_vak)
+	return false
+
+static func _in(v: Rect2, lijst: Array[Rect2]) -> bool:
+	for w in lijst:
+		if w.is_equal_approx(v):
+			return true
+	return false
+
+## Is this guest on his way somewhere: walking in through the front door,
+## walking a leg, or travelling through the doors?
+static func _loopt(d) -> bool:
+	return str(d.staat) in ["loop", "komt"] or not (d.punten as Array).is_empty() \
+		or not (d.route as Array).is_empty()
+
+## The order the layers are placed in: a name plate right after the hotel's
+## buttons, before the wish bubbles (see the sort in `plaats()`).
+func _sorteer_laag(s: Spot) -> float:
+	if s.kind == "naam":
+		return float(Laag.HOTEL) + 0.5
+	return float(s.laag)
+
+## Does this spot hang on something that does not walk?  The hotel's own
+## buttons — a door or the lift, the bell, the board, a game's entry, a bowl —
+## hang on furniture and walls; they choose their place against what stands
+## still, so a guest walking past them moves none of them.  A wish bubble
+## hangs ON a guest and walks with him; a game's buttons keep the old rule.
+func _staat_stil(s: Spot) -> bool:
+	return s.laag == Laag.HOTEL and s.kind != "naam"
+
+func _is_dier_vak(v: Rect2) -> bool:
+	return _in(v, _dieren_vak)
+
 func _diepte(s: Spot) -> float:
 	return s.d if not is_nan(s.d) else s.x + s.z
 
@@ -733,8 +892,12 @@ func _kies_deurborden(lijstje: Array[Spot], kader: Rect2) -> void:
 	for s in borden:
 		maten.append(_maat_van(s))
 	_mijd_balie_nu = false
+	# a sign is ON its door: a guest walking through the opening or past it
+	# does not move it (owner, 2026-09-24)
+	_negeer_dieren = Negeer.ALLE
 	var beste := {"kosten": INF, "keuze": []}
 	_zoek_deurborden(borden, maten, kader, 0, 0.0, [], beste)
+	_negeer_dieren = Negeer.GEEN
 	# the search borrowed `_geplaatst` as its stack; it is empty again here
 	var keuze: Array = beste["keuze"]
 	for i in mini(borden.size(), keuze.size()):
@@ -807,6 +970,9 @@ func _schuif_vrij(r: Rect2, kader: Rect2, hart_min: float, hart_max: float,
 	randen.append_array(_geplaatst)
 	randen.append_array(_balk_muur)
 	randen.append_array(_vakken)
+	for v in _vakken_mee:
+		if not _mee_telt_niet(v):
+			randen.append(v)
 	var stappen: Array[float] = []
 	for b in randen:
 		if b.end.y <= r.position.y or b.position.y >= r.end.y:
@@ -1383,9 +1549,15 @@ func _plaat_plek(r: Rect2, kader: Rect2, gast: Rect2) -> Rect2:
 	var zij := _plaat_rij(r, kader, gast)
 	if zij.size.x > 0.0:
 		return zij
-	for stap in range(1, maxi(2, int(kader.size.y / RIJ)) + 1):
-		for dy in [-stap * RIJ, stap * RIJ]:
-			var q := Rect2(Vector2(r.position.x, r.position.y + dy), r.size)
+	# Since the plates give way to the hotel's buttons (2026-09-24) the row over
+	# the head is taken more often: then the row under the feet, then a band
+	# further out on either side — never a row that lies over the guest himself.
+	var onder := Rect2(Vector2(r.position.x, gast.end.y + 2.0), r.size)
+	for stap in range(0, maxi(2, int(kader.size.y / RIJ)) + 1):
+		for q in [Rect2(Vector2(r.position.x, r.position.y - stap * RIJ), r.size),
+				Rect2(Vector2(r.position.x, onder.position.y + stap * RIJ), r.size)]:
+			if stap == 0 and is_equal_approx(q.position.y, r.position.y):
+				continue
 			if q.position.y < KRAP or q.end.y > kader.size.y - KRAP:
 				continue
 			zij = _plaat_rij(q, kader, gast)
@@ -1393,12 +1565,15 @@ func _plaat_plek(r: Rect2, kader: Rect2, gast: Rect2) -> Rect2:
 				return zij
 	return _wijk_omhoog(r, kader)
 
-## A plate on one row: where it is when that is free, else slid along the row.
+## A plate on one row: where it is when that is free, else slid along the row —
+## on nothing placed and not on its own guest.
 func _plaat_rij(q: Rect2, kader: Rect2, gast: Rect2) -> Rect2:
-	if not _botst(q):
+	var vrij := func(p: Rect2) -> bool:
+		var snij := p.intersection(gast)
+		return not _botst(p) and not (snij.size.x > 0.001 and snij.size.y > 0.001)
+	if bool(vrij.call(q)):
 		return q
-	return _schuif_vrij(q, kader, gast.position.x, gast.end.x,
-		func(p: Rect2) -> bool: return not _botst(p))
+	return _schuif_vrij(q, kader, gast.position.x, gast.end.x, vrij)
 
 ## A fixed card may stand over the world, but never over the object it belongs
 ## to: the sum hangs ABOVE the bowl, the guest stays whole (HOTEL.md §9).
@@ -1554,10 +1729,18 @@ func _verzamel_dingen(kamer: String) -> void:
 			Vector2.ZERO, int(stuk.get("rot", 0)))
 		if v.size.x > 0.0 and v.size.y > 0.0:
 			_dingen_vak.append(v)
+	_dieren_vak.clear()
+	_staande_vak.clear()
+	var nu := World.tikken()
 	for d in World.dieren(kamer):
+		if _loopt(d):
+			_liep_op[d.id] = nu
 		var v := World.vlak_van_dier(d.id)
 		if v.size.x > 0.0 and v.size.y > 0.0:
 			_dingen_vak.append(v)
+			_dieren_vak.append(v)
+			if not _loopt(d) and nu - int(_liep_op.get(d.id, -STIL_TIKKEN)) >= STIL_TIKKEN:
+				_staande_vak.append(v)
 
 ## A button may lie over a small part of something big — the front of the desk
 ## under the bell, the ball pit's rim — without anybody reading it as that
@@ -1576,6 +1759,8 @@ func _vreemd_kosten(r: Rect2, eigen: Rect2) -> float:
 	for v in _dingen_vak:
 		if eigen.size.x > 0.0 and v.is_equal_approx(eigen):
 			continue
+		if _telt_niet(v):
+			continue
 		var snij := r.intersection(v)
 		if snij.size.x <= 0.0 or snij.size.y <= 0.0:
 			continue
@@ -1589,6 +1774,12 @@ func _vak_kosten(r: Rect2, eigen := Rect2()) -> float:
 	var som := 0.0
 	for v in _vakken:
 		if eigen.size.x > 0.0 and v.is_equal_approx(eigen):
+			continue
+		var snij := r.intersection(v)
+		if snij.size.x > 0.0 and snij.size.y > 0.0:
+			som += snij.size.x * snij.size.y
+	for v in _vakken_mee:
+		if (eigen.size.x > 0.0 and v.is_equal_approx(eigen)) or _mee_telt_niet(v):
 			continue
 		var snij := r.intersection(v)
 		if snij.size.x > 0.0 and snij.size.y > 0.0:

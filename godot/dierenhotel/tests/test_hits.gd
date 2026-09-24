@@ -52,6 +52,11 @@ func _keur(kader: Vector2, wat: String) -> void:
 					continue
 				if str(a.get("op", "")) == "aan" and v.is_equal_approx(a["vlak"]):
 					continue          # `op: aan` hangs ON its own thing, by design
+				# a door sign is ON its door, and a guest in the doorway or
+				# walking through it does not move it (owner, 2026-09-24: the
+				# signs jumped as Boef walked in)
+				if str(a.get("deurplek", "")) != "" and str(ids[j]).begins_with(Ui.PLAAT):
+					continue
 				var snij := ra.intersection(v)
 				gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
 					"%s: %s dekt voorwerp van %s" % [wat, ids[i], ids[j]])
