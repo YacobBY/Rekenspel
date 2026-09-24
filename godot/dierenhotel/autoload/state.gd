@@ -477,16 +477,17 @@ func bed_vrij(kamer_id := "") -> Dictionary:
 ## its own or room on its floor for a new one.  Every guest that checks in still
 ## ends WITH a bed, so everything that asks "who has a bed" keeps its answer.
 ##
-## The floor rule is the old bedden dry run (games-a.md §3.2): a new bed takes
-## the free cell farthest from every bed there is, and the cells within
-## `BED_LOS` voxels (Manhattan) of it are gone — `Rooms` drops the very same
-## cells when the bed is really put down.  The check-in puts beds down up to
-## `MAX_BEDDEN` a room; a bed bought in the meubelboek may still go beyond it.
+## The floor is the room's BED PLACES (`Rooms.bed_raster`, owner 2026-09-24:
+## "De eerste twee bedden zijn goed geplaatst, daarna gaat alles door
+## elkaar"): a new bed goes on the first free one, turned the room's way, so
+## beds 3, 4, ... stand in the same rows as bed1 and bed2.  Until that day a new
+## bed took the free cell farthest from every other bed, and beds landed
+## crosswise and through each other.  The check-in puts beds down up to
+## `MAX_BEDDEN` a room and never beyond the room's bed places.
 
-## The most beds the check-in itself puts in one room: six still leave a room of
-## 114 × 114 its rug, its bowl and its basket (the greedy dry run fits 17).
+## The most beds the check-in itself puts in one room.  The bed places of the
+## two bedrooms stay under it (four each), so today they are the real cap.
 const MAX_BEDDEN := 6
-const BED_LOS := 18.0
 
 ## The rooms with at least one bed, in the room order: the bedrooms.
 func slaapkamers() -> Array[String]:
@@ -513,120 +514,17 @@ func vrije_bedden(kamer_id: String) -> Array:
 	return uit
 
 ## Where the next `hoeveel` new beds would go, in the order they would be put
-## down: every one on the free cell farthest from all beds, and what lies within
-## `BED_LOS` of it is gone for the next.  A cell only counts when the WHOLE bed
-## fits there (`_bed_past`): a bed is 34 × 17 voxels, and the 18 voxels between
-## centres alone put new beds through the bowl, the play basket and the doorway.
+## down: the room's free bed places (`Rooms.vrije_bedplekken`), first to last.
+## A room without bed places takes no new beds.
 func bed_plekken(kamer_id: String, hoeveel: int) -> Array:
-	var r := Rooms.get_kamer(kamer_id)
 	var uit: Array = []
-	if r == null or hoeveel <= 0:
+	if hoeveel <= 0:
 		return uit
-	var weg := _in_de_weg(kamer_id)
-	var vrij: Array = []
-	for cel in r.vrij:
-		var c := Vector2(float(cel["x"]), float(cel["z"]))
-		if _bed_past(r, c, weg):
-			vrij.append(c)
-	var bedden: Array = []
-	for b in Rooms.slots(kamer_id, "bed"):
-		bedden.append(Vector2(float(b.get("x", 0.0)), float(b.get("z", 0.0))))
-	while not vrij.is_empty() and uit.size() < hoeveel:
-		var beste := -1
-		var best := -1.0
-		for i in vrij.size():
-			var dm := INF
-			for b in bedden:
-				dm = minf(dm, absf(b.x - vrij[i].x) + absf(b.y - vrij[i].y))
-			if dm > best:
-				best = dm
-				beste = i
-		var p: Vector2 = vrij[beste]
+	for p in Rooms.vrije_bedplekken(kamer_id):
+		if uit.size() >= hoeveel:
+			break
 		uit.append(p)
-		bedden.append(p)
-		weg.append(_bed_vlak(p))
-		var over: Array = []
-		for v in vrij:
-			if absf(v.x - p.x) + absf(v.y - p.y) >= BED_LOS and _bed_past(r, v, weg):
-				over.append(v)
-		vrij = over
 	return uit
-
-## The floor a thing takes, seen from above, around its own point: the x and z
-## extent of its voxels (a bed −17..16 × −8..8).  Cached per model and turn.
-var _voeten: Dictionary = {}
-
-func _voet(model: String, rot := 0) -> Rect2:
-	var sleutel := "%s|%d" % [model, posmod(rot, 2)]
-	if _voeten.has(sleutel):
-		return _voeten[sleutel]
-	var uit := Rect2()
-	if not model.is_empty() and Art.heeft_model(model):
-		var x0 := INF
-		var x1 := -INF
-		var z0 := INF
-		var z1 := -INF
-		for p in Art.model(model):
-			x0 = minf(x0, float(p["x"]))
-			x1 = maxf(x1, float(p["x"]))
-			z0 = minf(z0, float(p["z"]))
-			z1 = maxf(z1, float(p["z"]))
-		if x1 >= x0:
-			uit = Rect2(x0, z0, x1 - x0 + 1.0, z1 - z0 + 1.0)
-			if posmod(rot, 2) == 1:
-				uit = Rect2(z0, x0, z1 - z0 + 1.0, x1 - x0 + 1.0)
-	_voeten[sleutel] = uit
-	return uit
-
-## The floor a new bed at `p` takes, with a voxel of air round it.
-func _bed_vlak(p: Vector2) -> Rect2:
-	var v := _voet("bed")
-	if v.size.x <= 0.0:
-		v = Rect2(-17.0, -8.0, 34.0, 17.0)
-	return Rect2(v.position + p, v.size).grow(1.0)
-
-## What a new bed may not stand on: every piece on the floor (not what hangs on
-## a wall), every slot (a bed by its own model, a bowl as a block of 16), and
-## the step inside every door, the front door too.
-func _in_de_weg(kamer_id: String) -> Array:
-	var r := Rooms.get_kamer(kamer_id)
-	var uit: Array = []
-	if r == null:
-		return uit
-	for stuk in r.decor:
-		if bool(stuk.get("ver", false)):
-			continue
-		var v := _voet(str(stuk.get("n", "")), int(stuk.get("rot", 0)))
-		if v.size.x <= 0.0:
-			v = Rect2(-6.0, -6.0, 12.0, 12.0)
-		uit.append(Rect2(v.position + Vector2(float(stuk["x"]), float(stuk["z"])), v.size))
-	for sid in r.slots:
-		var s: Dictionary = r.slots[sid]
-		var v := _voet(str(s.get("model", ""))) if str(s.get("soort", "")) == "bed" else Rect2()
-		if v.size.x <= 0.0:
-			v = Rect2(-8.0, -8.0, 16.0, 16.0)
-		uit.append(Rect2(v.position + Vector2(float(s["x"]), float(s["z"])), v.size))
-	var deuren: Array = (r.deur_punten as Dictionary).values()
-	if not (r.ingang_punt as Dictionary).is_empty():
-		deuren.append(r.ingang_punt)
-	for dp in deuren:
-		uit.append(Rect2(float(dp["ix"]) - 10.0, float(dp["iz"]) - 10.0, 20.0, 20.0))
-	return uit
-
-## Does a whole bed fit at `p`: inside the walls, on nothing, and with the
-## place beside it where its guest stands (`Rooms._af_slot`) free to walk to?
-func _bed_past(r, p: Vector2, weg: Array) -> bool:
-	var bed := _bed_vlak(p)
-	if bed.position.x < 1.0 or bed.position.y < 1.0 \
-			or bed.end.x > float(r.w) - 1.0 or bed.end.y > float(r.d) - 1.0:
-		return false
-	var sta := p + Vector2(2.0, 12.0)
-	if sta.x > float(r.w) - 4.0 or sta.y > float(r.d) - 4.0:
-		return false
-	for w in weg:
-		if bed.intersects(w) or (w as Rect2).has_point(sta):
-			return false
-	return true
 
 ## Where the next new bed of this room goes, {x, z}, or {} when none fits.
 func bed_plek(kamer_id: String) -> Dictionary:
@@ -654,8 +552,8 @@ func kamers_met_plek() -> Array[String]:
 			uit.append(k)
 	return uit
 
-## May the bell bring a guest?  Some bedroom has a free bed, or floor for one new
-## bed (the first spot of the dry run is enough).
+## May the bell bring a guest?  Some bedroom has a free bed, or a free bed place
+## for one new bed.
 func plek_voor_gast() -> bool:
 	for k in slaapkamers():
 		if not vrije_bedden(k).is_empty():
@@ -671,6 +569,70 @@ func max_gasten() -> int:
 	for k in slaapkamers():
 		n += Rooms.slots(k, "bed").size() + nieuwe_bedden(k)
 	return n
+
+## Every guest in the hotel sleeps in a bed of his own (owner, 2026-09-24).  A
+## save can say otherwise: two guests named in one bed (a hand-made or seeded
+## save — `tools/kiek.js --gasten 7` did it), or a bed that is gone (a bought
+## bed that no longer stands on a bed place).  Such a guest gets a free bed of
+## his own room, else a new bed on a free bed place there, else the same in the
+## other bedrooms; with no bed anywhere he goes back to the front of the waiting
+## list — never lost.  Returns the ids of the guests it moved.  Runs once the
+## furniture is back (`Hotel.herstel_wereld`).
+func herstel_bedden() -> Array:
+	var uit: Array = []
+	var bezet := {}
+	var zonder: Array = []
+	# first every guest whose bed is really his, in guest order: the first one
+	# named in a bed keeps it
+	for g in s["gasten"]:
+		var bed := str(g.get("bed", ""))
+		if bed.is_empty():
+			continue
+		var sleutel := "%s|%s" % [str(g.get("kamer", "")), bed]
+		var slot := Rooms.slot(str(g.get("kamer", "")), bed)
+		if not slot.is_empty() and str(slot.get("soort", "")) == "bed" and not bezet.has(sleutel):
+			bezet[sleutel] = true
+		else:
+			zonder.append(g)
+	var wacht: Array = []
+	for g in zonder:
+		var nieuw := _bed_voor(str(g.get("kamer", "")), bezet)
+		if nieuw.is_empty():
+			wacht.append(g)
+			continue
+		g["kamer"] = nieuw["kamer"]
+		g["bed"] = nieuw["slot"]
+		g["waar"] = nieuw["kamer"]
+		bezet["%s|%s" % [str(nieuw["kamer"]), str(nieuw["slot"])]] = true
+		uit.append(str(g.get("id", "")))
+	for g in wacht:
+		(s["gasten"] as Array).erase(g)
+		g["kamer"] = ""
+		g["bed"] = ""
+		g["waar"] = "receptie"
+		g["behoefte"] = "kamer"
+		(s["wachtlijst"] as Array).push_front(g)
+		uit.append(str(g.get("id", "")))
+	return uit
+
+## A bed for a guest who has none: a free bed of `kamer` (not in `bezet`), a new
+## one on its first free bed place, then the other bedrooms.  {kamer, slot}.
+func _bed_voor(kamer: String, bezet: Dictionary) -> Dictionary:
+	var kamers: Array[String] = []
+	if Rooms.bestaat(kamer):
+		kamers.append(kamer)
+	for k in slaapkamers():
+		if not kamers.has(k):
+			kamers.append(k)
+	for k in kamers:
+		for b in Rooms.slots(k, "bed"):
+			if not bezet.has("%s|%s" % [k, str(b.get("id", ""))]):
+				return {"kamer": k, "slot": str(b.get("id", ""))}
+		if not Rooms.vrije_bedplekken(k).is_empty():
+			var m := Rooms.meubel_zet(k, "bed")
+			if not m.is_empty():
+				return {"kamer": k, "slot": str(m.get("id", ""))}
+	return {}
 
 func gast_in_bed(kamer: String, slot: String) -> Dictionary:
 	for g in s["gasten"]:

@@ -169,8 +169,8 @@ movable **dingen**: `balielamp` (receptie 15, 105, y 14) and `kar` (keuken 48, 6
 |---|---|
 | receptie | `balie` @ 40,60 · `balie` @ 75,60 · `baliez` @ 15,58 · `baliez` @ 15,93 · `bel` @ 33,60 y14 · `kassa` @ 66,60 y14 · `boek` @ 15,75 y14 · `lamp` @ 15,105 y14 (→ ding `balielamp`) · `prikbord` @ 1,64 y14 `rot 1` `ver` (since 2026-09-23 on the left wall over the bench in the waiting corner: behind the desk the visible wall had no room for the task cards, which now hang round the board instead of across the room) · `sleutelbordz` @ 1,84 `ver` · `plant` @ 105,18 · `plant` @ 108,81 · **port (2026-09-24):** the outline of the front door `voordeuromlijst` @ 72,119 in the front edge, in the middle of the pink rug, over the opening of §1.2 (open, 26 × 38; on 2026-09-23 it was the closed `voordeur` @ 111,1 on the back wall with `welkomsmat` @ 111,7) |
 | gang | `plant` @ 36,30 · `plant` @ 108,30 (along the FRONT edge since 2026-09-23: against the back wall they hid 37 % and 29 % of the bedroom doors) · `kist` @ 114,14 |
-| kamer1 | `plant` @ 107,8 (was 102,12: it hid the door's corner) · `mand` @ 93,99 |
-| kamer2 | `plant` @ 12,99 · `mand` @ 93,99 |
+| kamer1 | `plant` @ 107,8 (was 102,12: it hid the door's corner) · `mand` @ 106,74 (was 93,99: it stood on the fourth bed place, §1.5, 2026-09-24) · port: `raam`, `schilderijz`, `nachtkastje` @ 8,51, `blokken` @ 14,100 |
+| kamer2 | port (owner 2026-09-17, "kamer 2 ... mag wel iets anders"): `raamz`, `schilderij`, `boekenplank`, `staande_lamp` @ 12,52, `speelgoedkist` @ 104,44, `mand` @ 14,106 (was 14,96: on the third bed place, 2026-09-24), `plant` @ 48,106 (was 48,102) |
 | keuken | `kast` @ 33,6 · `zak` @ 66,18 · `kar` @ 48,66 (→ ding `kar`) · `plant` @ 108,93 |
 | tuin | the lawn behind the hotel (owner 2026-09-23: "Het zwembad vanuit de tuin gezien is niet duidelijk dat lijkt gewoon op een huis"): `gevel` `{wand: x, hoog: 34, stoep: 8}` — the hotel's back wall with the kitchen door and (R3) the kas's glass door with its glass canopy `kasluifelz` @ 1,68 y27 `ver` and a potted plant `kaspot` @ 4,58 (the kitchen window `gevelraamz` @ 1,70 made way for it: z ≤ 85 is all the facade in view), `luifelz` @ 1,40 y27 `ver`, `deurmatz` @ 5,40 · behind the back fence the pool (`uitzicht`, below) with `zwembadtrap` @ 31,−3 and `parasol` @ 66,0, seen through `zwembadpoort` @ 44,10 · `boom` @ 22,126 · `hok` @ 22,22 (the back corner against the hotel, where it also closes the gap between wall and fence; the hopscotch path starts in front of it) · `tobbe` @ 32,94 · `bal` @ 120,76 · `kist` @ 12,84 · plus the generated back fence and grass tufts (below), and the resting props of `hinkel` and `kraam` (§5.1) |
 | zwembad | `plant` @ 136,80 · `rozenboog` @ 4,66 (the gate back to the garden, 2026-09-23) with the garden beyond it: `boom` @ −22,46, `bloemstruik` @ −8,40 and −9,79 · one big `startblok` @ 14,28 (owner 2026-09-17: "Maak het startblok groter en doe 1 ipv 3"; the old `mat` entry plank is gone — "haal de oude houten plank weg") · plus the generated fence (along the back long side only, 2026-09-23) and grass tufts |
@@ -334,7 +334,23 @@ brass knob `#F2C14E`), and wears the `luifelz` awning and the `deurmatz` doormat
 **Fixed slots.** Only kamer1 and kamer2 have slots, identical in both:
 `bed1 = bed @ (30, 27)`, `bed2 = bed @ (30, 75)`, `bak = bak @ (84, 33)`.
 The tuin has one slot `tobbe` (soort `vrij`) at (32, 94). So the hotel starts with
-**4 beds → `maxGasten() = 4`**.
+**4 beds → `maxGasten() = 4`**.  **Port (owner 2026-09-17):** kamer2 has `bed1 = bedz @
+(18, 30)`, `bed2 = bedz @ (52, 30)`, `bak @ (96, 84)`; since 2026-09-24 the guest cap counts
+the bed places below, not the beds (games-a.md §3.2).
+
+**Bed places (port, owner 2026-09-24: "De eerste twee bedden zijn goed geplaatst, daarna
+gaat alles door elkaar").** A bedroom names the places its beds stand on, in order
+(`Kamer.bedden`, `Rooms.bed_raster(k)`), and how they all lie (`Kamer.bed_model`,
+`Rooms.bed_model(k)`): kamer1 `bed` at `(30, 27)`, `(30, 75)`, `(84, 54)`, `(84, 98)`;
+kamer2 `bedz` at `(18, 30)`, `(52, 30)`, `(18, 78)`, `(52, 78)`.  The first two are bed1
+and bed2.  Every place holds a whole bed (`Rooms.bed_vlak(model, x, z)`, the model's own
+voxels: `bed` −17..16 × −8..8, `bedz` the other way round) with a voxel of air to the next,
+on no floor decor, slot or door step (20 × 20 round `ix, iz`), with its standing place
+(`Rooms.bed_sta`, as `afSlot`) inside the room and on nothing — `tests/test_rooms.gd`
+holds all of it.  `Rooms.vrije_bedplekken(k)` = the places with no bed and nothing else on
+their floor now.  Around every bed no free cell lies within 3 voxels of its floor (its ends
+reach past the Manhattan 18 above) and no bought piece within 7 (`bezet`).  Every other
+room has no bed places.
 
 ### 1.6 Fractional placement
 
@@ -421,6 +437,11 @@ model, "voerbakje"), `mandje` (decor, model `mand`), `speelmand` (decor, model `
 4. decor types are pushed into `r.decor` with `meubel: id`; `bed`/`bakje` are pushed into
    `r.slots` (a bed with odd `rot` uses model `bedz` and `draai: true`), then `bouwAf(r)`
    runs again so standing places, free cells and wander places are up to date.
+   **Port (2026-09-24):** a bed in a room with bed places (§1.5) skips steps 2–3: it goes on
+   the free bed place nearest to `(x, z)` — the first free one when `x`/`z` are omitted —
+   with the room's model (`rot` becomes 0 for `bed`, 1 for `bedz`), or returns `null` when
+   every place has a bed.  A saved bed that stood anywhere comes back on a bed place.  An
+   `id` that already exists somewhere gets a fresh one (never two pieces under one id).
 
 Ids are `'m' + n + '_' + type` with a counter that must survive a reload
 (`Rooms.nrStand/zetNr/nrUitIds`, mirrored in the save as `meubelNr`).

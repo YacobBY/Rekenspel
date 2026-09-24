@@ -120,6 +120,7 @@ func start() -> void:
 ## Put every guest back where the save says it was.
 func herstel_wereld() -> void:
 	herstel_inrichting()                 # bought beds and furniture come first
+	State.herstel_bedden()               # then every guest in a bed of his own
 	World.zet_dag(int(State.s["dag"]))
 	World.sync(alle_dieren())
 	for g in State.s["gasten"]:

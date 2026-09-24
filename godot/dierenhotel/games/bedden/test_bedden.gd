@@ -517,6 +517,44 @@ func test_te_veel_bedden_gaan_weer_weg_en_opnieuw() -> void:
 	gelijk(State.s["checkin"], null, "nu is de check-in klaar")
 	await _af()
 
+## Owner, 2026-09-24: "De eerste twee bedden zijn goed geplaatst, daarna gaat
+## alles door elkaar."  The beds a "too many" answer shows stand exactly where
+## real new beds would stand — on kamer 2's next bed places, turned along z like
+## bed1 and bed2 there — and a right answer puts his new bed on the next one.
+func test_de_bedden_van_een_antwoord_staan_op_de_bedplekken() -> void:
+	_op()
+	_hotel(0, 2, false)
+	World.pauzeer(true)
+	var raster := Rooms.bed_raster("kamer2")
+	waar(await _kies_kamer("kamer2"), "kamer 2 gekozen")
+	waar(_druk("bd_som_keuzes", "Kn4"), "4 bedden: te veel")
+	var nep := World.decor_lijst("kamer2").filter(func(s): return s["door"] == SPEL)
+	gelijk(nep.size(), 2, "twee bedden erbij, voor dit antwoord")
+	var plekken: Array = []
+	for s in nep:
+		gelijk(str(s["model"]), "bedz", "ze liggen zoals bed1 en bed2 van kamer 2")
+		plekken.append(Vector2(float(s["x"]), float(s["z"])))
+	plekken.sort()
+	var verwacht: Array = [raster[2], raster[3]]
+	verwacht.sort()
+	gelijk(str(plekken), str(verwacht), "op de derde en vierde bedplek")
+	gelijk(Rooms.slots("kamer2", "bed").size(), 2, "en niets in de save")
+	await _af()
+	# the right answer: his new bed on the third place, turned along z
+	_op()
+	_hotel(0, 2, true)
+	var gid := _gid()
+	waar(await _kies_kamer("kamer2"), "kamer 2 gekozen")
+	waar(_druk("bd_som_keuzes", "Kn3"), "3 bedden: goed")
+	gelijk(State.s["checkin"], null, "de check-in is klaar")
+	var g := State.gast_van(gid)
+	var bed := Rooms.slot("kamer2", str(g.get("bed", "")))
+	waar(not bed.is_empty(), "hij heeft een nieuw bed")
+	gelijk(Vector2(float(bed.get("x", 0.0)), float(bed.get("z", 0.0))), raster[2],
+		"op de derde bedplek van kamer 2")
+	gelijk(str(bed.get("model", "")), "bedz", "zoals de andere bedden daar")
+	await _af()
+
 # --------------------------------------------------------------- rustmodus
 
 ## Reduced motion: nobody walks.  Wrong: the sad bubble at the desk and the

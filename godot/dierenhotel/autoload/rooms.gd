@@ -76,6 +76,14 @@ class Kamer extends RefCounted:
 	var zones: Dictionary = {}      ## reserved rectangles for the games
 	var decor: Array = []           ## {n, x, z, y, ver, params, sleutel, meubel, ingang}
 	var slots: Dictionary = {}      ## slotId -> {id, soort, model, x, z, sx, sz, draai}
+	## The BED PLACES of a bedroom, in the order beds go there (owner,
+	## 2026-09-24: "De eerste twee bedden zijn goed geplaatst, daarna gaat alles
+	## door elkaar").  Every bed of this room stands on one of them, all turned
+	## the same way (`bed_model`): the first two are `bed1` and `bed2`, a new bed
+	## — from the check-in or the meubelboek — takes the first free one.  Empty:
+	## not a bedroom, a bed keeps the old free-cell placement there.
+	var bedden: Array = []          ## [Vector2, ...]
+	var bed_model := "bed"          ## `bed` (along x) or `bedz` (along z)
 	var deuren: Array = []          ## {naar, wand, at, breed, poort}
 	## The hotel's front door, {wand, at, breed} like a door (the receptie only,
 	## owner 2026-09-23: guests "komen momenteel vanuit de gang binnen ipv
@@ -263,12 +271,9 @@ func _af_slot(slot: Dictionary) -> void:
 	var z: float = slot["z"]
 	match slot["soort"]:
 		"bed":
-			if slot.get("draai", false) or slot.get("model", "") == "bedz":
-				slot["sx"] = x + 12
-				slot["sz"] = z + 2
-			else:
-				slot["sx"] = x + 2
-				slot["sz"] = z + 12
+			var sta := bed_sta(str(slot.get("model", "")), x, z, bool(slot.get("draai", false)))
+			slot["sx"] = sta.x
+			slot["sz"] = sta.y
 		"bak":
 			slot["sx"] = x - 13
 			slot["sz"] = z
@@ -309,6 +314,9 @@ func _cel_vrij(r: Kamer, x: int, z: int) -> bool:
 		var slot: Dictionary = r.slots[id]
 		if absf(slot["x"] - x) + absf(slot["z"] - z) < 18.0:
 			return false
+	# a bed is 34 voxels long: its ends reach past the 18 above
+	if _op_een_bed(r, x, z, CEL_BED_RAND):
+		return false
 	for naar in r.deur_punten:
 		var dp: Dictionary = r.deur_punten[naar]
 		if absf(dp["ix"] - x) + absf(dp["iz"] - z) < 14.0:
@@ -419,6 +427,9 @@ func _bezet(r: Kamer, x: float, z: float) -> bool:
 		var slot: Dictionary = r.slots[id]
 		if absf(slot["x"] - x) + absf(slot["z"] - z) < 15.0:
 			return true
+	# nothing goes down on a bed, nor against its ends
+	if _op_een_bed(r, x, z, MEUBEL_BED_RAND):
+		return true
 	for stuk in r.decor:
 		if absf(stuk["x"] - x) + absf(stuk["z"] - z) < 15.0:
 			return true
@@ -453,8 +464,133 @@ func _naar_raster(r: Kamer, x: float, z: float) -> Dictionary:
 			beste = {"x": float(cel["x"]), "z": float(cel["z"])}
 	return beste
 
+# ------------------------------------------------------------- de bedplekken
+##
+## Owner, 2026-09-24: "De eerste twee bedden zijn goed geplaatst, daarna gaat
+## alles door elkaar."  A new bed used to take the free cell FARTHEST from every
+## other bed (the check-in) or any free cell of the 12-voxel grid (the
+## meubelboek), turned along x in both rooms, and only its centre was held 15
+## voxels (Manhattan) off the rest — while a bed is 34 × 17 voxels.  So beds 3,
+## 4 and 5 landed crosswise, through each other, on the bowl and in the doorway.
+## A bedroom now names its bed places (`Kamer.bedden`) and every bed stands on
+## one of them, the room's way round, in the room's order.
+
+## Free floor kept round a bed, in voxels: no free cell (wander place, ✨ spot)
+## within `CEL_BED_RAND` of its footprint, no bought piece within
+## `MEUBEL_BED_RAND` (a plant is 14 across: 7 from its centre to its rim).
+const CEL_BED_RAND := 3.0
+const MEUBEL_BED_RAND := 7.0
+
+## The floor a model takes, seen from above, around its own point: the x and z
+## extent of its voxels (a `bed` −17..16 × −8..8, a `bedz` the other way round);
+## `rot` odd turns it a quarter.  Cached per model and turn; an unknown model is
+## an empty rect.
+var _voeten: Dictionary = {}
+
+func voet(model: String, rot := 0) -> Rect2:
+	var sleutel := "%s|%d" % [model, posmod(rot, 2)]
+	if _voeten.has(sleutel):
+		return _voeten[sleutel]
+	var uit := Rect2()
+	if not model.is_empty() and Art.heeft_model(model):
+		var x0 := INF
+		var x1 := -INF
+		var z0 := INF
+		var z1 := -INF
+		for p in Art.model(model):
+			x0 = minf(x0, float(p["x"]))
+			x1 = maxf(x1, float(p["x"]))
+			z0 = minf(z0, float(p["z"]))
+			z1 = maxf(z1, float(p["z"]))
+		if x1 >= x0:
+			uit = Rect2(x0, z0, x1 - x0 + 1.0, z1 - z0 + 1.0)
+			if posmod(rot, 2) == 1:
+				uit = Rect2(z0, x0, z1 - z0 + 1.0, x1 - x0 + 1.0)
+	_voeten[sleutel] = uit
+	return uit
+
+## The floor a bed of `model` standing at (x, z) takes, in room voxels.
+func bed_vlak(model: String, x: float, z: float) -> Rect2:
+	var v := voet(model)
+	if v.size.x <= 0.0:
+		v = Rect2(-8.0, -17.0, 17.0, 34.0) if model == "bedz" else Rect2(-17.0, -8.0, 34.0, 17.0)
+	return Rect2(v.position + Vector2(x, z), v.size)
+
+## Where the guest of a bed stands before he hops in (world.md §1.5 `afSlot`):
+## in front of a bed along x, beside a turned one.
+static func bed_sta(model: String, x: float, z: float, draai := false) -> Vector2:
+	if draai or model == "bedz":
+		return Vector2(x + 12.0, z + 2.0)
+	return Vector2(x + 2.0, z + 12.0)
+
+## The floor a slot takes: a bed by its own model, anything else as a block of 16.
+func slot_vlak(slot: Dictionary) -> Rect2:
+	var x := float(slot["x"])
+	var z := float(slot["z"])
+	if str(slot.get("soort", "")) == "bed":
+		return bed_vlak(str(slot.get("model", "bed")), x, z)
+	return Rect2(x - 8.0, z - 8.0, 16.0, 16.0)
+
+## The bed places of a room, in order ([] when it is not a bedroom).
+func bed_raster(kamer_id: String) -> Array:
+	var r := get_kamer(kamer_id)
+	return [] if r == null else r.bedden.duplicate()
+
+## How the beds of this room are turned: `bed` or `bedz`.
+func bed_model(kamer_id: String) -> String:
+	var r := get_kamer(kamer_id)
+	return "bed" if r == null else r.bed_model
+
+## The bed places of a room where a new bed can go now, in the room's order: no
+## bed on it yet, and nothing else on its floor (a bought plant or bowl, the
+## step inside a door).
+func vrije_bedplekken(kamer_id: String) -> Array:
+	var r := get_kamer(kamer_id)
+	var uit: Array = []
+	if r == null:
+		return uit
+	for p in r.bedden:
+		if _bedplek_vrij(r, p):
+			uit.append(p)
+	return uit
+
+func _bedplek_vrij(r: Kamer, p: Vector2) -> bool:
+	var bed := bed_vlak(r.bed_model, p.x, p.y)
+	for sid in r.slots:
+		if bed.intersects(slot_vlak(r.slots[sid])):
+			return false
+	for stuk in r.decor:
+		if bool(stuk.get("ver", false)) or bool(stuk.get("hek", false)):
+			continue
+		var v := voet(str(stuk.get("n", "")), int(stuk.get("rot", 0)))
+		if v.size.x <= 0.0:
+			v = Rect2(-6.0, -6.0, 12.0, 12.0)
+		if bed.intersects(Rect2(v.position + Vector2(float(stuk["x"]), float(stuk["z"])), v.size)):
+			return false
+	var deuren: Array = r.deur_punten.values()
+	if not r.ingang_punt.is_empty():
+		deuren.append(r.ingang_punt)
+	for dp in deuren:
+		if bed.intersects(Rect2(float(dp["ix"]) - 10.0, float(dp["iz"]) - 10.0, 20.0, 20.0)):
+			return false
+	return true
+
+## Does (x, z) lie on a bed of this room, or within `rand` voxels of one?
+func _op_een_bed(r: Kamer, x: float, z: float, rand: float) -> bool:
+	for sid in r.slots:
+		var slot: Dictionary = r.slots[sid]
+		if str(slot.get("soort", "")) == "bed" \
+				and slot_vlak(slot).grow(rand).has_point(Vector2(x, z)):
+			return true
+	return false
+
 ## world.md §1.8 — put a piece of furniture down.  Returns the record, or {}
 ## when there is no free spot: never a half-placed item.
+##
+## A bed in a bedroom goes on the free bed place nearest to (x, z) — the first
+## free one when no point is given — turned the room's way; `rot` is then the
+## room's (0 along x, 1 for `bedz`).  No free bed place: {}.  A saved bed that
+## stood anywhere comes back on a bed place, so an old jumble tidies itself up.
 func meubel_zet(kamer_id: String, type: String, x: float = NAN, z: float = NAN,
 		rot: int = 0, id: String = "") -> Dictionary:
 	var r := get_kamer(kamer_id)
@@ -462,20 +598,41 @@ func meubel_zet(kamer_id: String, type: String, x: float = NAN, z: float = NAN,
 		return {}
 	_onthoud_basis()
 	var soort: Dictionary = MEUBEL[type]
-	if is_nan(x) or is_nan(z):
+	var op_raster: bool = soort["soort"] == "bed" and not r.bedden.is_empty()
+	if op_raster:
+		var vrij := vrije_bedplekken(kamer_id)
+		if vrij.is_empty():
+			return {}
+		var p: Vector2 = vrij[0]
+		if not is_nan(x) and not is_nan(z):
+			var af := INF
+			for q in vrij:
+				var d: float = absf((q as Vector2).x - x) + absf((q as Vector2).y - z)
+				if d < af:
+					af = d
+					p = q
+		x = p.x
+		z = p.y
+		rot = 1 if r.bed_model == "bedz" else 0
+	elif is_nan(x) or is_nan(z):
 		x = r.w / 2.0
 		z = r.d / 2.0
-	if x < 4 or z < 4 or x > r.w - 4 or z > r.d - 4 or _bezet(r, x, z):
+	if not op_raster and (x < 4 or z < 4 or x > r.w - 4 or z > r.d - 4 or _bezet(r, x, z)):
 		var vak := _naar_raster(r, x, z)
 		if vak.is_empty():
 			return {}
 		x = vak["x"]
 		z = vak["z"]
-	if _bezet(r, x, z):
+	if not op_raster and _bezet(r, x, z):
 		return {}
+	if not id.is_empty() and _id_bestaat(id):
+		id = ""                       # a save that names one piece twice: a new id
 	if id.is_empty():
 		_nr += 1
 		id = "m%d_%s" % [_nr, type]
+		while _id_bestaat(id):
+			_nr += 1
+			id = "m%d_%s" % [_nr, type]
 	else:
 		_nr = maxi(_nr, _nr_uit_id(id))
 	var uit: Dictionary
@@ -492,6 +649,17 @@ func meubel_zet(kamer_id: String, type: String, x: float = NAN, z: float = NAN,
 	bouw_af(r)
 	kamers_veranderd.emit()
 	return uit.duplicate()
+
+## Is `id` already a slot or a bought piece somewhere in the hotel?
+func _id_bestaat(id: String) -> bool:
+	for kid in _volgorde:
+		var r: Kamer = _kamers[kid]
+		if r.slots.has(id):
+			return true
+		for stuk in r.decor:
+			if str(stuk.get("meubel", "")) == id:
+				return true
+	return false
 
 func meubel_weg(id: String) -> bool:
 	for kid in _volgorde:
@@ -691,11 +859,20 @@ func _bouw_kamers() -> void:
 			{"n": "blokken", "x": 14, "z": 100},
 			# (107, 8), not (102, 12): there it hid the corner of the door
 			{"n": "plant", "x": 107, "z": 8},
-			{"n": "mand", "x": 93, "z": 99}],
+			# against the right-hand edge between the two new beds; at (93, 99)
+			# it stood on the fourth bed place
+			{"n": "mand", "x": 106, "z": 74}],
 		"slots": [
 			{"id": "bed1", "soort": "bed", "model": "bed", "x": 30, "z": 27},
 			{"id": "bed2", "soort": "bed", "model": "bed", "x": 30, "z": 75},
-			{"id": "bak", "soort": "bak", "model": "kom", "x": 84, "z": 33}]})
+			{"id": "bak", "soort": "bak", "model": "kom", "x": 84, "z": 33}],
+		# The bed places (owner, 2026-09-24: "De eerste twee bedden zijn goed
+		# geplaatst, daarna gaat alles door elkaar").  Two columns of beds along
+		# x, all turned alike: the left column is bed1 and bed2, the right one
+		# starts below the bowl — above it the door and the bowl leave no room —
+		# with a lane of 20 voxels between the columns and 4 under the bowl.
+		"bed_model": "bed",
+		"bedden": [[30, 27], [30, 75], [84, 54], [84, 98]]})
 	# Kamer 2, the mint room: everything the child recognises sits somewhere
 	# else.  Both beds are `bedz` — turned a quarter, side by side along the back
 	# wall, leaving its right half for the door — the bowl stands in the far
@@ -713,12 +890,19 @@ func _bouw_kamers() -> void:
 			{"n": "boekenplank", "x": 100, "z": 1, "y": 30, "ver": true},
 			{"n": "staande_lamp", "x": 12, "z": 52},
 			{"n": "speelgoedkist", "x": 104, "z": 44},
-			{"n": "mand", "x": 14, "z": 96},
-			{"n": "plant", "x": 48, "z": 102}],
+			# in the near-left corner; at (14, 96) it stood on the third bed place
+			{"n": "mand", "x": 14, "z": 106},
+			# (48, 106), not (48, 102): a little air before the fourth bed
+			{"n": "plant", "x": 48, "z": 106}],
 		"slots": [
 			{"id": "bed1", "soort": "bed", "model": "bedz", "x": 18, "z": 30},
 			{"id": "bed2", "soort": "bed", "model": "bedz", "x": 52, "z": 30},
-			{"id": "bak", "soort": "bak", "model": "kom", "x": 96, "z": 84}]})
+			{"id": "bak", "soort": "bak", "model": "kom", "x": 96, "z": 84}],
+		# The bed places: a second row of `bedz` straight in front of bed1 and
+		# bed2, 48 further forward, so the four beds stand two by two.  A third
+		# column would stand in the doorway (row 1) and on the bowl (row 2).
+		"bed_model": "bedz",
+		"bedden": [[18, 30], [52, 30], [18, 78], [52, 78]]})
 	_kamer({"id": "keuken", "naam": "Keuken", "icoon": "🍪", "w": 120, "d": 114,
 		"wand": 56, "vloer": "tegel", "loop": 1.5,
 		# an apricot runner in front of the sink: the laundry and the pool deck
@@ -948,6 +1132,9 @@ func _kamer(o: Dictionary) -> void:
 		s["sx"] = s["x"]
 		s["sz"] = s["z"]
 		r.slots[s["id"]] = s
+	r.bed_model = str(o.get("bed_model", "bed"))
+	for p in o.get("bedden", []):
+		r.bedden.append(Vector2(float(p[0]), float(p[1])))
 	_kamers[r.id] = r
 	_volgorde.append(r.id)
 

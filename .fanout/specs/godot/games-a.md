@@ -428,23 +428,35 @@ staat is de hele beurt.
 De gastengrens is niet meer "een vrij bed" maar **vrije vloer**:
 * `State.slaapkamers()` — de kamers met minstens één bed (kamer 1, kamer 2).
 * `State.plek_in(k)` = vrije bedden in `k` + `State.nieuwe_bedden(k)`; dat laatste is
-  `min(MAX_BEDDEN − bedden in k, wat de vloer nog draagt)`, met **`MAX_BEDDEN` = 6**
-  (een bovengrens: zes bedden laten een kamer van 114 × 114 nog zijn kleed, bakje en
-  mand).  Een bed uit het meubelboek telt mee voor die zes en is zolang het leeg staat
-  gewoon een vrij bed; wie er een koopt boven de zes (waar het raster het toelaat) heeft
-  een extra plek.
-* De vloer is de oude droogplaatsing (`bed_plekken`): elk nieuw bed op het vrije vakje
-  dat het verst van alle bedden ligt, en de vakjes binnen **18 voxels** (Manhattan)
-  vallen weg — precies wat `Rooms` doet als het bed er echt komt.  **Nieuw
-  (2026-09-24):** een vakje telt alleen als het **hele bed** er past (`_bed_past`): een
-  bed is 34 × 17 voxels (`_voet("bed")`), met een voxel lucht eromheen, binnen de muren,
-  op geen enkel ding (vloerdecor, slots — een bed op zijn eigen model, een bakje als blok
-  van 16 — en de stap binnen elke deur, ook de voordeur, 20 × 20) en met de staplek
-  ernaast (`x + 2, z + 12`) vrij.  De oude regel alleen zette nieuwe bedden dwars door
-  het bakje, de speelmand en de deuropening.  In de twee basiskamers passen zo **drie**
-  nieuwe bedden: vijf per kamer, tien gasten in het hotel.
+  `min(MAX_BEDDEN − bedden in k, vrije bedplekken van k)`, met **`MAX_BEDDEN` = 6**
+  (een bovengrens).  Een bed uit het meubelboek staat ook op een bedplek (§5.7) en is
+  zolang het leeg staat gewoon een vrij bed; zijn alle bedplekken bezet, dan is er geen
+  bed meer te koop (§5.7).
+* **Elk dier een eigen bed, ook na het laden** (`State.herstel_bedden()`, in
+  `Hotel.herstel_wereld` direct na de meubels): een gast die in een bed staat dat al van
+  een eerdere gast is (een zelfgemaakte opslag; `tools/kiek.js --gasten 7` deed het tot
+  2026-09-24) of in een bed dat er niet meer is, krijgt een vrij bed van zijn kamer, anders
+  een nieuw bed op een vrije bedplek daar, anders hetzelfde in de andere slaapkamer; is er
+  nergens een bed, dan gaat hij vooraan op de wachtlijst — nooit kwijt.  Een bed uit een
+  oude opslag dat ergens anders stond, komt bij het laden op de dichtstbijzijnde vrije
+  bedplek terug (`Rooms.meubel_zet`).
+* **De vloer is de rij bedplekken van de kamer** (eigenaar 2026-09-24: "De eerste twee
+  bedden zijn goed geplaatst, daarna gaat alles door elkaar").  Elke slaapkamer noemt
+  haar bedplekken in volgorde (`Rooms.bed_raster(k)`, world.md §1.5); de eerste twee zijn
+  `bed1` en `bed2`, elk bed ligt zoals die twee (`Rooms.bed_model(k)`: kamer 1 `bed` langs
+  x, kamer 2 `bedz` langs z).  `State.bed_plekken(k, n)` = de eerste `n` vrije bedplekken
+  (`Rooms.vrije_bedplekken`: geen bed erop en niets anders op zijn vloer), in die volgorde.
+  Tot die dag nam een nieuw bed het vrije vakje dat het verst van alle bedden lag: bed 3, 4
+  en 5 kwamen kriskras te staan, in kamer 2 dwars op de andere, en een bed uit het
+  meubelboek door een ander bed heen, op het bakje en in de deuropening.
+  **Kamer 1:** `(30, 27)`, `(30, 75)`, `(84, 54)`, `(84, 98)` — twee kolommen, de rechter
+  begint onder het bakje (erboven laten de deur en het bakje geen plek).  **Kamer 2:**
+  `(18, 30)`, `(52, 30)`, `(18, 78)`, `(52, 78)` — twee bij twee; een derde kolom zou in de
+  deuropening (rij 1) en op het bakje (rij 2) staan.  Dus **vier per kamer, acht gasten in
+  het hotel** (was tien, op kriskras gezette bedden); `MAX_BEDDEN` = 6 blijft de bovengrens
+  en ligt boven het aantal bedplekken.  Meer plekken = een bedplek erbij in `rooms.gd`.
 * `State.plek_voor_gast()` (bel, prikbord) = een slaapkamer met een vrij bed, of met
-  vloer voor een heel nieuw bed en minder dan zes bedden.  `State.kamers_met_plek()` = de kamerkeuze.
+  een vrije bedplek en minder dan zes bedden.  `State.kamers_met_plek()` = de kamerkeuze.
 * Elke ingecheckte gast heeft daarna een bed: alles wat "gasten met een bed" filtert
   blijft werken.
 
@@ -482,7 +494,7 @@ kamer van het spel, zodat het meelopen daar eindigt en niet terugspringt naar de
 receptie).
 
 * **Goed** (`n + 1`): zijn bed is het eerste vrije bed van die kamer, of een nieuw
-  (`voeg_bed` op de verste plek, `Snd.plop`).  De check-in eindigt meteen in
+  (`voeg_bed` op de eerstvolgende vrije bedplek, `Snd.plop`).  De check-in eindigt meteen in
   `Hotel.wijs_bed(kamer, bed, {loop: true})`: bed, `Snd.tover`, één ster
   (`checkin`), taakje `bed`, ochtend → vrij, opslaan; hij loopt naar zijn bed en
   springt erin, de camera erachteraan.  Ligt hij: `💤 <naam> doet een dutje` (klas `goed`)
@@ -495,7 +507,8 @@ receptie).
   loopt hij terug naar zijn plek aan de balie — de camera loopt terug mee — en
   daar komt dezelfde vraag.
 * **Te veel**: de vrije bedden en de nieuwe voor dit antwoord staan er (de nieuwe
-  als los decor van het spel: ze komen niet in de opslag); hij loopt naar het bed
+  als los decor van het spel op de volgende vrije bedplekken, met het model van de kamer:
+  ze komen niet in de opslag); hij loopt naar het bed
   dat het zijne zou zijn, is teleurgesteld (wolkje `🛏 te veel bedden`), na **1 s**
   gaan de bedden van dit antwoord weer weg (`Snd.terug`) en loopt hij terug naar de
   balie en dezelfde vraag.  De bedden gaan álle weg, niet alleen de extra: anders
@@ -1018,9 +1031,20 @@ eerst naar `V.thuis` (de kamer waar je vandaan kwam, of `kamer1`).
   in beeld (`mbvak_<kamer>_<id>`, icoon ✨, klas `hotgame`, prio 9,
   titel `hier neerzetten`); zijn er meer, dan staat er een ▸-knop
   (`mb_meer`, prio 8, titel `meer plekjes`) die met stappen van 4 door de lijst
-  wandelt.
-* **Neerzetten:** `bed` gaat via `wereld.voegBed` (dus de gastenlimiet gaat
-  meteen omhoog), al het andere via `wereld.plaatsMeubel(kamer, type, x, z, 0)`.
+  wandelt.  **Port (eigenaar 2026-09-24: "De eerste twee bedden zijn goed geplaatst,
+  daarna gaat alles door elkaar"):** alleen vakjes waar het meubel echt blijft staan
+  (`Rooms.vrij_vak`), en niet op een vrije bedplek van de kamer (de bedvloer + 7 voxels)
+  zolang er elders vloer is.  **Een bed** heeft zijn eigen vakjes: precies de vrije
+  bedplekken van die kamer (§3.2, `Rooms.vrije_bedplekken`), in de volgorde van de kamer
+  (`mbvak_<kamer>_bed<x>_<z>`); een ruimte zonder bedplekken heeft er geen.  Staat er een
+  bed in de doos en heeft de kamer waar je bent geen vrije bedplek, dan gaat het spel naar
+  een slaapkamer die er wel een heeft.
+* **Geen bedplek meer vrij:** een bed kopen (ook op het lijstje, samen met de bedden die
+  nog in de doos wachten) gaat niet als er niet voor elk bed een vrije bedplek is:
+  `Snd.zacht()` + wolkje `mb_bedvol` 🛏 `<maxGasten>` `"alle kamers vol"` (dezelfde woorden
+  als de bel bij een vol hotel), klas `hulp`, na 2400 ms weg; er gaat geen munt af.
+* **Neerzetten:** `bed` gaat via `wereld.voegBed` (in een slaapkamer altijd op de
+  vrije bedplek die het dichtst bij het vakje ligt, zoals de kamer ligt), al het andere via `wereld.plaatsMeubel(kamer, type, x, z, 0)`.
   Lukt het niet → `bezet(...)`. Lukt het wel: id + type in het eigen laatje,
   `Snd.plop(2)`, opslaan, HUD bij, en een wolkje `mb_neer`:
   * bed → 🐾 + `<maxGasten>` + `"gasten"`, klas `goed`, hoog 26;
@@ -1034,7 +1058,9 @@ eerst naar `V.thuis` (de kamer waar je vandaan kwam, of `kamer1`).
 
 Op bladzijde 1 krijgen **hooguit 3 meubels per kamer** twee knopjes ernaast
 (klas `hotkar`, prio 8, y 14):
-* alleen bij een bed: `mbdraai_<id>` 🔄 op `(x+8, z-8)`, titel `bed draaien`;
+* alleen bij een bed: `mbdraai_<id>` 🔄 op `(x+8, z-8)`, titel `bed draaien` —
+  **port (2026-09-24):** niet in een slaapkamer, want daar ligt elk bed op een bedplek zoals
+  de kamer (§3.2); alleen een bed uit een oude opslag in een andere ruimte kan nog draaien;
 * altijd: `mbop_<id>` 📦 op `(x-8, z+8)`, titel `<naam> oppakken`.
 
 **Draaien** = weghalen en op hetzelfde vakje een kwartslag anders terugzetten
@@ -1058,7 +1084,8 @@ Wereld: `is genoeg`; `je hebt €<n>` / `je hebt <n>`;
 `een munt terugpakken`; `terug naar het meubelboek`;
 `terug` / `betaald`; `<naam> neerzetten`; `sleep naar een plekje`;
 `hier neerzetten`; `meer plekjes`; `bezet`; `gasten`; `iemand slaapt`;
-`bed draaien`; `<naam> oppakken`.
+`bed draaien`; `<naam> oppakken`; `alle kamers vol` (🛏 + het aantal gasten, port
+2026-09-24).
 Na een misser: `🔄 Nog een keer` bij de kassa (`Ui.misser`). De spooklabels
 `zoveel is het samen` / `zoveel krijg je terug` / `dit moet er nog bij` /
 `zoveel moet het zijn` / `zo ziet het uit` / `zoveel is het`, de doortelregels en

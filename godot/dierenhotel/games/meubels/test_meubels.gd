@@ -935,6 +935,88 @@ func test_blad_dicht_geeft_de_wereldpagina() -> void:
 		func(q): return str(q["id"]) == mid).size(), 0, "en staat niet meer in de kamer")
 	_af()
 
+## Eigenaar, 2026-09-24: "De eerste twee bedden zijn goed geplaatst, daarna gaat
+## alles door elkaar."  Een bed uit de doos heeft een ✨-vakje op elke vrije
+## bedplek van de slaapkamer en nergens anders; het landt precies daar, zoals
+## bed1 en bed2 liggen; het krijgt geen 🔄 (elk bed van een slaapkamer ligt al
+## zoals de kamer); en de vakjes van een plant blijven van de vrije bedplekken af.
+func test_een_gekocht_bed_gaat_op_een_bedplek() -> void:
+	await _op(Vector2(1000, 648), 5, 12)
+	State.spel_data("meubels")["wacht"] = {"nog": ["bed", "plant"]}
+	waar(Games.start("meubels"), "het spel start op de plaatsstap")
+	await _tel_frames(3)
+	gelijk(World.kamer_nu(), "kamer1", "de doos gaat naar kamer 1")
+	var vrij := Rooms.vrije_bedplekken("kamer1")
+	gelijk(vrij.size(), 2, "kamer 1 heeft twee vrije bedplekken")
+	var vakken := _vakken()
+	gelijk(vakken.size(), vrij.size(), "één ✨-vakje per vrije bedplek")
+	for id in vakken:
+		var s := Hits.spot(id)
+		waar(vrij.has(Vector2(s.x, s.z)), "%s ligt op een bedplek (%s, %s)" % [id, s.x, s.z])
+	waar(_tik(_eerste_vak()), "zet het bed neer")
+	await _tel_frames()
+	var nieuw: Array = Rooms.slots("kamer1", "bed").filter(
+		func(b): return str(b["id"]).begins_with("m"))
+	gelijk(nieuw.size(), 1, "er staat één gekocht bed")
+	if nieuw.size() == 1:
+		gelijk(Vector2(float(nieuw[0]["x"]), float(nieuw[0]["z"])), vrij[0],
+			"op de eerste vrije bedplek")
+		gelijk(str(nieuw[0]["model"]), Rooms.bed_model("kamer1"), "zoals bed1 en bed2")
+	# nu de plant: geen vakje op de bedplek die nog vrij is
+	gelijk(str(_spel().call("_nog")), '["plant"]', "de plant is aan de beurt")
+	var bedplek := Rooms.bed_vlak(Rooms.bed_model("kamer1"), vrij[1].x, vrij[1].y)
+	var planten := _vakken()
+	waar(not planten.is_empty(), "de plant heeft vakjes")
+	for id in planten:
+		var s := Hits.spot(id)
+		waar(not bedplek.grow(Rooms.MEUBEL_BED_RAND).has_point(Vector2(s.x, s.z)),
+			"%s ligt niet op de vrije bedplek" % id)
+		waar(Rooms.vrij_vak("kamer1", s.x, s.z), "%s is echt vrij" % id)
+	# de wereldpagina: een 📦 bij het gekochte bed, geen 🔄
+	Games.stop()
+	await _tel_frames()
+	State.spel_data("meubels")["wacht"] = {"nog": []}
+	waar(Games.start("meubels"), "opnieuw gestart")
+	await _tel_frames()
+	await _kassa_door()
+	if nieuw.size() == 1:
+		var mid := str(nieuw[0]["id"])
+		(State.spel_data("meubels")["mijn"] as Array).append({"id": mid, "type": "bed"})
+		Ui.blad_dicht()
+		await _tel_frames()
+		World.naar("kamer1")
+		await _tel_frames()
+		waar(_er_is("mbop_%s" % mid), "het gekochte bed heeft een 📦-knop")
+		waar(not _er_is("mbdraai_%s" % mid), "maar geen 🔄: het ligt al zoals de kamer")
+	_af()
+
+## Elke bedplek heeft een bed: een bed kopen kan dan niet, want het zou in de
+## doos blijven zonder vakje.  Hetzelfde wolkje als de bel bij een vol hotel,
+## en er gaat geen munt af.
+func test_geen_bed_te_koop_als_alle_bedplekken_vol_zijn() -> void:
+	await _op(Vector2(1000, 648), 3, 12)
+	for k in Rooms.lijst():
+		while not Rooms.meubel_zet(k, "bed").is_empty():
+			pass
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	await _tel_frames()
+	var munten := int(State.s["munten"])
+	waar(_blad_tik("Kk_bed"), "tik op het bed")
+	await _tel_frames()
+	waar(_er_is("mb_bedvol"), "het wolkje zegt dat alle kamers vol zijn")
+	gelijk(int(State.s["munten"]), munten, "er gaat geen munt af")
+	gelijk(str(_spel().call("_nog")), "[]", "en er zit niets in de doos")
+	_af()
+
+func _vakken() -> Array[String]:
+	var uit: Array[String] = []
+	for id in Hits.lijst():
+		if id.begins_with("mbvak_"):
+			uit.append(id)
+	return uit
+
 # ==================================================================================
 # 6. elke kinderzin letterlijk, en het tekstbudget van F4
 # ==================================================================================
