@@ -108,6 +108,50 @@ func _op_slot() -> bool:
 	var s := Hits.spot("wk_som_keuzes")
 	return s != null and is_instance_valid(s.knoop) and (s.knoop as UiKeuzes).op_slot
 
+## De grote klok van voren, of `null`.
+func _groot() -> WekkerKlok:
+	var s := Hits.spot("wk_groot")
+	if s == null or not is_instance_valid(s.knoop):
+		return null
+	return s.knoop as WekkerKlok
+
+## Nergens staat in woorden hoe laat de klok is (eigenaar 2026-09-24: "geen
+## hint geven hoe laat het is"): geen sombalk, geen tijdplaatje op de klok, en
+## de grote klok zegt het alleen met zijn wijzers — die staan wel op de stand.
+func _geen_tijdhint(s: Dictionary, wat: String) -> void:
+	var som := _kaart_tekst("Kolom/Rij/Som")
+	gelijk(som, "", "%s: geen klokstand in woorden op de kaart" % wat)
+	var k := Hits.spot("wk_som")
+	if k != null and is_instance_valid(k.knoop):
+		var l := k.knoop.get_node_or_null("Kolom/Rij/Som") as Label
+		waar(l == null or not l.visible, "%s: de sombalk staat er niet" % wat)
+	waar(Hits.spot("wk_tijd") == null, "%s: geen tijdplaatje boven de klok" % wat)
+	var g := _groot()
+	waar(g != null, "%s: de grote klok staat er" % wat)
+	if g != null:
+		gelijk([g.uur, g.minuut], [int(s["u"]), int(s["m"])],
+			"%s: de grote klok wijst de stand aan" % wat)
+		gelijk(g.tooltip_text, "", "%s: en verklapt hem niet in een titel" % wat)
+	# geen enkele tekst in beeld noemt de stand — behalve als die toevallig de
+	# wektijd is, want die staat terecht in de wens van de gast
+	var woord: String = Sommen.Wekker.tijd_woord(int(s["u"]), int(s["m"]))
+	var wil: String = Sommen.Wekker.tijd_woord(int(s["doelU"]), int(s["doelM"]))
+	if woord == wil or str(s.get("stap", "")) == "duur":
+		return
+	for id in Hits.lijst():
+		var q := Hits.spot(id)
+		if q == null or not is_instance_valid(q.knoop) or q.kamer != World.kamer_nu():
+			continue
+		var teksten: Array[String] = [q.knoop.tooltip_text]
+		if "text" in q.knoop:
+			teksten.append(str(q.knoop.get("text")))
+		for l in q.knoop.find_children("*", "Label", true, false):
+			if (l as Label).is_visible_in_tree() or not q.knoop.is_inside_tree():
+				teksten.append((l as Label).text)
+		for t in teksten:
+			waar(not (" %s " % t).contains(" %s " % woord) and not t.ends_with(woord),
+				"%s: %s zegt de stand '%s' in woorden: '%s'" % [wat, id, woord, t])
+
 # ------------------------------------------------------------- 1. aanmelding
 
 ## Het spel wordt door de mapscan gevonden; de mapnaam IS het id, en geen
@@ -214,12 +258,11 @@ func _speel_beurt(band_n: int, dag: int, kunnen: int, verwacht_band: int) -> voi
 			"de tijdsduurvraag staat op de kaart")
 		waar(_tik("u%d" % int(s["doelU"])), "het goede uur wordt getikt")
 		gelijk(str(s["stap"]), "zet", "daarna mag de klok gezet worden")
-	# de klok staat op de startstand en draagt die als cijfer
-	var start_woord: String = Sommen.Wekker.tijd_woord(int(s["u"]), int(s["m"]))
-	gelijk(_kaart_tekst("Kolom/Rij/Som"), "nu: " + start_woord, "de sombalk")
+	# de klok staat op de startstand en niets zegt die in woorden
+	_geen_tijdhint(s, "start band %d" % verwacht_band)
 	waar(not World.decor_plek("klok", "gang").is_empty(), "de klok hangt in de gang")
 	# draaien tot de wijzers op het doel staan: alleen met de knoppen die
-	# deze band heeft, en altijd VOORUIT
+	# deze band heeft, hier alleen vooruit
 	var stappen := {"uur": 60, "kwartier": 15, "vijf": 5}
 	var rondjes := 0
 	while not spel.goed() and rondjes < 200:
@@ -238,9 +281,10 @@ func _speel_beurt(band_n: int, dag: int, kunnen: int, verwacht_band: int) -> voi
 		if not gedaan:
 			break
 	waar(spel.goed(), "de wijzers staan op de wektijd (band %d)" % verwacht_band)
-	gelijk(_kaart_tekst("Kolom/Rij/Som"),
-		"nu: " + Sommen.Wekker.tijd_woord(int(s["doelU"]), int(s["doelM"])),
-		"de sombalk loopt mee")
+	var g := _groot()
+	waar(g != null and g.uur == int(s["doelU"]) and g.minuut == int(s["doelM"]),
+		"de grote klok draait mee tot de wektijd")
+	gelijk(_kaart_tekst("Kolom/Rij/Som"), "", "en de kaart zegt de stand niet")
 	var sterren_voor: int = int(State.s["sterren"])
 	waar(_tik("klaar"), "✅ Klaar")
 	gelijk(str(spel.stand()["stap"]), "wakker", "de gast wordt wakker")
@@ -359,8 +403,7 @@ func test_geen_hulp_na_een_fout() -> void:
 		gelijk(_kaart_tekst("Kolom/Hulp"), "💛 draai tot de klok klopt",
 			"%s: geen hulpladder, de vaste regel" % wat)
 		gelijk(_kaart_tekst("Kolom/Regel"), regel_voor, "%s: dezelfde wens" % wat)
-		gelijk(_kaart_tekst("Kolom/Rij/Som"),
-			"nu: " + Sommen.Wekker.tijd_woord(u_voor, m_voor), "%s: de klokstand" % wat)
+		_geen_tijdhint(s, wat)
 		waar(not spel.klok_params().has("spookU") and not spel.klok_params().has("spookM"),
 			"%s: geen spookwijzers" % wat)
 		waar(bool(World.slaapt(str(s["gast"]))), "%s: de gast slaapt door" % wat)
@@ -400,9 +443,7 @@ func test_klaar_zonder_draaien_telt_geen_misser() -> void:
 		waar(not spel.klok_params().has("spookM"), "geen spookminuutwijzer")
 	gelijk(int(s["u"]), u_voor, "de wijzers staan nog waar ze stonden (uur)")
 	gelijk(int(s["m"]), m_voor, "de wijzers staan nog waar ze stonden (minuut)")
-	gelijk(_kaart_tekst("Kolom/Rij/Som"),
-		"nu: " + Sommen.Wekker.tijd_woord(u_voor, m_voor),
-		"en de sombalk toont gewoon de klokstand")
+	_geen_tijdhint(s, "na twee keer ✅ zonder draaien")
 	gelijk(int(State.s["sterren"]), 0, "er valt geen ster")
 	# draaien is wél een poging: dán telt ✅ weer als misser
 	_draai_naast(spel, "aan de wijzers draaien")
@@ -433,6 +474,58 @@ func test_nooit_spookwijzers() -> void:
 	var zonder := Art.model("wekker_klok", {"uur": 3, "min": 0})
 	gelijk(met.size(), zonder.size(), "een oude spookparameter tekent niets meer")
 	gelijk(int(State.s["sterren"]), 0, "en het kostte geen ster")
+	_af()
+
+## "Doe ook een 'uur eraf' optie" (eigenaar 2026-09-24): de wijzers een uur
+## terug, vóór 1 uur komt 12 uur, de minuten blijven staan.  Het is een draai
+## als elke andere: de teller loopt op (R3), een misser-kaart gaat terug naar
+## de gewone zin, en de grote klok wijst mee.  En wie over de wektijd heen
+## draaide, komt er met één tik terug.
+func test_uur_eraf_draait_een_uur_terug() -> void:
+	_op()
+	_gasten(5, 2, 3)
+	waar(Games.start(ID), "het spel start")
+	var spel := _spel()
+	if spel == null:
+		_af()
+		return
+	var s: Dictionary = spel.stand()
+	gelijk(int(s["band"]), 4, "band 4: met kwartieren")
+	for keer in 13:
+		var u_voor := int(s["u"])
+		var m_voor := int(s["m"])
+		var d_voor := int(s["draaien"])
+		waar(_tik("uur_af"), "uur eraf (%d)" % keer)
+		gelijk(int(s["u"]), Sommen.Wekker.u12(u_voor - 1), "een uur terug vanaf %d" % u_voor)
+		gelijk(int(s["m"]), m_voor, "de minuten blijven staan")
+		gelijk(int(s["draaien"]), d_voor + 1, "het telt als draai")
+		var g := _groot()
+		waar(g != null and g.uur == int(s["u"]) and g.minuut == int(s["m"]),
+			"de grote klok wijst mee")
+	# over de wektijd heen en weer terug
+	var rondjes := 0
+	while not spel.goed() and rondjes < 60:
+		rondjes += 1
+		var over: int = posmod(Sommen.Wekker.in_min(int(s["doelU"]), int(s["doelM"]))
+			- Sommen.Wekker.in_min(int(s["u"]), int(s["m"])), 720)
+		if over >= 60:
+			_tik("uur")
+		else:
+			_tik("kwartier")
+	waar(spel.goed(), "de klok staat op de wektijd")
+	waar(_tik("uur"), "een uur te ver")
+	waar(not spel.goed(), "nu staat hij er voorbij")
+	waar(_tik("uur_af"), "en met uur eraf")
+	waar(spel.goed(), "weer precies goed")
+	# na een misser brengt uur eraf de gewone zin terug, zoals elke draai
+	_tik("uur_af")
+	waar(_tik("klaar"), "✅ op een verkeerde stand")
+	gelijk(str(s["stap"]), "mis", "een misser")
+	await _wacht_mispauze()
+	waar(_tik("uur"), "terugdraaien")
+	gelijk(str(s["stap"]), "zet", "de gewone zin is terug")
+	waar(_tik("klaar"), "✅")
+	gelijk(str(spel.stand()["stap"]), "wakker", "de gast wordt wakker")
 	_af()
 
 ## De tijdsduurvraag van band 5: een verkeerd uur is een misser zonder
@@ -765,22 +858,26 @@ func test_stop_laat_de_wereld_schoon_achter() -> void:
 		"aan": func(_s) -> void: pass})
 	waar(Games.start(ID), "het spel start")
 	waar(not World.decor_plek("klok", "gang").is_empty(), "de klok staat er")
+	var groot := _groot()
+	waar(groot != null, "en hij staat groot van voren")
 	var eigen := 0
 	for id in Hits.lijst():
 		if Hits.spot(id).door == ID:
 			eigen += 1
-	waar(eigen >= 4, "het spel plaatste eigen knoppen (%d)" % eigen)
+	waar(eigen >= 3, "het spel plaatste eigen elementen: kaart, strook, grote klok (%d)" % eigen)
 	Games.stop()
 	gelijk(Games.actief(), "", "er draait niets meer")
 	gelijk(Hits.voorrang_van(), "", "en niemand heeft voorrang")
 	for id in Hits.lijst():
 		waar(Hits.spot(id).door != ID, "geen hotspot van het spel bleef staan: %s" % id)
 	waar(Hits.spot("wk_som") == null, "de kaart is weg")
-	waar(Hits.spot("wk_plaat") == null, "het tagje op de wijzerplaat is weg")
+	waar(Hits.spot("wk_groot") == null, "de grote klok van voren is weg")
 	waar(World.decor_plek("klok", "gang").is_empty(), "en de klok is weg")
 	gelijk(World.decor_lijst().filter(func(d): return d["door"] == ID).size(), 0,
 		"al het eigen decor is weg")
 	waar(Hits.spot("hotelknop") != null, "de knop van een ander bleef staan")
+	waar(groot == null or not is_instance_valid(groot) or groot.is_queued_for_deletion(),
+		"de grote klok wordt opgeruimd")
 	_af()
 
 # ---------------------------------------------------------- 7. de kindtekst
@@ -824,7 +921,6 @@ func test_kindtekst_letterlijk_en_binnen_het_budget() -> void:
 				zinnen.append(str(zd[0]))
 				zinnen.append(str(zd[1]))
 			zinnen.append("%s is wakker" % lang)
-			zinnen.append("nu: " + Sommen.Wekker.tijd_woord(u, m))
 	var te_lang: Array[String] = []
 	for zin in zinnen:
 		if zin.is_empty():
@@ -841,8 +937,10 @@ func test_kindtekst_letterlijk_en_binnen_het_budget() -> void:
 	var hulp := str(k["T_HULP_BEGIN"])
 	waar(hulp.split(" ", false).size() <= 8 and hulp.length() <= 40,
 		'de hulpregel "%s" past in 8 woorden en 40 tekens' % hulp)
-	for weg in ["T_HULP0", "T_HULP1", "T_HULP_LAD", "T_HULP2", "KL_SPOOK_U", "KL_SPOOK_M"]:
+	for weg in ["T_HULP0", "T_HULP1", "T_HULP_LAD", "T_HULP2", "KL_SPOOK_U", "KL_SPOOK_M",
+			"T_PLAAT"]:
 		waar(not k.has(weg), "%s bestaat niet meer" % weg)
+	gelijk(spel.som_balk(), "", "de sombalk zegt de klokstand niet meer (2026-09-24)")
 	gelijk(k["T_NAAM"], "Wekkerdienst", "naam")
 	gelijk(k["T_LABEL"], "Wekker", "label")
 	gelijk(k["T_TAAK"], "Wekker zetten", "prikbord")
@@ -857,9 +955,11 @@ func test_kindtekst_letterlijk_en_binnen_het_budget() -> void:
 	gelijk(k["T_NOG_NIET"], "nog niet", "bij de gast, wakker")
 	gelijk(k["T_GOEDEMORGEN"], "goedemorgen", "het ☀-wolkje")
 	gelijk(k["T_AF"], "allemaal gewekt", "de ronde af")
-	gelijk(k["T_PLAAT"], "de wijzerplaat", "het lege tagje")
 	gelijk(k["T_UUR"], "uur erbij", "knop uur")
 	gelijk(k["T_UUR_K"], "uur", "knop uur, kort")
+	gelijk(k["T_UUR_AF"], "uur eraf", "knop uur eraf")
+	gelijk(k["T_UUR_AF_K"], "eraf", "knop uur eraf, kort")
+	gelijk(k["ICO_UUR_AF"], "⏪", "knop uur eraf, pictogram")
 	gelijk(k["T_KWARTIER"], "kwartier erbij", "knop kwartier")
 	gelijk(k["T_KWARTIER_K"], "kwartier", "knop kwartier, kort")
 	gelijk(k["T_VIJF"], "5 minuten erbij", "knop vijf")
@@ -878,7 +978,7 @@ func test_kindtekst_letterlijk_en_binnen_het_budget() -> void:
 		for c in Ui.mist_tekens(Sommen.Wekker.uur_ico(u, 0)):
 			if not mist.has(c):
 				mist.append(c)
-	for c in Ui.mist_tekens("🕐 🕒 🕧 ✅ ☀ 💤 🛏"):
+	for c in Ui.mist_tekens("🕐 ⏪ 🕒 🕧 ✅ ☀ 💤 🛏"):
 		if not mist.has(c):
 			mist.append(c)
 	gelijk(mist.size(), 0, "geen tofu: %s" % str(mist))
@@ -886,17 +986,26 @@ func test_kindtekst_letterlijk_en_binnen_het_budget() -> void:
 
 ## Pictogram ÉN woord op elke keuzeknop, nooit een kaal pictogram (F4).
 func test_elke_keuzeknop_draagt_een_woord() -> void:
-	_op()
-	_gasten(8, 2, 5)
-	waar(Games.start(ID), "het spel start")
-	for id in ["uur", "kwartier", "vijf", "klaar"]:
-		var b := _knop(id)
-		waar(b != null, "knop %s staat er" % id)
-		if b != null:
-			var stukken := b.text.split(" ", false)
-			waar(stukken.size() >= 2, "knop %s draagt pictogram én woord: '%s'"
-				% [id, b.text])
-	_af()
+	# band, gasten, dag, kunnen → de knoppen van die band; hooguit vier (§9)
+	for rij in [[3, 2, 1, 3, ["uur", "uur_af", "klaar"]],
+			[4, 5, 2, 3, ["uur", "uur_af", "kwartier", "klaar"]],
+			[5, 8, 2, 5, ["uur", "uur_af", "vijf", "klaar"]]]:
+		_op()
+		_gasten(int(rij[1]), int(rij[2]), int(rij[3]))
+		waar(Games.start(ID), "het spel start (band %d)" % int(rij[0]))
+		gelijk(int(_spel().stand()["band"]), int(rij[0]), "band %d" % int(rij[0]))
+		var st := Hits.spot("wk_som_keuzes")
+		var rij_knoop: Node = st.knoop.get_node_or_null("Rij") if st != null else null
+		gelijk(rij_knoop.get_child_count() if rij_knoop != null else -1,
+			(rij[4] as Array).size(), "band %d: %d knoppen" % [int(rij[0]), (rij[4] as Array).size()])
+		for id in rij[4]:
+			var b := _knop(str(id))
+			waar(b != null, "band %d: knop %s staat er" % [int(rij[0]), id])
+			if b != null:
+				var stukken := b.text.split(" ", false)
+				waar(stukken.size() >= 2, "knop %s draagt pictogram én woord: '%s'"
+					% [id, b.text])
+		_af()
 
 # ----------------------------------------------- 8. de knoppen dekken niets
 ##
@@ -997,9 +1106,11 @@ func test_dekking_in_vier_kaders() -> void:
 		await _schil_af(h)
 	State.s = bewaard
 
-## De klok is echt te zien, de kaart hangt eronder en de wijzerplaat blijft vrij
-## (games-b.md §2.6, bindend).
-func test_de_klok_is_te_zien_en_de_plaat_blijft_vrij() -> void:
+## De klok is echt te zien, hij komt groot naar voren, de kaart hangt eronder
+## en er ligt niets op de wijzerplaat (games-b.md §2.6, bindend; eigenaar
+## 2026-09-24: "de klok naar voren laten komen zodat de speler de klok
+## duidelijk van voren kan zien").
+func test_de_klok_komt_naar_voren_en_blijft_vrij() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	for maat in SCHERMEN:
 		var h: Dictionary = await _schil_op(maat)
@@ -1013,25 +1124,35 @@ func test_de_klok_is_te_zien_en_de_plaat_blijft_vrij() -> void:
 			"%s: en voor het grootste deel (%.0f %%)"
 				% [str(maat), 100.0 * zicht.size.x * zicht.size.y / maxf(1.0, klok.size.x * klok.size.y)])
 		var dbg := Hits.debug()
-		waar(dbg.has("wk_plaat"), "%s: het tagje ligt op de plaat" % str(maat))
-		if dbg.has("wk_plaat"):
-			var plaat: Rect2 = dbg["wk_plaat"]["rect"]
-			waar(plaat.size.x >= 20.0 and plaat.size.y >= 20.0,
-				"%s: en is minstens 20 x 20 (%s)" % [str(maat), str(plaat.size)])
-			waar(klok.intersection(plaat).size.y > 0.0,
-				"%s: en ligt op de klok" % str(maat))
+		waar(dbg.has("wk_groot"), "%s: de grote klok staat er" % str(maat))
+		var plaat := klok
+		if dbg.has("wk_groot"):
+			plaat = dbg["wk_groot"]["rect"]
+			waar(not bool(dbg["wk_groot"]["krap"]), "%s: op een echte plek" % str(maat))
+			# groot: minstens anderhalf keer de wandklok, en nooit onder de 96
+			waar(plaat.size.x >= maxf(96.0, 1.5 * klok.size.x),
+				"%s: en groot (%s tegen de wandklok %s)" % [str(maat), str(plaat.size), str(klok.size)])
+			waar(Rect2(Vector2.ZERO, kader).encloses(plaat),
+				"%s: helemaal in beeld (%s)" % [str(maat), str(plaat)])
+			# van voren: hij staat vóór de wandklok, dus hij dekt die grotendeels
+			var snij_w := plaat.intersection(klok)
+			waar(snij_w.size.x * snij_w.size.y >= 0.5 * zicht.size.x * zicht.size.y,
+				"%s: recht voor de wandklok (%s vs %s)" % [str(maat), str(plaat), str(klok)])
 			for id in dbg.keys():
-				if str(id) == "wk_plaat":
+				if str(id) == "wk_groot":
 					continue
 				var snij: Rect2 = (dbg[id]["rect"] as Rect2).intersection(plaat)
 				gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
-					"%s: %s staat niet op de wijzerplaat" % [str(maat), id])
+					"%s: %s staat niet op de grote klok" % [str(maat), id])
+			var g := _groot()
+			waar(g != null and g.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+				"%s: een tik gaat door de klok heen: het is geen knop" % str(maat))
 		# de kaart hangt ONDER de klok, niet erover
 		if dbg.has("wk_som"):
 			var kaart: Rect2 = dbg["wk_som"]["rect"]
-			waar(kaart.position.y >= klok.end.y - 0.01,
+			waar(kaart.position.y >= plaat.end.y - 0.01,
 				"%s: de kaart hangt onder de klok (%s vs %s)"
-					% [str(maat), str(kaart), str(klok)])
+					% [str(maat), str(kaart), str(plaat)])
 		await _schil_af(h)
 	State.s = bewaard
 
@@ -1058,15 +1179,9 @@ func test_klokmodel() -> void:
 	gelijk(int(stuk.get("z", 0)), 1, "KZ")
 	gelijk(stuk.get("ver", false), true, "wanddecor")
 	gelijk(str(stuk.get("model", "")), "wekker_klok", "model")
-	# en het cijfer ÓP de klok draagt de stand
-	var tag := Hits.spot("wk_tijd")
-	waar(tag != null, "de klok draagt zijn tijd als cijfer")
-	if tag != null:
-		var spel := _spel()
-		var s: Dictionary = spel.stand()
-		var w: String = Sommen.Wekker.tijd_woord(int(s["u"]), int(s["m"]))
-		gelijk((tag.knoop as Label).text, w, "en dat is de stand van de klok")
-		gelijk(tag.knoop.tooltip_text, "de klok staat op %s" % w, "met zijn titel")
+	# er hangt GEEN cijfer meer op de klok dat de stand verklapt (2026-09-24)
+	waar(Hits.spot("wk_tijd") == null, "geen tijdplaatje op de klok")
+	_geen_tijdhint(_spel().stand(), "het model")
 	_af()
 
 

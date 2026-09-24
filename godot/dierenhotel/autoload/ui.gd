@@ -563,6 +563,18 @@ func maak_knop(kind: String, o: Dictionary) -> Control:
 			var n := UiNaamplaat.new()
 			n.bouw(str(o.get("tekst", o.get("label", ""))), maten)
 			return n
+		"eigen":
+			# A game's own picture that `Hits` places and owns like any other
+			# element of that game — the wekker's big clock (2026-09-24).  The
+			# game builds it and hands it in as `knoop`; it is never a button,
+			# and it goes with the game.  Its size it answers itself
+			# (`inhoud_maat()`), like `UiWolk`.
+			var eigen = o.get("knoop", null)
+			if eigen is Control:
+				return eigen
+			var leeg := Control.new()
+			leeg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			return leeg
 	var knop := UiHotKnop.new()
 	knop.bouw(o, maten, _tap)
 	return knop

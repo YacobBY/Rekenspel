@@ -6,16 +6,21 @@ extends MiniGame
 ##     voxelmodel (`wekker_klok`) met een wijzerplaat, twaalf uurstreepjes en
 ##     TWEE wijzers die echt met de parameters meedraaien; elke tik zet nieuwe
 ##     params, dus de motor bakt precies één plaatje opnieuw;
-##   * op de klok staat zijn eigen tijd als cijfer (`ctx.ui.getal_tag`);
-##   * onder de klok hangt één sommenkaart met de wekkerwens van de gast, de
-##     stand van de klok als sombalk en één knoppenstrook met pictogram én
-##     woord;
+##   * zolang er gespeeld wordt komt die klok van de muur naar VOREN: groot en
+##     recht van voren (`WekkerKlok`, klok_groot.gd), met cijfers en wijzers die
+##     echt draaien (eigenaar 2026-09-24: "de klok naar voren laten komen zodat
+##     de speler de klok duidelijk van voren kan zien tot ze wegklikken");
+##   * NERGENS staat in woorden hoe laat de klok is — geen cijfer boven de klok,
+##     geen "nu: …" op de kaart (eigenaar 2026-09-24: "geen hint geven hoe laat
+##     het is"): het kind leest de wijzers;
+##   * onder de klok hangt één sommenkaart met de wekkerwens van de gast en één
+##     knoppenstrook met pictogram én woord: een uur erbij, een uur eraf, …;
 ##   * bij het slapende dier hangt zijn eigen wekkerkaartje (💤);
 ##   * goed gezet: de klok slaat, het dier wordt wakker (houding blij +
 ##     ☀-wolkje) en er valt een ster;
-##   * verkeerd gezet: het dier slaapt door, de kaart zegt wat de klok NU zegt
-##     en wat de gast WIL, en de wijzers blijven staan zodat je verder kunt
-##     draaien.  Nooit terugzetten, nooit rood, geen timer (F5).
+##   * verkeerd gezet: het dier slaapt door en de wijzers blijven staan zodat je
+##     verder kunt draaien — vooruit, of met "uur eraf" een uur terug (eigenaar
+##     2026-09-24).  Nooit rood, geen timer (F5).
 ##
 ## GEEN HULP NA EEN FOUT (eigenaar 2026-09-24: "Nee geef geen hulp na fouten.
 ## Kinderen moeten zelf leren rekenen").  De hulpladder van K3 — de gewone
@@ -78,9 +83,14 @@ const T_SLAAPT_NOG := "slaapt nog"
 const T_NOG_NIET := "nog niet"
 const T_GOEDEMORGEN := "goedemorgen"
 const T_AF := "allemaal gewekt"
-const T_PLAAT := "de wijzerplaat"
 const T_UUR := "uur erbij"
 const T_UUR_K := "uur"
+## Een uur terug (eigenaar 2026-09-24: 'Doe ook een "uur eraf" optie').  ⏪
+## zoals op elke afspeelknop: terugspoelen.  Kort `eraf`, want twee knoppen
+## met alleen "uur" erop zijn alleen aan hun plaatje uit elkaar te houden.
+const T_UUR_AF := "uur eraf"
+const T_UUR_AF_K := "eraf"
+const ICO_UUR_AF := "⏪"
 const T_KWARTIER := "kwartier erbij"
 const T_KWARTIER_K := "kwartier"
 const T_VIJF := "5 minuten erbij"
@@ -97,6 +107,14 @@ var _kaart: Ui.Kaart = null
 var _kader_af: Callable = Callable()
 var _t0 := 0                      ## begin van deze beurt, voor state.tel()
 var _zeg := ""                    ## wat er nu bij de gast staat
+var _stap := 0                    ## wat er net gedraaid is (min): zo draaien de wijzers mee
+
+## De grote klok van voren (`WekkerKlok`), zolang er gespeeld wordt.
+const GROOT := "wk_groot"
+## Nooit groter dan dit (eenheden): op een groot scherm blijft het een klok aan
+## de muur van de gang en geen wijzerplaat van de hele kamer.
+const GROOT_MAX := 420.0
+const GROOT_MIN := 96.0
 
 # ---------------------------------------------------------------- aanmelding
 
@@ -253,7 +271,7 @@ func stop() -> void:
 func _op_kader(_rect: Rect2, _schaal: Dictionary) -> void:
 	if not actief or _s.is_empty() or int(_s.get("af", 0)) != 0:
 		return
-	_plaat_vrij()
+	# de grote klok meet zichzelf elke plaatsing opnieuw (`_groot_maat`)
 	_hang_kaart()
 
 func _geen_gasten() -> void:
@@ -489,58 +507,108 @@ static func _klok_model(p: Dictionary) -> Array:
 func klok_params() -> Dictionary:
 	return {"uur": int(_s.get("u", 12)), "min": int(_s.get("m", 0))}
 
+## De klok aan de muur (het voxelmodel) en de grote klok van voren.  Er komt
+## geen cijfer meer bij dat zegt hoe laat hij is (eigenaar 2026-09-24: "geen
+## hint geven hoe laat het is"): het oude tijdplaatje `wk_tijd` is weg.
 func _zet_klok() -> void:
 	ctx.wereld.decor(KAMER, {"id": DECOR, "model": MODEL, "x": KX, "z": KZ,
 		"ver": true, "params": klok_params()})
-	var w := tijd_woord(int(_s.get("u", 12)), int(_s.get("m", 0)))
-	# het cijfer ÓP de klok (HOTEL.md §9), net boven de kast
-	ctx.ui.getal_tag(DECOR, w, {"id": "wk_tijd", "kamer": KAMER, "y": 48.0,
-		"prio": 12, "titel": "de klok staat op %s" % w})
-	_plaat_vrij()
+	var stap := _stap
+	_stap = 0
+	_groot_klok(stap)
 
-## De wijzerplaat vrijhouden (games-b.md §2.6, bindend).  De deurknoppen van
-## het hotel hangen in de gang precies in de band waar de klok hangt; gemeten
-## stonden "Kamer 1" en "Kamer 2" ÓP de wijzerplaat.  Dit spel legt daarom één
-## LEEG tagje van zichzelf precies op de plaat: niet te zien en niet te tikken,
-## maar het reserveert de cellen.  Zodra het spel stopt staan de deurknoppen
-## weer waar ze willen.
+## De klok van VOREN (eigenaar 2026-09-24).  Zolang de wekkerdienst loopt staat
+## hij groot en recht voor de muur van de gang, tot het kind wegtikt: dan ruimt
+## `stop()` hem op met de rest.  In een andere kamer (het wakker worden) laat
+## `Hits` hem vanzelf weg; terug in de gang komt hij weer naar voren.
 ##
-## CONTRACTGAT.  `Hits` heeft geen anker dat een element met opzet ÓP zijn eigen
-## voorwerp zet: `midden` tilt zich juist van dat voorwerp af (`_bezet_voor`,
-## "de som hangt boven het bakje"), en zonder eigen `vlak` zoekt `Hits` er zelf
-## een voorwerp bij op positie.  Dat is voor elke andere kaart precies goed, maar
-## dit tagje moet juist ÓP de klok blijven liggen.  Er is geen manier om "ik heb
-## geen voorwerp" te zeggen; het tagje geeft daarom een rechthoekje van 1 x 1
-## buiten het kader mee.  Zie het verslag onder "Contract gaps".
-const GEEN_VLAK := Rect2(Vector2(-16.0, -16.0), Vector2(1.0, 1.0))
+## Hij neemt ook de taak van het oude lege tagje `wk_plaat` over (games-b.md
+## §2.6): wat Hits hier neerlegt reserveert zijn hele rechthoek, dus er valt
+## geen knop op de wijzerplaat.  Hij hangt in de VASTE laag, zodat een
+## naambordje van een dier dat door de gang loopt voor hem opzij gaat en hij
+## niet zelf van zijn plek springt.
+func _groot_klok(stap: int = 0) -> void:
+	var u := int(_s.get("u", 12))
+	var m := int(_s.get("m", 0))
+	var s := Hits.spot(GROOT)
+	if s != null and is_instance_valid(s.knoop) and s.knoop is WekkerKlok:
+		(s.knoop as WekkerKlok).zet(u, m, stap)
+		return
+	var klok := WekkerKlok.new()
+	klok.meet = _groot_maat
+	klok.zet(u, m)
+	_wand_hart(klok)
+	ctx.hotspots.maak({"id": GROOT, "kind": "eigen", "knoop": klok, "kamer": KAMER,
+		"x": KX, "z": KZ, "y": float(CY), "op": "midden", "geen_vlak": true,
+		"vast": true, "prio": 20, "volg": _volg_groot()})
 
-func _plaat_vrij() -> String:
-	var k := float(ctx.wereld.schaal().get("k", 1.0))
-	var d := maxf(20.0, float(JsGetal.rond(2.0 * R_RAND * k)))
-	var hoog: float = ctx.wereld.px_per_hoogte()
-	var vloer: float = ctx.wereld.mik_punt(KX, KZ, 0.0).y
-	var mik_y := vloer - float(CY) * hoog
-	var boven := mik_y - d * 0.5
-	var onder := mik_y + d * 0.5
-	# Op een laag liggend kader snijdt de camera de bovenkant van de kast weg en
-	# wordt het cijfer op de klok tegen de bovenrand geklemd.  De reservering
-	# blijft daar ónder: wat toch niet te zien is hoeft niet vrijgehouden.
-	var t := Hits.spot("wk_tijd")
-	if t != null and is_instance_valid(t.knoop):
-		boven = maxf(boven, float(Hits.RAND) + t.knoop.get_combined_minimum_size().y)
-	onder = maxf(onder, boven + 20.0)
-	var id := ctx.hotspots.maak({"id": "wk_plaat", "kind": "tag", "kamer": KAMER,
-		"x": KX, "z": KZ, "y": (vloer - (boven + onder) * 0.5) / maxf(hoog, 0.001),
-		"op": "midden", "prio": 15,
-		"titel": T_PLAAT, "maat": Vector2(d, onder - boven),
-		"vlak": GEEN_VLAK})
-	# `UiGetalTag` tekent een geel pilletje; dit tagje mag niets laten zien.
-	# Onzichtbaar via `modulate`, niet via `visible`: `Hits.plaats()` zet de
-	# zichtbaarheid elke tekening zelf.
-	var s := Hits.spot(id)
-	if s != null and is_instance_valid(s.knoop):
-		s.knoop.modulate = Color(1.0, 1.0, 1.0, 0.0)
-	return id
+## Waar de klok aan de muur hangt, voor het naar voren komen.
+func _wand_hart(klok: WekkerKlok) -> void:
+	klok.van_hart = World.mik_punt(KX, KZ, float(CY))
+	klok.van_straal = R_KAST * float(World.schaal().get("k", 1.0))
+
+## Elke plaatsing: het hart van de grote klok staat zo dicht mogelijk bij de
+## wandklok — recht ervoor — maar helemaal in de vrije ruimte boven de
+## rekenbalk.  `Hits` klemt hem daarna nog in het kader.
+func _volg_groot() -> Callable:
+	return func() -> Dictionary:
+		var s := Hits.spot(GROOT)
+		if s == null or not is_instance_valid(s.knoop):
+			return {}
+		_wand_hart(s.knoop as WekkerKlok)
+		var hoog: float = World.px_per_hoogte()
+		if hoog <= 0.001:
+			return {}
+		var vrij := _groot_vrij()
+		var maat := _groot_maat()
+		var wand: Vector2 = World.mik_punt(KX, KZ, float(CY))
+		var y_mid := clampf(wand.y, vrij.position.y + maat.y * 0.5,
+			maxf(vrij.position.y + maat.y * 0.5, vrij.end.y - maat.y * 0.5))
+		var vloer: float = World.mik_punt(KX, KZ, 0.0).y
+		return {"x": KX, "z": KZ, "y": (vloer - y_mid) / hoog, "kamer": KAMER}
+
+## De ruimte waarin de grote klok mag staan: het kader boven de rekenbalk.
+## Staat er geen balk (een kader dat daar te krap voor is), dan houdt hij
+## onderin plaats vrij voor de kaart en haar strook, die dan onder hem hangen.
+func _groot_vrij() -> Rect2:
+	var kader := World.kader_rect().size
+	var boven := float(Hits.RAND)
+	var onder := kader.y - float(Hits.RAND)
+	if Ui.balk_aan():
+		onder = kader.y - Ui.balk_kost() - float(Hits.GAT)
+	else:
+		onder -= _kaart_ruimte()
+	return Rect2(Vector2(float(Hits.RAND), boven),
+		Vector2(maxf(0.0, kader.x - 2.0 * float(Hits.RAND)), maxf(0.0, onder - boven)))
+
+## Hoe hoog de zwevende kaart met haar strook eronder is, plus de lucht ertussen.
+func _kaart_ruimte() -> float:
+	var h := 0.0
+	var k := Hits.spot("wk_som")
+	if k != null and is_instance_valid(k.knoop) and k.knoop is UiSomkaart:
+		h += Ui.kaart_mat(k.knoop as UiSomkaart).y + float(Hits.GAT)
+	var st := Hits.spot("wk_som_keuzes")
+	if st != null and is_instance_valid(st.knoop):
+		h += (st.knoop as Control).get_combined_minimum_size().y + float(Hits.KLEEF)
+	return h
+
+## Zo groot als de vrije ruimte toelaat: in de hoogte helemaal, in de breedte
+## hooguit vier vijfde (er moet ruimte blijven voor een wolkje ernaast).
+func _groot_maat() -> Vector2:
+	var vrij := _groot_vrij()
+	var breed := minf(vrij.size.x * 0.8, vrij.size.y / WekkerKlok.VORM)
+	breed = clampf(breed, GROOT_MIN, GROOT_MAX)
+	return WekkerKlok.maat_bij(floorf(breed))
+
+## De rechthoek waar de grote klok nu staat (of komt te staan).
+func groot_rect() -> Rect2:
+	var l: Dictionary = Hits.debug().get(GROOT, {})
+	if l.has("rect"):
+		return l["rect"]
+	var maat := _groot_maat()
+	var vrij := _groot_vrij()
+	var x: float = World.mik_punt(KX, KZ, float(CY)).x
+	return Rect2(Vector2(x - maat.x * 0.5, vrij.get_center().y - maat.y * 0.5), maat)
 
 # ------------------------------------------------------------------ de kaart
 
@@ -550,8 +618,9 @@ func tijd_woord(u: int, m: int) -> String:
 ## De zin blijft binnen het budget van F4: hooguit 8 woorden EN 40 tekens, en
 ## op één regel past ongeveer 34 tekens.  Met de langste naam en de langste
 ## tijd loopt "... wil om ... op" daar net over; dan zegt de kaart het korter.
-## K3: na een misser zegt de kaart dezelfde wens nog eens — de klokstand
-## staat in de balk, niet in de zin; de kaart hoeft niet te herhalen.
+## K3: na een misser zegt de kaart dezelfde wens nog eens.  Hoe laat de klok
+## NU is staat nergens in woorden (eigenaar 2026-09-24): dat leest het kind
+## van de wijzers.
 func zin_zet() -> Array:
 	var naam := naam_van(str(_s.get("gast", "")))
 	var wil := tijd_woord(int(_s.get("doelU", 12)), int(_s.get("doelM", 0)))
@@ -564,17 +633,27 @@ func zin_duur() -> Array:
 	return ["%s slaapt nog %d uur" % [naam_van(str(_s.get("gast", ""))),
 		int(_s.get("duur", 1))], T_DUUR2]
 
-## De sombalk is de stand van de klok, die live meeloopt terwijl je draait.
-## K3: de balk staat altijd — ook na een misser is "nu: ..." de anker die het
-## kind vertelt waar de klok staat ten opzichte van de gewenste tijd.
+## De sombalk is leeg.  Tot 2026-09-24 stond hier de klokstand in woorden
+## ("nu: 10 uur"), en daarmee hoefde het kind de klok niet te lezen: het tikte
+## tot de woorden klopten (eigenaar: "geen hint geven hoe laat het is").
 func som_balk() -> String:
-	return "nu: %s" % tijd_woord(int(_s.get("u", 12)), int(_s.get("m", 0)))
+	return ""
 
+## Een uur erbij en een uur eraf in elke band; band 4 draait daarnaast per
+## kwartier, band 5 per vijf minuten.  De strook houdt hooguit vier knoppen
+## (HOTEL.md §9), dus band 5 heeft geen kwartierknop meer: een kwartier is drie
+## keer vijf minuten, en per vijf minuten rond tellen is precies wat groep 5
+## op de klok leert.  (Het alternatief — ✅ Klaar uit de strook halen — laat
+## de knop waar het kind op eindigt los van de andere staan.)
 func knoppen() -> Array:
 	var band := int(_s.get("band", 3))
-	var l: Array = [{"id": "uur", "icoon": "🕐", "tekst": T_UUR, "kort": T_UUR_K,
-		"kies": func(_k: String) -> void: draai(60)}]
-	if band >= 4:
+	var l: Array = [
+		{"id": "uur", "icoon": "🕐", "tekst": T_UUR, "kort": T_UUR_K,
+			"kies": func(_k: String) -> void: draai(60)},
+		{"id": "uur_af", "icoon": ICO_UUR_AF, "tekst": T_UUR_AF, "kort": T_UUR_AF_K,
+			"kies": func(_k: String) -> void: draai(-60)},
+	]
+	if band == 4:
 		l.append({"id": "kwartier", "icoon": "🕒", "tekst": T_KWARTIER,
 			"kort": T_KWARTIER_K, "kies": func(_k: String) -> void: draai(15)})
 	if band >= 5:
@@ -613,10 +692,11 @@ func _teken_kaart(nieuw: bool) -> void:
 	_kaart.som(som_balk())
 	_kaart.hulp(str(_s.get("hulp", "")))
 
-## De kaart hangt precies `GAT` onder de rechthoek van de klok.  Dan hoeft het
-## bandrooster haar niet van de wijzerplaat af te tillen (`midden` doet dat
-## anders in hele banden van 52) en houdt de keuzestrook eronder haar plek, ook
-## op een laag liggend kader.
+## De kaart hangt precies `GAT` onder de rechthoek van de klok — sinds
+## 2026-09-24 de grote klok van voren.  Dan hoeft het bandrooster haar niet van
+## de klok af te tillen (`midden` doet dat anders in hele banden van 52) en
+## houdt de keuzestrook eronder haar plek, ook op een laag liggend kader.  (In
+## de rekenbalk staat de kaart op het papier onderin; dan telt dit niet.)
 ##
 ## Alles is gemeten en niets gegokt: de rechthoek komt van de gebakken plaat van
 ## het model, de hoogte van de kaart van haar eigen minimummaat vóór de eerste
@@ -630,6 +710,8 @@ func _hang_kaart() -> void:
 	if hoog <= 0.001:
 		return
 	var klok: Rect2 = ctx.wereld.vlak_van(MODEL, KX, KZ, 0.0, klok_params())
+	if Hits.spot(GROOT) != null:
+		klok = groot_rect()
 	if klok.size.y <= 0.0:
 		return
 	# the card's HONEST height: its own Control minimum is a tower of one word
@@ -642,12 +724,8 @@ func _hang_kaart() -> void:
 		if eerlijk.y > 0.0:
 			kh = eerlijk.y
 	var vloer: float = ctx.wereld.mik_punt(KX, KZ, 0.0).y
-	# between the clock and the card the clock's own time ("10 uur") keeps its
-	# place, one band of the button grid: the tag steps down in whole bands
-	# off the clock face, and without that room the card pushed it under
-	# itself — and the answer strip, which glues under the card, went to the
-	# foot of the frame
-	s.y = (vloer - (klok.end.y + float(Hits.GAT) + float(Hits.RIJ) + kh * 0.5)) / hoog
+	# right under the clock: there is no time tag between them any more
+	s.y = (vloer - (klok.end.y + float(Hits.GAT) + kh * 0.5)) / hoog
 
 ## Het wekkerkaartje bij het dier: in zijn eigen kamer te zien.  Hetzelfde id
 ## werkt hetzelfde wolkje bij, dus er wordt niets afgebroken en opnieuw gebouwd.
@@ -727,7 +805,7 @@ func _meld() -> void:
 			for k in rij.get_children():
 				print("[probe] wekkerknop ", k.name, "=",
 					(k as Control).get_global_rect(), " tekst=", (k as Button).text)
-	for id in ["wk_som", "wk_som_keuzes", "wk_plaat", "wk_tijd", "wk_gast", "wk_zon"]:
+	for id in ["wk_som", "wk_som_keuzes", GROOT, "wk_gast", "wk_zon"]:
 		var q := Hits.spot(id)
 		if q != null and is_instance_valid(q.knoop) and q.knoop.visible:
 			print("[probe] wekkerplek ", id, "=", q.knoop.get_global_rect(),
@@ -738,7 +816,9 @@ func _meld() -> void:
 # -------------------------------------------------------------------- tikken
 
 ## "uur erbij" / "kwartier erbij" / "5 minuten erbij": de wijzers draaien
-## VOORUIT, na 12 begint het gewoon weer bij 1.  Nooit terugzetten.
+## vooruit, na 12 begint het gewoon weer bij 1.  "uur eraf" (`stap_min` -60)
+## draait ze een uur terug, vóór 1 komt 12 (eigenaar 2026-09-24).  De grote klok
+## laat de wijzers die kant op draaien (`_stap`).
 func draai(stap_min: int) -> Dictionary:
 	if not actief or _af_nu() or str(_s.get("stap", "")) == "duur":
 		return {}
@@ -752,6 +832,7 @@ func draai(stap_min: int) -> Dictionary:
 	# Elke draai geeft een zachte gong; `Snd.klok()` remt zichzelf af op
 	# 120 ms, zodat twee tikken op één knop één slag geven (architecture.md §8).
 	ctx.snd.klok()
+	_stap = stap_min
 	teken(false)
 	_bewaar()
 	return {"u": int(_s["u"]), "m": int(_s["m"])}

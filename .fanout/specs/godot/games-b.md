@@ -805,9 +805,26 @@ Een beurt is **geldig** als `L`, `p` en `M` getallen zijn, `L > 0`,
 
 In de **gang** hangt aan de achterwand een grote halklok. De gasten slapen; het
 kind draait de wijzers naar het uur dat een gast wil opstaan en tikt ✅ Klaar.
-Klopt het, dan slaat de klok, wordt het dier wakker en valt er een ster. Klopt
-het niet, dan slaapt het dier gewoon door en blijven de wijzers staan waar ze
-staan — **nooit terugzetten, nooit rood, geen timer**.
+Klopt het, dan slaat de klok, wordt het dier wakker en valt er een ster. Klopt het niet, dan slaapt het dier gewoon door en blijven de wijzers staan waar ze
+staan — **nooit rood, geen timer**. (Tot 2026-09-24 ook "nooit terugzetten"; sindsdien
+is er een knop `uur eraf`, §2.7.)
+
+**De klok van voren (eigenaar 2026-09-24).** *"Kun je de klok groter maken wanneer erop
+wordt geklikt en geen hint geven hoe laat het is? Doe ook een 'uur eraf' optie"* en
+*"ook de klok naar voren laten komen zodat de speler de klok duidelijk van voren kan
+zien tot ze wegklikken van het wekker zetten"*. Zolang het spel loopt staat in de gang
+een grote, platte wekker recht van voren (`wk_groot`, `kind: "eigen"`, de klasse
+`WekkerKlok` in `games/wekker/klok_groot.gd`): kast, gouden rand, room wijzerplaat met
+de cijfers 1–12, zestig minuutstreepjes, twee belletjes en twee pootjes, in de kleuren
+van het voxelmodel. Hij komt bij het verschijnen van de wandklok naar voren (0,42 s) en
+de wijzers draaien bij elke draai echt mee (een uur erbij = één rondje van de grote
+wijzer vooruit, een uur eraf één rondje terug). Maat: zo groot als de vrije ruimte boven
+de rekenbalk toelaat — in de hoogte helemaal, in de breedte hooguit 4/5, tussen 96 en
+420 eenheden; het hart zo dicht mogelijk voor de wandklok. Hij hangt in de vaste laag
+(`vast: true`, prio 20), is geen knop (een tik gaat erdoorheen) en `stop()` ruimt hem op
+met de rest; in de kamer van de gast (het wakker worden) laat `Hits` hem weg. **Nergens
+staat in woorden hoe laat de klok is**: geen tijdplaatje boven de klok, geen sombalk
+`nu: …`, geen titel op de grote klok.
 
 Kamer `gang`: 120 × 36 voxels, wand 56, vloer `loper`; vast decor `plant`
 (44, 8), `plant` (82, 8), `kist` (114, 14); deuren naar receptie, kamer 1,
@@ -986,10 +1003,14 @@ Een streep tekenen: voor `r` van `r0` tot `r1` in stappen `stap` en `t` van
 `naarVox(r·sin a + t·cos a, −r·cos a + t·sin a)`, verschoven met `CY` in y.
 
 **Elke tik zet nieuwe params**, dus de motor bakt precies één plaatje opnieuw.
-Op de klok staat zijn eigen tijd als cijfer: `getalTag('klok', tijdWoord(u, m),
-{y: 48, prio: 12, titel: 'de klok staat op <tijdWoord>'})`.
+*(Tot 2026-09-24 stond op de klok zijn eigen tijd als cijfer, `wk_tijd`; dat verklapte
+de stand en is weg.)*
 
 ### 2.6 De wijzerplaat vrijhouden (bindend)
+
+*Sinds 2026-09-24 doet de grote klok van voren (`wk_groot`, §2.1) dit: wat `Hits` hem
+geeft reserveert zijn hele rechthoek, dus er valt geen knop op de wijzerplaat. Het lege
+tagje hieronder bestaat niet meer; de tekst blijft staan als geschiedenis.*
 
 De deurknoppen van het hotel hangen in de gang precies in de band waar de klok
 hangt; gemeten stonden "Kamer 1" en "Kamer 2" **op** de wijzerplaat. Oplossing:
@@ -1035,18 +1056,21 @@ stappen even hoog.
 **De tijdsduurvraag** (`zinDuur`): `'<naam> slaapt nog <duur> uur'` /
 `'Hoe laat is hij wakker?'`.
 
-**De sombalk** is de live meelopende klokstand `'nu: <tijdWoord(u,m)>'`, behalve
-in de stap `mis`: daar is de balk **leeg**, want de tijd staat dan al in de zin
-(en de klok draagt hem zelf ook nog als cijfer) — anders zou het kind hem drie
-keer lezen.
+**De sombalk** is **leeg** (eigenaar 2026-09-24: "geen hint geven hoe laat het
+is"). Tot die dag stond daar de live meelopende klokstand `'nu: <tijdWoord(u,m)>'`, en
+daarmee hoefde het kind de klok niet te lezen: het tikte tot de woorden klopten.
 
 **De knoppenstrook** (`keuzeTitel 'draai de klok'`):
 
 | band | knoppen (id, icoon, tekst lang → kort) | stap |
 |---|---|---|
-| 3 | `uur` 🕐 `'uur erbij'` → `'uur'`; `klaar` ✅ `'Klaar'` | +60 min |
-| 4 | idem + `kwartier` 🕒 `'kwartier erbij'` → `'kwartier'` | +15 min |
-| 5 | idem + `vijf` 🕧 `'5 minuten erbij'` → `'5 min'` | +5 min |
+| 3 | `uur` 🕐 `'uur erbij'` → `'uur'`; `uur_af` ⏪ `'uur eraf'` → `'eraf'`; `klaar` ✅ `'Klaar'` | +60 / −60 min |
+| 4 | `uur`, `uur_af`, `kwartier` 🕒 `'kwartier erbij'` → `'kwartier'`, `klaar` | +15 min |
+| 5 | `uur`, `uur_af`, `vijf` 🕧 `'5 minuten erbij'` → `'5 min'`, `klaar` | +5 min |
+
+Hooguit vier knoppen (HOTEL.md §9): band 5 heeft sinds 2026-09-24 **geen kwartierknop**
+meer — een kwartier is drie keer vijf minuten, en per vijf minuten rond tellen is wat
+groep 5 op de klok leert. (Niet gekozen: ✅ Klaar uit de strook halen.)
 
 Bij de tijdsduurvraag (`keuzeTitel 'hoe laat wordt hij wakker?'`) staan er in
 plaats daarvan vier uurknoppen `uurIco(u, 0)` + `'<u> uur'`.
@@ -1069,8 +1093,9 @@ en na een misser `'slaapt nog'` (slapend) of `'nog niet'`.
 
 ### 2.8 Tikken
 
-**Draaien** (`draai(stapMin)`): de wijzers gaan **vooruit**, na 12 begint het
-gewoon weer bij 1. Nooit terugzetten. Stond de kaart in `mis`, dan gaat hij bij
+**Draaien** (`draai(stapMin)`): de wijzers gaan vooruit, na 12 begint het
+gewoon weer bij 1; `uur eraf` (`stapMin = −60`) draait ze een uur terug, vóór 1
+komt 12. Stond de kaart in `mis`, dan gaat hij bij
 de eerste draai terug naar de gewone zin. Elke draai geeft een zachte gong
 (`snd.klok`), maar met een rem: nooit twee slagen binnen **120 ms**. Tijdens de
 tijdsduurvraag doet draaien niets.
@@ -1127,17 +1152,17 @@ sterstand blijft behouden (er valt hooguit één ster per ronde).
 | prikbord | `'Wekker zetten'` |
 | geen gasten | wolkje op de kist `🛏 'nog geen gasten'` |
 | kaart, zetten | `'<naam> wil om <tijd> op'` (of `'Wek <naam> om <tijd>'`) / `'Zet de klok'` of `'Zet de klok voor morgen'` |
-| kaart, na misser | `'De klok staat op <tijd>'` / `'<naam> wil <tijd>'` |
+| kaart, na misser | dezelfde wens als ervoor (K3); de klokstand staat nergens in woorden |
 | kaart, tijdsduur | `'<naam> slaapt nog <n> uur'` / `'Hoe laat is hij wakker?'` |
-| sombalk | `'nu: <tijd>'` (leeg na een misser) |
-| knoppen | `'uur erbij'`/`'uur'`, `'kwartier erbij'`/`'kwartier'`, `'5 minuten erbij'`/`'5 min'`, `'Klaar'`; tijdsduur: `'<u> uur'` |
+| sombalk | leeg (2026-09-24) |
+| knoppen | `'uur erbij'`/`'uur'`, `⏪ 'uur eraf'`/`'eraf'`, `'kwartier erbij'`/`'kwartier'`, `'5 minuten erbij'`/`'5 min'`, `'Klaar'`; tijdsduur: `'<u> uur'` |
 | strooktitel | `'draai de klok'` / `'hoe laat wordt hij wakker?'` |
 | hulp | vast, vanaf de eerste tik: `'💛 draai tot de klok klopt'`; na een misser verandert hij niet (geen hulpladder meer, 2026-09-24) |
 | misser | `🔄 Nog een keer` bij de klok, de strook 1,2 s op slot |
 | bij de gast | `'<tijd>'`, na een misser `'slaapt nog'` of `'nog niet'` |
 | wakker | kaart `'<naam> is wakker'`, wolkje `☀ 'goedemorgen'` |
 | ronde af | wolkje op de klok `⏰ 'allemaal gewekt'` |
-| op de klok | `'<tijd>'` met titel `'de klok staat op <tijd>'` |
+| op de klok | niets (2026-09-24): de grote klok van voren wijst de tijd alleen aan |
 
 ### 2.11 Stoppen en herstellen
 
