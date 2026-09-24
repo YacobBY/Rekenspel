@@ -140,16 +140,19 @@ func test_na_een_duik_loopt_hij_weer_op_de_vloer() -> void:
 	_na_afloop()
 
 ## Gliding: 20 points along one straight line cost the same as one point.
+## The line runs over open floor (x = 40, in front of the desk, past the bench
+## and the plant): a walk goes round what stands in the room now (`looppad`),
+## and the old line along x = 20 ended inside the plant at (16, 96).
 func test_glijden_door_de_punten_kost_geen_extra_tijd() -> void:
 	World.naar("receptie")
-	World.zet(T, "receptie", 20.0, 20.0, {"kind": "hond"})
+	World.zet(T, "receptie", 40.0, 40.0, {"kind": "hond"})
 	var een := {}
-	_bestel(een, T, [Vector2(20.0, 100.0)])
+	_bestel(een, T, [Vector2(40.0, 110.0)])
 	var recht := _draai(een)
-	World.zet(T, "receptie", 20.0, 20.0, {"kind": "hond"})
+	World.zet(T, "receptie", 40.0, 40.0, {"kind": "hond"})
 	var veel: Array = []
 	for i in range(1, 21):
-		veel.append(Vector2(20.0, 20.0 + i * 4.0))
+		veel.append(Vector2(40.0, 40.0 + i * 3.5))
 	var stukjes := {}
 	_bestel(stukjes, T, veel)
 	var gestapt := _draai(stukjes)

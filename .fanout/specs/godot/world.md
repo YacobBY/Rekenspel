@@ -330,6 +330,28 @@ brass knob `#F2C14E`), and wears the `luifelz` awning and the `deurmatz` doormat
     `(x + 12, z + 2)`;
   * `bak`: `(x − 13, z)`;
   * anything else: `(x, z)`.
+* **Port (2026-09-24): the walking grid** (`World.looppad_rooster(kamer)`, `wereld/looppad.gd`;
+  owner: "Dieren lopen ook vaak door objecten heen als ze naar andere maps toe lopen en ik ze
+  volg"). It is NOT derived here once: it is read from what stands on the floor of the room
+  *right now* — `Rooms.hindernissen(kamer)` (every decor piece that is not `ver` and not a
+  grass tuft `pol`; every slot: a bed as its model, a bowl as `kom` on `Art.KOM_ANKER` — a
+  bought `bakje` too — the tub; the pool's `bad` as a floor rectangle; the desk `balie` and
+  the strip behind it back to the wall), plus the movable things standing in the room (the
+  trolley, the desk lamp) and the games' loose decor (`World.decor`, not `ver`). `World`
+  keeps one grid per room and rebuilds it (≈ 5–10 ms) whenever that list changes — bought
+  furniture, a pushed trolley, a game's stall — the list itself is the cache key.
+  * A piece blocks the voxel columns in which it has a voxel between `VLOER = 2` and
+    `KOP = 12` over the floor (its own `y` included, its `rot` applied). Flat things (a
+    doormat, the hopscotch stones, a threshold) lie under a guest's paws; what hangs over
+    his back (the garland, a tree's crown, a parasol's canopy, the bar over a gate) is no
+    wall.
+  * Cells of `CEL = 2` voxels: **DICHT** when a blocked column lies within `HARD = 3` of the
+    cell's middle (so every point of a cell that is not DICHT is ≥ 2.5 voxels from every
+    footprint), **KRAP** within `RUIM = 6`, or within `RAND = 4` of the room's edge, else
+    **OPEN**. A* runs over nodes of `KNOOP = 4` voxels (2 × 2 cells, the worst class).
+  * The free-cell grid `r.vrij` and the wander places `r.plekken` above keep their own
+    Manhattan rules; a wander place is only walked to when its cell is not DICHT and it is
+    reachable (§2.6).
 
 **Fixed slots.** Only kamer1 and kamer2 have slots, identical in both:
 `bed1 = bed @ (30, 27)`, `bed2 = bed @ (30, 75)`, `bak = bak @ (84, 33)`.
@@ -583,6 +605,25 @@ back to the desk (`ga`) halfway to his room kept the doors of that first walk, a
 walk ended with a step through one of them — he turned up in the corridor (found by the
 beds game's `⬅ Terug`, games-a.md §3.6).
 
+**Port (2026-09-24): every walk goes round what stands in the room** (`World.looppad(kamer,
+van, naar)`, the grid of §1.5). Every leg a guest WALKS inside a room — `ga`, every point of
+`stappen`/`loop_naar`, the leg to the next door of a `reis` (door step `ix, iz` to door step),
+the last leg to the asked point (a bed's standing place, a bowl's eating spot, a game's
+place), `mood`, `solo`, idle wandering — is the way A* finds over the grid, eight neighbours,
+at a cost per voxel of 1 (OPEN), 1.5 (KRAP) and 200 (DICHT), then pulled straight: from every
+corner kept, straight on to the farthest corner whose line runs no further through DICHT cells
+than the path it cuts off and costs at most 1.25 × as much, sampled every half voxel. So a
+guest walks natural diagonals round the beds, the desk, the plants, the stalls and the
+trolley, and never closer to a piece than the grid path went. A straight line over OPEN cells
+only is walked as it is (one point). DICHT is expensive, never forbidden: a goal inside a
+piece (the bed's own point) is reached the shortest way in, and a guest who stands in
+something (woken on the mattress, a piece put down on him) walks out the shortest way — out
+of the water too, which replaces `Rooms.om_het_water` (kept as the fallback when a room has
+no grid). **Not** routed: `pose: 'zwem'` and `'spring'`, a walk with `perStap` (it counts its
+own points), and reduced motion (he is put on the last point anyway). The travel bar of a
+journey (`World.reis_voortgang`) counts the leg's real length round everything
+(`been_lengte`), so it still only climbs.
+
 **Promises** (`stappen`, `loopNaar`): options `{pose: null|'zwem'|'spring', tempo: 1,
 perStap(i, punt), na}`. The promise resolves `true` when the last point is reached (exactly
 on the point, in end pose `na`, default `wacht`, or `zwem` when `pose: 'zwem'`), and
@@ -630,6 +671,13 @@ If a route through doors is pending, that is done first.
 `vrijePlek(d)`: start at a random index in the wander list, skip a place within isometric
 screen distance 66 of another animal's target in the same room, skip a place closer than 40
 to the animal itself, keep the farthest, and stop early with 45 % chance per candidate.
+**Port (2026-09-24):** first skip a place whose cell of the walking grid (§1.5) is DICHT —
+kamer 1's four places at the ends of its beds, the keuken's three under the trolley — or that
+cannot be reached without squeezing through something (the fallback "first candidate" is
+then his own spot, so he stays where he is). A guest who stands IN something — the kraam's
+customer spot lies in the counter's footprint — counts as standing on the nearest free floor
+around it, where he walks out to. The walk there goes round things like every
+walk (§2.5).
 After a happy bout, `wandelKans` grows by 0.06 (max 0.62).
 
 Other state details: `blij` lasts `46 + floor(r·34)` ticks with one of three styles

@@ -136,6 +136,7 @@ class Dier extends RefCounted:
 	var reis_deuren := 0           ## doors on that journey
 	var reis_klaar := 0            ## doors already passed
 	var been_van := Vector2.INF    ## where the leg he is walking started
+	var been_lengte := 0.0         ## how long that leg is, round everything (`looppad`)
 	## coming in through the front door (`kom_binnen`, state `komt`): the beats
 	## still to play (`WereldBinnenkomst`), the ticks into the current one, where
 	## it started, and the spot the arrival ends on
@@ -1010,16 +1011,18 @@ func stappen(id: String, punten: Array, o: Dictionary = {}) -> bool:
 	var lijst := _punten_van(punten)
 	if lijst.is_empty():
 		return true
-	if str(o.get("pose", "")).is_empty() and not (o.get("per_stap", o.get("perStap", Callable())) as Callable).is_valid():
-		# a walk: every leg goes round the water (a walk that counts its own
-		# points keeps them, or the count would be off)
-		var droog: Array = []
+	if str(o.get("pose", "")).is_empty() and not (o.get("per_stap", o.get("perStap", Callable())) as Callable).is_valid() \
+			and not rust():
+		# a walk: every leg goes round what stands in the room and round the
+		# water (`looppad`).  A walk that counts its own points keeps them, or
+		# the count would be off; swimming and jumping keep their exact line;
+		# reduced motion puts him on the last point anyway.
+		var weg: Array = []
 		var van := Vector2(d.x, d.z)
 		for p in lijst:
-			droog.append_array(Rooms.om_het_water(d.kamer, van, p))
-			droog.append(p)
+			weg.append_array(looppad(d.kamer, van, p))
 			van = p
-		lijst = droog
+		lijst = weg
 	_breek(d, false)
 	d.beweeg_pose = o.get("pose", "")
 	d.beweeg_tempo = maxf(0.05, float(o.get("tempo", 1.0)))
@@ -1048,13 +1051,87 @@ func stappen(id: String, punten: Array, o: Dictionary = {}) -> bool:
 	vuil()
 	return await op.af
 
-## The walking points to `doel` from where `d` stands: round the water when the
-## straight line would cut through it (Rooms.om_het_water).  Swimmers and
-## jumpers keep their own line.
+## The walking points to `doel` from where `d` stands: round what stands in the
+## room and round the water (`looppad`).  Swimmers and jumpers keep their own
+## line.
 func _droog_pad(d: Dier, doel: Vector2) -> Array:
-	var uit: Array = Rooms.om_het_water(d.kamer, Vector2(d.x, d.z), doel)
-	uit.append(doel)
+	return looppad(d.kamer, Vector2(d.x, d.z), doel)
+
+# ---------------------------------------------------------------- looppaden
+##
+## The way round things (owner, 2026-09-24: "Dieren lopen ook vaak door objecten
+## heen als ze naar andere maps toe lopen en ik ze volg").  Every leg a guest
+## WALKS in a room — to the next door, through the room to the door after it,
+## to his bed, his bowl, a game's spot, a wander place — goes round what stands
+## there: `WereldLooppad` builds a grid of the room from `_hindernissen` and
+## finds the way with A*, pulled straight into natural diagonals.  One grid per
+## room, kept until what stands in the room changes: the key is the list
+## itself, so a bought bed, a pushed trolley or a game's stall are in the very
+## next walk, whichever way they got there.  Swimming, jumping and a walk that
+## counts its own points (`per_stap`) keep their exact points.
+
+var _looppaden: Dictionary = {}    ## kamer -> WereldLooppad
+
+## Everything that stands on the floor of a room right now: the room's own
+## (`Rooms.hindernissen`: decor, slots, water, the desk), the movable things
+## standing there (the trolley, the desk lamp) and the loose decor of the games.
+func _hindernissen(kamer_id: String) -> Array:
+	var uit := Rooms.hindernissen(kamer_id)
+	for id in _dingen:
+		var ding: Dictionary = _dingen[id]
+		if str(ding["kamer"]) == kamer_id:
+			uit.append({"model": str(ding["model"]), "params": {}, "x": float(ding["x"]),
+				"z": float(ding["z"]), "y": float(ding["hoog"]), "rot": 0, "ax": 0.0, "az": 0.0})
+	if _decor.has(kamer_id):
+		for stuk in (_decor[kamer_id] as Dictionary).values():
+			if bool(stuk["ver"]):
+				continue
+			uit.append({"model": str(stuk["model"]), "params": stuk["params"],
+				"x": float(stuk["x"]), "z": float(stuk["z"]), "y": float(stuk["hoog"]),
+				"rot": int(stuk["rot"]), "ax": 0.0, "az": 0.0})
 	return uit
+
+## The walking grid of a room as it stands now; null for an unknown room.
+func looppad_rooster(kamer_id: String) -> WereldLooppad:
+	var r := Rooms.get_kamer(kamer_id)
+	if r == null:
+		return null
+	var lijst := _hindernissen(kamer_id)
+	var sleutel := "%d|%d|%s" % [r.w, r.d, str(lijst)]
+	var oud: WereldLooppad = _looppaden.get(kamer_id)
+	if oud != null and oud.sleutel == sleutel:
+		return oud
+	var stukken: Array = []
+	for h in lijst:
+		if not (h as Dictionary).has("model"):
+			stukken.append(h)
+			continue
+		var kol := WereldLooppad.kolommen(str(h["model"]), h["params"], int(h["rot"]), float(h["y"]))
+		if kol.is_empty():
+			continue
+		stukken.append({"kolommen": kol, "x": h["x"], "z": h["z"], "ax": h["ax"], "az": h["az"]})
+	var nieuw := WereldLooppad.bouw(r.w, r.d, stukken)
+	nieuw.sleutel = sleutel
+	_looppaden[kamer_id] = nieuw
+	return nieuw
+
+## `World.looppad(kamer, van, naar)` — the points a guest walks from `van` to
+## `naar` in this room, round everything that stands there: the points AFTER
+## `van`, the last one exactly `naar`.  A free straight line is one point.  No
+## grid (an unknown room) or no way found: the old walk, straight and round
+## the water (`Rooms.om_het_water`).
+func looppad(kamer_id: String, van: Vector2, naar: Vector2) -> Array:
+	var rooster := looppad_rooster(kamer_id)
+	var uit: Array = [] if rooster == null else rooster.pad(van, naar)
+	if uit.is_empty():
+		uit = Rooms.om_het_water(kamer_id, van, naar)
+		uit.append(naar)
+	return uit
+
+## Can a guest stand on this spot of the room and walk there from `van`?  The
+## wander places and anything else that is picked rather than asked for.
+func _plek_haalbaar(rooster: WereldLooppad, van: Vector2, p: Vector2) -> bool:
+	return rooster == null or (rooster.vrij(p) and rooster.bereikbaar(van, p))
 
 ## Only finite points count; `{x, z}`, `[x, z]` and `Vector2` are all accepted.
 func _punten_van(punten: Array) -> Array:
@@ -1144,11 +1221,9 @@ func reis_voortgang(id: String) -> float:
 	if d == null or d.reis_doel == "" or d.reis_deuren <= 0:
 		return 1.0
 	var deel := 0.0
-	if not d.punten.is_empty() and is_finite(d.been_van.x):
-		var doel: Vector2 = d.punten[0]
-		var heel := d.been_van.distance_to(doel)
-		if heel > 0.001:
-			deel = clampf(1.0 - Vector2(d.x, d.z).distance_to(doel) / heel, 0.0, 1.0)
+	if not d.punten.is_empty() and d.been_lengte > 0.001:
+		# the part of the way round everything (`looppad`) he has walked
+		deel = clampf(1.0 - _rest_afstand(d) / d.been_lengte, 0.0, 1.0)
 	return clampf((float(d.reis_klaar) + deel) / float(d.reis_deuren), 0.0, 1.0)
 
 ## The room a travelling guest steps out of into the room he is heading for —
@@ -2103,6 +2178,7 @@ func _volgende_deur(d: Dier) -> void:
 		return
 	d.punten = _droog_pad(d, Vector2(dp["ix"], dp["iz"]))
 	d.been_van = Vector2(d.x, d.z)
+	d.been_lengte = _rest_afstand(d)
 	d.staat = "loop"
 	d.na = "deur"
 
@@ -2173,19 +2249,28 @@ func _kies(d: Dier) -> void:
 	d.pose = "rust"
 	d.tikken = JsGetal.rond((12.0 + d.rnd.volgende() * 46.0) * d.rustig)
 
-## A free wander place: not on top of another animal's target, not right under
-## the animal's own nose, and the farthest one of the candidates it looked at.
+## A free wander place: one he can stand on and walk to (`looppad`), not on top
+## of another animal's target, not right under the animal's own nose, and the
+## farthest one of the candidates it looked at.
 func _vrije_plek(d: Dier) -> Vector2:
 	var r := Rooms.get_kamer(d.kamer)
 	if r == null or r.plekken.is_empty():
 		return Vector2(d.x, d.z)
+	# only a place he can stand on and walk to: a wander place in a bed or a
+	# ball pit, or one behind something he cannot get round, is skipped
+	var rooster := looppad_rooster(d.kamer)
+	var hier := Vector2(d.x, d.z)
 	var n: int = r.plekken.size()
 	var start := int(d.rnd.volgende() * n)
 	var beste := Vector2(r.plekken[start][0], r.plekken[start][1])
+	if not _plek_haalbaar(rooster, hier, beste):
+		beste = hier
 	var beste_af := -1.0
 	for i in n:
 		var p: Array = r.plekken[(start + i) % n]
 		var kand := Vector2(p[0], p[1])
+		if not _plek_haalbaar(rooster, hier, kand):
+			continue
 		var bezet := false
 		for ander in _dieren.values():
 			if ander == d or ander.kamer != d.kamer:
