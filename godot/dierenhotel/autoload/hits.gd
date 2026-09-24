@@ -688,6 +688,12 @@ static func _is_deurbord(s: Spot) -> bool:
 const DEURPLEK := ["deur", "latei", "latei"]
 const DEUR_KOSTEN := [0.0, 1000.0, 2000.0]  ## what each height costs the set
 const DEUR_GEEN := 1000000.0                 ## no place of the rule at all: the band grid
+## Signs of ONE room at different heights (owner, 2026-09-24: "Kamer 2 staat
+## onder de deur maar kamer 1 boven de deur. Dit is geen consistente plaats"):
+## when one sign has to go over its lintel, all of that room's signs go there
+## too.  Dearer than every all-the-same set, cheaper than the band grid, so a
+## mixed set is only taken when no single height fits every door.
+const DEUR_GEMENGD := 100000.0
 const DEUR_RAND := 8.0   ## a sign keeps the middle of its door at least this far inside it
 
 static func deurbord_plekken(deur: Rect2, maat: Vector2) -> Array[Rect2]:
@@ -741,19 +747,27 @@ func _zoek_deurborden(borden: Array[Spot], maten: Array[Vector2], kader: Rect2, 
 	if kosten >= float(beste["kosten"]):
 		return
 	if i >= borden.size():
+		var hoogtes := {}
+		for k in pad:
+			if not (k as Dictionary).is_empty():
+				hoogtes[int(k["h"])] = true
+		if hoogtes.size() > 1:
+			kosten += DEUR_GEMENGD
+			if kosten >= float(beste["kosten"]):
+				return
 		beste["kosten"] = kosten
 		beste["keuze"] = pad.duplicate()
 		return
 	var deur := borden[i].vlak_nu
 	var plekken := deurbord_plekken(deur, maten[i])
 	for h in plekken.size():
-		var r := _deurbord_op(plekken[h], deur, kader)
+		var r := _deurbord_op(plekken[h], deur, kader, h == 1)
 		if r.size.x <= 0.0:
 			continue
 		# a hair per unit of sliding, so the most centred set wins a tie
 		var k := kosten + float(DEUR_KOSTEN[h]) + absf(r.get_center().x - deur.get_center().x) * 0.01
 		_geplaatst.append(r)
-		pad.append({"rect": r, "plek": DEURPLEK[h]})
+		pad.append({"rect": r, "plek": DEURPLEK[h], "h": h})
 		_zoek_deurborden(borden, maten, kader, i + 1, k, pad, beste)
 		pad.pop_back()
 		_geplaatst.pop_back()
@@ -766,9 +780,14 @@ func _zoek_deurborden(borden: Array[Spot], maten: Array[Vector2], kader: Rect2, 
 ## object box but its own door — sliding sideways past a neighbour if it has
 ## to, as long as the middle of its door stays `DEUR_RAND` inside it.  Empty
 ## when that height does not fit.
-func _deurbord_op(p: Rect2, deur: Rect2, kader: Rect2) -> Rect2:
+func _deurbord_op(p: Rect2, deur: Rect2, kader: Rect2, latei := false) -> Rect2:
 	var r := _klem(p, kader)
-	if absf(r.position.y - p.position.y) > 0.5:
+	# Over the lintel of a door that reaches the top of the frame (the corridor's
+	# Receptie door) the frame pushes the sign down onto the top of its own door:
+	# still the same place for every sign of the room, as long as it stays on
+	# the upper half of that door.
+	var zakt := latei and r.position.y > p.position.y and r.end.y <= deur.get_center().y
+	if absf(r.position.y - p.position.y) > 0.5 and not zakt:
 		return Rect2()
 	var cx := deur.get_center().x
 	var speel := maxf(0.0, r.size.x * 0.5 - DEUR_RAND)

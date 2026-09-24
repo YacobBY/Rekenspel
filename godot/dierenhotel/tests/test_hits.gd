@@ -1243,6 +1243,11 @@ func _keur_deurbordjes(wat: String, kader: Vector2) -> Dictionary:
 		for i in plekken.size():
 			if Hits.DEURPLEK[i] == plek and absf(plekken[i].position.y - r.position.y) <= 0.5:
 				hoogte = true
+		# over the lintel of a door that reaches the top of the frame: pushed
+		# down to the frame's edge, on the upper half of its own door
+		if plek == "latei" and r.position.y <= float(Hits.KRAP) + 0.5 \
+				and r.position.y > plekken[1].position.y and r.end.y <= deur.get_center().y + 0.5:
+			hoogte = true
 		waar(hoogte, "%s: %s hangt op een hoogte van de regel (%s: %s, deur %s)"
 			% [wat, id, plek, str(r), str(deur)])
 		waar(r.position.y < deur.end.y,
@@ -1318,14 +1323,26 @@ func test_deurbordjes_in_de_gang_met_de_voerkar() -> void:
 		gelijk(int(tel["deur"]) + int(tel["latei"]), 4, "%s: vier deurbordjes in de gang" % str(maat))
 		if maat == Vector2i(1024, 768) and dbg.has("karhot") and dbg.has("deur_gang_kamer1"):
 			# the owner's picture: the trolley stands in the Kamer 1 opening, so
-			# that sign goes over the lintel — and the other signs stay on their door
+			# that sign goes over the lintel — and so do ALL signs of the room,
+			# at the same height ("geen consistente plaats", 2026-09-24)
 			var kar_vlak: Rect2 = dbg["karhot"]["vlak"]
 			var k1: Rect2 = dbg["deur_gang_kamer1"]["vlak"]
 			waar(kar_vlak.intersects(k1), "de kar staat voor de deur van kamer 1")
-			gelijk(str(dbg["deur_gang_kamer1"]["deurplek"]), "latei",
-				"dat bordje hangt boven de latei")
-			gelijk(str(dbg["deur_gang_receptie"]["deurplek"]), "deur", "Receptie op zijn deur")
-			gelijk(str(dbg["deur_gang_keuken"]["deurplek"]), "deur", "Keuken op zijn deur")
+			for id in ["deur_gang_kamer1", "deur_gang_kamer2", "deur_gang_receptie", "deur_gang_keuken"]:
+				if dbg.has(id):
+					gelijk(str(dbg[id]["deurplek"]), "latei", "%s hangt boven de latei" % id)
+		# one height per room: never on the door here and over the lintel there.
+		# Not on the phone: its corridor's four doors are closer together than
+		# two signs over their lintels are wide, so only a mix fits there.
+		var hoogtes := {}
+		for id in dbg.keys():
+			if str(id).begins_with("deur_gang_") and dbg[id].has("deurplek"):
+				var r: Rect2 = dbg[id]["rect"]
+				var v: Rect2 = dbg[id]["vlak"]
+				hoogtes["%s|%d" % [str(dbg[id]["deurplek"]), roundi((r.position.y - v.position.y) / 52.0)]] = true
+		waar(maat.x < 600 or hoogtes.size() <= 1 or not hoogtes.keys().any(func(k): return str(k).begins_with("deur|")),
+			"%s: de bordjes van de gang hangen niet deels op en deels boven hun deur (%s)"
+				% [str(maat), str(hoogtes.keys())])
 		_keur(Vector2(h["kader"]), "%s gang, kar vast" % str(maat))
 		Games.stop()
 		for _f in 2:
