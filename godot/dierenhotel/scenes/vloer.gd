@@ -85,6 +85,24 @@ const GLAS_VAK := 12.0                    ## voxels between two glazing bars
 const GLAS_VOET := 6.0                    ## the knee wall is this high
 const GLAS_GROEN_TOT := 14.0              ## the green fades out this far above it
 const GLAS_KOP := 22.0                    ## the transom
+# The lift (`Kamer.lift`, owner 2026-09-24: the hotel is a tower): a steel
+# frame round an open cabin, the two sliding doors pushed aside, a row of floor
+# lights over it — one per floor, the one you are on lit — and the call plate
+# beside it.
+const LIFT_KOOI := Color("#E3E7EC")       ## the cabin's back wall ...
+const LIFT_KOOI_LICHT := Color("#FFF5DA") ## ... warm under its ceiling light
+const LIFT_VLOER := Color("#8F98A2")
+const LIFT_STAAL := Color("#A9B2BC")
+const LIFT_STAAL_D := Color("#8A949F")
+const LIFT_DEUR := Color("#C6CED6")
+const LIFT_DEUR_D := Color("#A3ADB8")
+const LIFT_PANEEL := Color("#3F4751")
+const LIFT_LAMP := Color("#FFC94A")
+const LIFT_LAMP_UIT := Color("#6E7883")
+const LIFT_DIEP := 10.0                   ## voxels deep, the cabin
+const LIFT_DEURBREED := 2.0               ## what shows of each pushed-aside door
+const LIFT_LAMPEN_OP := 2.2               ## the light panel starts this far over the lintel
+const LIFT_LAMPEN_HOOG := 5.0             ## ... and is this tall
 
 var _mesh: ArrayMesh = null
 var _kamer := ""
@@ -211,6 +229,7 @@ func _wanden(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 	_vlak(v, k, i, [_proj(0, 0), _proj(0, r.d), _proj(SCHADUW_BREED, r.d),
 		_proj(SCHADUW_BREED, 0)], WAND_SCHADUW)
 	_deuren(r, v, k, i)
+	_lift(r, v, k, i)
 
 ## The kas: both back walls in glass (see GLAS_*), then the shadow strips and the
 ## doors exactly as a plaster room has them.
@@ -357,6 +376,83 @@ func _deurblad(z0: float, z1: float, hoog: float, v: PackedVector2Array,
 		_proj(dik, p0, ym + 0.5)], DEURBLAD)
 	_vlak(v, k, i, [_proj(dik, z1 - 2.4, 12.0), _proj(dik, z1 - 1.2, 12.0),
 		_proj(dik, z1 - 1.2, 13.2), _proj(dik, z1 - 2.4, 13.2)], DEURKNOP)
+
+## The lift in its wall (`Kamer.lift`): the open cabin, the steel frame, the
+## doors pushed aside, the floor lights over it and the call plate beside it.
+## It is as tall as a door (`Rooms.deur_hoog`), so the door sign rule and
+## `World.vlak_van_lift` measure the same box.
+func _lift(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
+		i: PackedInt32Array) -> void:
+	if r.lift.is_empty():
+		return
+	var dr: Dictionary = r.lift
+	var langs_z := str(dr.get("wand", "z")) == "z"
+	var hoog := float(Rooms.deur_hoog(r, dr))
+	var a := float(dr["at"])
+	var b := a + float(dr["breed"])
+	# a point in the wall: `t` along it, `diep` behind it, `y` up
+	var pw := func(t: float, diep: float, y: float) -> Vector2:
+		return _proj(t, -diep, y) if langs_z else _proj(-diep, t, y)
+	# the cabin's back wall fills the opening, warm under its light
+	var onder := LIFT_KOOI
+	var boven := LIFT_KOOI_LICHT
+	_vlak_kl(v, k, i, [pw.call(a, 0.0, 0.0), pw.call(b, 0.0, 0.0), pw.call(b, 0.0, hoog),
+		pw.call(a, 0.0, hoog)], [onder, onder, boven, boven])
+	# ... and its floor, as far as the opening shows it
+	var vloer: Array = [Vector2(a - hoog, -LIFT_DIEP), Vector2(b, -LIFT_DIEP), Vector2(b, 0),
+		Vector2(a - hoog, 0)] if langs_z else [Vector2(-LIFT_DIEP, a - hoog),
+		Vector2(0, a - hoog), Vector2(0, b), Vector2(-LIFT_DIEP, b)]
+	var zicht := doorkijk_zicht({"at": a, "breed": b - a, "wand": dr["wand"]}, hoog)
+	_veelhoek(v, k, i, _knip(vloer, zicht), LIFT_VLOER)
+	# the jamb that faces the viewer, in steel
+	_vlak(v, k, i, [pw.call(a, 0.0, 0.0), pw.call(a, WAND_DIK, 0.0), pw.call(a, WAND_DIK, hoog),
+		pw.call(a, 0.0, hoog)], LIFT_STAAL_D)
+	# the two sliding doors, pushed aside to the edges of the opening
+	for kant: Array in [[a, a + LIFT_DEURBREED], [b - LIFT_DEURBREED, b]]:
+		var d0: float = kant[0]
+		var d1: float = kant[1]
+		_vlak(v, k, i, [pw.call(d0, 0.3, 0.0), pw.call(d1, 0.3, 0.0), pw.call(d1, 0.3, hoog),
+			pw.call(d0, 0.3, hoog)], LIFT_DEUR)
+		var naad := d1 - 0.4 if d0 == a else d0
+		_vlak(v, k, i, [pw.call(naad, 0.2, 0.0), pw.call(naad + 0.4, 0.2, 0.0),
+			pw.call(naad + 0.4, 0.2, hoog), pw.call(naad, 0.2, hoog)], LIFT_DEUR_D)
+	# the steel frame: two posts and the lintel
+	var top := hoog + 1.6
+	_vlak(v, k, i, [pw.call(a - 1.4, 0.0, 0.0), pw.call(a, 0.0, 0.0), pw.call(a, 0.0, top),
+		pw.call(a - 1.4, 0.0, top)], LIFT_STAAL)
+	_vlak(v, k, i, [pw.call(b, 0.0, 0.0), pw.call(b + 1.4, 0.0, 0.0), pw.call(b + 1.4, 0.0, top),
+		pw.call(b, 0.0, top)], LIFT_STAAL)
+	_vlak(v, k, i, [pw.call(a - 1.4, 0.0, hoog), pw.call(b + 1.4, 0.0, hoog),
+		pw.call(b + 1.4, 0.0, top), pw.call(a - 1.4, 0.0, top)], LIFT_STAAL)
+	# the floor lights: one per floor, the ground floor on the left of the
+	# row as the child looks at it, this floor lit
+	var etages := Rooms.etages()
+	etages.reverse()
+	var y0 := hoog + LIFT_LAMPEN_OP
+	var y1 := y0 + LIFT_LAMPEN_HOOG
+	_vlak(v, k, i, [pw.call(a - 1.0, 0.0, y0), pw.call(b + 1.0, 0.0, y0),
+		pw.call(b + 1.0, 0.0, y1), pw.call(a - 1.0, 0.0, y1)], LIFT_PANEEL)
+	var n := etages.size()
+	var stap := (b - a) / float(maxi(1, n))
+	for j in n:
+		# the x wall runs from right to left on screen: count from its far end
+		var t0 := a + stap * (float(j) + 0.25) if langs_z else b - stap * (float(j) + 0.75)
+		var t1 := t0 + stap * 0.5
+		var aan: bool = etages[j] == r.etage
+		_vlak(v, k, i, [pw.call(t0, -0.1, y0 + 1.2), pw.call(t1, -0.1, y0 + 1.2),
+			pw.call(t1, -0.1, y1 - 1.2), pw.call(t0, -0.1, y1 - 1.2)],
+			LIFT_LAMP if aan else LIFT_LAMP_UIT)
+	# the call plate beside the frame, on the side the room opens to, with
+	# its up and down button
+	var c0 := b + 2.6 if langs_z else a - 5.0
+	var c1 := c0 + 2.4
+	_vlak(v, k, i, [pw.call(c0, 0.0, 10.0), pw.call(c1, 0.0, 10.0), pw.call(c1, 0.0, 16.0),
+		pw.call(c0, 0.0, 16.0)], LIFT_STAAL_D)
+	var cm := (c0 + c1) * 0.5
+	_vlak(v, k, i, [pw.call(cm - 0.7, -0.1, 13.4), pw.call(cm + 0.7, -0.1, 13.4),
+		pw.call(cm, -0.1, 14.9), pw.call(cm, -0.1, 14.9)], LIFT_LAMP)
+	_vlak(v, k, i, [pw.call(cm, -0.1, 11.1), pw.call(cm, -0.1, 11.1),
+		pw.call(cm + 0.7, -0.1, 12.6), pw.call(cm - 0.7, -0.1, 12.6)], LIFT_LAMP_UIT)
 
 ## What a door lets you see: the floor of the room behind it, in that room's own
 ## 4x4 tiles (`Rooms.vloer_kleur`), clipped to exactly the floor the opening

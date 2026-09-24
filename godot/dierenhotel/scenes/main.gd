@@ -81,6 +81,7 @@ func _ready() -> void:
 	Hotel.hud_veranderd.connect(_ververs_chroom)
 	Hotel.dag_veranderd.connect(func(_d: int) -> void: _meld_stand("dag"))
 	Hotel.bord_veranderd.connect(_ververs_chroom)
+	Hotel.lift_gevraagd.connect(_lift)
 	Rooms.kamers_veranderd.connect(_nieuwe_kamers)
 	World.kamer_veranderd.connect(func(_k: String) -> void: kamerbalk.ververs())
 	# V5 (PLAN.md): a bowl level can change right in the middle of the world
@@ -326,12 +327,22 @@ func _brievenmuur() -> void:
 		"knoppen": [{"id": "sluit", "tekst": UiTekst.SLUITEN}]})
 
 func _plattegrond() -> void:
+	_toren(UiTekst.KAART_TITEL, UiTekst.KAART_HINT)
+
+## The lift's panel (owner, 2026-09-24: the hotel is a tower): the same tower
+## as the map, under the lift's own title — a floor is a row, and a tap on a
+## room rides there (`World.naar` slides the new floor in from above or below).
+func _lift(_kamer: String) -> void:
+	print("[probe] lift open kamer=", _kamer)
+	_toren(UiTekst.LIFT_BLAD, UiTekst.LIFT_HINT)
+
+func _toren(titel: String, hint: String) -> void:
 	var kaart := UiPlattegrond.new()
 	kaart.bouw(Ui.maten)
 	kaart.kamer_gekozen.connect(func(id: String) -> void:
 		Ui.blad_dicht()
 		Hotel.naar_kamer(id))
-	Ui.blad_open({"titel": UiTekst.KAART_TITEL, "hint": UiTekst.KAART_HINT,
+	Ui.blad_open({"titel": titel, "hint": hint,
 		"inhoud": [kaart], "knoppen": [{"id": "sluit", "tekst": UiTekst.SLUITEN}]})
 
 # --------------------------------------------------------------- de maten

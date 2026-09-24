@@ -33,6 +33,11 @@ const DICHT_KLEIN := 900    ## short side under this -> density lower bound 2
 const REIS_S := 0.300       ## camera slide between two rooms
 const REIS_ZIJ := 0.40      ## it starts 40 % of the frame width sideways
 const REIS_ALFA := 0.35     ## ... and at this alpha
+## A ride in the lift to another floor (`Kamer.etage`): the new floor comes in
+## from above (going up) or from below, a little slower than a walk through a
+## door, so the child sees the hotel is a tower.
+const LIFT_S := 0.55
+const LIFT_OP := 0.55      ## it starts 55 % of the frame height up or down
 
 const MATRAS := 7           ## the top of a mattress, in voxels
 const ZWEM_DIEP := ArtEffect.ZWEM_DIEP   ## a swimmer sinks this many voxels
@@ -56,7 +61,8 @@ var _schaal := {"g": 3, "dicht": 2.0, "k": 1.5, "q": 1.5,
 var _cam := Vector2.ZERO           ## camera origin in canvas px, while sliding
 var _cam_doel := Vector2.ZERO      ## where it is going — hotspots already use this
 var _reis := 1.0                   ## 0..1 of the slide; 1 = standing still
-var _reis_zij := 0.0
+var _reis_zij := Vector2.ZERO   ## where the camera slide starts, from its goal
+var _reis_duur := REIS_S
 var _viewport: SubViewport = null
 var _kamerscene: Node2D = null
 var _dieren: Dictionary = {}       ## id -> Dier
@@ -404,8 +410,8 @@ func _ease(t: float) -> float:
 func _reis_stap(delta: float) -> void:
 	if _reis >= 1.0:
 		return
-	_reis = minf(1.0, _reis + delta / REIS_S)
-	_cam = _cam_doel + Vector2(_reis_zij * (1.0 - _ease(_reis)), 0.0)
+	_reis = minf(1.0, _reis + delta / _reis_duur)
+	_cam = _cam_doel + _reis_zij * (1.0 - _ease(_reis))
 	_vuil = true
 
 # ------------------------------------------------------------- projectie
@@ -498,7 +504,28 @@ func vlak_van_deur(kamer_id: String, naar: String) -> Rect2:
 		for p in hoeken:
 			vak = vak.expand(p)
 		return vak
+	# a ride in the lift: its one opening, whichever floor it goes to
+	if Rooms.via_lift(kamer_id, naar):
+		return vlak_van_lift(kamer_id)
 	return Rect2()
+
+## The screen rectangle of the lift in a room (`Kamer.lift`): the opening and
+## its steel frame, up to the floor lights over it.  `Rect2()` without a lift.
+func vlak_van_lift(kamer_id: String = "") -> Rect2:
+	var r := Rooms.get_kamer(kamer_id if kamer_id != "" else _kamer_nu)
+	if r == null or r.lift.is_empty():
+		return Rect2()
+	var a := float(r.lift.get("at", 0)) - 1.0
+	var b := a + float(r.lift.get("breed", 12)) + 2.0
+	# up to the top of the floor lights (`scenes/vloer.gd`, LIFT_LAMPEN_*)
+	var h := float(Rooms.deur_hoog(r, r.lift)) + 7.2
+	var randen: Array = [[a, 0.0], [b, 0.0]] if str(r.lift.get("wand", "z")) == "z" \
+		else [[0.0, a], [0.0, b]]
+	var vak := Rect2(mik_punt(float(randen[0][0]), float(randen[0][1]), 0.0), Vector2.ZERO)
+	for xz in randen:
+		vak = vak.expand(mik_punt(float(xz[0]), float(xz[1]), 0.0))
+		vak = vak.expand(mik_punt(float(xz[0]), float(xz[1]), h))
+	return vak
 
 ## The screen rectangle of a room's front door (`Kamer.ingang`, the receptie
 ## only), in frame units: the opening and its frame, as tall as every door
@@ -619,13 +646,22 @@ func naar(kamer_id: String) -> void:
 	_cam_doel = cam_doel(Rooms.get_kamer(kamer_id))
 	var lijst := Rooms.lijst()
 	var later := lijst.find(kamer_id) > lijst.find(oud)
+	var op := Rooms.etage(kamer_id) - Rooms.etage(oud)
 	if rust() or _kader.size.x < 1.0 or _viewport == null:
 		_reis = 1.0
 		_cam = _cam_doel
+	elif op != 0 and Rooms.bestaat(oud):
+		# another floor: the lift ride — the new floor slides in from above
+		# when you go up, from below when you go down
+		_reis = 0.0
+		_reis_duur = LIFT_S
+		_reis_zij = Vector2(0.0, (-LIFT_OP if op > 0 else LIFT_OP) * float(_viewport.size.y))
+		_cam = _cam_doel + _reis_zij
 	else:
 		_reis = 0.0
-		_reis_zij = (REIS_ZIJ if later else -REIS_ZIJ) * float(_viewport.size.x)
-		_cam = _cam_doel + Vector2(_reis_zij, 0.0)
+		_reis_duur = REIS_S
+		_reis_zij = Vector2((REIS_ZIJ if later else -REIS_ZIJ) * float(_viewport.size.x), 0.0)
+		_cam = _cam_doel + _reis_zij
 	_vuil = true
 	kamer_veranderd.emit(kamer_id)
 

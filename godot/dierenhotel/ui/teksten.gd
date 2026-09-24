@@ -64,6 +64,15 @@ const KAART_TITEL := "🗺️ De plattegrond"
 const KAART_HINT := "Tik op een ruimte om er naartoe te gaan."
 const SLUITEN := "Sluiten"
 
+# ------------------------------------------------------------------ de lift
+## The lift between the floors (owner, 2026-09-24: the hotel is a tower).  Its
+## button on the opening, the words a screen reader says, and the panel it
+## opens — the same tower as the map (`ui/plattegrond.gd`).
+const LIFT := "Lift"
+const LIFT_TITEL := "Neem de lift"
+const LIFT_BLAD := "🛗 De lift"
+const LIFT_HINT := "Waar wil je heen?"
+
 # ------------------------------------------------------------ §7.7 prikbord
 ## The board is a sheet (owner, 2026-09-23); its cards are the hotel's own
 ## strings, this is only what the sheet says around them.
