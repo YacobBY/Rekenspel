@@ -58,11 +58,6 @@ const BRIEVENMUUR := {
 	"sluiten": "Sluiten",
 }
 
-## Where each room hangs on the map sheet (world.md §6.3).
-const KAART := {"receptie": [1, 2], "gang": [2, 2], "kamer1": [2, 1],
-	"kamer2": [2, 3], "keuken": [3, 2], "tuin": [4, 2], "wasserij": [3, 3],
-	"zwembad": [4, 3]}
-
 const EIGENAAR := "hotel"
 const BORD := "bord"
 const BORD_LEEG := "Speel lekker rond"
