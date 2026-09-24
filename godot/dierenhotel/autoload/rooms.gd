@@ -617,11 +617,12 @@ func _bouw_kamers() -> void:
 		# bigger than a door in a wall (owner, 2026-09-24: "zet de lobby deur
 		# waar het tapijt is maar alleen de uitlijn en laat hem open zodat je
 		# erdoorheen kan kijken en het tapijt zien ... En maak hem wat groter dan
-		# de andere deuren").  20 wide and 32 tall where every door in a wall is
-		# 12 x 26.  A guest who arrives steps in over the rug and walks straight
+		# de andere deuren"; and once more: "Mooi maak de deur nog iets groter").
+		# 26 wide and 38 tall where every door in a wall is 12 x 26.  A guest
+		# who arrives steps in over the rug and walks straight
 		# up to the counter; no door button, path or chip goes through it
 		# (`Kamer.ingang`, world.md §1.2).  `open`: no leaf, nothing to shut.
-		"ingang": {"wand": "voor", "at": 62, "breed": 20, "hoog": 32, "open": true},
+		"ingang": {"wand": "voor", "at": 59, "breed": 26, "hoog": 38, "open": true},
 		"decor": [
 			# the outline of the front door, on the front edge in the middle of
 			# the rug (`matten` x 45..99)

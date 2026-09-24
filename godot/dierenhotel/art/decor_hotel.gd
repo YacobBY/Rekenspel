@@ -187,14 +187,15 @@ static func voordeur(p := {}) -> Array:
 ## erdoorheen kan kijken en het tapijt zien ... En maak hem wat groter dan de
 ## andere deuren"): only its outline — two white posts, a lintel and the
 ## threshold on the floor — and open, so you look through it at the rug and the
-## lobby as through every door into the next room.  20 wide and 32 tall inside
-## (a door in a wall is 12 x 26).  Along x, one deep, for the edge z = d.
+## lobby as through every door into the next room.  26 wide and 38 tall inside
+## (a door in a wall is 12 x 26; the owner asked twice for it bigger, 2026-09-24:
+## "Mooi maak de deur nog iets groter").  Along x, one deep, for the edge z = d.
 static func voordeuromlijst(_p := {}) -> Array:
 	var v: Array = []
-	ArtVorm.bx(v, -11, 0, 0, 1, 32, 1, KOZIJN)
-	ArtVorm.bx(v, 10, 0, 0, 1, 32, 1, KOZIJN)
-	ArtVorm.bx(v, -11, 32, 0, 22, 2, 1, KOZIJN)
-	ArtVorm.bx(v, -10, 0, 0, 20, 1, 1, DREMPEL)
+	ArtVorm.bx(v, -14, 0, 0, 1, 38, 1, KOZIJN)
+	ArtVorm.bx(v, 13, 0, 0, 1, 38, 1, KOZIJN)
+	ArtVorm.bx(v, -14, 38, 0, 28, 2, 1, KOZIJN)
+	ArtVorm.bx(v, -13, 0, 0, 26, 1, 1, DREMPEL)
 	return v
 
 # ---------------------------------------------------------------- op de vloer

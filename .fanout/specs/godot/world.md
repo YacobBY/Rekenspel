@@ -135,15 +135,16 @@ when a room does not exist. Example: `pad('kamer1','zwembad')` =
 
 **The front door** (port, owner 2026-09-23: the guests "komen momenteel vanuit de gang binnen
 ipv ingang"). The receptie has one more opening that is NOT a door of this graph:
-`Kamer.ingang = {wand: 'voor', at: 62, breed: 20, hoog: 32, open: true}`, the hotel's way
+`Kamer.ingang = {wand: 'voor', at: 59, breed: 26, hoog: 38, open: true}`, the hotel's way
 in from outside.  **Port (owner 2026-09-24: "zet de lobby deur waar het tapijt is maar alleen
 de uitlijn en laat hem open zodat je erdoorheen kan kijken en het tapijt zien ... En maak hem
 wat groter dan de andere deuren"):** it stands in the FRONT edge of the lobby (`wand: 'voor'`,
-z = d), the side the camera looks in through, in the middle of the pink rug (x 62..82 over
+z = d), the side the camera looks in through, in the middle of the pink rug (x 59..85 over
 the rug's 45..99), and it is only its outline — `voordeuromlijst` (§1.3, art-sound-rules.md
 §8): two white posts, a lintel and the threshold, no leaf, so you look through it at the rug
-as through every door into the next room.  20 wide and 32 tall (`hoog`, read by
-`deur_hoog()`) where a door in a wall is 12 × 26.  `open: true`: it never shuts, makes no
+as through every door into the next room.  26 wide and 38 tall (`hoog`, read by
+`deur_hoog()`) where a door in a wall is 12 × 26 (first 20 × 32; "Mooi maak de deur nog iets
+groter", same day).  `open: true`: it never shuts, makes no
 door sound, and `World.ingang_open(kamer)` is always true.  (For one day, 2026-09-23, it was
 a closed door on the back wall right of the desk, `voordeur` @ 111,1 with a welcome mat.)
 `Rooms.ingang(kamer)` derives `{x: 72, z: 120, ix: 72, iz: 108, dx: 72, dz: 118, wand}`
@@ -166,7 +167,7 @@ movable **dingen**: `balielamp` (receptie 15, 105, y 14) and `kar` (keuken 48, 6
 
 | room | decor (model @ x, z [, y]) |
 |---|---|
-| receptie | `balie` @ 40,60 · `balie` @ 75,60 · `baliez` @ 15,58 · `baliez` @ 15,93 · `bel` @ 33,60 y14 · `kassa` @ 66,60 y14 · `boek` @ 15,75 y14 · `lamp` @ 15,105 y14 (→ ding `balielamp`) · `prikbord` @ 1,64 y14 `rot 1` `ver` (since 2026-09-23 on the left wall over the bench in the waiting corner: behind the desk the visible wall had no room for the task cards, which now hang round the board instead of across the room) · `sleutelbordz` @ 1,84 `ver` · `plant` @ 105,18 · `plant` @ 108,81 · **port (2026-09-24):** the outline of the front door `voordeuromlijst` @ 72,119 in the front edge, in the middle of the pink rug, over the opening of §1.2 (open, 20 × 32; on 2026-09-23 it was the closed `voordeur` @ 111,1 on the back wall with `welkomsmat` @ 111,7) |
+| receptie | `balie` @ 40,60 · `balie` @ 75,60 · `baliez` @ 15,58 · `baliez` @ 15,93 · `bel` @ 33,60 y14 · `kassa` @ 66,60 y14 · `boek` @ 15,75 y14 · `lamp` @ 15,105 y14 (→ ding `balielamp`) · `prikbord` @ 1,64 y14 `rot 1` `ver` (since 2026-09-23 on the left wall over the bench in the waiting corner: behind the desk the visible wall had no room for the task cards, which now hang round the board instead of across the room) · `sleutelbordz` @ 1,84 `ver` · `plant` @ 105,18 · `plant` @ 108,81 · **port (2026-09-24):** the outline of the front door `voordeuromlijst` @ 72,119 in the front edge, in the middle of the pink rug, over the opening of §1.2 (open, 26 × 38; on 2026-09-23 it was the closed `voordeur` @ 111,1 on the back wall with `welkomsmat` @ 111,7) |
 | gang | `plant` @ 36,30 · `plant` @ 108,30 (along the FRONT edge since 2026-09-23: against the back wall they hid 37 % and 29 % of the bedroom doors) · `kist` @ 114,14 |
 | kamer1 | `plant` @ 107,8 (was 102,12: it hid the door's corner) · `mand` @ 93,99 |
 | kamer2 | `plant` @ 12,99 · `mand` @ 93,99 |
