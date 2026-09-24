@@ -1091,7 +1091,10 @@ func test_de_gasten_eten_bij_het_bakje() -> void:
 			waar(str(d.pose).begins_with("hap"), "%s hapt (%s)" % [g["naam"], d.pose])
 			waar(not World.slaapt(str(g["id"])), "%s is uit bed" % g["naam"])
 			gelijk(float(d.hoogte), 0.0, "%s staat op de vloer, niet op de matras" % g["naam"])
-			waar(p.distance_to(bak) < 20.0, "%s staat bij het bakje (%.1f)" % [g["naam"], p.distance_to(bak)])
+			# 25: sinds de vaste bedplekken (2026-09-24) staat bed 3 van kamer 1
+			# vlak onder het bakje, en in een volle kamer eet de derde gast dan
+			# één ring verder (±24) — nog steeds naast het bakje, niet bij zijn bed
+			waar(p.distance_to(bak) < 25.0, "%s staat bij het bakje (%.1f)" % [g["naam"], p.distance_to(bak)])
 			waar(p.distance_to(Vector2(float(bed["x"]), float(bed["z"]))) > 10.0,
 				"%s staat niet op zijn bed" % g["naam"])
 			waar(Rooms.vrij_vak(kamer, p.x, p.y), "%s staat op vrije vloer" % g["naam"])

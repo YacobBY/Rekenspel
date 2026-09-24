@@ -338,6 +338,113 @@ func test_plek_in_de_slaapkamers() -> void:
 		gelijk(State.plek_in("kamer1"), 1, "een gekocht bed geeft plek")
 	Rooms.herstel()
 
+## The check-in fills the bed places in order (owner, 2026-09-24: "De eerste
+## twee bedden zijn goed geplaatst, daarna gaat alles door elkaar"): the room
+## chosen for each new guest gets his bed on its next free bed place — as the
+## beds game does it, a free bed first, else `bed_plek` + `voeg_bed` — every
+## guest lies in a bed of his own, and the guest cap is exactly the bed places.
+func test_de_check_in_vult_de_bedplekken_op_volgorde() -> void:
+	_voor()
+	Rooms.herstel()
+	var plekken := 0
+	for k in State.slaapkamers():
+		plekken += Rooms.bed_raster(k).size()
+	gelijk(plekken, 8, "vier bedplekken in elk van de twee slaapkamers")
+	gelijk(State.max_gasten(), plekken, "de gastenlimiet is het aantal bedplekken")
+	var pool := State.gasten_pool()
+	var gasten: Array = []
+	var n := 0
+	while State.plek_voor_gast() and n < 30:
+		var kamers := State.kamers_met_plek()
+		var k: String = kamers[n % kamers.size()]
+		var slot := ""
+		var vrij := State.vrije_bedden(k)
+		if not vrij.is_empty():
+			slot = str((vrij[0] as Dictionary)["id"])
+		else:
+			var p := State.bed_plek(k)
+			gelijk(Vector2(float(p["x"]), float(p["z"])), Rooms.vrije_bedplekken(k)[0],
+				"%s: het nieuwe bed komt op de eerstvolgende bedplek" % k)
+			slot = str(World.voeg_bed(k, {"x": p["x"], "z": p["z"]}).get("id", ""))
+		waar(not slot.is_empty(), "gast %d krijgt een bed in %s" % [n + 1, k])
+		var g: Dictionary = (pool[n % pool.size()] as Dictionary).duplicate(true)
+		g["id"] = "%s_%d" % [str(g["id"]), n]
+		g["kamer"] = k
+		g["bed"] = slot
+		gasten.append(g)
+		State.s["gasten"] = gasten
+		n += 1
+	gelijk(n, plekken, "precies zoveel gasten als bedplekken")
+	waar(not State.plek_voor_gast(), "en dan is het hotel vol")
+	gelijk(State.max_gasten(), plekken, "de limiet bleef wat hij was")
+	var gezien := {}
+	for g in gasten:
+		var sleutel := "%s|%s" % [str(g["kamer"]), str(g["bed"])]
+		waar(not gezien.has(sleutel), "%s ligt alleen in %s" % [str(g["id"]), sleutel])
+		gezien[sleutel] = true
+		waar(not Rooms.slot(str(g["kamer"]), str(g["bed"])).is_empty(), "het bed van %s bestaat" % g["id"])
+	for b in Rooms.slots("", "bed"):
+		waar(Rooms.bed_raster(str(b["kamer"])).has(Vector2(float(b["x"]), float(b["z"]))),
+			"%s in %s staat op een bedplek" % [b["id"], b["kamer"]])
+		gelijk(str(b["model"]), Rooms.bed_model(str(b["kamer"])), "%s ligt zoals de kamer" % b["id"])
+	Rooms.herstel()
+
+## Every guest a bed of his own, also after a save that says otherwise: the
+## seed `tools/kiek.js --gasten 7` made until 2026-09-24 put guests 5, 6 and 7
+## in bed1/bed2 again — two animals in one bed on the picture.
+func test_herstel_geeft_elk_dier_een_eigen_bed() -> void:
+	_voor()
+	Rooms.herstel()
+	var rond := [["kamer1", "bed1"], ["kamer1", "bed2"], ["kamer2", "bed1"], ["kamer2", "bed2"]]
+	var gasten: Array = []
+	for i in 7:
+		var g := State.mk_gast("g%d" % i, "G%d" % i, "hond", "puppy", 1, "Wandeling", 30)
+		g["kamer"] = rond[i % 4][0]
+		g["bed"] = rond[i % 4][1]
+		g["waar"] = g["kamer"]
+		gasten.append(g)
+	State.s["gasten"] = gasten
+	var verhuisd := State.herstel_bedden()
+	gelijk(str(verhuisd), str(["g4", "g5", "g6"]), "de drie dubbele dieren kregen een ander bed")
+	for i in 4:
+		gelijk(str(gasten[i]["bed"]), rond[i][1], "g%d houdt zijn bed" % i)
+	gelijk(str(gasten[4]["kamer"]), "kamer1", "g4 blijft in zijn kamer")
+	var s4 := Rooms.slot("kamer1", str(gasten[4]["bed"]))
+	gelijk(Vector2(float(s4["x"]), float(s4["z"])), Rooms.bed_raster("kamer1")[2],
+		"op de derde bedplek van kamer 1")
+	_elk_een_eigen_bed("na de reparatie")
+	# a bed that is gone: its guest gets the free bed of his room
+	gasten[0]["bed"] = "m99_bed"
+	gelijk(str(State.herstel_bedden()), str(["g0"]), "g0 had geen bed meer")
+	_elk_een_eigen_bed("na een verdwenen bed")
+	gelijk(str(gasten[0]["kamer"]), "kamer1", "g0 slaapt weer in kamer 1")
+	# the hotel full up: the last free bed place, then the waiting list
+	var extra: Array = []
+	for i in 2:
+		var g := State.mk_gast("x%d" % i, "X%d" % i, "poes", "poes", 1, "Spelen", 15)
+		g["kamer"] = "kamer2"
+		g["bed"] = "bed1"
+		gasten.append(g)
+		extra.append(g)
+	State.herstel_bedden()
+	_elk_een_eigen_bed("in een vol hotel")
+	gelijk(str(extra[0]["kamer"]), "kamer2", "x0 krijgt de laatste bedplek")
+	gelijk(Rooms.vrije_bedplekken("kamer2").size(), 0, "kamer 2 is vol")
+	waar(not (State.s["gasten"] as Array).has(extra[1]), "x1 is niet meer in het hotel")
+	gelijk(str(State.s["wachtlijst"][0]["id"]), "x1", "maar staat vooraan op de wachtlijst")
+	gelijk(str(extra[1]["bed"]), "", "zonder bed")
+	Rooms.herstel()
+
+func _elk_een_eigen_bed(wanneer: String) -> void:
+	var gezien := {}
+	for g in State.s["gasten"]:
+		var sleutel := "%s|%s" % [str(g["kamer"]), str(g["bed"])]
+		waar(not gezien.has(sleutel), "%s: %s deelt %s" % [wanneer, str(g["id"]), sleutel])
+		gezien[sleutel] = true
+		var slot := Rooms.slot(str(g["kamer"]), str(g["bed"]))
+		waar(not slot.is_empty() and str(slot["soort"]) == "bed",
+			"%s: het bed van %s bestaat (%s)" % [wanneer, str(g["id"]), sleutel])
+
 func test_reparaties_verliezen_nooit_een_gast() -> void:
 	_voor()
 	# 1. a checkin whose gastId does not match nieuweGast is dropped

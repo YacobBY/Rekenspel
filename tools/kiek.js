@@ -40,6 +40,8 @@ function hulp() {
   --gasten N          eigen gastenaantal (overschrijft --band; max 7)
   --dag N             dagnummer in de opslag (standaard 1)
   --kleding           kleed elke gast aan uit de winkelstraat (een vaste set per gast)
+  --opslag BESTAND    een eigen opslag (JSON: {v, s} of alleen s) in plaats van de gezaaide;
+                      --kamer zet er kamerNu in (bv. een hotel vol gekochte bedden)
   --uit MAP           uitvoermap (standaard $DH_LOG_DIR/kiek of /tmp/dierenhotel-log/kiek)
   --viewport BxH[@dpr][:naam]   standaard 1024x768@2:ipad-land
   --url URL           bestaande server gebruiken in plaats van build/web zelf te serveren
@@ -51,7 +53,7 @@ const argv = process.argv.slice(2);
 const opt = {
   kamer: 'receptie', tik: null, chip: null, wacht: 2500, band: 3, gasten: null, dag: 1, kleding: false,
   uit: path.join(process.env.DH_LOG_DIR || '/tmp/dierenhotel-log', 'kiek'),
-  viewport: '1024x768@2:ipad-land', url: null,
+  viewport: '1024x768@2:ipad-land', url: null, opslag: null,
   playwright: process.env.PLAYWRIGHT_PAD || null,
 };
 for (let i = 0; i < argv.length; i++) {
@@ -66,6 +68,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--gasten') opt.gasten = parseInt(v(), 10);
   else if (a === '--dag') opt.dag = parseInt(v(), 10);
   else if (a === '--kleding') opt.kleding = true;
+  else if (a === '--opslag') opt.opslag = v();
   else if (a === '--uit') opt.uit = v();
   else if (a === '--viewport') opt.viewport = v();
   else if (a === '--url') opt.url = v();
@@ -103,14 +106,32 @@ const KLEDING = [
   ['kroon', 'zonnebril', 'laarsjes'], ['hoedje', 'das'], ['streepsjaal', 'slofjes'],
   ['pet', 'zonnebril', 'bal'],
 ];
+// A guest past the four fixed beds gets a bed of his own: a bought bed in the
+// save (`meubels`).  Its x/z do not matter — the game puts every bed of a
+// bedroom on the room's next free bed place (Rooms.meubel_zet).  Until
+// 2026-09-24 guest 5 got bed1 again: two animals in one bed.
+function bedVan(i, meubels) {
+  if (i < BEDDEN.length) return BEDDEN[i];
+  const kamer = i % 2 === 0 ? 'kamer1' : 'kamer2';
+  const id = `m${meubels.length + 1}_bed`;
+  meubels.push({ id, kamer, type: 'bed', x: 57, z: 57, rot: 0, soort: 'bed' });
+  return [kamer, id];
+}
 
 function maakOpslag() {
+  if (opt.opslag) {
+    const doc = JSON.parse(fs.readFileSync(opt.opslag, 'utf8'));
+    const eigen = doc.s ? doc : { v: 1, s: doc };
+    eigen.s.kamerNu = opt.kamer;
+    return JSON.stringify(eigen);
+  }
   const n = Math.min(7, opt.gasten != null ? opt.gasten : (opt.band === 3 ? 1 : (opt.band === 4 ? 4 : 7)));
   const kunnen = opt.band === 5 ? 5 : 3;
   const gasten = [];
+  const meubels = [];
   for (let i = 0; i < n; i++) {
     const [id, naam, kind, soort, scoops] = POOL[i];
-    const bed = BEDDEN[i % BEDDEN.length];
+    const bed = bedVan(i, meubels);
     gasten.push({
       id, naam, name: naam, kind, soort, scoops, act: 'Wandeling', mins: 30,
       kamer: bed[0], bed: bed[1], waar: bed[0],
@@ -124,7 +145,7 @@ function maakOpslag() {
   const s = {
     dag: opt.dag, ronde: 'vrij', munten: 4, sterren: 0, band: opt.band, kunnen,
     signaal: [], gasten, wachtlijst: [], famIdx: 0,
-    meubels: [], meubelNr: 0, taken: [], brieven: [],
+    meubels, meubelNr: meubels.length, taken: [], brieven: [],
     scoops: 40, levering: 4, snoeppot: 0,
     kar: null, spel: {}, gezien: {},
     kamerNu: opt.kamer, uitcheck: [], nieuweGast: null,

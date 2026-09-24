@@ -384,12 +384,15 @@ func _kamer_voor(n: int) -> Vector2:
 		else:
 			World.verberg_bed(_kamer, sid)
 	# what is still missing stands there as a bed for this answer only
+	# on the room's next bed places and turned the room's way, exactly where a
+	# real new bed would stand
 	var erbij := toon - _getoond.size()
+	var model := Rooms.bed_model(_kamer)
 	var i := 0
 	for p in State.bed_plekken(_kamer, erbij):
 		var id := "bd_nep%d" % i
 		var v: Vector2 = p
-		if not ctx.wereld.decor(_kamer, {"id": id, "model": "bed", "x": v.x, "z": v.y,
+		if not ctx.wereld.decor(_kamer, {"id": id, "model": model, "x": v.x, "z": v.y,
 				"door": ctx.id}).is_empty():
 			_nep.append(id)
 		i += 1
@@ -398,11 +401,10 @@ func _kamer_voor(n: int) -> Vector2:
 		return Vector2(float(s.get("sx", s.get("x", 0.0))), float(s.get("sz", s.get("z", 0.0))))
 	if not _nep.is_empty():
 		var stuk := World.decor_plek(_nep[0], _kamer)
-		# the standing place beside a bed along x (`Rooms._af_slot`)
-		return Vector2(float(stuk.get("x", 0.0)) + 2.0, float(stuk.get("z", 0.0)) + 12.0)
+		# the standing place beside that bed (`Rooms.bed_sta`, as `_af_slot`)
+		return Rooms.bed_sta(model, float(stuk.get("x", 0.0)), float(stuk.get("z", 0.0)))
 	# no bed for him: he stands in the middle of the room and looks round for
-	# one — the free floor nearest its centre (the farthest free cell, where a
-	# new bed would go, can lie right in front of the bowl or the basket)
+	# one — the free floor nearest its centre
 	return midden_van(_kamer)
 
 ## The free floor cell nearest the middle of a room.

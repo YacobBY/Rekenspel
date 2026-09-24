@@ -428,6 +428,222 @@ func test_meubels_zetten_en_weghalen() -> void:
 	gelijk(Rooms.slots("", "bed").size(), voor, "herstel geeft de basisinrichting terug")
 	gelijk(Rooms.get_kamer("kamer1").slots.size(), 3, "en de slots van kamer1")
 
+# ------------------------------------------------------------ de bedplekken
+#
+# OWNER, 2026-09-24: "De eerste twee bedden zijn goed geplaatst, daarna gaat
+# alles door elkaar."  Measured before the fix (headless, the check-in's own
+# placement): kamer 1 got new beds at (84, 60), (60, 96) and (48, 48), kamer 2
+# at (60, 84), (24, 72) and (84, 60) — scattered, turned along x in a room whose
+# beds lie along z — and a bed from the meubelboek landed at (72, 24) in kamer
+# 1, on the bowl and in the doorway, and at (57, 57) through two other beds.
+
+const SLAAPKAMERS := ["kamer1", "kamer2"]
+
+## The floor every fixed thing of a room takes: its floor decor by its own
+## voxels, every slot, and the step inside every door.  [[naam, Rect2]]
+func _vaste_vlakken(r: Rooms.Kamer, ook_bedden := true) -> Array:
+	var uit: Array = []
+	for stuk in r.decor:
+		if bool(stuk.get("ver", false)):
+			continue
+		var v := Rooms.voet(str(stuk["n"]), int(stuk.get("rot", 0)))
+		waar(v.size.x > 0.0, "%s: %s heeft een voetafdruk" % [r.id, stuk["n"]])
+		uit.append([str(stuk["n"]), Rect2(v.position + Vector2(float(stuk["x"]), float(stuk["z"])), v.size)])
+	for sid in r.slots:
+		if not ook_bedden and str(r.slots[sid]["soort"]) == "bed":
+			continue
+		uit.append([str(sid), Rooms.slot_vlak(r.slots[sid])])
+	for naar in r.deur_punten:
+		var dp: Dictionary = r.deur_punten[naar]
+		uit.append(["deur " + str(naar), Rect2(float(dp["ix"]) - 10.0, float(dp["iz"]) - 10.0, 20.0, 20.0)])
+	return uit
+
+## Every bedroom names its bed places, and they are a neat arrangement: the
+## first two are bed1 and bed2, every bed turned the same way, every place in a
+## column or a row with another one, no two beds touching, nothing of the room
+## under a bed, and the place where the guest stands free and inside the room.
+func test_elke_slaapkamer_heeft_nette_bedplekken() -> void:
+	Rooms.herstel()
+	var totaal := 0
+	for k in SLAAPKAMERS:
+		var r := Rooms.get_kamer(k)
+		var raster := Rooms.bed_raster(k)
+		totaal += raster.size()
+		waar(raster.size() >= 4, "%s heeft minstens vier bedplekken (%d)" % [k, raster.size()])
+		gelijk(Rooms.bed_model(k), str(r.slots["bed1"]["model"]), "%s: elk bed zoals bed1" % k)
+		gelijk(str(r.slots["bed2"]["model"]), str(r.slots["bed1"]["model"]), "%s: bed2 ook" % k)
+		gelijk(raster[0], Vector2(float(r.slots["bed1"]["x"]), float(r.slots["bed1"]["z"])),
+			"%s: de eerste plek is bed1" % k)
+		gelijk(raster[1], Vector2(float(r.slots["bed2"]["x"]), float(r.slots["bed2"]["z"])),
+			"%s: de tweede plek is bed2" % k)
+		var model := Rooms.bed_model(k)
+		var vast := _vaste_vlakken(r, false)
+		for i in raster.size():
+			var p: Vector2 = raster[i]
+			var bed := Rooms.bed_vlak(model, p.x, p.y)
+			# a column or a row with another place
+			var mee := false
+			for j in raster.size():
+				if j != i and (is_equal_approx(raster[j].x, p.x) or is_equal_approx(raster[j].y, p.y)):
+					mee = true
+			waar(mee, "%s: plek %s staat in een rij of kolom" % [k, str(p)])
+			waar(bed.position.x >= 1.0 and bed.position.y >= 1.0
+				and bed.end.x <= r.w - 1.0 and bed.end.y <= r.d - 1.0,
+				"%s: bed op %s binnen de muren (%s)" % [k, str(p), str(bed)])
+			# no two beds touch: a voxel of air at least
+			for j in range(i + 1, raster.size()):
+				var q: Vector2 = raster[j]
+				waar(not bed.grow(1.0).intersects(Rooms.bed_vlak(model, q.x, q.y)),
+					"%s: bed op %s en op %s overlappen" % [k, str(p), str(q)])
+			for ding in vast:
+				waar(not bed.intersects(ding[1]),
+					"%s: bed op %s staat op %s %s" % [k, str(p), ding[0], str(ding[1])])
+			# his standing place: inside the room, on no bed and on nothing else
+			var sta := Rooms.bed_sta(model, p.x, p.y)
+			waar(sta.x >= 4.0 and sta.y >= 4.0 and sta.x <= r.w - 4.0 and sta.y <= r.d - 4.0,
+				"%s: de staplek %s van bed %s ligt in de kamer" % [k, str(sta), str(p)])
+			for q in raster:
+				waar(not Rooms.bed_vlak(model, (q as Vector2).x, (q as Vector2).y).has_point(sta),
+					"%s: de staplek %s van bed %s ligt niet op een bed" % [k, str(sta), str(p)])
+			for ding in vast:
+				waar(not (ding[1] as Rect2).has_point(sta),
+					"%s: de staplek %s van bed %s ligt niet op %s" % [k, str(sta), str(p), ding[0]])
+	gelijk(totaal, 8, "acht bedplekken: vier per slaapkamer")
+	for k in Rooms.lijst():
+		if not SLAAPKAMERS.has(k):
+			gelijk(Rooms.bed_raster(k).size(), 0, "%s is geen slaapkamer" % k)
+
+## The reproduction: buy beds one by one in both bedrooms, wherever the child
+## asks (no point, the middle, a corner, the doorway, on the bowl, on another
+## bed), until the room is full.  Every bed lands on the next free bed place,
+## turned the room's way, with an id of its own; none touches another bed, the
+## decor, the bowl or a door; the next one is refused; and the same purchases
+## give the same room every time.
+func test_bedden_kopen_tot_de_kamer_vol_is() -> void:
+	var eerste := _koop_alle_bedden()
+	var tweede := _koop_alle_bedden()
+	gelijk(str(tweede), str(eerste), "dezelfde aankopen geven dezelfde kamers")
+	Rooms.herstel()
+
+func _koop_alle_bedden() -> Dictionary:
+	Rooms.herstel()
+	var uit := {}
+	var wensen := [Vector2(NAN, NAN), Vector2(57, 57), Vector2(4, 110), Vector2(78, 8),
+		Vector2(84, 33), Vector2(30, 27), Vector2(110, 110), Vector2(-5, 300)]
+	for k in SLAAPKAMERS:
+		var r := Rooms.get_kamer(k)
+		var raster := Rooms.bed_raster(k)
+		var model := Rooms.bed_model(k)
+		var gezet: Array = []
+		for w in wensen:
+			var vrij_voor := Rooms.vrije_bedplekken(k).size()
+			var m := Rooms.meubel_zet(k, "bed", w.x, w.y)
+			if m.is_empty():
+				gelijk(vrij_voor, 0, "%s: bed %d geweigerd, dus er was geen plek" % [k, gezet.size() + 3])
+				break
+			var p := Vector2(float(m["x"]), float(m["z"]))
+			waar(raster.has(p), "%s: het bed op %s staat op een bedplek" % [k, str(p)])
+			gelijk(str(m["model"]), model, "%s: het bed ligt zoals de andere" % k)
+			gelijk(Vector2(float(m["sx"]), float(m["sz"])), Rooms.bed_sta(model, p.x, p.y),
+				"%s: zijn staplek" % k)
+			gezet.append([str(m["id"]), p])
+		gelijk(Rooms.slots(k, "bed").size(), raster.size(), "%s: elke bedplek heeft een bed" % k)
+		gelijk(Rooms.meubel_zet(k, "bed"), {}, "%s: vol is vol, geen bed ernaast" % k)
+		gelijk(Rooms.vrije_bedplekken(k).size(), 0, "%s: geen vrije bedplek meer" % k)
+		# with no point given the beds go in the room's own order
+		var volgorde: Array = []
+		for g in gezet:
+			volgorde.append(g[1])
+		waar(volgorde.size() >= 1 and volgorde[0] == raster[2], "%s: het derde bed op de derde plek" % k)
+		# no two beds touch, and nothing of the room lies under one
+		var bedden := Rooms.slots(k, "bed")
+		var vast := _vaste_vlakken(r, false)
+		for i in bedden.size():
+			var a := Rooms.slot_vlak(bedden[i])
+			for j in range(i + 1, bedden.size()):
+				waar(not a.grow(1.0).intersects(Rooms.slot_vlak(bedden[j])),
+					"%s: %s en %s overlappen" % [k, bedden[i]["id"], bedden[j]["id"]])
+			for ding in vast:
+				waar(not a.intersects(ding[1]), "%s: %s staat op %s" % [k, bedden[i]["id"], ding[0]])
+		uit[k] = gezet
+	# slot ids are unique in the whole hotel
+	var ids := {}
+	for b in Rooms.slots("", "bed"):
+		var sleutel := "%s|%s" % [b["kamer"], b["id"]]
+		waar(not ids.has(sleutel), "het bed %s bestaat één keer" % sleutel)
+		ids[sleutel] = true
+	var meubel_ids := {}
+	for m in Rooms.meubels():
+		waar(not meubel_ids.has(m["id"]), "het meubel-id %s bestaat één keer" % m["id"])
+		meubel_ids[m["id"]] = true
+	return uit
+
+## Saved and put back (`Hotel.herstel_inrichting` does exactly this), every bed
+## stands where it stood, with the same id; and a bed from an old save that
+## stood anywhere comes back on a bed place — the old jumble tidies itself up.
+func test_bedden_blijven_staan_na_herladen() -> void:
+	Rooms.herstel()
+	for k in SLAAPKAMERS:
+		while not Rooms.meubel_zet(k, "bed").is_empty():
+			pass
+	var bewaard := Rooms.meubels()
+	var voor := {}
+	for b in Rooms.slots("", "bed"):
+		voor["%s|%s" % [b["kamer"], b["id"]]] = [b["x"], b["z"], b["model"]]
+	Rooms.herstel()
+	for m in bewaard:
+		waar(not Rooms.meubel_zet(str(m["kamer"]), str(m["type"]), float(m["x"]), float(m["z"]),
+			int(m["rot"]), str(m["id"])).is_empty(), "%s komt terug" % m["id"])
+	var na := {}
+	for b in Rooms.slots("", "bed"):
+		na["%s|%s" % [b["kamer"], b["id"]]] = [b["x"], b["z"], b["model"]]
+	gelijk(str(na), str(voor), "elk bed op dezelfde plek, zelfde id, zelfde kant op")
+	# an old save: the beds the check-in and the meubelboek used to put down
+	Rooms.herstel()
+	var oud := [["kamer1", 84, 60], ["kamer1", 60, 96], ["kamer1", 48, 48], ["kamer1", 72, 24],
+		["kamer2", 60, 84], ["kamer2", 24, 72], ["kamer2", 84, 60]]
+	var i := 0
+	var terug := 0
+	for o in oud:
+		i += 1
+		var m := Rooms.meubel_zet(str(o[0]), "bed", float(o[1]), float(o[2]), 0, "m%d_bed" % i)
+		if m.is_empty():
+			continue
+		terug += 1
+		waar(Rooms.bed_raster(str(o[0])).has(Vector2(float(m["x"]), float(m["z"]))),
+			"het oude bed %s staat nu op een bedplek (%s, %s)" % [m["id"], m["x"], m["z"]])
+		gelijk(str(m["id"]), "m%d_bed" % i, "met zijn eigen id")
+	gelijk(terug, 4, "twee per kamer passen er nog bij, de rest niet")
+	Rooms.herstel()
+
+## Nothing stands on a bed and nobody wanders onto one: no free cell, no wander
+## place and no spot for a bought piece within reach of a bed's floor.
+func test_niets_staat_op_een_bed() -> void:
+	Rooms.herstel()
+	for k in SLAAPKAMERS:
+		while not Rooms.meubel_zet(k, "bed").is_empty():
+			pass
+		var r := Rooms.get_kamer(k)
+		for b in Rooms.slots(k, "bed"):
+			var vlak := Rooms.slot_vlak(b)
+			for cel in r.vrij:
+				waar(not vlak.has_point(Vector2(float(cel["x"]), float(cel["z"]))),
+					"%s: vrij vak %s ligt op %s" % [k, cel["id"], b["id"]])
+			for p in r.plekken:
+				waar(not vlak.has_point(Vector2(float(p[0]), float(p[1]))),
+					"%s: loopplek %s ligt op %s" % [k, str(p), b["id"]])
+			for hoek in [vlak.position, vlak.end - Vector2.ONE,
+					Vector2(vlak.position.x, vlak.end.y - 1.0), Vector2(vlak.end.x - 1.0, vlak.position.y)]:
+				waar(not Rooms.vrij_vak(k, hoek.x, hoek.y),
+					"%s: geen meubel op de hoek %s van %s" % [k, str(hoek), b["id"]])
+		var plant := Rooms.meubel_zet(k, "plant", float(Rooms.slots(k, "bed")[2]["x"]),
+			float(Rooms.slots(k, "bed")[2]["z"]))
+		if not plant.is_empty():
+			for b in Rooms.slots(k, "bed"):
+				waar(not Rooms.slot_vlak(b).has_point(Vector2(float(plant["x"]), float(plant["z"]))),
+					"%s: de plant landt niet op %s" % [k, b["id"]])
+	Rooms.herstel()
+
 # ------------------------------------------------------------ de overgangen
 
 ## The floor plate, for the pure helpers of its door drawing.

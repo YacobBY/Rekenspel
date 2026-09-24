@@ -276,12 +276,23 @@ func test_slapen_ligt_op_het_matras() -> void:
 	gelijk(d.pose, "lig", "pose lig")
 	gelijk(d.face, 1, "een gewoon bed kijkt naar rechts")
 	waar(World.slaapt("t_slaap"), "World.slaapt() ziet hem")
-	# a rotated bed mirrors the sleeper, which is a quarter turn in this isometry
-	var draai := Rooms.meubel_zet("kamer1", "bed", 66.0, 66.0, 1)
+	# a rotated bed mirrors the sleeper, which is a quarter turn in this isometry.
+	# Every bed of a bedroom lies the room's way (its bed places, 2026-09-24):
+	# kamer 2's beds are turned, kamer 1's are not, whatever `rot` asks
+	var draai := Rooms.meubel_zet("kamer2", "bed", 66.0, 66.0, 1)
+	waar(not draai.is_empty(), "een bed in kamer 2")
 	if not draai.is_empty():
-		World.slaap("t_slaap", "kamer1", String(draai["id"]))
+		World.zet("t_slaap", "kamer2", 60.0, 60.0)
+		World.slaap("t_slaap", "kamer2", String(draai["id"]))
 		gelijk(World.dier("t_slaap").face, -1, "een gedraaid bed spiegelt het dier")
 		Rooms.meubel_weg(String(draai["id"]))
+	var recht := Rooms.meubel_zet("kamer1", "bed", 66.0, 66.0, 1)
+	if not recht.is_empty():
+		gelijk(str(recht["model"]), "bed", "in kamer 1 ligt ook een gekocht bed langs x")
+		World.zet("t_slaap", "kamer1", 60.0, 60.0)
+		World.slaap("t_slaap", "kamer1", String(recht["id"]))
+		gelijk(World.dier("t_slaap").face, 1, "en dan kijkt het dier naar rechts")
+		Rooms.meubel_weg(String(recht["id"]))
 	# out of another room he walks there first and lies down on arrival
 	World.zet("t_slaap", "receptie", 90.0, 30.0)
 	World.slaap("t_slaap", "kamer1", "bed1")

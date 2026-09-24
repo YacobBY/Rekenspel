@@ -100,14 +100,26 @@ const POOL = [
   ['stamp', 'Stampertje', 'konijn', 'konijn', 1],
 ];
 const BEDDEN = [['kamer1', 'bed1'], ['kamer1', 'bed2'], ['kamer2', 'bed1'], ['kamer2', 'bed2']];
+// Een gast na de vier vaste bedden krijgt een eigen bed: een gekocht bed in de
+// save (`meubels`).  Waar het staat maakt niet uit: het spel zet elk bed van een
+// slaapkamer op de eerstvolgende vrije bedplek (Rooms.meubel_zet).  Tot
+// 2026-09-24 kreeg gast 5 weer bed1: twee dieren in één bed (zoals kiek.js).
+function bedVan(i, meubels) {
+  if (i < BEDDEN.length) return BEDDEN[i];
+  const kamer = i % 2 === 0 ? 'kamer1' : 'kamer2';
+  const id = `m${meubels.length + 1}_bed`;
+  meubels.push({ id, kamer, type: 'bed', x: 57, z: 57, rot: 0, soort: 'bed' });
+  return [kamer, id];
+}
 
 function maakOpslag() {
   const n = Math.min(7, opt.gasten != null ? opt.gasten : (opt.band === 3 ? 1 : (opt.band === 4 ? 4 : 7)));
   const kunnen = opt.band === 5 ? 5 : 3;
   const gasten = [];
+  const meubels = [];
   for (let i = 0; i < n; i++) {
     const [id, naam, kind, soort, scoops] = POOL[i];
-    const bed = BEDDEN[i % BEDDEN.length];
+    const bed = bedVan(i, meubels);
     gasten.push({
       id, naam, name: naam, kind, soort, scoops, act: 'Wandeling', mins: 30,
       kamer: bed[0], bed: bed[1], waar: bed[0],
@@ -119,7 +131,7 @@ function maakOpslag() {
   const s = {
     dag: opt.dag, ronde: 'vrij', munten: 4, sterren: 0, band: opt.band, kunnen,
     signaal: [], gasten, wachtlijst: [], famIdx: 0,
-    meubels: [], meubelNr: 0, taken: [], brieven: [],
+    meubels, meubelNr: meubels.length, taken: [], brieven: [],
     scoops: 40, levering: 4, snoeppot: 0,
     kar: null, spel: {}, gezien: {},
     kamerNu: opt.kamer, uitcheck: [], nieuweGast: null,

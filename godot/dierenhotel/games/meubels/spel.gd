@@ -68,6 +68,9 @@ const T_BEZET := "bezet"
 const T_GASTEN := "gasten"
 const T_SLAAPT := "iemand slaapt"
 const T_DRAAIEN := "bed draaien"
+## Elke bedplek van elke slaapkamer heeft al een bed: dezelfde woorden als het
+## wolkje van de bel bij een vol hotel (`Hotel.BEL_VOL`).
+const T_KAMERS_VOL := "alle kamers vol"
 ## architecture.md §13 Q-X2-8/Q-X2-9: de wachtrij is op drie gemaximeerd en een
 ## vierde verzoek krijgt dit antwoord.
 const T_EERST := "leg eerst iets neer"
@@ -762,6 +765,30 @@ func _tekort(totaal: int) -> void:
 		"hoog": 26.0, "prio": 11})
 	ctx.wereld.vuil()
 
+## Past elk bed dat je koopt (en elk bed dat nog in de doos wacht) op een vrije
+## bedplek?  Een bed staat alleen op een bedplek van een slaapkamer; zijn ze
+## allemaal bezet, dan zou het in de doos blijven zonder vakje om naartoe te gaan.
+func _bedden_passen(types: Array) -> bool:
+	var nodig := 0
+	for t in types + _nog():
+		if str(t) == "bed":
+			nodig += 1
+	if nodig == 0:
+		return true
+	var vrij := 0
+	for k in Rooms.lijst():
+		vrij += Rooms.vrije_bedplekken(k).size()
+	return nodig <= vrij
+
+## Geen bedplek meer vrij: hetzelfde wolkje als de bel bij een vol hotel
+## (`🛏 <n> alle kamers vol`), en er gaat niets van je munten af.
+func _kamers_vol() -> void:
+	ctx.snd.zacht()
+	_wolk(_hier(), {"id": "mb_bedvol", "icoon": "🛏", "getal": ctx.state.max_gasten(),
+		"tekst": T_KAMERS_VOL, "klas": "hulp", "hoog": 26.0, "prio": 11})
+	ctx.wereld.vuil()
+	_wolk_straks("mb_bedvol", 2.4)
+
 func _koop_versiering(sleutel: String) -> void:
 	var q := _q()
 	var v := _versier(sleutel)
@@ -822,7 +849,9 @@ func _mijn_meubel_knoppen() -> void:
 			var type := str(mijn.get("type", "plant"))
 			var x := float(m.get("x", 0.0))
 			var z := float(m.get("z", 0.0))
-			if type == "bed":
+			# in a bedroom every bed is turned the room's way (its bed places,
+			# owner 2026-09-24): there is nothing to turn
+			if type == "bed" and Rooms.bed_raster(kamer_id).is_empty():
 				ctx.hotspots.maak({"id": "mbdraai_%s" % id, "kamer": kamer_id,
 					"x": x + 8.0, "z": z - 8.0, "y": 14.0,
 					"icoon": "🔄", "label": W_DRAAIEN, "titel": T_DRAAIEN, "prio": 8,
@@ -924,6 +953,9 @@ func _koop(types: Array) -> void:
 	var tot := _totaal_van(types)
 	if tot > _munten():
 		_tekort(tot)
+		return
+	if not _bedden_passen(types):
+		_kamers_vol()
 		return
 	var cap := Sommen.Meubels.buidel_cap(tot, _munten(), _band())
 	_spaar = {}
@@ -1342,7 +1374,14 @@ func _plaats() -> void:
 	if _nog().is_empty():
 		_boek()
 		return
-	if ctx.wereld.actief() == "receptie":
+	# een bed wacht in de doos: naar een slaapkamer met een vrije bedplek
+	if str(_nog()[0]) == "bed" and Rooms.vrije_bedplekken(_thuis).is_empty():
+		for k in Rooms.lijst():
+			if not Rooms.vrije_bedplekken(k).is_empty():
+				_thuis = k
+				break
+	if ctx.wereld.actief() == "receptie" \
+			or (str(_nog()[0]) == "bed" and Rooms.vrije_bedplekken(ctx.wereld.actief()).is_empty()):
 		Hotel.naar_kamer(_thuis)
 	_plaats_teken()
 
@@ -1379,7 +1418,7 @@ func _plaats_teken() -> void:
 			ctx.wereld.vuil()})
 
 	# de vrije vakjes van DEZE ruimte, hooguit vier tegelijk
-	var alle := _vakjes(nu)
+	var alle := _vakjes(nu, str(nog[0]))
 	if _vak_offset >= alle.size():
 		_vak_offset = 0
 	var vak_max := _vak_max()
@@ -1431,10 +1470,22 @@ func _doos_plek(kamer_id: String) -> Dictionary:
 
 ## De vrije vakjes, netjes uit elkaar en op volgorde van de deur af: wat het
 ## dichtst bij binnenkomen ligt zie je het eerst.
-func _vakjes(kamer_id: String) -> Array:
+##
+## Een BED gaat alleen op een vrije bedplek van een slaapkamer, in de volgorde
+## van de kamer (eigenaar 2026-09-24: "De eerste twee bedden zijn goed
+## geplaatst, daarna gaat alles door elkaar"); een andere ruimte heeft voor een
+## bed geen vakje.  Al het andere gaat niet op een vrije bedplek staan zolang
+## er ook elders vloer is: daar komt later een bed.
+func _vakjes(kamer_id: String, type := "") -> Array:
 	var r: Rooms.Kamer = ctx.wereld.kamer(kamer_id)
 	if r == null:
 		return []
+	if type == "bed":
+		var bedden: Array = []
+		for p in Rooms.vrije_bedplekken(kamer_id):
+			var v: Vector2 = p
+			bedden.append({"id": "bed%d_%d" % [int(v.x), int(v.y)], "x": v.x, "z": v.y})
+		return bedden
 	var dx := float(r.w) / 2.0
 	var dz := float(r.d) / 2.0
 	for naar in r.deur_punten:
@@ -1442,7 +1493,25 @@ func _vakjes(kamer_id: String) -> Array:
 		dx = float(punt.get("ix", punt.get("x", dx)))
 		dz = float(punt.get("iz", punt.get("z", dz)))
 		break                                      # het eerste deurpunt telt
-	var vrij: Array = r.vrij.duplicate()
+	var vrij: Array = []
+	var bedplekken: Array = []
+	for p in Rooms.vrije_bedplekken(kamer_id):
+		var v: Vector2 = p
+		bedplekken.append(Rooms.bed_vlak(Rooms.bed_model(kamer_id), v.x, v.y)
+			.grow(Rooms.MEUBEL_BED_RAND))
+	for cel in r.vrij:
+		var c := Vector2(float(cel["x"]), float(cel["z"]))
+		if not Rooms.vrij_vak(kamer_id, c.x, c.y):
+			continue                               # het meubel zou elders landen
+		var op_bedplek := false
+		for vlak in bedplekken:
+			if (vlak as Rect2).has_point(c):
+				op_bedplek = true
+				break
+		if not op_bedplek:
+			vrij.append(cel)
+	if vrij.is_empty():
+		vrij = r.vrij.duplicate()
 	vrij.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return absf(a["x"] - dx) + absf(a["z"] - dz) \
 			< absf(b["x"] - dx) + absf(b["z"] - dz))
