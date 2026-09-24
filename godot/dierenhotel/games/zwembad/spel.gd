@@ -10,7 +10,12 @@ extends MiniGame
 ##   * at most `M` metres per pick;
 ##   * too short simply continues with the rest, too far bumps the wall with a
 ##     short 💛 Au! — never a cross, never a star less, never a repeated turn;
-##   * exactly reaching the other side says "Precies aan de overkant!".
+##   * exactly reaching the other side says "Precies aan de overkant!";
+##   * a wrong answer gets NO help (owner, 2026-09-24: "Nee geef geen hulp na
+##     fouten.  Kinderen moeten zelf leren rekenen"): too short or too many,
+##     he swims what the answer bought and then sulks in the water with
+##     `🔄 Nog een keer` — no "nog 13 m", no "hooguit 30 m", no help line on
+##     the next card, no markers lighting up, no pale marker in the water.
 ##
 ## The numbers come from `Sommen.Zwembad` and are never re-implemented here
 ## (architecture.md §1.1 F1); the ordering of the four buttons is the frozen
@@ -22,8 +27,6 @@ const STROOK_ID := "zb_som_keuzes"
 const WOLK_ID := "zb_wolk"
 const GAST_TAG := "zb_gasttag"
 const VLAG_TAG := "zb_vlagtag"
-const SPOOK_ID := "zb_spook"
-const SPOOK_TAG := "zb_spooktag"
 const VLAG_DECOR := "zb_vlag"
 
 const MODEL_STREEP := "zwembad_streep"
@@ -32,6 +35,10 @@ const MODEL_VLAG := "zwembad_vlag"
 const REIS_TIK := 0.22        ## how often we look whether he arrived  (§1.6)
 const REIS_GEDULD := 25.0     ## and how long we keep looking
 const WOLK_S := 1.1           ## a bubble between two questions
+## The sulk after a wrong stroke, then the next card.  Shorter than the `sip`
+## pose of `Ui.misser`, so he is put back afloat before that pose runs out —
+## a pose that ran out in the water would send him paddling off.
+const MIS_S := 1.4
 const BOTS_S := 1.2           ## the 💛 Au! stays this long             (§1.7)
 ## The bump (owner, 2026-09-23): the bounce back through the water, and the
 ## little paddle that turns him to the wall again.
@@ -60,7 +67,6 @@ var _uit_kader: Callable = Callable()
 var _decor_ids: Array[String] = []
 var _label_ids: Array[String] = []
 var _kant := ""
-var _hulp_licht := false        ## rung 1: the markers ahead glow with the card
 var _na_bots := false           ## the next card is the one after a bump (N3)
 
 # --------------------------------------------------------------- aanmelding
@@ -248,17 +254,9 @@ func _vraag() -> void:
 			"keuze_titel": ZwembadBeurt.HULP_TITEL, "keuzes": keuzes,
 		})
 	_volg_kaart()
-	# the help ladder (games-b.md §0.5): count together, the rule, and only at
-	# the third slip a ghost marker in the water that shows the answer
-	var hulp := ZwembadBeurt.hulp_regel(int(_b["misser"]), m)
-	if not hulp.is_empty():
-		_kaart.hulp(hulp)
-	# the first rung shows WHAT to count: for as long as the card is up, every
-	# marker ahead of him lights up on the rim (games-b.md §0.5)
-	_hulp_licht = int(_b["misser"]) >= 1
+	# no help line, no lit markers, no pale marker, however many slips there
+	# were (owner, 2026-09-24): the card is the question and nothing more
 	_strepen_ververs()
-	if int(_b["misser"]) >= 3:
-		_spook_aan()
 	_meld_kaart()
 
 ## One tap on a choice button (games-b.md §1.5).
@@ -277,11 +275,8 @@ func _kies(n: int) -> void:
 	_b["leg"] = int(_b["leg"]) + 1
 	_b["laatste_p"] = p
 	_b["laatste_rest"] = maxi(0, l - p)
-	_spook_uit()
 	ctx.ui.wolk_weg(WOLK_ID)
 	_kaart_weg()          # no card = no second tap on the same question
-	_hulp_licht = false   # the stroke starts: the help lights burn out again
-	_strepen_ververs()
 	_bewaar()
 	print("[probe] zwembad=kies n=", n, " soort=", soort, " meters=", meters,
 		" p=", p, " misser=", _b["misser"])
@@ -318,15 +313,21 @@ func _kies(n: int) -> void:
 	if soort == "goed":
 		ctx.snd.ja()
 		_zeg(ZwembadBeurt.PRECIES_ICOON, "%d m" % meters, "gezwommen")
-	elif soort == "veel":
-		ctx.snd.zacht()
-		_zeg(ZwembadBeurt.ICOON, "", "hooguit %d m" % m)
-	else:
-		ctx.snd.zacht()
-		_zeg(ZwembadBeurt.ICOON, "", "nog %d m" % (l - int(_b["p"])))
-	if not await na(_leestijd(WOLK_S)):
+		if not await na(_leestijd(WOLK_S)):
+			return
+		ctx.ui.wolk_weg(WOLK_ID)
+		_vraag()
 		return
-	ctx.ui.wolk_weg(WOLK_ID)
+	# too short, or more than he may swim at once: he swam what the answer
+	# bought, and now he is disappointed — no word about how far is left or
+	# what the most is (owner, 2026-09-24).  Then afloat again, and the card.
+	ctx.snd.zacht()
+	ctx.ui.misser(null, _gast)
+	if not await na(_leestijd(MIS_S)):
+		return
+	var d = ctx.wereld.dier(_gast)
+	if d != null and d.kamer == KAMER:
+		ctx.wereld.blijf(_gast, "zwem")
 	_vraag()
 
 # ---------------------------------------------------------------- zwemmen
@@ -517,7 +518,7 @@ func _slag_stap(p0: int, voor: int, elke: int) -> Callable:
 ##   4. he paddles round to face the wall again and floats;
 ##   5. a NEW question from there: a different distance to work out.
 ## Nothing is taken — no star, no stroke of the turn; the miss only feeds the
-## help ladder.  With reduced motion he is simply on his new metre, the bubble
+## adaptive signal.  With reduced motion he is simply on his new metre, the bubble
 ## keeps its full time.  `p_voor` is his metre before the stroke.
 func _bots_en_terug(p_voor: int) -> void:
 	var l := int(_b["L"])
@@ -704,15 +705,13 @@ func _sluit_als() -> void:
 ## One metre marker, re-issued as it is (a `World.decor` with the same id and
 ## `door` replaces the piece, which is how a marker recolours).  `gehaald`
 ## falls out of `_b["p"]` alone, so a reload and a frame change derive it
-## again: the knobs he has swum past wear the flag pink.  `licht` is the first
-## rung of the help ladder: while the card is up, every marker AHEAD of him
-## glows so the child sees which ones to count.
+## again: the knobs he has swum past wear the flag pink.  Nothing lights up
+## after a slip (owner, 2026-09-24).
 func _streep_zet(m: int, groot: bool, x: float, z: float) -> void:
 	var id := "zb_streep_%d" % m
 	ctx.wereld.decor(KAMER, {"id": id, "model": MODEL_STREEP, "door": ctx.id,
 		"x": x, "z": z, "params": {"groot": groot,
-			"gehaald": m > 0 and m <= int(_b["p"]),
-			"licht": _hulp_licht and m > int(_b["p"])}})
+			"gehaald": m > 0 and m <= int(_b["p"])}})
 	if not _decor_ids.has(id):
 		_decor_ids.append(id)
 
@@ -748,9 +747,8 @@ func _bouw_decor() -> void:
 	ctx.ui.getal_tag({"x": vx, "z": vz}, "%d m" % l,
 		{"id": VLAG_TAG, "kamer": KAMER, "y": 34, "prio": 8})
 
-## Re-issue only the markers of the rim, with the current `gehaald` and
-## `licht` — no numbers and no flag.  This is how the help light of the first
-## rung burns IN with a card and OUT again with the next stroke (§0.5).
+## Re-issue only the markers of the rim, with the current `gehaald` — no
+## numbers and no flag.
 func _strepen_ververs() -> void:
 	var l := int(_b["L"])
 	var stap := int(_b["stap"])
@@ -766,27 +764,6 @@ func _decor_weg() -> void:
 	for id in _decor_ids:
 		ctx.wereld.decor_weg(KAMER, id)
 	_decor_ids.clear()
-
-## The third rung of the help ladder: a pale marker where he should stop, with
-## the answer on it — showing, not reading (HOTEL.md §9).
-func _spook_aan() -> void:
-	var l := int(_b["L"])
-	var p := int(_b["p"])
-	var juist := Sommen.Zwembad.juist_van(l, int(_b["M"]), p)
-	var bad := _bad()
-	var x := float(JsGetal.rond(ZwembadBeurt.baan_x(bad, l, p + juist)))
-	var z := ZwembadBeurt.rand_z(bad)
-	ctx.wereld.decor(KAMER, {"id": SPOOK_ID, "model": MODEL_STREEP, "door": ctx.id,
-		"x": x, "z": z, "params": {"groot": true, "bleek": true}})
-	if not _decor_ids.has(SPOOK_ID):
-		_decor_ids.append(SPOOK_ID)
-	ctx.ui.getal_tag({"x": x, "z": z}, juist,
-		{"id": SPOOK_TAG, "kamer": KAMER, "y": 11, "prio": 5, "klas": "hulp"})
-
-func _spook_uit() -> void:
-	ctx.wereld.decor_weg(KAMER, SPOOK_ID)
-	_decor_ids.erase(SPOOK_ID)
-	ctx.hotspots.weg(SPOOK_TAG)
 
 # ------------------------------------------------------- de kaart en haar marges
 
@@ -910,7 +887,6 @@ func stop() -> void:
 		_uit_kader = Callable()
 	_kaart_weg()
 	ctx.ui.wolk_weg(WOLK_ID)
-	_spook_uit()
 	_nood_uit()
 	ctx.hotspots.weg(GAST_TAG)
 	ctx.hotspots.weg(VLAG_TAG)

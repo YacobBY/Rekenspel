@@ -18,6 +18,15 @@ extends MiniGame
 ##     model `tobbe_sop` waarvan de waterhoogte de inhoud is (HOTEL.md §9,
 ##     "uitleggen door te laten zien").  Het cijfer óp de tobbe blijft.
 ##   * `setTimeout` wordt `await na()`, dus `stop()` ruimt elke wachttijd op.
+##
+## Een misser helpt niet (eigenaar 2026-09-24: "Nee geef geen hulp na fouten.
+## Kinderen moeten zelf leren rekenen").  Een fout getal op de somkaart, een
+## ✓ bij een scheve verdeling, een tobbe die overloopt: een zacht geluid en
+## `🔄 Nog een keer` (bij de kaart; wie in de tuin staat kijkt teleurgesteld
+## als er sop overloopt) — en verder niets: geen telregel, geen wolkje met wat
+## er nog bij moet of waar de rest heen moet, geen buurvrouw Els met
+## spookcijfers.  Het sop van een volle tobbe gaat wel terug op het rek: dat is
+## de tobbe zelf, geen hint.
 
 const KAMER := "tuin"
 ## `Sommen.Tobbe.HAND` — hoeveel schepjes één tik uit het rek haalt.
@@ -35,7 +44,7 @@ const KUIP_HOOG := 6
 ## Het plankje vóór de tobbes: hoeveel echte pixels opzij elk stuk gereedschap
 ## mikt, zodat elk zijn eigen kolom in het bandenrooster houdt (zie
 ## `_gereedschap_punt`).  De sommenkaart staat in het midden op 0.
-const GEREEDSCHAP := {"kan": -150.0, "hulp": -80.0, "klaar": 80.0, "kraan": 150.0}
+const GEREEDSCHAP := {"kan": -150.0, "opnieuw": -80.0, "klaar": 80.0, "kraan": 150.0}
 
 ## De stand van de beurt.  Leeft in `ctx.data()["stand"]` en overleeft dus een
 ## herlaad; awaits en timers doen dat nooit (architecture.md §6.2 regel 3).
@@ -106,7 +115,7 @@ func _nieuwe_stand(n: int, band: int, dag: int) -> Dictionary:
 		"stap": "vraag",
 		"rek": t if soort == "eerlijk" else (int(r["basis"]) if soort == "dubbel" else 0),
 		"tob": tobbes, "kan": 0, "inbad": inbad, "hand": 1,
-		"missers": 0, "lijn": 0, "hulp": 0, "wens": 0, "ster": 0,
+		"missers": 0, "lijn": 0, "wens": 0, "ster": 0,
 		"mors": -1, "tel": 0, "zeg": {}, "t0": 0,
 	}
 
@@ -115,7 +124,7 @@ func _nieuwe_stand(n: int, band: int, dag: int) -> Dictionary:
 ## en staat er "3.0 + 3.0 =" op de kaart.
 func _normaliseer(st: Dictionary) -> Dictionary:
 	for sleutel in ["dag", "N", "band", "n0", "perDier", "basis", "T", "M", "per",
-			"rest", "rek", "kan", "hand", "missers", "lijn", "hulp", "wens",
+			"rest", "rek", "kan", "hand", "missers", "lijn", "wens",
 			"ster", "mors", "tel", "t0"]:
 		st[sleutel] = int(st.get(sleutel, 0))
 	st["soort"] = str(st.get("soort", "eerlijk"))
@@ -161,16 +170,6 @@ func _kan_nodig() -> bool:
 
 func _mv(n: int, enk: String, meerv: String) -> String:
 	return Ui.meervoud(n, enk, meerv)
-
-## Samen doortellen: `_tel_mee(6, 2)` -> "6 … 12."  (ui.js `telMee`; de motor
-## heeft die helper nog niet — zie "Contract gaps" in het rapport.)
-func _tel_mee(stap: int, aantal: int, staart := ".") -> String:
-	var l := PackedStringArray()
-	var som := 0
-	for i in aantal:
-		som += stap
-		l.append(str(som))
-	return " … ".join(l) + staart
 
 # =====================================================================
 #  3. TOBBES NEERZETTEN
@@ -266,7 +265,7 @@ func _voor_punt() -> Dictionary:
 
 ## Het plankje vóór de tobbes, met een VASTE plek per stuk gereedschap.
 ##
-## Dit is de "container" van het ticket.  Mikten kraantje, kannetje, ✓, ↩ en Els
+## Dit is de "container" van het ticket.  Mikten kraantje, kannetje, ✓ en ↩
 ## allemaal op hetzelfde punt, dan deelde het bandenrooster de vrije blokken in
 ## de volgorde uit waarin het ze tegenkwam — en die volgorde verandert zodra er
 ## een knop bij komt of weggaat (↩ verschijnt na het eerste schepje, het wolkje
@@ -476,19 +475,12 @@ func _teken() -> void:
 		"id": "tb_klaar", "kamer": KAMER, "x": klaar["x"], "z": klaar["z"], "y": 0.0,
 		"op": "onder", "obj": "tobbe", "icoon": "✓", "label": "klaar", "prio": 13,
 		"titel": "zo is het goed", "aan": func(_spot) -> void: _check()})
-	var hulp := _gereedschap_punt(GEREEDSCHAP["hulp"])
-	if int(_s["missers"]) >= 2:
+	var opnieuw := _gereedschap_punt(GEREEDSCHAP["opnieuw"])
+	if int(_s["rek"]) < int(_s["T"]) or _iets_in_de_tobbes():
 		ctx.hotspots.maak({
-			"id": "tb_els", "kamer": KAMER, "x": hulp["x"], "z": hulp["z"], "y": 0.0,
-			"op": "onder", "obj": "tobbe", "icoon": "🩺", "label": "Els", "prio": 8,
-			"titel": "buurvrouw Els doet het voor", "aan": func(_spot) -> void: _hulp()})
-	elif int(_s["rek"]) < int(_s["T"]) or _iets_in_de_tobbes():
-		ctx.hotspots.maak({
-			"id": "tb_opnieuw", "kamer": KAMER, "x": hulp["x"], "z": hulp["z"], "y": 0.0,
+			"id": "tb_opnieuw", "kamer": KAMER, "x": opnieuw["x"], "z": opnieuw["z"], "y": 0.0,
 			"op": "onder", "obj": "tobbe", "icoon": "🔄", "label": "opnieuw", "prio": 7,
 			"titel": "opnieuw beginnen", "aan": func(_spot) -> void: _leeg()})
-	if int(_s["hulp"]) != 0:
-		_spook_neer()
 	_teken_zeg()
 	World.vuil()
 	_meld()
@@ -521,14 +513,10 @@ func _teken_tobbes() -> void:
 			"klas": "hotkar", "prio": 12, "titel": titel,
 			"volg": _volg_tobbe(i),
 			"aan": func(_spot) -> void: _tik_tobbe(i)})
-		# het aantal als cijfer ÓP de tobbe; tijdens de hulp van Els liggen daar
-		# de spookcijfers, en twee getallen op één tobbe leest niemand
-		if int(_s["hulp"]) == 0:
-			ctx.ui.getal_tag({"x": float(_p[i]["x"]), "z": float(_p[i]["z"])}, n,
-				{"id": "tb_n%d" % i, "kamer": KAMER, "y": 0.0,
-				"titel": "schepjes in tobbe %d" % (i + 1), "volg": _volg_tobbe(i)})
-		else:
-			ctx.ui.getal_tag({"x": 0.0, "z": 0.0}, null, {"id": "tb_n%d" % i})
+		# het aantal als cijfer ÓP de tobbe
+		ctx.ui.getal_tag({"x": float(_p[i]["x"]), "z": float(_p[i]["z"])}, n,
+			{"id": "tb_n%d" % i, "kamer": KAMER, "y": 0.0,
+			"titel": "schepjes in tobbe %d" % (i + 1), "volg": _volg_tobbe(i)})
 
 func _teken_rek() -> void:
 	var kist := World.mik("kist", KAMER)
@@ -538,7 +526,7 @@ func _teken_rek() -> void:
 	ctx.hotspots.bron({"x": float(kist["x"]), "z": float(kist["z"])}, {
 		"id": "tb_rek", "kamer": KAMER, "icoon": "🧴", "hoog": 14.0,
 		# prio 11 in plaats van 10: zonder het rek is er geen sop en dus geen
-		# beurt, dus het rek gaat vóór het kraantje en vóór Els (zie het kannetje)
+		# beurt, dus het rek gaat vóór het kraantje (zie het kannetje)
 		"aantal": rek, "hand": int(_s["hand"]) if rek > 0 else 0, "prio": 11,
 		"titel": "rek met %s, pak %d" % [_mv(rek, "schepje", "schepjes"), int(_s["hand"])],
 		"tik": func(_spot) -> void: _wissel_hand(),
@@ -661,15 +649,13 @@ func _antwoord(n, goed: int, k) -> void:
 	if n == null or _s.is_empty():
 		return
 	if int(n) != goed:
+		# geen hulp (eigenaar 2026-09-24): `Ui` zet de strook even op slot met
+		# `🔄 Nog een keer` en zet dezelfde vier getallen terug; de kaart en de
+		# tobbes blijven precies zoals ze waren, en wie in de tuin staat is sip
 		_s["missers"] = int(_s["missers"]) + 1
-		_s["lijn"] = 1
 		ctx.snd.zacht()
-		k.zet("")
-		# samen doortellen: net zoveel sprongen als er tobbes zijn
-		var staart := (" … en %d over." % int(_s["rest"])) if int(_s["rest"]) > 0 else "."
-		k.hulp(_tel_mee(int(_s["basis"]), 2) if str(_s["soort"]) == "dubbel"
-			else _tel_mee(goed, int(_s["M"]), staart))
 		_bewaar()
+		_teleurgesteld()
 		return
 	k.zet(str(int(n)))
 	k.klaar()
@@ -792,11 +778,11 @@ func _kraantje() -> void:
 	var h := m / 2
 	var r := m - 2 * h
 	if r != 0 and int(_s["band"]) < 5:
-		# even/oneven, groep 3: halveren mag hier niet met een rest
-		_s["lijn"] = 1
+		# even/oneven, groep 3: halveren mag hier niet met een rest.  Er komt
+		# geen uitleg bij (eigenaar 2026-09-24): de kraan werkt gewoon niet, en
+		# dat laat `🔄 Nog een keer` zien
 		ctx.snd.zacht()
-		_zeg({"icoon": "⚖️", "getal": m, "tekst": "is oneven"})
-		_teken()
+		ctx.ui.misser(_kaart, "")
 		return
 	_s["tob"][bron] = h
 	_s["tob"][doel] = int(_s["tob"][doel]) + h
@@ -823,9 +809,7 @@ func _leeg() -> void:
 		_s["tob"][0] = int(_s["T"])
 		_s["rek"] = 0
 	_s["mors"] = -1
-	_s["hulp"] = 0
 	_zeg(null)
-	_spook_weg()
 	ctx.snd.terug()
 	_bewaar()
 	_teken()
@@ -834,21 +818,19 @@ func _leeg() -> void:
 #  10. DE VRIENDELIJKE CONTROLE — nooit een kruis
 # =====================================================================
 
-## Te vol: het sop gaat terug op het rek en de dieren liggen dubbel.  Er komt
-## nooit een kruis (architecture.md §1.1 F5).
+## Te vol: het sop gaat terug op het rek (dat is de tobbe zelf), en wie in de
+## tuin staat kijkt teleurgesteld — geen wolkje dat zegt wat er mis ging, en
+## nooit een kruis (architecture.md §1.1 F5; eigenaar 2026-09-24).
 func _overloop(i: int) -> void:
 	_s["rek"] = int(_s["rek"]) + int(_s["tob"][i])
 	_s["tob"][i] = 0
 	_s["missers"] = int(_s["missers"]) + 1
-	_s["lijn"] = 1
 	_s["mors"] = i
 	ctx.snd.zacht()
-	_zeg({"icoon": "🦆", "tekst": "te vol"})
-	for g in ctx.state.s["gasten"]:
-		if str(g.get("waar", "")) == KAMER:
-			World.mood(str(g["id"]), "bouncy")
+	_zeg(null)
 	_bewaar()
 	_teken()
+	_teleurgesteld()
 	if not await na(1.4):
 		return
 	if _s.is_empty() or int(_s["mors"]) != i:
@@ -860,7 +842,7 @@ func _check() -> void:
 	if _s.is_empty() or str(_s["stap"]) != "vullen":
 		return
 	if int(_s["rek"]) > 0:
-		_mis({"icoon": "🥄", "getal": int(_s["rek"]), "tekst": "nog op het rek"})
+		_mis()
 		return
 	for i in int(_s["M"]):
 		if int(_s["tob"][i]) > int(_s["per"]):
@@ -870,32 +852,38 @@ func _check() -> void:
 	for i in range(1, int(_s["M"])):
 		if int(_s["tob"][i]) != int(_s["tob"][0]):
 			gelijk = false
-	if not gelijk:
-		_mis({"icoon": "⚖️", "tekst": "even hoog"})
-		return
-	if int(_s["kan"]) != int(_s["rest"]):
-		_mis({"icoon": "🫗", "getal": int(_s["rest"]), "tekst": "hoort hierin"})
-		return
-	if int(_s["tob"][0]) != int(_s["per"]):
-		_mis({"icoon": "🥄", "getal": int(_s["per"]) - int(_s["tob"][0]), "tekst": "erbij"})
+	if not gelijk or int(_s["kan"]) != int(_s["rest"]) \
+			or int(_s["tob"][0]) != int(_s["per"]):
+		_mis()
 		return
 	_geslaagd()
 
-func _mis(o: Dictionary) -> void:
+## ✓ bij een verdeling die niet klopt: een misser, en niets wat verklapt wat er
+## mis is — niet hoeveel er nog op het rek ligt, niet "even hoog", niet waar de
+## rest heen moet (eigenaar 2026-09-24).
+func _mis() -> void:
 	_s["missers"] = int(_s["missers"]) + 1
-	_s["lijn"] = 1
 	_s["mors"] = -1
 	ctx.snd.zacht()
-	_zeg(o)
 	_bewaar()
 	_teken()
+	_teleurgesteld()
+
+## Wat een misser in de tuin laat zien: `🔄 Nog een keer` bij de kaart (dit spel
+## heeft geen dier van de beurt), en wie er in de tuin staat is even sip.
+func _teleurgesteld() -> void:
+	ctx.ui.misser(_kaart, "")
+	for g in ctx.state.s["gasten"]:
+		var id := str(g.get("id", ""))
+		var d = ctx.wereld.dier(id)
+		if d != null and d.kamer == KAMER and str(d.staat) != "slaap":
+			ctx.wereld.pose(id, "sip", Ui.SIP_TIKKEN)
 
 func _geslaagd() -> void:
 	_s["stap"] = "baden"
 	_s["lijn"] = 1
 	_s["mors"] = -1
 	_zeg(null)
-	_spook_weg()
 	# het water is klaar: wie in bad moet komt er zelf aan lopen
 	_haal_baders()
 	# Het adaptieve signaal telt hier al mee; de STER hoort bij de hele ronde en
@@ -912,36 +900,6 @@ func _geslaagd() -> void:
 	if not await na(2.2):
 		return
 	ctx.ui.wolk_weg("tb_goed")
-
-# ---------- Els doet het voor: de goede aantallen als spookcijfers ----------
-
-func _spook_weg() -> void:
-	if ctx == null:
-		return
-	for i in _p.size():
-		ctx.ui.getal_tag({"x": 0.0, "z": 0.0}, null, {"id": "tb_s%d" % i})
-	ctx.ui.getal_tag({"x": 0.0, "z": 0.0}, null, {"id": "tb_sk"})
-
-func _spook_neer() -> void:
-	for i in _p.size():
-		ctx.ui.getal_tag({"x": float(_p[i]["x"]), "z": float(_p[i]["z"])}, int(_s["per"]),
-			{"id": "tb_s%d" % i, "kamer": KAMER, "y": 0.0, "klas": "hotspook",
-			"titel": "zoveel hoort erin", "volg": _volg_tobbe(i)})
-	if int(_s["rest"]) > 0:
-		var rij := _rij_punt()
-		ctx.ui.getal_tag({"x": rij["x"], "z": rij["z"]}, int(_s["rest"]),
-			{"id": "tb_sk", "kamer": KAMER, "y": 6.0, "klas": "hotspook",
-			"titel": "zoveel blijft over"})
-
-func _hulp() -> void:
-	if _s.is_empty():
-		return
-	_s["hulp"] = 1
-	_zeg({"icoon": "🩺", "getal": int(_s["per"]), "tekst": "ieder evenveel"})
-	ctx.state.zet_gezien("tobbe_els")
-	ctx.snd.brief()
-	_bewaar()
-	_teken()
 
 # =====================================================================
 #  11. DE DIEREN IN BAD
@@ -1166,7 +1124,7 @@ func _meld() -> void:
 		"T": int(_s["T"]), "M": int(_s["M"]), "per": int(_s["per"]),
 		"rest": int(_s["rest"]), "rek": int(_s["rek"]), "tob": _s["tob"],
 		"kan": int(_s["kan"]), "hand": int(_s["hand"]), "missers": int(_s["missers"]),
-		"hulp": int(_s["hulp"]), "ster": int(_s["ster"]), "inbad": _s["inbad"]}))
+		"ster": int(_s["ster"]), "inbad": _s["inbad"]}))
 	if not await na(0.1):
 		return
 	# `dekking_max` telt alleen de KNOPPEN: een vaste kaart en een cijfer mogen

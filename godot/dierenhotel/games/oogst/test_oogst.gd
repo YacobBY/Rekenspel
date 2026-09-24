@@ -10,8 +10,6 @@ const KAMER := "kas"
 const KAART := "og_som"
 const STROOK := "og_som_keuzes"
 const PLUK := "og_pluk"
-const HULP := "og_hulp"
-const SPOOK := "og_spook"
 const LEKKER := "og_lekker"
 const LEEG := "og_leeg"
 const TAFEL := "og_tafel"
@@ -206,20 +204,21 @@ func test_aanmelding() -> void:
 	waar(not unlock.call(0, 3), "zonder gasten niet")
 	waar(unlock.call(1, 3), "vanaf één gast wel")
 
-## The table model bakes at every scale, with and without punnets and ghosts.
+## The table model bakes at every scale, with and without punnets.  There are
+## no ghost berries any more (owner, 2026-09-24: no help after a miss): an old
+## `spook` parameter changes nothing.
 func test_de_pluktafel_bakt() -> void:
 	for g in [2, 3, 4]:
 		for params in [{}, {"b": [10, 10, 4, 0, -1]}, {"b": Spel.RUST_BAKJES},
-				{"b": [10, 10, 10, 10, 10, 10, 10, 10, 10, 10]}, {"b": [3], "spook": 0}]:
+				{"b": [10, 10, 10, 10, 10, 10, 10, 10, 10, 10]}]:
 			var p = Art.plaat("oogst_tafel", g, params)
 			waar(p != null and p.w > 0 and p.h > 0, "oogst_tafel bakt op g=%d met %s" % [g, str(params)])
 	# the berries are really in the model: more berries, more voxels
 	var leeg: Array = Modellen.tafel({"b": [0]})
 	var vol: Array = Modellen.tafel({"b": [10]})
 	waar(vol.size() > leeg.size(), "een vol bakje heeft meer voxels dan een leeg")
-	var spook: Array = Modellen.tafel({"b": [4], "spook": 0})
-	var zonder: Array = Modellen.tafel({"b": [4]})
-	waar(spook.size() > zonder.size(), "het spookbakje toont bleke aardbeien in de lege gaatjes")
+	gelijk(Modellen.tafel({"b": [4], "spook": 0}).size(), Modellen.tafel({"b": [4]}).size(),
+		"geen bleke spookaardbeien meer in de lege gaatjes")
 	# ten places, five per column, none on top of another
 	var gezien := {}
 	for i in 10:
@@ -317,18 +316,19 @@ func test_elke_zin_past() -> void:
 		waar(Ui.keur_regel("oogst", zin), "binnen het budget: %s" % zin)
 		waar((Beurt.ICOON + " " + zin).length() <= 40, "met het pictogram ≤ 40 tekens: %s" % zin)
 		gelijk(Ui.mist_tekens(zin).size(), 0, "alle tekens bestaan: %s" % zin)
-	for teken in [Beurt.ICOON, Beurt.ICOON_PLUK10, Beurt.ICOON_HULP, Beurt.ICOON_AF,
-			Beurt.ICOON_LEKKER]:
+	for teken in [Beurt.ICOON, Beurt.ICOON_PLUK10, Beurt.ICOON_AF, Beurt.ICOON_LEKKER]:
 		gelijk(Ui.mist_tekens(teken).size(), 0, "het pictogram %s staat in de fontsubset" % teken)
-	# the help lines count along the real structure of the table
 	var o := {"band": 4, "vol": 3, "los": 4, "T": 34, "doel": 4, "nodig": 6}
-	gelijk(Beurt.hulp_tel(o), "10 … 20 … 30 en nog 4", "tellen per bakje")
-	gelijk(Beurt.hulp_bij(o), "5 … 6 … 7 … 8 … 9 … 10", "doortellen tot 10")
 	gelijk(Beurt.som_bij(o), "4 + __ = 10", "de aanvulsom met het gat")
 	var o5 := {"band": 5, "vol": 6, "los": 3, "T": 63, "doel": 10, "nodig": 37}
-	gelijk(Beurt.hulp_bij(o5), "63 ▸ 70 ▸ 80 ▸ 90 ▸ 100", "via de tientallen naar 100")
 	gelijk(Beurt.som_bij(o5), "63 + __ = 100", "de aanvulsom tot honderd")
-	gelijk(Beurt.spook_bij(o5), "7 + 30", "het spookgetal laat de twee stappen zien")
+	# the help ladder is gone (owner, 2026-09-24): no counting line, no ghost
+	var namen: Array[String] = []
+	for m in (Beurt as Script).get_script_method_list():
+		namen.append(str(m["name"]))
+	waar(namen.has("som_bij"), "de methodelijst van beurt.gd is te lezen")
+	for weg in ["hulp_tel", "hulp_bij", "spook_tel", "spook_bij"]:
+		waar(not namen.has(weg), "geen %s meer in beurt.gd" % weg)
 
 # ------------------------------------------------------------ een hele beurt
 
@@ -356,7 +356,8 @@ func test_een_beurt_in_groep_4() -> void:
 	waar(d != null and d.kamer == KAMER, "de gast van de beurt is in de kas")
 	if d != null:
 		waar(absf(d.x - Spel.GAST_X) + absf(d.z - Spel.GAST_Z) <= 1.0, "naast de tafel")
-	# a miss: nothing lost, the same four choices, help on the table
+	# a miss: nothing lost, the same four choices, the picker disappointed —
+	# and no help (owner, 2026-09-24)
 	var sterren := int(State.s["sterren"])
 	var fout_getal := -1
 	for k in keuzes:
@@ -366,7 +367,8 @@ func test_een_beurt_in_groep_4() -> void:
 	_kies(fout_getal)
 	gelijk(_stand().get("stap", ""), "tel", "een misser: dezelfde vraag")
 	gelijk(int(_stand().get("missers", 0)), 1, "de misser is geteld")
-	waar(_knoop(HULP) != null, "de hulp hangt als wolkje bij de tafel")
+	waar(is_sip(gast), "de plukker is teleurgesteld")
+	gelijk(_kaart_tekst("Kolom/Hulp"), "", "en er komt geen hulpregel")
 	gelijk(int(State.s["sterren"]), sterren, "een misser kost niets")
 	var strook := _knoop(STROOK) as UiKeuzes
 	waar(strook != null and strook.op_slot, "de strook staat even op slot (S5)")
@@ -378,7 +380,6 @@ func test_een_beurt_in_groep_4() -> void:
 	gelijk(_stand().get("stap", ""), "bij", "tweede vraag: hoeveel passen er nog bij")
 	gelijk(_kaart_tekst("Kolom/Regel"), "🍓 " + Beurt.T_BIJ, "de zin van de tweede vraag")
 	gelijk(_kaart_tekst("Kolom/Rij/Som"), "%d + __ = 10" % int(o["los"]), "de aanvulsom")
-	waar(_knoop(HULP) == null, "de hulp is weg bij een nieuwe vraag")
 	waar(_strook().has(int(o["nodig"])), "het goede antwoord staat op de strook")
 	_kies(int(o["nodig"]))
 	await _wacht_kaart()
@@ -461,51 +462,47 @@ func test_een_beurt_in_groep_3() -> void:
 		gelijk(_stand().get("stap", ""), "af", "het bakje is vol (dag %d)" % dag)
 		_af()
 
-## The help ladder (games-b.md §0.5): count along in a bubble on the table
-## after a miss, and at the third miss the answer in pale numbers — the ghost
-## tag on the table, and in the second question the ghost berries in the open
-## punnet.  Never a cross, never a star less, the turn always goes on.
-func test_de_hulpladder() -> void:
+## The owner, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten zelf
+## leren rekenen.  Fout antwoord kiezen moet niet beloond worden met hulp maar
+## juist een teleurgesteld dier."  One, two and three wrong answers on both
+## questions: every time the picker sulks with `🔄 Nog een keer` beside him,
+## and after the pause the table, the card and the strip are exactly what
+## they were — no counting line, no pale number on the table, no pale berries
+## in the open punnet.  The same question stays, nothing is lost, and the
+## right answer still goes on.
+func test_geen_hulp_na_een_fout() -> void:
 	_op()
 	_wereld(4, 4)
 	waar(Games.start(SPEL), "het spel start")
 	var o := Beurt.opzet(4, 4, 2)
-	var mis := -1
-	for k in _strook():
-		if k != int(o["T"]):
-			mis = k
-			break
-	for i in 3:
-		_kies(mis)
-		var hulp := _knoop(HULP)
-		waar(hulp != null, "misser %d: het hulpwolkje staat er" % (i + 1))
-		if hulp != null:
-			waar((hulp as Button).text.contains(Beurt.hulp_tel(o)) or _wolk_tekst(hulp).contains(Beurt.hulp_tel(o)),
-				"en telt per bakje mee")
-		if i < 2:
-			waar(_knoop(SPOOK) == null, "misser %d: nog geen spookgetal" % (i + 1))
-		await _wacht_mispauze()
-	waar(_knoop(SPOOK) != null, "de derde misser: het antwoord bleek op de tafel")
-	gelijk((_knoop(SPOOK) as Label).text if _knoop(SPOOK) is Label else "", Beurt.spook_tel(o),
-		"als tientallen en eenheden")
-	_kies(int(o["T"]))
-	await _wacht_kaart()
-	waar(_knoop(SPOOK) == null, "goed: het spookgetal is weg")
-	var mis2 := -1
-	for k in _strook():
-		if k != int(o["nodig"]):
-			mis2 = k
-			break
-	for i in 3:
-		_kies(mis2)
-		await _wacht_mispauze()
-	gelijk(int(_tafel()["params"]["spook"]), int(o["vol"]),
-		"bij de aanvulvraag: bleke aardbeien in het open bakje")
-	gelijk(int(_stand().get("missers", 0)), 6, "zes missers geteld, niets verloren")
-	_kies(int(o["nodig"]))
-	await _wacht_kaart()
-	gelijk(int(_tafel()["params"]["spook"]), -1, "goed: de spookaardbeien zijn weg")
-	gelijk(_stand().get("stap", ""), "pluk", "en de beurt gaat gewoon door")
+	await _wacht(1.2)
+	var gast := str(_stand().get("gast", ""))
+	var sterren := int(State.s["sterren"])
+	for vraag in [["tel", int(o["T"])], ["bij", int(o["nodig"])]]:
+		var goed := int(vraag[1])
+		var regel := _kaart_tekst("Kolom/Regel")
+		var keuzes := _strook()
+		var voor := beeld(SPEL)
+		waar(voor.has(KAART) and voor.has(STROOK) and voor.has("decor " + TAFEL),
+			"%s: het beeld kent de kaart, de strook en de tafel (%s)" % [vraag[0], str(voor.keys())])
+		for i in 3:
+			var wat := "%s, misser %d" % [vraag[0], i + 1]
+			_kies(_fout_getal(goed))
+			waar(is_sip(gast), "%s: de plukker is teleurgesteld" % wat)
+			waar(mis_wolk(KAART), "%s: met 🔄 Nog een keer" % wat)
+			gelijk(_kaart_tekst("Kolom/Hulp"), "", "%s: geen hulpregel" % wat)
+			await _wacht_mispauze()
+			niets_erbij(voor, beeld(SPEL), wat)
+			gelijk(_stand().get("stap", ""), vraag[0], "%s: dezelfde vraag" % wat)
+			gelijk(_kaart_tekst("Kolom/Regel"), regel, "%s: dezelfde zin" % wat)
+			gelijk(str(_strook()), str(keuzes), "%s: dezelfde vier keuzes" % wat)
+			waar(not (_tafel()["params"] as Dictionary).has("spook"),
+				"%s: geen bleke aardbeien" % wat)
+		_kies(goed)
+		await _wacht_kaart()
+	gelijk(int(_stand().get("missers", 0)), 6, "zes missers geteld, voor het adaptieve signaal")
+	gelijk(int(State.s["sterren"]), sterren, "en niets verloren")
+	gelijk(_stand().get("stap", ""), "pluk", "het goede antwoord gaat gewoon door")
 	_af()
 
 func _wolk_tekst(k: Control) -> String:
@@ -687,9 +684,9 @@ func test_de_rustende_tafel() -> void:
 
 ## The real shell on the four ticket screens, every step of a turn: every
 ## button of the game is a real tap target inside the frame, covers nothing,
-## found a real place (never `krap`), and the pick button and the help bubble
-## hang AT their thing (owner, 2026-09-23: labels floating where they don't
-## belong).
+## found a real place (never `krap`), and the pick button hangs AT its thing
+## (owner, 2026-09-23: labels floating where they don't belong).  A miss shows
+## no help on any screen (owner, 2026-09-24).
 func test_de_knoppen_op_vier_schermen() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	var scherm_terug = Ui.get("_scherm")
@@ -725,12 +722,10 @@ func test_de_knoppen_op_vier_schermen() -> void:
 		for _f in 3:
 			await boom.process_frame
 		_keur(kader.size, "%s misser" % str(maat))
-		if minf(kader.size.x, kader.size.y) >= 400.0:
-			_bij_zijn_ding(HULP, "%s: het hulpwolkje" % str(maat))
-		else:
-			waar(_knoop(HULP) == null, "%s: op de telefoon geen hulpwolkje" % str(maat))
-			waar(_kaart_tekst("Kolom/Hulp").contains(" en nog "),
-				"%s: maar de hulpregel op de kaart (%s)" % [str(maat), _kaart_tekst("Kolom/Hulp")])
+		gelijk(_kaart_tekst("Kolom/Hulp"), "", "%s: geen hulpregel op de kaart" % str(maat))
+		waar(Hits.spot("og_hulp") == null and Hits.spot("og_spook") == null,
+			"%s: geen hulpwolkje en geen spookgetal" % str(maat))
+		waar(mis_wolk(KAART), "%s: alleen 🔄 Nog een keer" % str(maat))
 		await _wacht_mispauze()
 		_kies(int(o["T"]))
 		await _wacht_kaart()
@@ -814,7 +809,7 @@ func _keur(kader: Vector2, wat: String) -> void:
 		var r: Rect2 = d["rect"]
 		# The one exception: `Ui`'s own miss bubble (S5, "🔄 Nog een keer", 1.2 s)
 		# on the landscape phone.  There the maths bar lets go (B3), and the
-		# floating card with its help line, its strip and that bubble share the
+		# floating card, its strip and that bubble share the
 		# five bands of a 289 unit frame; the bubble touches the end of the strip
 		# for the length of the pause.  Every element of the game itself still
 		# finds a real place there.

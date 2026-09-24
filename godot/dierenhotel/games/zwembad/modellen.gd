@@ -18,28 +18,18 @@ const VLAG_VOET := "#EDEFF6"
 const VLAG_MAST := "#B98F62"
 const VLAG_DOEK := "#F5A8BE"
 
-## A metre marker on the rim.  `groot` = a whole label step (a taller post),
-## `bleek` = the ghost marker of the third help step: the same shape, washed
-## out, so it reads as "this is where you are going", not as a real marker.
+## A metre marker on the rim.  `groot` = a whole label step (a taller post).
 ## `gehaald` = the swimmer has passed this metre: the white knob becomes the
 ## flag pink, so the number line shows how far he is and how much is left.
-## `licht` = the first rung of the help ladder lights this marker ("tel de
-## strepen tot de vlag"): post and stripe glow towards the knob white and the
-## knob itself stays as it is.
+## (No pale ghost marker and no lit markers any more: a slip gets no help,
+## owner 2026-09-24.)
 static func streep(params: Dictionary) -> Array:
 	var groot := bool(params.get("groot", false))
-	var bleek := bool(params.get("bleek", false))
 	var gehaald := bool(params.get("gehaald", false))
-	var licht := bool(params.get("licht", false))
 	var kl := Color(STREEP_GROOT if groot else STREEP_KLEIN)
 	var knop := Color(STREEP_KNOP)
-	if bleek:
-		kl = kl.lerp(Color(STREEP_KNOP), 0.55)
-		knop = knop.lerp(Color(STREEP_KLEIN), 0.25)
-	elif gehaald:
+	if gehaald:
 		knop = Color(VLAG_DOEK)
-	if licht and not bleek:
-		kl = kl.lerp(Color(STREEP_KNOP), 0.45)
 	var h: int = 7 if groot else 4
 	var v: Array = []
 	ArtVorm.bx(v, -1, 0, -2, 2, 1, 4, kl)          # the stripe over the rim

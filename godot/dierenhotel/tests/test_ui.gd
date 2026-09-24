@@ -354,15 +354,18 @@ func _mis_kaart(id: String, goed: int, dier: String, keer: Array):
 ## (PLAN.md S5).  Nothing was taken away to get there.
 func test_een_misser_maakt_het_dier_even_sip() -> void:
 	_op(Vector2(1000, 648))
-	World.zet(MIS_GAST, "receptie", 20.0, 20.0, {"kind": "hond"})
+	World.zet(MIS_GAST, World.kamer_nu(), 20.0, 20.0, {"kind": "hond"})
 	var keer: Array = []
 	var kaart = _mis_kaart("ms1", 5, MIS_GAST, keer)
 	waar(World.dier(MIS_GAST).pose != "sip", "voordat er iets misging was hij niet sip")
 	var f := _verkeerd_getal("ms1", 5)
 	waar(not f.is_empty() and _kies("ms1", f), "een verkeerd getal getikt")
 	gelijk(World.dier(MIS_GAST).pose, "sip", "het dier van de beurt is sip")
+	waar(Hits.spot("mis_ms1") != null, "met 🔄 Nog een keer naast zich")
 	gelijk(World.dier(MIS_GAST).tikken, Ui.SIP_TIKKEN,
-		"en wel %d tikken, dus ~1,5 s bij World.TIK" % Ui.SIP_TIKKEN)
+		"en wel %d tikken, dus ~2 s bij World.TIK" % Ui.SIP_TIKKEN)
+	waar(float(Ui.SIP_TIKKEN) * World.TIK > Ui.MIS_PAUZE,
+		"de sip duurt langer dan het slot op de strook (eigenaar 2026-09-24)")
 	gelijk(keer.size(), 1, "en het spel hoort het foute antwoord gewoon")
 	for _i in Ui.SIP_TIKKEN + 2:
 		World._tik()
@@ -433,20 +436,94 @@ func test_een_misser_kost_niets() -> void:
 	kaart.weg()
 	_af()
 
-## A card with no animal still pauses: the lock is the point, the sad face is
-## only there when there is a face to make sad.
-func test_zonder_dier_alleen_de_pauze() -> void:
+## A card with no animal still pauses, and the miss is still seen (owner,
+## 2026-09-24: a wrong answer gets no help, only its disappointment): the
+## `🔄 Nog een keer` bubble hangs at the card's own thing — where the card
+## points — for as long as the strip is locked.
+func test_zonder_dier_hangt_het_wolkje_bij_de_kaart() -> void:
 	_op(Vector2(1000, 648))
 	var keer: Array = []
 	var kaart = _mis_kaart("nd1", 5, "", keer)
 	gelijk(kaart.dier, "", "er is geen dier van de beurt")
 	waar(_kies("nd1", _verkeerd_getal("nd1", 5)), "verkeerd getikt")
-	waar(Hits.spot("mis_nd1") == null, "er is geen treurwolkje")
+	var wolk := Hits.spot("mis_nd1")
+	waar(wolk != null, "het wolkje staat er toch")
+	if wolk != null:
+		var plek := Hits.spot("nd1")
+		gelijk(Vector2(wolk.x, wolk.z), Vector2(plek.x, plek.z), "op het punt van de kaart")
+		waar(wolk.y > plek.y, "en er net boven")
+		gelijk(wolk.door, "test", "van het spel van de kaart")
+		waar(str((wolk.knoop as Control).tooltip_text).contains(UiTekst.MIS_ZIN), "🔄 Nog een keer")
 	var strook := Hits.spot("nd1_keuzes").knoop as UiKeuzes
-	waar(strook.op_slot, "maar de strook staat wél op slot")
+	waar(strook.op_slot, "en de strook staat op slot")
 	await _wacht(Ui.MIS_PAUZE + 0.3)
-	waar(not strook.op_slot, "en die gaat gewoon weer open")
+	waar(not strook.op_slot, "die gaat gewoon weer open")
+	waar(Hits.spot("mis_nd1") == null, "en het wolkje is weg")
 	kaart.weg()
+	_af()
+
+## A miss without a card — a coin that slides back, a stroke that fell short —
+## is only the animal: he sulks, the bubble hangs beside him in the name of
+## the game that asked, and after the pause it goes by itself.
+func test_een_misser_zonder_kaart_is_alleen_het_dier() -> void:
+	_op(Vector2(1000, 648))
+	World.zet(MIS_GAST, World.kamer_nu(), 20.0, 20.0, {"kind": "konijn"})
+	Ui.misser(null, MIS_GAST, "test")
+	var id := Ui.MIS_WOLK + Ui.MIS_DIER + MIS_GAST
+	gelijk(World.dier(MIS_GAST).pose, "sip", "het dier is sip")
+	var wolk := Hits.spot(id)
+	waar(wolk != null, "met het wolkje naast zich")
+	if wolk != null:
+		gelijk(wolk.door, "test", "op naam van het spel")
+	Ui.misser(null, "", "test")
+	Ui.misser(null, "niemand_hier", "test")
+	await _wacht(Ui.MIS_PAUZE + 0.3)
+	waar(Hits.spot(id) == null, "na de pauze is het wolkje weg")
+	World.weg(MIS_GAST)
+	_af()
+
+## Without a strip the box is the game's own — the coins on the counter, the
+## number on a key — and the end of the pause leaves it standing.
+func test_zonder_strook_blijft_het_vak_van_het_spel() -> void:
+	_op(Vector2(1000, 648))
+	World.zet(MIS_GAST, World.kamer_nu(), 20.0, 20.0, {"kind": "hond"})
+	var kaart := Ui.somkaart({"x": 20.0, "z": 20.0}, "€5", {
+		"id": "vk1", "door": "test", "kamer": World.kamer_nu(), "max": 2,
+		"icoon": "🎁", "regel": "Leg de munten op de toonbank", "dier": MIS_GAST})
+	Hits.plaats()
+	kaart.zet("€3")
+	Ui.misser(kaart, MIS_GAST)
+	waar(kaart.pauze, "de misser loopt")
+	await _wacht(Ui.MIS_PAUZE + 0.3)
+	waar(not kaart.pauze, "en is voorbij")
+	var knoop := Hits.spot("vk1").knoop as UiSomkaart
+	gelijk(knoop.vak_label.text, "€3", "wat het spel in het vak schreef, staat er nog")
+	kaart.weg()
+	World.weg(MIS_GAST)
+	_af()
+
+## A game that rebuilds its card under the same id during a pause owns a new
+## strip: the old pause's timer does not unlock it and does not take the new
+## card's bubble away.
+func test_een_nieuwe_kaart_houdt_haar_eigen_misser() -> void:
+	_op(Vector2(1000, 648))
+	World.zet(MIS_GAST, World.kamer_nu(), 20.0, 20.0, {"kind": "poes"})
+	var keer: Array = []
+	var oud = _mis_kaart("nk1", 5, MIS_GAST, keer)
+	waar(_kies("nk1", _verkeerd_getal("nk1", 5)), "de eerste misser")
+	await _wacht(0.6)
+	var nieuw = _mis_kaart("nk1", 5, MIS_GAST, keer)
+	waar(nieuw != oud, "de kaart is opnieuw gebouwd")
+	waar(_kies("nk1", _verkeerd_getal("nk1", 5)), "de misser op de nieuwe kaart")
+	await _wacht(Ui.MIS_PAUZE - 0.6 + 0.2)
+	var strook := Hits.spot("nk1_keuzes").knoop as UiKeuzes
+	waar(strook.op_slot, "de oude timer liep af, de nieuwe strook blijft op slot")
+	waar(Hits.spot("mis_nk1") != null, "en het wolkje van de nieuwe misser staat er nog")
+	await _wacht(0.8)
+	waar(not strook.op_slot, "tot haar eigen pauze voorbij is")
+	waar(Hits.spot("mis_nk1") == null, "en dan gaat het wolkje ook")
+	nieuw.weg()
+	World.weg(MIS_GAST)
 	_af()
 
 ## Closing the card in the middle of the pause leaves nothing behind: the
@@ -454,7 +531,7 @@ func test_zonder_dier_alleen_de_pauze() -> void:
 ## unlock and erases nothing.
 func test_sluiten_tijdens_de_pauze_lekt_niets() -> void:
 	_op(Vector2(1000, 648))
-	World.zet(MIS_GAST, "receptie", 20.0, 20.0, {"kind": "kat"})
+	World.zet(MIS_GAST, World.kamer_nu(), 20.0, 20.0, {"kind": "kat"})
 	var keer: Array = []
 	var kaart = _mis_kaart("lk1", 5, MIS_GAST, keer)
 	waar(_kies("lk1", _verkeerd_getal("lk1", 5)), "verkeerd getikt")

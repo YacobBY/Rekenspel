@@ -30,7 +30,6 @@ const KINDTEKST := [
 	"Hoeveel meer %s dan %s?", "Hoeveel stuks samen?", "Hoeveel %s zijn het?",
 	"Hoeveel stuks liggen er?", "Hoeveel blokjes worden dat?",
 	"Hoeveel liggen er nog?",
-	"tel de blokjes", "kijk naar de hoogste stapel",
 	"Alles gesorteerd!", "klaar",
 	"blokje", "blokjes", "krat met %s: %d %s",
 	"berg met %d stuks was, tik om er %d te pakken",
@@ -168,11 +167,11 @@ func _toets_fout() -> bool:
 	return false
 
 ## Wait out the miss pause S5 puts on the answer strip (`Ui.MIS_PAUZE`, plus
-## a little room).  A wrong answer now holds the four number buttons shut for
-## 1,2 s so a child cannot mash to a win; a test that wants three misses in a
-## row therefore has to sit through the pause between them, the way a child
-## with a real finger does.  Band 3 taps a strip of soort-words and is not
-## locked at all — only the `goed:` number strip is.
+## a little room).  A wrong answer holds the buttons shut for 1,2 s so a child
+## cannot mash to a win — the four numbers, and since 2026-09-24 the strip of
+## kinds of band 3 too; a test that wants three misses in a row therefore has
+## to sit through the pause between them, the way a child with a real finger
+## does.
 func _wacht_mispauze() -> void:
 	var boom := Engine.get_main_loop() as SceneTree
 	var eind := Time.get_ticks_msec() + int(Ui.MIS_PAUZE * 1000.0) + 250
@@ -524,12 +523,17 @@ func test_legenda_bij_band_5() -> void:
 	waar(Hits.spot("ws_legenda") == null, "band 4 heeft geen legenda nodig")
 	_licht_af()
 
-# ------------------------------------------------------- fout, hulp, ster
+# ------------------------------------------------- fout, geen hulp, ster
 
-## A wrong answer is never punished: no red, no buzzer, no lost star, no turn
-## started over — a soft sound and a help line (HOTEL.md §9, games-b.md §0.6).
-## The ladder is: 1st and 2nd attempt count along, 3rd attempt ghost numbers.
-func test_fout_antwoord_en_hulpladder() -> void:
+## The owner, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten zelf
+## leren rekenen.  Fout antwoord kiezen moet niet beloond worden met hulp maar
+## juist een teleurgesteld dier."  In every band, one, two and three wrong
+## answers on the chart: the strip pauses with `🔄 Nog een keer` at the card
+## (this game has no animal of the turn), and after the pause the card, the
+## crates and the chart are exactly what they were — no counting line, no
+## "kijk naar de hoogste stapel", no ghost numbers on the crates.  Never
+## punishing either, and the right answer still works.
+func test_geen_hulp_na_een_fout() -> void:
 	_licht_op()
 	for band in BANDEN:
 		_wereld(band)
@@ -538,12 +542,8 @@ func test_fout_antwoord_en_hulpladder() -> void:
 		_sorteer_alles()
 		var st := _stand()
 		var vak: Array = st["vak"]
-		var per := int(st["per"])
-		var h := 0
 		var l := 0
 		for i in vak.size():
-			if int(vak[i]) > int(vak[h]):
-				h = i
 			if int(vak[i]) < int(vak[l]):
 				l = i
 		var fout_antwoord := func() -> void:
@@ -551,66 +551,58 @@ func test_fout_antwoord_en_hulpladder() -> void:
 				_kies(str(WasSoorten.soort(l)["id"]))     # the lowest pile, never right
 			else:
 				_toets_fout()
-		# 1st miss
-		fout_antwoord.call()
-		st = _stand()
-		gelijk(int(st["missers"]), 1, "band %d: een misser geteld" % band)
-		gelijk(str(st["stap"]), "vraag1", "de beurt blijft staan (geen straf)")
-		var hulp1 := _kaart_tekst("hulp")
-		waar(not hulp1.is_empty(), "band %d: er komt een hulpregel" % band)
-		if band == 3:
-			gelijk(hulp1, "tel de blokjes", "band 3, eerste hulp")
-		elif band == 4:
-			gelijk(hulp1, _tel_door(int(vak[l]) * per, int(vak[h]) * per, per),
-				"band 4: doortellen van laag naar hoog")
-		else:
-			gelijk(hulp1, Econ.tel_mee(2, mini(8, int(vak[h])), " …"),
-				"band 5: blokjes maal twee")
-		waar(_kaart_tekst("vak") != "✓", "het antwoordvakje blijft leeg")
-		# 2nd miss
-		await _wacht_mispauze()
-		fout_antwoord.call()
-		st = _stand()
-		gelijk(int(st["missers"]), 2, "band %d: twee missers" % band)
-		if band == 3:
-			gelijk(_kaart_tekst("hulp"), "kijk naar de hoogste stapel",
-				"band 3 wordt gerichter bij de tweede misser")
-		waar(Hits.spot("ws_sp0") == null, "nog geen spookcijfers na twee missers")
-		# 3rd miss: ghost numbers on the crates
-		await _wacht_mispauze()
-		fout_antwoord.call()
-		st = _stand()
-		gelijk(int(st["missers"]), 3, "band %d: drie missers" % band)
-		for i in int(st["m"]):
-			var tag := Hits.spot("ws_sp%d" % i)
-			waar(tag != null, "band %d: spookcijfer op krat %d" % [band, i])
-			if tag != null:
-				gelijk((tag.knoop as UiGetalTag).text, str(int(vak[i]) * per),
-					"en het klopt")
-				gelijk(tag.kind, "tag", "een cijfer, geen knop")
+		var voor := beeld(ID)
+		waar(voor.has("ws_vraag") and voor.has("ws_vraag_keuzes"),
+			"band %d: het beeld kent de kaart en de strook" % band)
+		var regel := _kaart_tekst("regel")
+		for keer in 3:
+			var wat := "band %d, misser %d" % [band, keer + 1]
+			fout_antwoord.call()
+			st = _stand()
+			gelijk(int(st["missers"]), keer + 1, "%s: geteld" % wat)
+			gelijk(str(st["stap"]), "vraag1", "%s: de vraag blijft staan" % wat)
+			waar(mis_wolk("ws_vraag"), "%s: 🔄 Nog een keer bij de kaart" % wat)
+			var strook := Hits.spot("ws_vraag_keuzes")
+			waar(strook != null and (strook.knoop as UiKeuzes).op_slot,
+				"%s: de strook staat even op slot" % wat)
+			gelijk(_kaart_tekst("hulp"), "", "%s: geen hulpregel" % wat)
+			for i in int(st["m"]):
+				waar(Hits.spot("ws_sp%d" % i) == null, "%s: geen spookcijfer op krat %d" % [wat, i])
+			waar(Hits.spot("ws_sp_berg") == null, "%s: en niet op de berg" % wat)
+			await _wacht_mispauze()
+			niets_erbij(voor, beeld(ID), wat)
+			gelijk(_kaart_tekst("regel"), regel, "%s: dezelfde vraag" % wat)
 		# never punishing: no star was taken away, nothing was reset
 		gelijk(int(State.s["sterren"]), sterren_voor, "geen ster erbij en geen ster eraf")
 		gelijk(str(_stand()["vak"]), str(vak), "het diagram staat er nog precies zo")
-		# and the right answer still works, with the ghosts gone
-		await _wacht_mispauze()
 		waar(_antwoord_goed(), "band %d: het goede antwoord komt er alsnog door" % band)
-		waar(Hits.spot("ws_sp0") == null, "de spookcijfers gaan weg bij goed")
 		Games.stop()
 	_licht_af()
 
-static func _tel_door(van: int, tot: int, stap: int) -> String:
-	var l: Array[String] = [str(van)]
-	var n := van
-	var veilig := 0
-	while n < tot and veilig < 12:
-		veilig += 1
-		n += maxi(1, stap)
-		l.append(str(n))
-	return " … ".join(l) + " …"
+## The opening question about the pile, wrong three times: the same pause, and
+## no ghost number on the pile either.
+func test_geen_hulp_bij_de_openingsvraag() -> void:
+	_licht_op()
+	_wereld(4)
+	Games.start(ID)
+	gelijk(str(_stand().get("stap", "")), "vraag0", "de beurt opent met de vraag over de berg")
+	var voor := beeld(ID)
+	for keer in 3:
+		var wat := "opening, misser %d" % (keer + 1)
+		waar(_toets_fout(), "%s: een fout getal" % wat)
+		waar(mis_wolk("ws_vraag"), "%s: 🔄 Nog een keer bij de kaart" % wat)
+		gelijk(_kaart_tekst("hulp"), "", "%s: geen telregel" % wat)
+		waar(Hits.spot("ws_sp_berg") == null, "%s: geen spookcijfer op de berg" % wat)
+		await _wacht_mispauze()
+		niets_erbij(voor, beeld(ID), wat)
+	waar(_antwoord_goed(), "het goede antwoord opent de berg")
+	gelijk(str(_stand().get("stap", "")), "sorteren", "en dan wordt er gesorteerd")
+	_licht_af()
 
 ## Sorting wrong is not punished either: the crate bobs, the piece goes back on
-## the pile and nothing else happens (games-b.md §4.7).  An empty hand on a
-## crate does nothing at all.
+## the pile, `🔄 Nog een keer` hangs at that crate for the length of a miss,
+## and nothing that helps appears (games-b.md §4.7; owner 2026-09-24).  An
+## empty hand on a crate does nothing at all.
 func test_mis_sorteren_is_niet_straffend() -> void:
 	_licht_op()
 	_wereld(4)
@@ -628,7 +620,15 @@ func test_mis_sorteren_is_niet_straffend() -> void:
 	waar(_tik("ws_berg"), "pak een stuk")
 	var soort := int(_stand()["hand"])
 	var fout_krat := (soort + 1) % int(_stand()["m"])
+	var beeld_voor := beeld(ID)
 	waar(_tik("ws_k%d" % fout_krat), "leg het in de verkeerde krat")
+	waar(Hits.spot(Ui.MIS_WOLK + "was_krat%d" % fout_krat) != null,
+		"🔄 Nog een keer bij de foute krat")
+	await _wacht_mispauze()
+	waar(Hits.spot(Ui.MIS_WOLK + "was_krat%d" % fout_krat) == null, "en dat gaat vanzelf weg")
+	for id in beeld(ID).keys():
+		waar(beeld_voor.has(id) or str(id) == "ws_hand",
+			"na het foute sorteren verschijnt %s niet" % id)
 	var na2 := _stand()
 	gelijk(int(na2["i"]), berg_voor, "het stuk ligt weer op de berg")
 	gelijk(int(na2["hand"]), -1, "de hand is leeg")
@@ -685,6 +685,7 @@ func test_ster_is_voor_meedoen() -> void:
 			l = i
 	for _p in 3:
 		_kies(str(WasSoorten.soort(l)["id"]))
+		await _wacht_mispauze()
 	gelijk(int(State.s["sterren"]), voor, "missen levert geen ster op, maar kost er ook geen")
 	_antwoord_goed()
 	gelijk(int(State.s["sterren"]), voor + 1, "meedoen levert er precies een op")
@@ -696,7 +697,7 @@ func test_ster_is_voor_meedoen() -> void:
 # ---------------------------------------------------------------- herstel
 
 ## The turn survives a reload: `stop()` writes the state to `ctx.data()` and a
-## fresh `start()` picks it up — including the help the child had earned.
+## fresh `start()` picks it up — the misses too, but no help comes with them.
 func test_herstel_uit_ctx_data() -> void:
 	_licht_op()
 	_wereld(4)
@@ -734,8 +735,8 @@ func test_herstel_uit_ctx_data() -> void:
 	var na := _stand()
 	gelijk(str(na["stap"]), "vraag1", "de vraag staat er meteen weer")
 	gelijk(int(na["missers"]), 3, "en de missers zijn niet weggegooid")
-	waar(Hits.spot("ws_sp0") != null, "bij drie missers liggen de spookcijfers er weer")
-	waar(not _kaart_tekst("hulp").is_empty(), "en de hulpregel staat er ook weer")
+	waar(Hits.spot("ws_sp0") == null, "maar er komen geen spookcijfers terug (2026-09-24)")
+	gelijk(_kaart_tekst("hulp"), "", "en geen hulpregel")
 	# a state from another day / band / guest count is NOT reused
 	Games.stop()
 	State.s["dag"] = int(State.s["dag"]) + 1
@@ -825,7 +826,9 @@ func test_kindtekst_staat_letterlijk_in_de_bron() -> void:
 		gelijk("pak %d" % per, GREEP[per - 1], "de handgreep bij per %d" % per)
 	# the real minus sign, not a hyphen (games-b.md leeswijzer)
 	waar(bron.contains("%d − %d ="), "de sombalk gebruikt het echte minteken U+2212")
-	waar(bron.contains(" … "), "de teller gebruikt het beletselteken U+2026")
+	# the help ladder is gone (owner, 2026-09-24)
+	for weg in ["tel de blokjes", "kijk naar de hoogste stapel", "tel_mee", "_spook"]:
+		waar(not bron.contains(weg), 'de hulp "%s" staat niet meer in de bron' % weg)
 	# and the font really carries every character of them
 	for zin in KINDTEKST + HAND_EEN + HAND_TWEE + GREEP \
 			+ ["🧦", "🧣", "🧺", "🧸", "🧹", "📊", "📦", "✅", "👍"]:

@@ -265,5 +265,11 @@ class UiVoor extends RefCounted:
 		return Ui.getal_tag(obj, n, kopie)
 	func toast(tekst: String, soort: String = "") -> void:
 		Ui.toast(tekst, soort)
+	## A wrong answer, seen and nothing more (owner, 2026-09-24: "geef geen
+	## hulp na fouten"): the animal of the turn sulks with `🔄 Nog een keer`
+	## beside it and the strip of `kaart` locks for a moment (`Ui.misser`).
+	## `kaart` may be null — a miss without a card is only the animal.
+	func misser(kaart, dier: String) -> void:
+		Ui.misser(kaart, dier, _door)
 	func op_kader(fn: Callable) -> Callable:
 		return Ui.op_kader(fn)

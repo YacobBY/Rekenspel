@@ -11,7 +11,15 @@ extends MiniGame
 ##
 ## THE SUMS ARE FROZEN and live in `Sommen.Kraam` (architecture.md §2.2):
 ## `opzet`, `schuif_van`, `splits_met`, `tel_vanaf`, `keuring`, `WAREN`,
-## `MUNTEN`, `SPOOK_MUNT`.  This file never re-derives a price.
+## `MUNTEN`.  This file never re-derives a price.
+##
+## A MISS GETS NO HELP (owner, 2026-09-24: "Nee geef geen hulp na fouten.
+## Kinderen moeten zelf leren rekenen").  A wrong sum, "klaar" with too little
+## on the counter, or a coin too many: the shopper sulks (`sip`) with
+## `🔄 Nog een keer` beside him, and nothing else appears — no counting line,
+## no ghost coins on the grass, no "+€3 erbij", no "€1 terug".  The coin that
+## was one too many still slides back: the counter never holds more than the
+## price, that is the stall itself and not a hint.
 ##
 ## WHAT THE GODOT PORT DOES DIFFERENTLY, and why (the owner's rule: "als Godot
 ## verbeteringen biedt implementeer die dan"):
@@ -63,9 +71,6 @@ const SOM_S := 0.6
 const GRAS_MUNT := -60.0
 const GRAS_MUNT_AF := -62.0
 const GRAS_KLAAR := -160.0
-const GRAS_SPOOK := -160.0
-const GRAS_SPOOK_AF := 40.0
-const GRAS_SPOOK_D := 32.0
 ## One voxel up, so the band grid places them and they cover nothing.
 const GRAS_HOOG := 1.0
 ## A coin button is ~56 px wide in the HTML, because only "€2" stands in it and
@@ -99,11 +104,7 @@ const T_AF := "Veel plezier ermee!"
 const T_KLAAR := "klaar"
 const T_KLAAR_TITEL := "klaar met tellen"
 const T_HAND := "in je hand"
-const T_TERUG := "terug"
-const T_ERBIJ := "erbij"
 const T_TIK_GETAL := "tik een getal"
-const T_SPOOK_SOM := "zoveel is het"
-const T_SPOOK_LEG := "dit moet er nog bij"
 
 const Modellen := preload("res://games/kraam/modellen.gd")
 
@@ -290,7 +291,7 @@ func _nieuwe_stand(g: Dictionary, n: int, band: int, dag: int) -> Dictionary:
 		"gast": str(g.get("id", "")), "dag": dag, "N": n, "band": band,
 		"stap": "som" if b >= 4 else "leg",
 		"gelegd": [], "hand": int((Sommen.Kraam.MUNTEN[b] as Array)[0]),
-		"som_pog": 0, "leg_pog": 0, "missers": 0, "spook": 0, "hulp": "",
+		"som_pog": 0, "leg_pog": 0, "missers": 0,
 		"wens": 1 if str(g.get("behoefte", "")) == "souvenir" else 0,
 		"ster": 0, "acc": 0, "zeg": null,
 	}
@@ -537,8 +538,8 @@ func _zinnen() -> Array:
 ## The second line while the coins are going down.  As long as the counter is
 ## empty it says what to do; from the first coin on it counts the rest down, so
 ## the card stops reading "€11 €0" with nothing to tell the child how far he
-## still has to go.  Too much (a coin on its way back) keeps the instruction —
-## the bubble beside it already says how much comes back.
+## still has to go.  Too much (a coin on its way back) keeps the instruction:
+## the shopper's sulk says it was wrong, and nothing says by how much.
 func _leg_regel(standaard: String) -> String:
 	if _stap() != "leg" or O.is_empty():
 		return standaard
@@ -574,8 +575,6 @@ func _teken() -> void:
 	if _stap() == "af":
 		_teken_bank()
 		_teken_af()
-	if _stap() == "leg" and int(S.get("spook", 0)) == 1:
-		_spook_neer(int(O["doel"]) - _tel(_gelegd()), T_SPOOK_LEG)
 	_teken_zeg()
 	ctx.wereld.vuil()
 	_meld()
@@ -618,6 +617,8 @@ func _teken_kaart() -> void:
 		"id": KAART_ID, "kamer": KAMER, "hoog": _kaart_hoog(), "icoon": _kaart_ico(),
 		"regel": str(zinnen[0]), "regel2": regel2, "max": 2,
 		"vlak": _vrij_vlak(),
+		# the shopper is the animal of the turn: a miss makes HIM sulk (S5)
+		"dier": str(S.get("gast", "")),
 	}
 	if open:
 		# the slips: the price alone, the note alone, the sum of both
@@ -633,15 +634,11 @@ func _teken_kaart() -> void:
 	var spot: Hits.Spot = ctx.hotspots.spot(KAART_ID)
 	if spot != null:
 		spot.volg = _volg_kaart
-	if not str(S.get("hulp", "")).is_empty():
-		_kaart.hulp(str(S["hulp"]))
 	if _stap() == "af":
 		_kaart.zet(Sommen.Kraam.euro(int(O["doel"])))
 		_kaart.klaar()
 	elif _stap() == "leg":
 		_kaart.zet(Sommen.Kraam.euro(_op_bank()))
-	elif int(S.get("som_pog", 0)) >= 3 and not (O["vraag"] as Dictionary).is_empty():
-		_spook_neer(int(O["vraag"]["goed"]), T_SPOOK_SOM)
 
 ## Where the card wants to hang, in voxels above the counter's floor point.
 ## `round(145 / pxPerHoogte)` as the spec says, plus exactly the lift that keeps
@@ -747,25 +744,13 @@ func _volg_bank() -> Dictionary:
 	return {"x": P["geld"]["x"], "z": P["geld"]["z"], "y": GELD_HOOG,
 		"kamer": KAMER, "vlak": _bank_vlak()}
 
-## Are the ghost coins on the grass right now?  While they lie there only the
-## thing being bought keeps its price tag, so the garden stays under 16 buttons.
-func _spook_ligt() -> bool:
-	if _stap() == "leg":
-		return int(S.get("spook", 0)) == 1
-	if _stap() == "som":
-		return int(S.get("som_pog", 0)) >= 3
-	return false
-
 ## The price tags: every displayed thing carries its price as a number ON the
 ## thing.  It is not a button — the guest already says on the card what he wants.
 func _teken_waren() -> void:
-	var alleen := _spook_ligt()
 	var waren: Array = O["waren"]
 	for i in waren.size():
 		var w: Dictionary = waren[i]
 		var wil := _koopt(str(w["id"]))
-		if alleen and not wil:
-			continue
 		var p: Dictionary = P["waren"][i]
 		var id := "kr_p%d" % i
 		ctx.ui.getal_tag({"x": float(p["x"]), "z": float(p["z"]), "kamer": KAMER},
@@ -864,28 +849,6 @@ func _teken_zeg() -> void:
 		"tekst": str(z.get("tekst", "")), "klas": "hulp",
 		"hoog": roundf(ZEG_PX / maxf(1.0, World.px_per_hoogte())), "prio": 12})
 
-# ------------------------------------------------------------- spookmunten
-
-func _spook_weg() -> void:
-	if ctx == null:
-		return
-	for i in Sommen.Kraam.SPOOK_MAX:
-		ctx.ui.getal_tag({"x": 0.0, "z": 0.0}, null, {"id": "kr_sp%d" % i})
-
-## The showing row lies on the grass in front of the stall, 40 css px apart, on
-## a depth line in front of the purse so it never falls over it (§5.8/§5.9).
-func _spook_neer(bedrag: int, titel: String) -> void:
-	_spook_weg()
-	if bedrag <= 0 or O.is_empty():
-		return
-	var munten := Sommen.Kraam.splits_met(bedrag, Sommen.Kraam.SPOOK_MUNT)
-	for i in mini(munten.size(), Sommen.Kraam.SPOOK_MAX):
-		var p := _op_gras(GRAS_SPOOK + i * GRAS_SPOOK_AF, GRAS_SPOOK_D)
-		ctx.ui.getal_tag({"x": p["x"], "z": p["z"], "kamer": KAMER},
-			Sommen.Kraam.euro(int(munten[i])),
-			{"id": "kr_sp%d" % i, "y": 0.0, "klas": "hotspook", "prio": 7,
-				"titel": titel})
-
 # ---------------------------------------------------- het cijferpad (§5.9)
 
 func _antwoord_som(n, k) -> void:
@@ -897,31 +860,20 @@ func _antwoord_som(n, k) -> void:
 		return
 	var goed := int(O["vraag"]["goed"])
 	if int(n) != goed:
+		# No help (owner, 2026-09-24): the shopper sulks, the strip pauses and
+		# the same four sums come back — `Ui` does that through the card's
+		# `dier` — and the card stays exactly as it was, so it is not rebuilt.
 		S["som_pog"] = int(S.get("som_pog", 0)) + 1
 		S["missers"] = int(S.get("missers", 0)) + 1
 		ctx.snd.zacht()
-		if k != null:
-			k.zet("")
-		# The help ladder: count on together first, then again, and only at the
-		# third try do the ghost coins lie there (`_teken_kaart` puts them down).
-		var koop := _gekocht()
-		if int(O["band"]) == 4 and koop.size() >= 2:
-			S["hulp"] = Sommen.Kraam.tel_vanaf(int(koop[0]["prijs"]), int(koop[1]["prijs"]))
-		else:
-			S["hulp"] = "%s ▸ %s" % [Sommen.Kraam.euro(int(O["kosten"])),
-				Sommen.Kraam.euro(int(O["betaald"]))]
-		_zeg(null)
 		State.bewaar()
-		_teken()
 		return
 	ctx.state.tel(int(S.get("som_pog", 0)) == 0, Time.get_ticks_msec() - _t0)
 	ctx.snd.ja()
 	if k != null:
 		k.zet(Sommen.Kraam.euro(int(n)))
 	S["stap"] = "leg"
-	S["hulp"] = ""
 	S["zeg"] = null
-	_spook_weg()
 	State.bewaar()
 	_na_de_som()
 
@@ -955,38 +907,32 @@ func _leg_munt(v: int) -> void:
 	_herstel_bank()
 	# A coin is already sliding back: then the stall takes no new one for a
 	# moment.  Without that gate every tap in that half second adds a coin while
-	# only one comes back.
+	# only one comes back.  The shopper is sulking already; nothing is said.
 	if _terug_munt != 0:
 		ctx.snd.zacht()
-		_zeg({"icoon": "🪙", "getal": Sommen.Kraam.euro(_op_bank() - int(O["doel"])),
-			"tekst": T_TERUG})
-		_teken()
 		return
 	var lijst := _gelegd()
 	var som := _tel(lijst)
 	S["hand"] = v
-	# Too much: the coin lies on it for a moment and then slides back.  So the
-	# child sees how much too much it was; nothing is ever taken away and the
-	# turn simply goes on.  The coin lives in `_terug_munt` only, so the SAVE
-	# stays on the last valid state.
+	# Too much: the coin lies on it for a moment and then slides back, and the
+	# shopper sulks — no bubble says by how much (owner, 2026-09-24); nothing
+	# is ever taken away and the turn simply goes on.  The coin lives in
+	# `_terug_munt` only, so the SAVE stays on the last valid state.
 	if som + v > int(O["doel"]):
 		_terug_munt = v
 		S["missers"] = int(S.get("missers", 0)) + 1
 		_terug_nr += 1
 		var mijn := _terug_nr
 		ctx.snd.munt()
-		_zeg({"icoon": "🪙", "getal": Sommen.Kraam.euro(som + v - int(O["doel"])),
-			"tekst": T_TERUG})
 		State.bewaar()                    # only the valid state
 		_teken()
+		ctx.ui.misser(_kaart, str(S.get("gast", "")))
 		_schuif_terug(mijn)
 		return
 	lijst.append(v)
 	S["gelegd"] = lijst
 	ctx.snd.munt()
 	_zeg(null)
-	S["spook"] = 0
-	_spook_weg()
 	State.bewaar()
 	if _tel(lijst) == int(O["doel"]):
 		_gelukt()
@@ -1002,8 +948,9 @@ func _schuif_terug(mijn: int) -> void:
 	ctx.snd.terug()
 	_teken()
 
-## "zo is het goed": tapping is always allowed.  Is there too little, then the
-## bubble calmly says how much still has to go on — never red, never a cross.
+## "zo is het goed": tapping is always allowed.  Is it not right yet, then the
+## shopper sulks — never red, never a cross, and never a word about how much
+## is missing (owner, 2026-09-24): the child counts the counter again himself.
 func _klaar_met_tellen() -> void:
 	if S.is_empty() or _stap() != "leg" or O.is_empty():
 		return
@@ -1015,18 +962,8 @@ func _klaar_met_tellen() -> void:
 	S["leg_pog"] = int(S.get("leg_pog", 0)) + 1
 	S["missers"] = int(S.get("missers", 0)) + 1
 	ctx.snd.zacht()
-	if som < doel:
-		_zeg({"icoon": "🪙", "getal": "+" + Sommen.Kraam.euro(doel - som), "tekst": T_ERBIJ})
-	else:
-		_zeg({"icoon": "🪙", "getal": Sommen.Kraam.euro(som - doel), "tekst": T_TERUG})
-	if int(S["leg_pog"]) >= 2:
-		var deel: Array = []
-		for m in Sommen.Kraam.splits_met(doel, O["munten"]):
-			deel.append(Sommen.Kraam.euro(int(m)))
-		S["hulp"] = " + ".join(deel)
-	S["spook"] = 1 if int(S["leg_pog"]) >= 3 else 0
 	State.bewaar()
-	_teken()
+	ctx.ui.misser(_kaart, str(S.get("gast", "")))
 
 # ---------------------------------------------------------------- gelukt
 
@@ -1034,10 +971,7 @@ func _gelukt() -> void:
 	if S.is_empty() or _stap() == "af":
 		return
 	S["stap"] = "af"
-	S["spook"] = 0
-	S["hulp"] = ""
 	S["zeg"] = null
-	_spook_weg()
 	var g := _gast()
 	# what was bought stays VISIBLE on the animal until checkout
 	if not g.is_empty() and int(S.get("acc", 0)) == 0:

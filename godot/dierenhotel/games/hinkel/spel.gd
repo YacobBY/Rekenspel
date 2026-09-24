@@ -7,6 +7,13 @@ extends MiniGame
 ## a start stone; the child first picks the HOP SIZE and then the NUMBER OF
 ## HOPS, and the animal hops from stone to stone, counting along.
 ##
+## A wrong number of hops is hopped too (never punishing), and then the animal
+## is disappointed — `sip` with `🔄 Nog een keer` — and the card simply asks
+## the hop size again from the stone he landed on.  No help follows a miss
+## (owner, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten zelf
+## leren rekenen"): no counting line on the card, no bubble that says he is
+## short or too far, no card that says which way to hop.
+##
 ## Every number comes from `Sommen.Hinkel.*` (architecture.md §2, F1): this file
 ## never re-implements a generator.  What lives here is the world: two voxel
 ## models, where everything stands, the sentences, and the turn.
@@ -40,7 +47,6 @@ const BORD_LOS := 2.0
 
 const STEEN_MARGE := 2.5        ## voxels from his stone: he stands on it (`_op_start_steen`)
 const VRIJ_S := 2.0             ## how often the strip is swept clear again
-const ZEG_S := 2.4              ## how long the soft word at the animal stays
 const EIND_S := 4.6             ## and how long the finished card stays readable
 const LEEG_S := 1.8             ## "nog geen gasten" and then close
 
@@ -705,12 +711,9 @@ func _zinnen() -> Dictionary:
 			else ["%s springt %d%s" % [nm, int(_s["sprong"]),
 					" terug" if _richting() < 0 else " per keer"],
 				"Hoeveel sprongen?"]}
-	if str(_s["melding"]) == "ver":
-		return {"icoon": _ico(g), "zin": ["Oei, te ver!"] if k
-			else ["Oei, te ver!", "Kies je sprong terug"]}
-	if str(_s["melding"]) == "kort":
-		return {"icoon": _ico(g), "zin": ["Nog even verder"] if k
-			else ["%s staat op %d" % [nm, int(_s["s"])], "Nog even verder"]}
+	# after a wrong landing too: the same question from where he stands, and
+	# nothing about being short or too far (owner, 2026-09-24: no help after a
+	# miss)
 	return {"icoon": _ico(g), "zin": ["Kies je sprong"] if k
 		else ["%s staat op %d, trap bij %d" % [nm, int(_s["s"]), int(_s["doel"])],
 			"Kies je sprong"]}
@@ -864,10 +867,6 @@ func _teken_kaart() -> void:
 	_kaart = ctx.ui.somkaart(plek, "" if fase == "af" else _som_regel(), o)
 	if fase == "af":
 		_kaart.klaar()
-	# the help ladder: only from the SECOND slip do we count along together
-	if fase == "aantal" and int(_s["missers"]) >= 2 and not _krap():
-		_kaart.hulp(Sommen.Hinkel.tel_pad(int(_s["s"]), int(_s["doel"]),
-			int(_s["sprong"])))
 
 func _teken() -> void:
 	if not actief or _s.is_empty():
@@ -957,8 +956,7 @@ func _hop(aantal: int) -> void:
 	var hops := maxi(0, mini(aantal, maxh))
 	if hops == 0:
 		ctx.snd.zacht()                 # there is no stone to go to
-		if _kaart != null:
-			_kaart.hulp(Sommen.Hinkel.tel_pad(s0, int(_s["doel"]), sprong))
+		ctx.ui.misser(_kaart, id)       # he is disappointed; no counting line
 		return
 	var punten: Array = []
 	for i in range(1, hops + 1):
@@ -1005,8 +1003,6 @@ func _loop_eerst(id: String, mijn: int) -> bool:
 	return actief and not _s.is_empty() and mijn == _hop_nr
 
 func _geland(pos: int) -> void:
-	var r := _richting()
-	var te_ver := (r > 0 and pos > int(_s["doel"])) or (r < 0 and pos < int(_s["doel"]))
 	var doel := int(_s["doel"])
 	_s["s"] = pos
 	_s["tel"] = 0
@@ -1015,27 +1011,15 @@ func _geland(pos: int) -> void:
 		return
 	_s["sprong"] = 0
 	_s["fase"] = "sprong"
-	_s["melding"] = "ver" if te_ver else "kort"
+	_s["melding"] = ""
 	ctx.snd.zacht()
 	State.bewaar()
 	_teken()
-	# a soft word at the animal — never a cross (HOTEL.md §9)
+	# never a cross (HOTEL.md §9) and never a hint either (owner, 2026-09-24):
+	# the animal is disappointed, and the new card waits out his sulk
 	var g := _gast()
-	if g.is_empty():
-		return
-	var id := str(g["id"])
-	var d = ctx.wereld.dier(id)
-	ctx.ui.wolk({"id": "hk_zeg", "kamer": "tuin", "klas": "hulp" if te_ver else "",
-		"icoon": "🙃" if te_ver else "🪨", "getal": pos,
-		"tekst": "te ver" if te_ver else "nog verder", "hoog": 52.0, "prio": 9,
-		"x": d.x if d != null else 0.0, "z": d.z if d != null else 0.0,
-		"volg": _volg_dier(id, 52.0)})
-	_zeg_straks()
-
-func _zeg_straks() -> void:
-	if not await na(ZEG_S):
-		return
-	ctx.ui.wolk_weg("hk_zeg")
+	if not g.is_empty():
+		ctx.ui.misser(_kaart, str(g["id"]))
 
 func _gelukt() -> void:
 	var g := _gast()

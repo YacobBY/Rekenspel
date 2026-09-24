@@ -46,18 +46,15 @@ const T_AF := "%s weegt %d kilo!"                        ## 5 woorden, ≤ 25 te
 const T_LICHT := "nog te licht"
 const T_ZWAAR := "te zwaar"
 const T_PRECIES := "precies!"
-const T_VOL := "Neem een zwaarder gewicht"
 const T_ERAF := "eraf"
 const T_ERAF_TITEL := "haal het laatste gewicht eraf"
 const T_KG := "%d kg"
 const T_KG_TITEL := "leg een gewicht op de weegschaal"
 const ICOON_LEG := "⬇"
 const T_LEEG := "nog geen gasten"
-const T_SPOOK := "zoveel is het"
 const ICOON_LICHT := "⬆"
 const ICOON_ZWAAR := "⬇"
 const ICOON_ERAF := "⬆"
-const ICOON_HULP := "💛"
 const ICOON_AF := "✅"
 
 ## The turn of today.
@@ -161,15 +158,6 @@ static func liever(lijst: Array) -> Array:
 	for v in lijst:
 		kleinste = mini(kleinste, int(v))
 	return [t - kleinste, lijst.size(), t + kleinste]
-
-## Counting on together (the help ladder, step 1 and 2): `10 ▸ 15 ▸ 17`.
-static func hulp(lijst: Array) -> String:
-	var l := PackedStringArray()
-	var t := 0
-	for v in lijst:
-		t += int(v)
-		l.append(str(t))
-	return " ▸ ".join(l)
 
 ## A sentence with the thing in it.
 static func vraag(ding: String) -> String:

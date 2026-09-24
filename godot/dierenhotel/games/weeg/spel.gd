@@ -13,10 +13,12 @@ extends MiniGame
 ## in groep 5 met 20 kilo erbij tot 60 — de reuzenpompoen.
 ##
 ## Rekenen eerst (PLAN.md R1): de leesvraag staat er meteen.  Een misser kost
-## niets (HOTEL.md §9, S5): de strook van `Ui` doet de pauze en dezelfde vier
-## keuzes, dit spel de hulpladder in een wolkje bij de weegschaal.  Te zwaar is
-## geen fout: de balans helt gewoon de andere kant op, en "eraf" haalt het
-## laatste gewicht er weer af.
+## niets en helpt ook niet (HOTEL.md §9, S5; eigenaar 2026-09-24: "geef geen
+## hulp na fouten"): de strook van `Ui` maakt de weger sip, doet de pauze en
+## zet dezelfde vier keuzes terug — er komt geen telrij, geen bleek getal en
+## geen recept.  Te zwaar is geen fout: de balans helt gewoon de andere kant
+## op, en "eraf" haalt het laatste gewicht er weer af.  Een zesde gewicht past
+## niet meer: de weger is dan even sip, zonder tip.
 ##
 ## De getallen komen uit `beurt.gd` (eigen gezaaide generator, `core/sommen.gd`
 ## blijft bevroren); de weegschaal met wat erop ligt is één model.
@@ -36,8 +38,6 @@ const KAART_ID := "wg_som"
 const STROOK_ID := "wg_som_keuzes"
 const ERAF_ID := "wg_eraf"
 const ZEG_ID := "wg_zeg"
-const HULP_ID := "wg_hulp"
-const SPOOK_ID := "wg_spook"
 const AF_ID := "wg_af"
 const LEEG_ID := "wg_leeg"
 
@@ -58,7 +58,6 @@ const RUST_BAND := 4
 
 const KAART_HOOG := 28.0
 const ZEG_HOOG := 20.0
-const SPOOK_HOOG := 14.0
 const AF_HOOG := 44.0
 
 const SOM_S := 0.6
@@ -66,14 +65,12 @@ const RECHT_S := 0.9         ## level: a moment to see it, then the question
 const BLIJF_S := 1.5         ## how often the guest of the turn is kept at his spot
 const AF_S := 3.4
 const LEEG_S := 1.8
-const SPOOK_NA := 3          ## the ghost number at the third miss on a question
-const SPOOK_LEG := 8         ## and the recipe after eight weights up and down
 
 var S: Dictionary = {}       ## the turn, in ctx.data()["stand"]
 var O: Dictionary = {}       ## the turn of today (Beurt.opzet), never saved
 var _kaart = null            ## Ui.Kaart
 var _kaart_stap := ""
-var _kaart_hulp := ""        ## the help line the card carries now (small frames)
+var _kaart_hulp := ""        ## the balance's remark on the card now (small frames)
 var _t0 := 0
 
 # ------------------------------------------------------------- aanmelding
@@ -339,7 +336,6 @@ func _antwoord(n, k) -> void:
 		S["missers"] = int(S["missers"]) + 1
 		ctx.snd.zacht()
 		_bewaar()
-		_teken()
 		return
 	if k != null:
 		k.zet(str(goed))
@@ -371,10 +367,10 @@ func leg(kg: int) -> void:
 		return
 	var pan := _pan()
 	if pan.size() >= Beurt.PAN_MAX:
+		# the pan is full: the weigher sulks, and no tip about heavier weights
+		# follows (owner, 2026-09-24) — the balance still says what it says
 		ctx.snd.zacht()
-		_zeg(Beurt.ICOON_HULP, Beurt.T_VOL)
-		_bewaar()
-		_teken()
+		ctx.ui.misser(_kaart, _gast_id())
 		return
 	pan.append(kg)
 	S["pan"] = pan
@@ -485,7 +481,7 @@ func _schaal_params() -> Dictionary:
 		return {"kant": 0, "l": str(O["ding1"]), "lm": int(O["maat1"]), "r": O["set1"]}
 	return {"kant": _kant(), "l": str(O["ding2"]), "lm": int(O["maat2"]), "r": _pan()}
 
-## A short remark at the balance: which way it leans, or that the pan is full.
+## A short remark at the balance: which way it leans.
 func _zeg(icoon: String, tekst: String, klas := "hulp") -> void:
 	S["zeg"] = {"icoon": icoon, "tekst": tekst, "klas": klas}
 
@@ -498,7 +494,6 @@ func _teken() -> void:
 		return
 	_zet_decor()
 	var stap := _stap()
-	var rek: Array = O["rek"]
 	if stap == "leg" and not _pan().is_empty():
 		ctx.hotspots.maak({"id": ERAF_ID, "kamer": KAMER, "obj": SCHAAL_ID, "op": "aan",
 			"x": float(SCHAAL_X), "z": float(SCHAAL_Z), "y": 12.0,
@@ -516,36 +511,15 @@ func _teken() -> void:
 			"klas": str(z.get("klas", "hulp")), "prio": 10})
 	else:
 		ctx.ui.wolk_weg(ZEG_ID)
-	# the help ladder: count along, and at the third miss the answer pale on
-	# the balance; while weighing, after many weights, the recipe
-	var lees := stap == "lees1" or stap == "lees2"
-	var lijst: Array = O["set1"] if stap == "lees1" else _pan()
-	var hulp := ""
-	if lees and int(S["pog"]) >= 1:
-		hulp = Beurt.hulp(lijst)
-	elif stap == "leg" and int(S["acties"]) >= SPOOK_LEG:
-		hulp = " + ".join(PackedStringArray(Beurt.splits(int(O["gewicht2"]), rek).map(
-			func(v): return str(v))))
-	# in a bubble at the balance on a tablet (a help line would push the card
-	# out of the maths bar), on a phone as the card's help line (no room for a
-	# bubble beside the balance there) — see oogst `_klein_kader`
-	if hulp.is_empty() or _klein_kader():
-		ctx.ui.wolk_weg(HULP_ID)
-	else:
-		ctx.ui.wolk({"id": HULP_ID, "kamer": KAMER, "obj": SCHAAL_ID, "op": "aan",
-			"x": float(SCHAAL_X), "z": float(SCHAAL_Z), "hoog": ZEG_HOOG,
-			"icoon": Beurt.ICOON_HULP, "tekst": hulp, "klas": "hulp", "prio": 11})
-	var op_kaart := hulp if _klein_kader() else ""
-	if op_kaart.is_empty() and _klein_kader() and stap == "leg" and not z.is_empty():
+	# On a phone the same remark is the card's second small line: there is no
+	# room for a bubble beside the balance.  It is what the balance shows after
+	# every weight, never help: a miss adds nothing (owner, 2026-09-24).
+	var op_kaart := ""
+	if _klein_kader() and stap == "leg" and not z.is_empty():
 		op_kaart = ("%s %s" % [str(z.get("icoon", "")), str(z.get("tekst", ""))]).strip_edges()
 	if _kaart != null and stap != "af" and op_kaart != _kaart_hulp:
 		_kaart_hulp = op_kaart
 		_kaart.hulp(op_kaart)
-	if lees and int(S["pog"]) >= SPOOK_NA:
-		ctx.ui.getal_tag(SCHAAL_ID, str(Beurt.som(lijst)), {"id": SPOOK_ID, "kamer": KAMER,
-			"y": SPOOK_HOOG, "klas": "hotspook", "prio": 7, "titel": Beurt.T_SPOOK})
-	else:
-		ctx.ui.getal_tag(SCHAAL_ID, null, {"id": SPOOK_ID})
 	if stap == "af":
 		var id := _gast_id()
 		if World.dier(id) != null:

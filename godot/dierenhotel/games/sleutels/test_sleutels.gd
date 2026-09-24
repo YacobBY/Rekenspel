@@ -292,12 +292,25 @@ func test_alle_teksten_staan_er_woordelijk() -> void:
 			"Hang %d op het lege haakje", "%s wacht op zijn sleutel",
 			"%s krijgt nummer %d", "tel met de sprongen mee",
 			"sleep of tik het lege haakje", "kies eerst het getal",
-			"De rij is nu af", "hang mij op", "kijk bij de buren", "leeg haakje",
-			"hier hoort ", "de sleutel van ", "nummer %d", "kamer %d",
-			"buurvrouw Els doet het voor", "naar mijn kamer", "alle sleutels hangen",
-			"om en om", "+ %d", " … ", " · ", " en ", "slaapt hier: ", "💡 "]:
+			"De rij is nu af", "hang mij op", "leeg haakje",
+			"de sleutel van ", "nummer %d", "kamer %d",
+			"naar mijn kamer", "alle sleutels hangen",
+			" · ", " en ", "slaapt hier: ", "💡 "]:
 		waar(bron.contains(zin), 'de tekst "%s" staat woordelijk in de bron' % zin)
-	waar(bron.contains("…"), "het echte beletselteken U+2026, geen drie punten")
+	# de hulpladder is weg (eigenaar 2026-09-24): geen buren, geen Els, geen tip
+	var re := RegEx.new()
+	re.compile("\"((?:[^\"\\\\]|\\\\.)*)\"")
+	var teksten: Array[String] = []
+	for m in re.search_all(bron):
+		teksten.append(m.get_string(1))
+		waar(not m.get_string(1).contains("..."),
+			"geen drie punten in een tekst, alleen het echte …: %s" % m.get_string(1))
+	for weg in ["kijk bij de buren", "hier hoort ", "buurvrouw Els doet het voor",
+			"om en om", "sl_els"]:
+		var nog := false
+		for t in teksten:
+			nog = nog or t.contains(weg)
+		waar(not nog, 'de hulptekst "%s" staat niet meer in de bron' % weg)
 	var spreek_geroepen := false
 	for regel in bron.split("\n"):
 		if regel.strip_edges().begins_with("Ui.spreek("):
@@ -317,8 +330,9 @@ func test_de_zinnen_passen_in_het_budget() -> void:
 		waar(Ui.keur_regel("proef", zin), '"%s" past in het budget' % zin)
 
 
-## `rijTekst` en het buurlijntje, precies zoals ze op de kaart komen te staan.
-func test_rijtekst_en_burenlijn() -> void:
+## `rijTekst` precies zoals hij op de kaart komt te staan, en na een misser op
+## een haakje GEEN buurlijntje (eigenaar 2026-09-24): de vaste doe-regel blijft.
+func test_rijtekst_en_geen_burenlijn() -> void:
 	_op()
 	_wereld(5, 3, 3)
 	waar(Games.start(ID), "het spel start")
@@ -345,14 +359,15 @@ func test_rijtekst_en_burenlijn() -> void:
 		waar(_kies(10), "het goede getal is te kiezen")
 		gelijk(str(p.get("stap", "")), "hang", "de beurt is overgegaan naar hang")
 		gelijk(int(p.get("gekozen", 0)), 10, "het gekozen getal staat in de save")
-	# een misser op een haakje zet het getallenlijntje in het hulpregeltje
+	# een misser op een haakje zet GEEN getallenlijntje in het hulpregeltje
 	var i := _fout_haakje(p, [])
 	await _hang(i)
+	gelijk(int(p["missers"]), 2, "de misser op het haakje is geteld")
 	if spel != null:
-		var lijn := str(spel.debug()["buren_tekst"])
-		waar(lijn.contains(" … "), "het buurlijntje staat er: %s" % lijn)
-		waar(lijn.split(" … ").size() == 3, "met de twee buren en het gat: %s" % lijn)
-		waar(lijn.contains("?"), "en het gat staat er als ?: %s" % lijn)
+		waar(not spel.debug().has("buren_tekst"), "er bestaat geen buurlijntje meer")
+		gelijk(str(spel.debug()["hulp_tekst"]), "sleep of tik het lege haakje",
+			"de hulpregel blijft de vaste doe-regel")
+		gelijk(str(spel.debug()["rij_tekst"]), "5, __, 15, ?, 25", "en de rij blijft de rij")
 	_af()
 
 # ------------------------------------------------- 2b. K1: eerst het getal
@@ -518,9 +533,11 @@ func test_de_stap_overleeft_een_herlaad() -> void:
 	_af()
 
 
-## De hulpregel is altijd gevuld, en na Els staan buurlijn én tip samen op
-## één regel (K1 punt 5 en B4).
-func test_de_hulpregel_is_altijd_geregen() -> void:
+## De hulpregel is altijd gevuld — en altijd dezelfde vaste regel: "tel met de
+## sprongen mee" bij de vraag, "sleep of tik het lege haakje" bij het hangen.
+## Twee missers veranderen er niets aan en brengen geen buurvrouw Els
+## (eigenaar 2026-09-24: "geef geen hulp na fouten").
+func test_de_hulpregel_staat_vast() -> void:
 	_op()
 	_wereld(5, 3)
 	Games.start(ID)
@@ -540,18 +557,9 @@ func test_de_hulpregel_is_altijd_geregen() -> void:
 	var tweede := _fout_haakje(p, [eerste])
 	await _hang(tweede)
 	gelijk(int(p["missers"]), 2, "twee missers")
-	var els := Hits.spot("sl_els")
-	waar(els != null, "Els staat er")
-	if els != null and is_instance_valid(els.knoop):
-		(els.knoop as BaseButton).emit_signal("pressed")
-	var d: Dictionary = spel.debug()
-	var lijn := str(d["buren_tekst"])
-	var tip := str(d["tip"])
-	var hulp := str(d["hulp_tekst"])
-	waar(not lijn.is_empty(), "de buurlijn staat er: %s" % lijn)
-	waar(not tip.is_empty(), "de tip van Els staat er: %s" % tip)
-	waar(hulp.contains(lijn) and hulp.contains(tip),
-		"beide staan op ÉÉN hulpregeltje: %s" % hulp)
+	waar(Hits.spot("sl_els") == null, "er komt geen buurvrouw Els")
+	gelijk(str(spel.debug()["hulp_tekst"]), "sleep of tik het lege haakje",
+		"en de regel is nog steeds de doe-regel")
 	_af()
 
 
@@ -658,73 +666,109 @@ func test_taak_wordt_afgevinkt() -> void:
 
 # --------------------------------------------------- 4. missen zonder straf
 
-## Een misser kost niets: geen ster, geen munt, geen beurt.  De twee buren
-## lichten op, het getallenlijntje komt in het antwoordvakje, en pas na twee
-## missers staat buurvrouw Els er — daarna legt ze de spookcijfers neer.
-func test_misser_helpt_en_straft_nooit() -> void:
+## De eigenaar, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten
+## zelf leren rekenen.  Fout antwoord kiezen moet niet beloond worden met hulp
+## maar juist een teleurgesteld dier."  Eén, twee en drie missers bij de vraag
+## (een fout getal) en bij het hangen (het verkeerde haakje): elke keer is de
+## gast aan de balie sip met `🔄 Nog een keer`, en na de pauze staat het bord
+## er precies zo bij — geen buren die oplichten, geen buurlijntje, geen "kijk
+## bij de buren", geen buurvrouw Els, geen spookcijfers.  Dezelfde vraag
+## blijft, er gaat niets af, en het goede getal en het goede haakje werken.
+func test_geen_hulp_na_een_fout() -> void:
 	_op()
 	_wereld(5, 3)
 	waar(Games.start(ID), "het spel start")
 	var p := _bord()
-	var spel := _spel()
 	var sterren := int(State.s["sterren"])
 	var munten := int(State.s["munten"])
-	var eerste := _fout_haakje(p, [])
-	await _hang(eerste)
-	gelijk(int(p["missers"]), 1, "de misser is geteld")
+	var s: Dictionary = (p["sleutels"] as Array)[0]
+	var gast := str(s["gast"])
+	# de vraag: drie foute getallen
+	var voor := beeld(ID)
+	waar(voor.has(Spel_KAART) and voor.has(Spel_KAART + "_keuzes"),
+		"het beeld kent de kaart en de strook")
+	var keuzes := _strook_namen()
+	for i in 3:
+		var wat := "vraag, misser %d" % (i + 1)
+		waar(_kies_fout() > 0, "%s: een fout getal gekozen" % wat)
+		waar(is_sip(gast), "%s: de gast is teleurgesteld" % wat)
+		waar(mis_wolk(Spel_KAART), "%s: met 🔄 Nog een keer" % wat)
+		waar(_strook_slot(), "%s: de strook staat even op slot" % wat)
+		await _wacht_mispauze()
+		await _pauze_voorbij()
+		niets_erbij(voor, beeld(ID), wat)
+		gelijk(str(p.get("stap", "")), "reken", "%s: dezelfde vraag" % wat)
+		gelijk(str(_strook_namen()), str(keuzes), "%s: dezelfde vier keuzes" % wat)
+	waar(_kies(int(s["nummer"])), "het goede getal is te kiezen")
+	Hits.plaats()
+	gelijk(str(p.get("stap", "")), "hang", "en dan mag de sleutel op")
+	# het hangen: drie keer het verkeerde haakje (het korte "krijgt nummer"-
+	# wolkje van het goede antwoord eerst weg: dat gaat vanzelf, na 1,6 s)
+	await _pauze_voorbij()
+	var boom := Engine.get_main_loop() as SceneTree
+	var tot := Time.get_ticks_msec() + 2500
+	while Hits.spot("sl_kies") != null and Time.get_ticks_msec() < tot:
+		await boom.process_frame
+	voor = beeld(ID)
+	var fouten: Array[int] = []
+	for i in 3:
+		var wat := "haakje, misser %d" % (i + 1)
+		var h := _fout_haakje(p, fouten)
+		if h < 0:
+			h = fouten[0]
+		fouten.append(h)
+		await _hang(h)
+		waar(is_sip(gast), "%s: de gast is teleurgesteld" % wat)
+		waar(mis_wolk(Spel_KAART), "%s: met 🔄 Nog een keer" % wat)
+		waar(Hits.spot("sl_els") == null, "%s: geen buurvrouw Els" % wat)
+		var tag := Hits.spot("sl_tag")
+		waar(tag == null or not (tag.knoop as Control).tooltip_text.contains("buren"),
+			"%s: de gast zegt niets over de buren" % wat)
+		await _pauze_voorbij()
+		niets_erbij(voor, beeld(ID), wat)
+		gelijk(int(p["nu"]), 0, "%s: de beurt blijft van dezelfde gast" % wat)
+		gelijk(_kaart_vak(), str(int(s["nummer"])), "%s: het getal staat nog op de kaart" % wat)
+	gelijk(int(p["missers"]), 6, "zes missers geteld, voor het adaptieve signaal")
 	gelijk(int(State.s["sterren"]), sterren, "een misser kost geen ster (F5)")
 	gelijk(int(State.s["munten"]), munten, "en geen munt")
-	gelijk(int(p["nu"]), 0, "en de beurt blijft van dezelfde gast")
-	waar(Hits.spot("sl_els") == null, "na één misser staat Els er nog niet")
-	if spel != null:
-		var d: Dictionary = spel.debug()
-		gelijk((d["buren"] as Array).size(), 2, "twee buren lichten op")
-		var lijn := str(d["buren_tekst"])
-		gelijk(lijn.split(" … ").size(), 3,
-			"de buren en het gat staan op volgorde met ' … ' ertussen: %s" % lijn)
-		# een `?` komt er alleen als het haakje waarop gemikt werd zelf leeg is
-		var haken: Array = ((p["borden"] as Array)[0] as Dictionary)["haken"]
-		if bool((haken[eerste] as Dictionary).get("blanco", false)):
-			waar(lijn.contains("?"), "een leeg haakje staat als ? in het lijntje: %s" % lijn)
-	# het wolkje van de gast wijst naar de buren
-	var wolk := Hits.spot("sl_tag")
-	waar(wolk != null and is_instance_valid(wolk.knoop)
-		and (wolk.knoop as Control).tooltip_text.contains("kijk bij de buren"),
-		"de gast zegt: kijk bij de buren")
-	# tweede misser: Els komt erbij, en ze blijft daarna staan
-	var tweede := _fout_haakje(p, [eerste])
-	if tweede >= 0:
-		await _hang(tweede)
-	else:
-		await _hang(eerste)
-	gelijk(int(p["missers"]), 2, "twee missers")
-	var els := Hits.spot("sl_els")
-	waar(els != null, "na twee missers staat Els er")
-	if els != null and is_instance_valid(els.knoop):
-		gelijk((els.knoop as Control).tooltip_text, "buurvrouw Els doet het voor",
-			"met haar eigen tekst")
-		(els.knoop as BaseButton).emit_signal("pressed")
-	waar(State.gezien("sleutels_els"), "de uitleg is gezien")
-	if spel != null:
-		var d2: Dictionary = spel.debug()
-		waar(bool(d2["spook"]), "Els legt de spookcijfers neer")
-		var tip := str(d2["tip"])
-		waar(tip == "om en om" or tip.begins_with("+ "),
-			'de hulpregel is "om en om" of "+ <stap>", nu: %s' % tip)
-	# het goede haakje draagt nu het goede getal als spookcijfer
-	var s: Dictionary = (p["sleutels"] as Array)[int(p["nu"])]
-	var haak := Hits.spot("sl_h%d" % int(s["haak"]))
-	waar(haak != null and is_instance_valid(haak.knoop)
-		and (haak.knoop as Button).text.contains(str(int(s["nummer"]))),
-		"het goede getal staat als spookcijfer op het lege haakje")
-	waar(haak != null and (haak.knoop as Control).tooltip_text
-		== "hier hoort %d" % int(s["nummer"]), "en de titel zegt waar het hoort")
-	# en daarna telt de ster gewoon: meedoen is genoeg
+	# en het goede haakje werkt gewoon, en de ster komt: meedoen is genoeg
 	for beurt in (p["sleutels"] as Array).size():
 		var q: Dictionary = (p["sleutels"] as Array)[int(p["nu"])]
 		await _hang(int(q["haak"]))
 	gelijk(int(State.s["sterren"]), sterren + 1, "de ster komt er ondanks de missers")
 	_af()
+
+
+const Spel_KAART := "sl_kaart"
+
+## De namen van de knoppen op de strook, in volgorde.
+func _strook_namen() -> Array[String]:
+	var uit: Array[String] = []
+	var rij := _strook()
+	if rij == null:
+		return uit
+	for k in rij.get_children():
+		uit.append(str(k.name))
+	return uit
+
+
+## Wat er in het antwoordvakje van de kaart staat.
+func _kaart_vak() -> String:
+	var s := Hits.spot(Spel_KAART)
+	if s == null or not is_instance_valid(s.knoop):
+		return ""
+	var l := s.knoop.get_node_or_null("Kolom/Rij/Vak") as Label
+	return "" if l == null else l.text
+
+
+## Wacht tot ook een pauze zonder strook (het hangen) voorbij is.
+func _pauze_voorbij() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var eind := Time.get_ticks_msec() + int(Ui.MIS_PAUZE * 1000.0) + 400
+	while Time.get_ticks_msec() < eind:
+		if Hits.spot(Ui.MIS_WOLK + Spel_KAART) == null:
+			return
+		await boom.process_frame
 
 
 ## Een sleutel op een bezet haakje is ook een misser, nooit een straf.

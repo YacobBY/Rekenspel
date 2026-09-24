@@ -4,7 +4,7 @@ Geschreven 2026-09-23 bij de bouw (PLAN.md R3, eigenaar: "Kan je met een aparte 
 nog een nieuwe map verzinnen en extra reken minigames daarvoor?").  Anders dan games-a
 en games-b is dit geen port van een HTML-bron: de kamer en beide spellen zijn nieuw
 in de Godot-versie.  De regels waar ze zich aan houden zijn die van games-b.md §0
-(sommenkaart, hulpladder, nooit straffend, geluiden, rustmodus, starten en stoppen),
+(sommenkaart, geen hulp na een fout, nooit straffend, geluiden, rustmodus, starten en stoppen),
 HOTEL.md §9 (rekenen ín de wereld, tekstbudget, elk woord aan zijn ding) en PLAN.md
 §1 R1–R10.  Waar een spel daarvan afwijkt staat het er met reden bij.
 
@@ -171,7 +171,8 @@ een heel bakje per tik tot alle tien vol zijn — de strategie "via de tien" in 
 
 `oogst_tafel` (`games/oogst/modellen.gd`): een tafel 26 × 37, blad op y 8, en daarop de
 bakjes als deel van **hetzelfde model** (`params.b`: per plek −1 = geen bakje, 0–10 =
-zoveel aardbeien; `params.spook`: de plek waarvan de lege gaatjes bleke aardbeien tonen).
+zoveel aardbeien).  Bleke spookaardbeien bestaan sinds 2026-09-24 niet meer (geen
+hulp na een fout); een oude `params.spook` tekent niets.
 Los decor sorteert op zijn vloerpunt, dus een los bakje op de achterste helft van de
 tafel zou eronder verdwijnen; één model, één plaat.  Een bakje is 12 × 6, groen, met
 aardbeien van 2 × 2 × 2 in twee rijen van vijf (het tienveld: eerst de achterste rij);
@@ -185,8 +186,7 @@ twee blijven.  Plek 0..4 is de linker kolom van achter naar voor, 5..9 de rechte
 | de kaart | `og_som` | de tafel (`somkaart('og_tafel', …)`); dokt in de rekenbalk (§3.1 PLAN.md) |
 | de antwoordstrook | `og_som_keuzes` | onder de kaart |
 | de plukknop | `og_pluk` | `op: aan` de aardbeienbak ("🍓 Pluk", groep 5 na het volle bakje "🧺 Pluk een bakje") |
-| samen tellen | `og_hulp` | `op: aan` de tafel, wolkje (tablet en groter); op een telefoon de hulpregel van de kaart |
-| het spookgetal | `og_spook` | cijfer op de tafel |
+| na een misser | `mis_og_som` | `🔄 Nog een keer` naast de plukker (`Ui.misser`); geen telwolkje `og_hulp` en geen spookgetal `og_spook` meer (2026-09-24) |
 | "😋 lekker!" | `og_lekker` | volgt de gast |
 | de gast | — | (64, 32), rechts naast de tafel op het pad — nooit vóór de bakjes |
 
@@ -217,17 +217,15 @@ wachtende gast gaat na 16 s anders dwalen en liep dan vóór de bakjes.
 Eén zin per vraag: met twee zinnen over zijn strook was de kaart te hoog voor de
 rekenbalk en zweefde hij over de aardbeienbak.
 
-### 2.7 De hulpladder en een misser
+### 2.7 Een misser, en geen hulp (eigenaar 2026-09-24)
 
-Een misser: `zacht`, de centrale S5-pauze van `Ui` (de gast even sip, `🔄 Nog een keer`,
-de strook 1,2 s op slot, daarna **dezelfde vier keuzes**) — de kaart wordt daarvoor
-nooit opnieuw gebouwd.  Stap 1 en 2: samen tellen, "💛 10 … 20 … 30 en nog 7"
-(vraag 1) of "💛 8 … 9 … 10" (vraag 2; groep 5 "💛 63 ▸ 70 ▸ 80 ▸ 90 ▸ 100"), als wolkje
-op de tafel — op de kaart maakte die regel de kaart te hoog voor de balk — en op een
-kader met een korte zijde onder 400 (telefoon) als hulpregel op de kaart, de plek die
-games-b.md §0.5 noemt (naast de tafel was er daar geen plek voor een wolkje).  Stap 3
-(derde misser): het antwoord bleek op de tafel, "30 + 7" (vraag 1) en bij vraag 2 bleke
-aardbeien in de lege gaatjes van het open bakje (groep 5: "7 + 30").  Nooit een kruis,
+Een misser: `zacht`, de centrale S5-pauze van `Ui` (de plukker even sip, `🔄 Nog een
+keer`, de strook 1,2 s op slot, daarna **dezelfde vier keuzes**) — de kaart wordt
+daarvoor nooit opnieuw gebouwd.  **Verder niets**, ook niet na twee of drie missers
+(games-b.md §0.5: "Nee geef geen hulp na fouten"): geen telwolkje op de tafel, geen
+hulpregel op de kaart, geen bleek getal en geen bleke aardbeien.  Tot 2026-09-24 kwam
+hier de hulpladder: "💛 10 … 20 … 30 en nog 7" / "💛 8 … 9 … 10" (groep 5 "💛 63 ▸ 70 ▸
+80 ▸ 90 ▸ 100") en bij de derde misser "30 + 7" of bleke aardbeien.  Nooit een kruis,
 nooit een ster minder.
 
 ### 2.8 Kindtekst, letterlijk
@@ -341,9 +339,8 @@ de volgorde waarin ze erop gelegd zijn (vijf naast elkaar passen niet op een pan
 | de kaart | `wg_som` | de weegschaal; dokt in de rekenbalk |
 | de antwoordstrook / de gewichten | `wg_som_keuzes` | onder de kaart: bij het aflezen vier getallen, bij het wegen één knop per gewicht "⬇ 5 kg" (kort, zoals in de balk en op een telefoon: "⬇ 5") |
 | eraf | `wg_eraf` | `op: aan` de weegschaal, "⬆ eraf", alleen als er een gewicht op ligt |
-| de balans zegt | `wg_zeg` | `op: aan` de weegschaal: "⬆ nog te licht", "⬇ te zwaar", "⚖️ precies!", "💛 Neem een zwaarder gewicht"; op een telefoon de hulpregel van de kaart |
-| samen tellen, het recept | `wg_hulp` | `op: aan` de weegschaal (telefoon: de hulpregel) |
-| het spookgetal | `wg_spook` | cijfer op de weegschaal |
+| de balans zegt | `wg_zeg` | `op: aan` de weegschaal: "⬆ nog te licht", "⬇ te zwaar", "⚖️ precies!" (wat de balans na elk gewicht laat zien); op een telefoon de hulpregel van de kaart |
+| na een misser | `mis_wg_som` | `🔄 Nog een keer` naast de weger; geen telwolkje of recept `wg_hulp` en geen spookgetal `wg_spook` meer (2026-09-24) |
 | "🥔 9 kilo" | `wg_af` | volgt de gast |
 | de gewichten op de vloer | `wg_kg1` … | los decor in een rij langs de schermhorizontaal rond (98, 78), 10 voxels uit elkaar; een gewicht dat op de pan gaat, pluft even |
 | de gast | — | (62, 88), links vóór de weegschaal, nooit vóór wat er gewogen wordt |
@@ -367,19 +364,22 @@ woord, en de rij op de vloer laat zien welk gewicht welke kleur heeft.
    gewichten.  Elke tik: `plop`, het gewicht op de stapel, de balans helt opnieuw en zegt
    wat er aan de hand is; "⬆ eraf" haalt het laatste gewicht weer af (`terug`).  Te zwaar
    is **geen misser**: de balans helt gewoon de andere kant op.  Hooguit vijf gewichten
-   (`PAN_MAX`); een zesde: `zacht` en "💛 Neem een zwaarder gewicht".  Recht: `ja`,
+   (`PAN_MAX`); een zesde: `zacht` en de weger is even sip met `🔄 Nog een keer` —
+   geen tip (tot 2026-09-24 "💛 Neem een zwaarder gewicht"), en geen misser voor het
+   adaptieve signaal.  Recht: `ja`,
    "⚖️ precies!", het lampje wordt groen, en 0,9 s later de volgende vraag.
 3. **lees2** — "🥔 Hoeveel kilo is de zak?", somregel met de eigen gewichten
    (`5 + 2 + 2 =`), vier getallen.
 4. **af** — "✅ De zak weegt 9 kilo!", het vakje zegt 9; `tel(missers == 0, ms)`, één
    ster (`taak_klaar('weeg')`), `hoera`, de gast blij met "🥔 9 kilo", na 3,4 s dicht.
 
-### 3.7 De hulpladder en een misser
+### 3.7 Een misser, en geen hulp (eigenaar 2026-09-24)
 
-Een misser op een leesvraag: `zacht` en de centrale S5-pauze (de kaart blijft staan).
-Stap 1 en 2: doortellen over de gewichten, "💛 10 ▸ 12 ▸ 13", in een wolkje bij de
-weegschaal (telefoon: op de kaart); stap 3: het antwoord bleek op de weegschaal.  Bij het
-wegen na acht gewichten erop en eraf het recept: "💛 5 + 2 + 2".
+Een misser op een leesvraag: `zacht` en de centrale S5-pauze (de weger even sip,
+`🔄 Nog een keer`, de strook op slot, de kaart blijft staan).  **Verder niets**
+(games-b.md §0.5): geen doortelregel, geen bleek getal op de weegschaal, en bij het
+wegen ook na vele gewichten erop en eraf geen recept.  (Tot 2026-09-24: "💛 10 ▸ 12 ▸
+13", bij de derde misser het antwoord bleek, en na acht gewichten "💛 5 + 2 + 2".)
 
 ### 3.8 Kindtekst, letterlijk
 
@@ -390,7 +390,7 @@ wegen na acht gewichten erop en eraf het recept: "💛 5 + 2 + 2".
 | prikbord | "⚖️ Weeg de groente", eronder "in de kas" |
 | lezen | "🎃 Hoeveel kilo is de pompoen?" · "🍉 … de meloen?" · "🥔 … de zak?" (niet "weegt": dan is de regel op een telefoon van 360 breed te lang voor de rekenbalk) |
 | wegen | "⚖️ Maak de weegschaal weer recht" · knoppen "⬇ 1 kg" … "⬇ 20 kg" (in de rekenbalk kort: "⬇ 1" … "⬇ 20") · "⬆ eraf" |
-| de balans | "⬆ nog te licht" · "⬇ te zwaar" · "⚖️ precies!" · "💛 Neem een zwaarder gewicht" |
+| de balans | "⬆ nog te licht" · "⬇ te zwaar" · "⚖️ precies!" |
 | klaar | "✅ De zak weegt 9 kilo!" · wolkje "🥔 9 kilo" |
 | niemand | wolkje "🛏 nog geen gasten" bij de pompoenen, na 1,8 s dicht |
 
@@ -419,7 +419,8 @@ bestand): 🍉 1F349, 🍓 1F353, 🎃 1F383, 🥔 1F954.  🪴 ⚖️ 🧺 💛
 `games/oogst/test_oogst.gd` (15) en `games/weeg/test_weeg.gd` (13): aanmelding, modellen
 op elke schaal, de getallen per band over dagen 1–14, de antwoorden, de hele beurt per
 band met de vinger (een misser, dezelfde vier keuzes, te licht/te zwaar/eraf, recht,
-aflezen, klaar), de hulpladder, herladen, zonder gasten, het rustspul en `mijd`, en de
+aflezen, klaar), geen hulp na één, twee en drie missers (`test_geen_hulp_na_een_fout`),
+herladen, zonder gasten, het rustspul en `mijd`, en de
 echte schil op 1024 × 768, 768 × 1024, 360 × 740 en 740 × 360: elke knop een tikdoel
 binnen het kader, nooit `krap`, niets van een ander ding afgedekt, en elk wolkje en elke
 knop bij zijn ding; op de drie hoge schermen staan de vragen in de rekenbalk (ook de

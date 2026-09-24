@@ -285,15 +285,3 @@ static func eind_regel_bots(naam: String) -> String:
 
 static func eind_regel2_bots(rest: int) -> String:
 	return "Het was nog %d meter" % rest
-
-## The three steps of the help ladder (games-b.md §0.5).  The pool has no
-## literals of its own for them, so these are gentle and wordless-ish: count
-## the markers, then the rule of the game, then the ghost marker in the water.
-static func hulp_regel(misser: int, m: int) -> String:
-	if misser <= 0:
-		return ""
-	if misser == 1:
-		return "💛 tel de strepen tot de vlag"
-	if misser == 2:
-		return "💛 hooguit %d m per keer" % m
-	return "💛 zwem tot het bleke streepje"

@@ -17,10 +17,14 @@ extends MiniGame
 ##     en wat de gast WIL, en de wijzers blijven staan zodat je verder kunt
 ##     draaien.  Nooit terugzetten, nooit rood, geen timer (F5).
 ##
-## HULPLADDER — hier wijkt het spel bewust af van de standaard (K3): de
-## eerste misser geeft de gewone hulpregel, de TWEEDE geeft de telladder
-## (uur voor uur van nu naar de wektijd), en pas bij de DERDE misser komen
-## de spookwijzers (architecture.md §13, Q-X3-6; HOTEL.md §5).
+## GEEN HULP NA EEN FOUT (eigenaar 2026-09-24: "Nee geef geen hulp na fouten.
+## Kinderen moeten zelf leren rekenen").  De hulpladder van K3 — de gewone
+## hulpregel, dan de telladder, dan de spookwijzers — is weg.  Een verkeerde
+## ✅ (of een verkeerd uur bij de tijdsduurvraag): een zacht geluid, de
+## strook even op slot met `🔄 Nog een keer` aan de klok (de slaper ligt in
+## zijn eigen kamer en slaapt gewoon door), en de kaart blijft precies zoals
+## hij was.  De vaste regel `T_HULP_BEGIN` staat er vanaf de eerste tik en
+## verandert niet.
 ##
 ## Wat de HTML-versie met eigen pixeldrempels deed (`kortWoord`, 370/400 px,
 ## `strookNakijken` na 140 ms) doet de motor nu synchroon: `UiKeuzes` meet zich
@@ -55,8 +59,6 @@ const KL_UUR := Color("#4A3B33")
 const KL_MIN := Color("#C9788F")
 const KL_HART := Color("#E0A86B")
 const KL_BEL := Color("#E8C58E")
-const KL_SPOOK_U := Color("#9A8578")
-const KL_SPOOK_M := Color("#D9A0B0")
 
 ## Kindtekst, letterlijk (games-b.md §2.10).  De suite leest ze hiervandaan.
 const T_NAAM := "Wekkerdienst"
@@ -69,16 +71,9 @@ const T_ZET_MORGEN := "Zet de klok voor morgen"
 const T_DUUR2 := "Hoe laat is hij wakker?"
 const T_STROOK := "draai de klok"
 const T_STROOK_DUUR := "hoe laat wordt hij wakker?"
+## De vaste regel op de kaart, vanaf de eerste tik (K3) en na een misser
+## ongewijzigd (eigenaar 2026-09-24).
 const T_HULP_BEGIN := "💛 draai tot de klok klopt"
-const T_HULP0 := "💛 draai eerst aan de wijzers"
-const T_HULP1 := "💛 draai nog wat verder"
-const T_HULP_LAD := "💛 nog %d uur"
-## K3: de tekst van games-b.md §2.10 was "👻 de spookwijzers wijzen mee";
-## die past niet op één regel van de kaart (185 px, hulp ~161 px) en liet de
-## kaart met 27 px groeien.  Ingekort op verzoek van de eigenaar (2026-09-21)
-## zodat de kaarthoogte over alle treden gelijk blijft; de spec mag hiervan
-## op de hoogte worden gebracht.
-const T_HULP2 := "👻 spoken wijzen mee"
 const T_SLAAPT_NOG := "slaapt nog"
 const T_NOG_NIET := "nog niet"
 const T_GOEDEMORGEN := "goedemorgen"
@@ -372,7 +367,7 @@ func _nieuwe_beurt(n: int, band: int, dag: int, idx: int, gast: String,
 	b["ster"] = 0
 	b["af"] = 0
 	# K3: de hulpregel is nooit leeg — de kaart staat vanaf de eerste tik
-	# klaar met wat het kind moet doen.
+	# klaar met wat het kind moet doen — en een misser verandert hem niet.
 	b["hulp"] = T_HULP_BEGIN
 	_t0 = Time.get_ticks_msec()
 	return b
@@ -388,11 +383,11 @@ func _lees_stand(v) -> Dictionary:
 		uit[k] = int(float(v.get(k, 0)))
 	uit["stap"] = str(v.get("stap", "zet"))
 	uit["gast"] = str(v.get("gast", ""))
-	uit["hulp"] = str(v.get("hulp", ""))
-	# K3: een oude opslag kan een lege hulpregel hebben; vul die bij, behalve
-	# bij een reeds ontwaakte gast — daar hoort geen hulpregel bij.
-	if uit["hulp"] == "" and uit["stap"] != "wakker":
-		uit["hulp"] = T_HULP_BEGIN
+	# K3: de vaste regel, behalve bij een reeds ontwaakte gast — daar hoort
+	# geen hulpregel bij.  Wat een oude opslag nog aan hulpladder bewaarde
+	# ("draai nog wat verder", een telladder, de spoken) komt niet terug
+	# (eigenaar 2026-09-24).
+	uit["hulp"] = "" if uit["stap"] == "wakker" else T_HULP_BEGIN
 	uit["slaapt"] = bool(v.get("slaapt", false))
 	var keuzes: Array = []
 	for q in (v.get("keuzes", []) as Array):
@@ -432,9 +427,8 @@ static func _hoek_min(m: int) -> float:
 	return (float(posmod(m, 60)) / 60.0) * TAU
 
 ## Een streepje of wijzer onder schermhoek `a` (0 = 12 uur, met de klok mee),
-## van straal r0 tot r1; `dik` is de halve breedte in schermpunten.  Een `stap`
-## groter dan 1 geeft een STIPPELlijn: zo lezen de spookwijzers als een hint en
-## niet als een tweede stel echte wijzers.
+## van straal r0 tot r1; `dik` is de halve breedte in schermpunten en `stap`
+## de afstand tussen twee punten langs de wijzer.
 static func _streep(v: Array, r0: float, r1: float, a: float, dik: float,
 		kl: Color, z: int, stap: float) -> void:
 	var s := sin(a)
@@ -482,12 +476,6 @@ static func _klok_model(p: Dictionary) -> Array:
 			continue
 		var s := _naar_vox(R_STREEP * sin(a), -R_STREEP * cos(a))
 		v.append({"x": s.x, "y": CY + s.y, "z": 2, "k": KL_STREEP})
-	# spookwijzers eerst, zodat de echte wijzers er overheen komen
-	if p.get("spookU", null) != null:
-		var su := int(p.get("spookU", 12))
-		var sm := int(p.get("spookM", 0))
-		_streep(v, 2.0, R_UUR, _hoek_uur(su, sm), 1.0, KL_SPOOK_U, 2, 1.5)
-		_streep(v, 2.0, R_MIN, _hoek_min(sm), 0.5, KL_SPOOK_M, 2, 1.5)
 	_streep(v, 0.0, R_UUR, _hoek_uur(uur, mn), 1.0, KL_UUR, 2, 0.5)
 	_streep(v, 0.0, R_MIN, _hoek_min(mn), 0.5, KL_MIN, 2, 0.5)
 	ArtVorm.bx(v, -1, CY - 1, 2, 2, 2, 1, KL_HART)
@@ -495,20 +483,11 @@ static func _klok_model(p: Dictionary) -> Array:
 
 # ------------------------------------------------- de klok in de wereld zetten
 
+## De stand van de wijzers, en niets anders: er wijzen geen bleke spookwijzers
+## mee, ook niet na drie missers (eigenaar 2026-09-24: "geef geen hulp na
+## fouten").
 func klok_params() -> Dictionary:
-	var p := {"uur": int(_s.get("u", 12)), "min": int(_s.get("m", 0))}
-	# Hulpladder: vanaf de TWEEDE misser wijzen bleke spookwijzers mee, zowel
-	# op de gewone zetkaart als op de kaart na een misser (HOTEL.md §5).  Ze
-	# horen bij twee ECHTE pogingen: er moet ook twee keer aan de wijzers
-	# gedraaid zijn, anders verklapt tikken alleen al de wektijd (R3).  Dat
-	# sluit ook de zijdeur van de tijdsduurvraag, die missers optelt zonder dat
-	# er ooit een wijzer bewoog.
-	var stap := str(_s.get("stap", ""))
-	if int(_s.get("missers", 0)) >= 3 and int(_s.get("draaien", 0)) >= 2 \
-			and (stap == "zet" or stap == "mis"):
-		p["spookU"] = int(_s.get("doelU", 12))
-		p["spookM"] = int(_s.get("doelM", 0))
-	return p
+	return {"uur": int(_s.get("u", 12)), "min": int(_s.get("m", 0))}
 
 func _zet_klok() -> void:
 	ctx.wereld.decor(KAMER, {"id": DECOR, "model": MODEL, "x": KX, "z": KZ,
@@ -739,8 +718,7 @@ func _meld() -> void:
 		" u=", int(_s.get("u", 0)), " m=", int(_s.get("m", 0)),
 		" doelU=", int(_s.get("doelU", 0)), " doelM=", int(_s.get("doelM", 0)),
 		" missers=", int(_s.get("missers", 0)),
-		" draaien=", int(_s.get("draaien", 0)),
-		" spook=", klok_params().has("spookU"), " goed=", goed(),
+		" draaien=", int(_s.get("draaien", 0)), " goed=", goed(),
 		" af=", int(_s.get("af", 0)), " sterren=", int(State.s["sterren"]))
 	var st := Hits.spot("wk_som_keuzes")
 	if st != null and is_instance_valid(st.knoop):
@@ -782,44 +760,38 @@ func goed() -> bool:
 	return Sommen.Wekker.in_min(int(_s.get("u", 12)), int(_s.get("m", 0))) \
 		== Sommen.Wekker.in_min(int(_s.get("doelU", 12)), int(_s.get("doelM", 0)))
 
-## ✅ Klaar.  Fout is nooit straffend: een zacht geluid en een hulpje, de
-## wijzers blijven staan zodat je verder kunt draaien (F5).
+## ✅ Klaar.  Fout is nooit straffend en helpt ook niet (F5; eigenaar
+## 2026-09-24): een zacht geluid, de strook even op slot met `🔄 Nog een keer`
+## aan de klok, de gast slaapt door, en de wijzers blijven staan zodat je
+## verder kunt draaien.  Op de kaart verandert niets.
 ##
 ## Een tik op ✅ telt alleen als poging wanneer er sinds de vorige keuring aan
-## de wijzers is gedraaid.  Anders was twee keer tikken zonder ook maar iets te
-## doen genoeg om de spookwijzers op de wektijd te zetten: het antwoord voor
-## niets (R3).  Zonder draai komt er dus geen misser bij, alleen een zacht
-## geluid en de regel die zegt wat er wél te doen is.
+## de wijzers is gedraaid: wie twee keer tikt zonder iets te doen, zit er niet
+## twee keer naast (R3, voor het adaptieve signaal).  Het antwoord is dan nog
+## steeds niet goed, dus ook dat is een misser om te zien.
 func klaar_tik() -> Variant:
 	if not actief or _af_nu() or str(_s.get("stap", "")) == "duur":
 		return null
 	if not goed():
-		if int(_s.get("draaien", 0)) == int(_s.get("gekeurd", 0)):
-			_s["hulp"] = T_HULP0
-			ctx.snd.zacht()
-			teken(false, T_SLAAPT_NOG if bool(_s.get("slaapt", false)) else T_NOG_NIET)
-			_bewaar()
-			return false
-		_s["gekeurd"] = int(_s.get("draaien", 0))
-		_s["missers"] = int(_s.get("missers", 0)) + 1
-		_s["stap"] = "mis"
-		# K3: de ladder is drie treden. Bij de eerste misser blijft de kaart
-		# staan en zegt de wolk dat de gast nog slaapt; bij de TWEEDE misser
-		# vertelt de telladder hoeveel er nog moeten draaien; pas bij de DERDE
-		# verschijnen de spookwijzers (games-b.md §2.4, K3).
-		if int(_s["missers"]) == 1:
-			_s["hulp"] = T_HULP1
-		elif int(_s["missers"]) == 2:
-			var lad := tel_ladder()
-			_s["hulp"] = lad if lad != "" else T_HULP1
-		else:
-			_s["hulp"] = T_HULP2
-		ctx.snd.zacht()
-		teken(false, T_SLAAPT_NOG if bool(_s.get("slaapt", false)) else T_NOG_NIET)
-		_bewaar()
+		if int(_s.get("draaien", 0)) != int(_s.get("gekeurd", 0)):
+			_s["gekeurd"] = int(_s.get("draaien", 0))
+			_s["missers"] = int(_s.get("missers", 0)) + 1
+			_s["stap"] = "mis"
+		_mis()
 		return false
 	_wakker_worden()
 	return true
+
+## Wat een misser laat zien: een zacht geluid, het wekkerkaartje bij de gast
+## zegt dat hij nog slaapt, en `Ui` zet de strook even op slot met
+## `🔄 Nog een keer` — bij de klok, want de slaper ligt in zijn eigen kamer en
+## wordt niet uit zijn bed gehaald.  Geen hulpregel, geen telladder, geen
+## spookwijzers.
+func _mis() -> void:
+	ctx.snd.zacht()
+	teken(false, T_SLAAPT_NOG if bool(_s.get("slaapt", false)) else T_NOG_NIET)
+	_bewaar()
+	ctx.ui.misser(_kaart, str(_s.get("gast", "")))
 
 ## Een tijd kiezen bij de tijdsduurvraag (band 5).
 func kies_tijd(u: int) -> Variant:
@@ -827,11 +799,7 @@ func kies_tijd(u: int) -> Variant:
 		return null
 	if Sommen.Wekker.u12(u) != Sommen.Wekker.u12(int(_s.get("doelU", 12))):
 		_s["missers"] = int(_s.get("missers", 0)) + 1
-		var lad := tel_ladder()
-		_s["hulp"] = lad if lad != "" else T_HULP1
-		ctx.snd.zacht()
-		teken(false, T_SLAAPT_NOG if bool(_s.get("slaapt", false)) else T_NOG_NIET)
-		_bewaar()
+		_mis()
 		return false
 	_s["stap"] = "zet"
 	_s["hulp"] = T_HULP_BEGIN
@@ -839,27 +807,6 @@ func kies_tijd(u: int) -> Variant:
 	teken(true)                   # andere knoppen: de kaart opnieuw
 	_bewaar()
 	return true
-
-## Samen tellen: van nu naar de wektijd, uur voor uur.
-## In de `zet`-stap geeft de bevroren kern duur = 0 (die tel is daar nog
-## niet gevraagd); val dan terug op het uurverschil zelf, anders staat er
-## één getal op de ladder.  Meer dan vijf uur voorlezen is geen telwerk meer
-## en past bovendien niet op één regel van de smalle kaart; dan zegt de
-## regel hoeveel er nog over zijn.  Staat de wijzer al op het goede uur
-## (alleen de minuten missen), dan is er niets bij te tellen en is de
-## ladder leeg; de aanroeper valt dan terug op de gewone hulpregel.
-func tel_ladder() -> String:
-	var uren: int = int(_s.get("duur", 0))
-	if uren <= 0:
-		uren = posmod(int(_s.get("doelU", 12)) - int(_s.get("u", 12)), 12)
-	if uren <= 0:
-		return ""
-	if uren > 5:
-		return T_HULP_LAD % uren
-	var l: Array[String] = []
-	for i in range(0, uren + 1):
-		l.append(str(Sommen.Wekker.u12(int(_s.get("u", 12)) + i)))
-	return "💛 " + " … ".join(l)
 
 # ------------------------------------------------------------- wakker worden
 

@@ -16,7 +16,6 @@ const BAKJE_D := Color("#83B474")
 const AARDBEI := Color("#E4574B")
 const AARDBEI_L := Color("#F27E70")
 const KROON := Color("#6FA05A")      ## the green crown on top of every berry
-const SPOOK := Color("#F6CFC9")      ## a ghost berry (help step 3): pale, never red
 
 ## The table: 26 along x, 37 along z, its top at y = TOP.
 const TOP := 8
@@ -38,9 +37,8 @@ static func plek(i: int) -> Vector2i:
 	return Vector2i(int(KOLOM_X[int(i / 5) % 2]), int(RIJ_Z[i % 5]))
 
 ## The table with its punnets.  `params.b` is one entry per place, 0..9: -1 (or
-## missing) = no punnet there, 0..10 = a punnet with that many berries.
-## `params.spook` = the place whose EMPTY holes show pale ghost berries (the
-## third step of the help ladder), -1 = none.
+## missing) = no punnet there, 0..10 = a punnet with that many berries.  (No
+## ghost berries any more: a miss gets no help, owner 2026-09-24.)
 static func tafel(params: Dictionary = {}) -> Array:
 	var v: Array = []
 	# the top, one plank line darker, and four legs
@@ -54,19 +52,18 @@ static func tafel(params: Dictionary = {}) -> Array:
 		for lz in [-18, 17]:
 			ArtVorm.bx(v, lx, 0, lz, 2, TOP - 2, 1, HOUT_D)
 	var b: Array = params.get("b", [])
-	var spook := int(params.get("spook", -1))
 	for i in 10:
 		var n := int(b[i]) if i < b.size() else -1
 		if n < 0:
 			continue
-		_bakje(v, plek(i), clampi(n, 0, 10), i == spook)
+		_bakje(v, plek(i), clampi(n, 0, 10))
 	return v
 
 ## One green punnet at `p` on the top: a tray with a rim, and in it up to ten
 ## berries in two rows of five (the ten-frame): the back row first, left to
 ## right, then the front row.  Every berry is 2 × 2 × 2 with its own green
 ## crown, so two berries that touch still count as two.
-static func _bakje(v: Array, p: Vector2i, n: int, spook: bool) -> void:
+static func _bakje(v: Array, p: Vector2i, n: int) -> void:
 	var x0 := p.x - int(BAKJE_L / 2.0)
 	var z0 := p.y - int(BAKJE_D_Z / 2.0)
 	ArtVorm.bx(v, x0, TOP, z0, BAKJE_L, 1, BAKJE_D_Z, BAKJE_D)
@@ -81,5 +78,3 @@ static func _bakje(v: Array, p: Vector2i, n: int, spook: bool) -> void:
 			ArtVorm.bx(v, bx, TOP + 1, bz, 2, 2, 2, AARDBEI)
 			ArtVorm.verf(v, bx, bx, TOP + 2, TOP + 2, bz, bz, AARDBEI_L)
 			v.append({"x": bx + 1, "y": TOP + 3, "z": bz, "k": KROON})
-		elif spook:
-			ArtVorm.bx(v, bx, TOP + 1, bz, 2, 1, 2, SPOOK)

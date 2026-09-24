@@ -8,8 +8,14 @@ extends MiniGame
 ## the crates and the sum is about that chart.
 ##
 ## What is ported unchanged: the numbers (`Sommen.Was.*`), every Dutch string,
-## the help ladder, the never-punishing rule, and the two layout rules C1 and
-## C2 of §4.6.  What is NOT ported is HOW those two rules are enforced: the
+## the never-punishing rule, and the two layout rules C1 and C2 of §4.6.  The
+## help ladder is GONE (owner, 2026-09-24: "Nee geef geen hulp na fouten.
+## Kinderen moeten zelf leren rekenen"): a wrong answer on the chart, or a
+## piece in the wrong crate, is seen — `🔄 Nog een keer`, the strip locked for
+## a moment, the crate bouncing — and nothing more: no counting line, no
+## pointer to the highest stack, no ghost numbers on the crates or the pile.
+##
+## What is NOT ported is HOW those two layout rules are enforced: the
 ## HTML read `Hits.debug()` and the DOM eight times over 2.65 s, because the
 ## button layer only placed in the next paint.  Here `World`'s projection is a
 ## closed form and a Control measures itself synchronously, so `WasIndeling`
@@ -122,14 +128,6 @@ func start(_c: SpelCtx) -> void:
 	_teken()
 	if _stap_nu() != "sorteren":
 		_vraag_kaart()
-		# The help the child had already earned comes back: at three misses the
-		# ghost numbers are there again, otherwise the counting line.  Anything
-		# else would make reloading a punishment ("my help is gone").
-		if _stap_nu() != "af" and _missers() > 0:
-			if _kaart != null:
-				_kaart.hulp(_hulp_zin())
-			if _missers() >= 3:
-				_spook()
 	_regel_indeling()
 	State.bewaar()
 	_meld("start")
@@ -268,13 +266,6 @@ func _antwoord_nu() -> int:
 func _vraag0_goed() -> int:
 	var t := int(_s.get("T", 0))
 	return int(t / 2) if int(_s.get("band", 3)) == 5 else t
-
-## Is the question that is open about the crates, or about the pile?  The
-## ghost numbers of the third attempt go where the question is: on the crates
-## for "welke stapel is het hoogst", on the pile for "hoeveel liggen er".
-func _vraag_over_kratten() -> bool:
-	var s := _stap_nu()
-	return s == "vraag1" or s == "vraag2"
 
 # ------------------------------------------------------------- waar staat wat
 
@@ -555,9 +546,13 @@ func _leg_in(i: int) -> bool:
 		ctx.snd.plop(1)
 	else:
 		ctx.snd.terug()
-		_wip(i)
 	State.bewaar()
 	_teken()
+	if soort != i:
+		# the crate bounces and says `🔄 Nog een keer` — nothing about which
+		# crate it should have been (owner, 2026-09-24)
+		_wip(i)
+		_mis_bij_krat(i)
 	if int(_s["i"]) >= rij.size() and _stap_nu() == "sorteren":
 		_klaar_met_sorteren()
 	elif soort == i and _tussensom_val():
@@ -606,6 +601,21 @@ func _wijs_berg_aan() -> void:
 		return
 	if is_instance_valid(b):
 		b.remove_theme_stylebox_override("normal")
+
+## A piece in the wrong crate, seen: the same `🔄 Nog een keer` as every miss
+## in the hotel, at that crate, for as long as a miss pauses a strip.  This
+## game has no animal of the turn to sulk (games-b.md §0.12), and while the
+## child sorts there is no card either, so the bubble hangs at the crate.
+func _mis_bij_krat(i: int) -> void:
+	var id := Ui.MIS_WOLK + _krat_id(i)
+	var q := _krat_plek(_m(), i)
+	ctx.ui.wolk({"id": id, "kamer": KAMER, "x": q.x, "z": q.y,
+		"hoog": float(_krat_y(i) + 6), "prio": 12,
+		"icoon": UiTekst.MIS_ICOON, "tekst": UiTekst.MIS_ZIN})
+	if not await na(Ui.MIS_PAUZE):
+		return
+	ctx.ui.wolk_weg(id)
+	ctx.wereld.vuil()
 
 ## The crate bounces: a soft "no" without a word and without red.
 func _wip(i: int) -> void:
@@ -743,15 +753,13 @@ func _kies(n: int) -> bool:
 		ctx.snd.ja()
 		if _kaart != null:
 			_kaart.klaar()                 # klaar() writes the ✓ itself
-		_spook_weg()
 		_volgende()
 		return true
+	# no help (owner, 2026-09-24): the strip pauses with `🔄 Nog een keer` at
+	# the card, and the same three piles are the same question
 	ctx.snd.zacht()
 	_s["missers"] = _missers() + 1
-	if _kaart != null:
-		_kaart.hulp("kijk naar de hoogste stapel" if _missers() >= 2 else _hulp_zin())
-	if _missers() >= 3:
-		_spook()
+	ctx.ui.misser(_kaart, "")
 	State.bewaar()
 	_meld("mis")
 	return false
@@ -761,8 +769,6 @@ func _antwoord(n, k) -> bool:
 	if ctx == null or _s.is_empty() or _stap_nu() == "af":
 		return false
 	if n == null:
-		if k != null:
-			k.hulp(_hulp_zin())
 		return false
 	_getikt = int(n)
 	var goed := int(n) == _antwoord_nu()
@@ -772,80 +778,15 @@ func _antwoord(n, k) -> bool:
 		if k != null:
 			k.zet(str(int(n)))
 			k.klaar()
-		_spook_weg()
-		_spook_berg_weg()
 		_volgende()
 		return true
+	# no help (owner, 2026-09-24): `Ui` pauses the strip with `🔄 Nog een keer`
+	# and brings the same four numbers back; the card stays as it was
 	ctx.snd.zacht()
 	_s["missers"] = _missers() + 1
-	if k != null:
-		k.zet("")
-		k.hulp(_hulp_zin())
-	if _missers() >= 3:
-		if _vraag_over_kratten():
-			_spook()
-		else:
-			_spook_berg()
 	State.bewaar()
 	_meld("mis")
 	return false
-
-## Counting on from `van` to `tot`: "5 … 6 … 7 … 8 …".  THAT is the help for
-## "hoeveel meer": you start on the low pile and count on to the high one, and
-## the number of steps is the answer.
-static func _tel_door(van: int, tot: int, stap: int) -> String:
-	var l: Array[String] = [str(van)]
-	var n := van
-	var veilig := 0
-	while n < tot and veilig < 12:
-		veilig += 1
-		n += maxi(1, stap)
-		l.append(str(n))
-	return " … ".join(l) + " …"
-
-func _hulp_zin() -> String:
-	var band := int(_s.get("band", 3))
-	var stap := _stap_nu()
-	# The two pile questions: the help is the count itself, in the step the
-	# band works in.  In group 5 the answer is blocks, so the child counts the
-	# pieces in twos — and how many numbers that takes IS the answer.
-	if stap == "vraag0" or stap == "vraagT":
-		if band == 5 and stap == "vraag0":
-			return Econ.tel_mee(2, _vraag0_goed(), " …")
-		return Econ.tel_mee(1, _antwoord_nu(), " …")
-	if band == 3:
-		return "tel de blokjes"
-	var h := _hoogste_idx()
-	if _stap_nu() == "vraag1" and band == 5:
-		return Econ.tel_mee(2, mini(8, int(_vak()[h])), " …")      # blocks x 2
-	if _stap_nu() == "vraag2" and band == 4:
-		var rij: Array[String] = []
-		var som := 0
-		for i in _m():
-			som += _stuks(i)
-			rij.append(str(som))
-		return " … ".join(rij) + " …"
-	return _tel_door(_stuks(_laagste_idx()), _stuks(h), _per())
-
-## Third attempt: the counts appear as ghost numbers on the crates.
-func _spook() -> void:
-	for i in _m():
-		ctx.ui.getal_tag(_krat_id(i), _stuks(i),
-			{"id": "ws_sp%d" % i, "kamer": KAMER, "y": float(_krat_y(i) - 2), "prio": 3})
-
-func _spook_weg() -> void:
-	for i in _m():
-		ctx.ui.getal_tag(_krat_id(i), null, {"id": "ws_sp%d" % i, "kamer": KAMER})
-
-## The third attempt at one of the two pile questions: the ghost number goes
-## on the pile it asks about, not on the crates — during the opening sum the
-## crates are still empty, so a ghost on them would explain nothing.
-func _spook_berg() -> void:
-	ctx.ui.getal_tag(DECOR_BERG, _antwoord_nu(),
-		{"id": "ws_sp_berg", "kamer": KAMER, "y": 22.0, "prio": 3})
-
-func _spook_berg_weg() -> void:
-	ctx.ui.getal_tag(DECOR_BERG, null, {"id": "ws_sp_berg", "kamer": KAMER})
 
 ## A question is right: on to the next one, back to the crates, or done.
 func _volgende() -> void:
@@ -948,8 +889,6 @@ func _regel_indeling() -> void:
 	_weeg_legenda(bodem)
 	_teken()
 	_mik_kaart()
-	if _missers() >= 3 and _vraag_over_kratten():
-		_spook()                       # the ghosts follow the new stack height
 	_pas_in_het_kader()
 	_c2 = _kaart == null or _kaart_top() >= bodem - 0.01
 
@@ -980,8 +919,7 @@ func _pas_in_het_kader() -> void:
 		if _legenda_kaart and _kaart != null and _krap(d, HOT_KAART):
 			# the second line made the card unplaceable: try the legend as a
 			# bubble instead, and rule 1 above drops that too if the room has no
-			# place for it either.  Then the doubling is taught by the help
-			# ladder ("2 … 4 … 6 … 8 …"), one soft tap away.
+			# place for it either — then the last resort below puts it back.
 			_legenda_kaart = false
 			_kaart.regel2("")
 			_mik_kaart()

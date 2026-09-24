@@ -202,6 +202,23 @@ func _titel(id: String) -> String:
 		return ""
 	return s.knoop.tooltip_text
 
+## Wacht de pauze af die `Ui.misser` na een misser op de strook legt (S5).
+func _wacht_mispauze() -> void:
+	await _wacht(Ui.MIS_PAUZE + 0.25)
+
+## Staat de strook van `kaart_id` even op slot?
+func _op_slot(kaart_id: String) -> bool:
+	var s := Hits.spot(kaart_id + "_keuzes")
+	return s != null and is_instance_valid(s.knoop) and (s.knoop as UiKeuzes).op_slot
+
+## Wat een misser in dit spel laat zien (eigenaar 2026-09-24): `🔄 Nog een keer`
+## bij de kassa — er is geen dier van de beurt — en geen hulpregel, geen
+## spookmunten.
+func _alleen_teleurstelling(kaart_id: String, wat: String) -> void:
+	waar(mis_wolk(kaart_id), "%s: 🔄 Nog een keer" % wat)
+	gelijk(_kaart_tekst(kaart_id, "hulp"), "", "%s: geen hulpregel" % wat)
+	waar(not _er_is("mb_spook"), "%s: geen spookmunten" % wat)
+
 # ==================================================================================
 # 1. registratie en ontgrendeling
 # ==================================================================================
@@ -580,30 +597,27 @@ func test_nul_munten_slaat_de_vraag_over() -> void:
 		"en de stand staat op het boek")
 	_af()
 
-## R3: er is geen route langs de som heen, en een misser kost niets.
+## R3: er is geen route langs de som heen, en een misser kost niets en helpt
+## niet (eigenaar 2026-09-24): drie foute antwoorden op de kassavraag, elke
+## keer `🔄 Nog een keer` en de strook even op slot — geen telladder langs de
+## munten, geen spookmunten — en daarna precies dezelfde kaart.
 func test_het_boek_komt_pas_na_het_goede_antwoord() -> void:
 	await _op(Vector2(1000, 648), 3, 9)
 	waar(Games.start("meubels"), "het spel start")
 	await _tel_frames()
 	var munten_voor := int(State.s["munten"])
 	var sterren_voor := int(State.s["sterren"])
-	# 1e misser: samen de buidel doortellen
-	waar(_typ_fout("mb_kas", 9), "een fout antwoord")
-	await _tel_frames()
-	waar(not Ui.blad_open_nu(), "het boek blijft dicht")
-	waar(_er_is("mb_kas"), "de kaart staat er nog")
-	gelijk(_kaart_tekst("mb_kas", "hulp"), "2 … 4 … 6 … 8 … 9",
-		"de telladder loopt langs de munten")
-	waar(not _er_is("mb_spook"), "nog geen spookmunten")
-	# 2e misser: nog steeds alleen de ladder
-	waar(_typ_fout("mb_kas", 9), "nog een fout antwoord")
-	await _tel_frames()
-	waar(not _er_is("mb_spook"), "en nog steeds geen spookmunten")
-	# 3e misser: de spookmunten, nooit een kruis
-	waar(_typ_fout("mb_kas", 9), "en nog een")
-	await _tel_frames()
-	waar(_er_is("mb_spook"), "nu liggen de spookmunten er")
-	gelijk(_titel("mb_spook"), Spel.T_SPOOK_ZOVEEL, "met het juiste label")
+	var voor := beeld("meubels")
+	waar(voor.has("mb_kas") and voor.has("mb_kas_keuzes"), "het beeld kent de kassavraag")
+	for keer in 3:
+		var wat := "kassa, misser %d" % (keer + 1)
+		waar(_typ_fout("mb_kas", 9), "%s: een fout antwoord" % wat)
+		await _tel_frames()
+		waar(not Ui.blad_open_nu(), "%s: het boek blijft dicht" % wat)
+		waar(_op_slot("mb_kas"), "%s: de strook staat even op slot" % wat)
+		_alleen_teleurstelling("mb_kas", wat)
+		await _wacht_mispauze()
+		niets_erbij(voor, beeld("meubels"), wat)
 	gelijk(int(State.s["munten"]), munten_voor, "er is geen munt afgepakt")
 	gelijk(int(State.s["sterren"]), sterren_voor, "en geen ster afgepakt")
 	waar(not Ui.blad_open_nu(), "en het boek is nog altijd dicht")
@@ -615,7 +629,6 @@ func test_het_boek_komt_pas_na_het_goede_antwoord() -> void:
 	gelijk(_wolk_deel("mb_af", "icoon"), "✅", "een groen vinkje")
 	gelijk(_wolk_deel("mb_af", "getal"), "€9", "met het bedrag erbij")
 	waar(not _er_is("mb_kas_keuzes"), "de strook is weg")
-	waar(not _er_is("mb_spook"), "en de spookmunten ook")
 	for _p in 40:
 		if Ui.blad_open_nu():
 			break
@@ -657,10 +670,16 @@ func test_de_kassavraag_overleeft_een_herlaad() -> void:
 	_af()
 
 # ==================================================================================
-# 3. de hulpladder en de nooit-straffen-regel
+# 3. geen hulp na een fout, en nooit straffen
 # ==================================================================================
 
-func test_hulpladder_en_nooit_straffen() -> void:
+## De eigenaar, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten
+## zelf leren rekenen."  Eén, twee en drie foute sommen bij het afrekenen, en
+## drie keer "klaar" met te weinig op de toonbank: elke keer `🔄 Nog een keer`
+## bij de kassa en verder niets — geen doortellen, geen "+€3", geen
+## spookmunten.  Nooit straffen: niets afgepakt, en het goede antwoord en het
+## goede bedrag leveren nog gewoon een ster op.
+func test_geen_hulp_en_nooit_straffen() -> void:
 	await _op(Vector2(1000, 648), 5, 12)
 	waar(Games.start("meubels"), "het spel start")
 	await _tel_frames()
@@ -674,48 +693,73 @@ func test_hulpladder_en_nooit_straffen() -> void:
 	var munten_voor := int(State.s["munten"])
 	var sterren_voor := int(State.s["sterren"])
 	gelijk(_kaart_tekst("mb_som", "hulp"), "", "eerst geen hulpregel")
-	# 1e misser: samen doortellen
-	waar(_typ_fout("mb_som", 4), "een fout antwoord")
-	await _tel_frames()
-	gelijk(_kaart_tekst("mb_som", "hulp"), "2 … 3 … 4", "samen doortellen vanaf 1")
-	waar(not _er_is("mb_spook"), "nog geen spookmunten")
-	# 2e misser: nog steeds samen doortellen
-	waar(_typ_fout("mb_som", 4), "nog een fout antwoord")
-	await _tel_frames()
-	gelijk(_kaart_tekst("mb_som", "hulp"), "2 … 3 … 4", "nog steeds doortellen")
-	waar(not _er_is("mb_spook"), "en nog steeds geen spookmunten")
-	# 3e misser: spookmunten
-	waar(_typ_fout("mb_som", 4), "en nog een")
-	await _tel_frames()
-	waar(_er_is("mb_spook"), "nu liggen de spookmunten er")
-	gelijk(_titel("mb_spook"), Spel.T_SPOOK_SAMEN, "met het juiste label")
-	# nooit straffen: niets afgepakt, kaart blijft open, en het goede antwoord
-	# levert nog steeds een ster op
+	var voor := beeld("meubels")
+	for keer in 3:
+		var wat := "som, misser %d" % (keer + 1)
+		waar(_typ_fout("mb_som", 4), "%s: een fout antwoord" % wat)
+		await _tel_frames()
+		waar(_op_slot("mb_som"), "%s: de strook staat even op slot" % wat)
+		_alleen_teleurstelling("mb_som", wat)
+		await _wacht_mispauze()
+		niets_erbij(voor, beeld("meubels"), wat)
 	gelijk(int(State.s["munten"]), munten_voor, "er is geen munt afgepakt")
 	gelijk(int(State.s["sterren"]), sterren_voor, "en geen ster afgepakt")
 	waar(_er_is("mb_som"), "de kaart staat er nog")
 	waar(_typ("mb_som", 4), "het goede antwoord")
 	await _wacht(0.6)
 	await _tel_frames()
-	waar(not _er_is("mb_spook"), "de spookmunten zijn weg")
-	# de munten-hulpladder: te weinig neergelegd
+	# te weinig neergelegd, drie keer "klaar"
 	waar(_tik("mb_bank"), "leg één munt neer")
-	waar(_tik("mb_ok"), "en zeg dat je klaar bent")
 	await _tel_frames()
-	waar(_kaart_tekst("mb_bon", "hulp").begins_with("🪙 +€3"),
-		"de hulpregel noemt wat er nog bij moet: %s" % _kaart_tekst("mb_bon", "hulp"))
-	waar(_kaart_tekst("mb_bon", "hulp").contains("2 … 3 … 4"), "en telt samen door")
-	waar(_tik("mb_ok"), "nog een keer")
-	waar(_tik("mb_ok"), "en nog een keer")
-	await _tel_frames()
-	waar(_er_is("mb_spook"), "bij de derde poging liggen de spookmunten er")
-	gelijk(_titel("mb_spook"), Spel.T_SPOOK_BIJ, "met het juiste label")
+	var bon := beeld("meubels")
+	for keer in 3:
+		var wat := "te weinig, klaar %d" % (keer + 1)
+		waar(_tik("mb_ok"), "%s: zeg dat je klaar bent" % wat)
+		await _tel_frames()
+		_alleen_teleurstelling("mb_bon", wat)
+		gelijk(_kaart_tekst("mb_bon", "vak"), "€4", "%s: de bon houdt zijn prijs" % wat)
+		await _wacht_mispauze()
+		niets_erbij(bon, beeld("meubels"), wat)
 	var sterren_nu := int(State.s["sterren"])
 	var gelegd := _leg_precies(4)
 	gelijk(gelegd, 4, "leg de rest neer")
 	waar(_tik("mb_ok"), "klaar")
 	gelijk(int(State.s["sterren"]), sterren_nu + 1,
 		"de ster komt er ook na zes missers (F5)")
+	_af()
+
+## Een fout wisselgeld (groep 4 en 5): dezelfde pauze, en geen telladder.
+func test_geen_hulp_bij_het_wisselgeld() -> void:
+	await _op(Vector2(1000, 648), 5, 12)
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	waar(_blad_tik("Kk_plant"), "plant erbij")
+	await _tel_frames()
+	waar(_blad_tik("Kk_mandje"), "mandje erbij")
+	await _tel_frames()
+	waar(_blad_tik("Kafrekenen"), "afrekenen")
+	await _tel_frames()
+	waar(_typ("mb_som", 4), "de som")
+	await _wacht(0.6)
+	await _tel_frames()
+	# buidel(12) = [5,2,2,2,1]: leg €5 neer, dan de wisselvraag
+	waar(_tik("mb_buidel") and _tik("mb_buidel"), "naar de munt van 5")
+	waar(_tik("mb_bank"), "leg €5 neer")
+	waar(_tik("mb_ok"), "klaar met tellen")
+	await _tel_frames()
+	waar(_er_is("mb_wissel"), "de wisselvraag staat er")
+	var voor := beeld("meubels")
+	for keer in 3:
+		var wat := "wisselgeld, misser %d" % (keer + 1)
+		waar(_typ_fout("mb_wissel", 1), "%s: een fout getal" % wat)
+		await _tel_frames()
+		waar(_op_slot("mb_wissel"), "%s: de strook staat even op slot" % wat)
+		_alleen_teleurstelling("mb_wissel", wat)
+		await _wacht_mispauze()
+		niets_erbij(voor, beeld("meubels"), wat)
+	waar(_typ("mb_wissel", 1), "het goede wisselgeld")
+	gelijk(int(State.s["munten"]), 8, "de prijs gaat uit de kassa")
 	_af()
 
 ## Groep 3 rekent geen wisselgeld uit: te veel = een munt terugpakken.
@@ -734,7 +778,8 @@ func test_groep_drie_pakt_een_munt_terug() -> void:
 	waar(_tik("mb_ok"), "klaar met tellen")
 	await _tel_frames()
 	waar(not _er_is("mb_wissel"), "er komt géén wisselkaart in groep 3")
-	gelijk(_kaart_tekst("mb_bon", "hulp"), "« €1 te veel", "maar wel de hulpregel")
+	_alleen_teleurstelling("mb_bon", "te veel")
+	await _wacht_mispauze()
 	waar(_er_is("mb_terug"), "en de knop om een munt terug te pakken")
 	gelijk(_titel("mb_terug"), Spel.T_MUNT_TERUG, "met de titel van §5.9")
 	waar(_tik("mb_terug"), "pak de munt terug")
@@ -906,21 +951,22 @@ func test_teksten_staan_er_letterlijk() -> void:
 			"kost ", "kosten ", "Leg de 🪙 munten op de toonbank", "tik een getal",
 			"de toonbank: ", "munt van ", " in je buidel)", "klaar met tellen",
 			"een munt terugpakken", "terug naar het meubelboek",
-			"zoveel is het samen", "zoveel krijg je terug", "dit moet er nog bij",
-			"zoveel moet het zijn", "zo ziet het uit", "zoveel is het",
 			"terug", "betaald", " neerzetten", "sleep naar een plekje",
 			"hier neerzetten", "meer plekjes", "bezet", "gasten", "iemand slaapt",
 			"bed draaien", " oppakken", " euro erbij", " kopen, ",
 			" kopen voor ", " sterren"]:
 		waar(bron.contains(zin), 'de zin "%s" staat letterlijk in spel.gd' % zin)
-	# de echte minus U+2212 en de ellipsis U+2026 (F3)
+	# de echte minus U+2212 (F3)
 	waar(bron.contains("−"), "de wisselsom gebruikt het echte minteken U+2212")
-	waar(bron.contains(" … "), "en samen doortellen de ellipsis U+2026")
+	# en de hulpladder is weg (eigenaar 2026-09-24)
+	for weg in ["zoveel is het samen", "zoveel krijg je terug", "dit moet er nog bij",
+			"zoveel moet het zijn", "zo ziet het uit", "te veel", "hotspook"]:
+		waar(not bron.contains('"%s"' % weg) and not bron.contains(weg + '"'),
+			'geen hulp na een misser meer: "%s"' % weg)
 	# geen enkele kinderzin heeft een teken dat het lettertype niet kent
 	for zin in [Spel.T_TITEL, Spel.T_SAMEN, Spel.T_TERUG_VRAAG, Spel.T_LEG_MUNTEN,
 			Spel.T_TIK_GETAL, Spel.T_SLEEP, Spel.T_HIER, Spel.T_MEER, Spel.T_BEZET,
-			Spel.T_SLAAPT, Spel.T_DRAAIEN, Spel.T_EERST, Spel.T_SPOOK_SAMEN,
-			Spel.T_SPOOK_WISSEL, Spel.T_SPOOK_BIJ, Spel.T_SPOOK_MOET,
+			Spel.T_SLAAPT, Spel.T_DRAAIEN, Spel.T_EERST,
 			Spel.T_HOEVEEL, Spel.T_GEEN_MUNTEN, Spel.T_OP_TAFEL, Spel.T_BUIDEL]:
 		gelijk(str(Ui.mist_tekens(zin)), "[]", 'elk teken van "%s" zit in de subset' % zin)
 
@@ -934,8 +980,6 @@ func test_elk_pictogram_zit_in_het_lettertype() -> void:
 			Spel.T_LIJST_LEEG, Spel.T_BOEK_DICHT, Spel.T_GENOEG, Spel.T_SAMEN,
 			Spel.T_TERUG_VRAAG, Spel.T_LEG_MUNTEN, Spel.T_TIK_GETAL,
 			Spel.T_KLAAR_TELLEN, Spel.T_MUNT_TERUG, Spel.T_TERUG_BOEK,
-			Spel.T_SPOOK_SAMEN, Spel.T_SPOOK_WISSEL, Spel.T_SPOOK_BIJ,
-			Spel.T_SPOOK_MOET, Spel.T_SPOOK_UIT, Spel.T_SPOOK_ZOVEEL,
 			Spel.T_TERUG, Spel.T_BETAALD, Spel.T_SLEEP, Spel.T_HIER, Spel.T_MEER,
 			Spel.T_BEZET, Spel.T_GASTEN, Spel.T_SLAAPT, Spel.T_DRAAIEN,
 			Spel.T_EERST, Spel.W_HIER, Spel.W_MEER, Spel.W_KLAAR, Spel.W_TERUG,
@@ -997,12 +1041,19 @@ func _keur_zin(zin: String, wat: String) -> void:
 	waar(woorden <= 8 and zin.length() <= 40,
 		"%s: \"%s\" = %d woorden, %d tekens (max 8 / 40)" % [wat, zin, woorden, zin.length()])
 
-## De hulpregel telt samen door en wordt nooit een lap tekst (§1.3).
-func test_samen_doortellen_stopt_bij_twaalf() -> void:
-	gelijk(Spel._door_tellen(1, 3), "2 … 3 … 4", "vanaf 1, drie stappen")
-	gelijk(Spel._door_tellen(6, 2), "7 … 8", "vanaf 6, twee stappen")
-	gelijk(Spel._door_tellen(0, 0), "", "nul stappen is niets")
-	gelijk(Spel._door_tellen(0, 20).split(" … ").size(), 12, "hooguit twaalf stappen")
+## Er is geen hulpladder meer (eigenaar 2026-09-24): geen doortel-hulp, geen
+## telladder langs de munten, geen spookmunten.
+func test_er_is_geen_hulpladder_meer() -> void:
+	var namen: Array[String] = []
+	for m in (Spel as Script).get_script_method_list():
+		namen.append(str(m["name"]))
+	waar(namen.has("_kas_ok"), "de methodelijst is te lezen")
+	for weg in ["_door_tellen", "_tel_munten", "_spook_zet", "_spook_weg"]:
+		waar(not namen.has(weg), "%s bestaat niet meer" % weg)
+	var k: Dictionary = (Spel as Script).get_script_constant_map()
+	for weg in ["T_SPOOK_SAMEN", "T_SPOOK_WISSEL", "T_SPOOK_BIJ", "T_SPOOK_MOET",
+			"T_SPOOK_UIT", "T_SPOOK_ZOVEEL"]:
+		waar(not k.has(weg), "%s bestaat niet meer" % weg)
 
 ## De catalogus komt uit `Sommen.Meubels`, niet uit dit spel (F1).
 func test_de_catalogus_komt_uit_de_rekenkern() -> void:

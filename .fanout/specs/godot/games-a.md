@@ -105,11 +105,19 @@ zin mag nooit, en `?` mag nooit als vergelijkingsteken tussen twee
 uitdrukkingen staan. Overtreding = één `console.warn` per kaartje, de kaart
 tekent wél door.
 
-**Hulpladder, overal gelijk:** 1e poging samen doortellen, 2e poging nog eens,
-pas bij de **3e** poging spookvormen. (sleutels/tobbe zetten hun
-helper-knop al na 2 missers neer; meubels/voerkar volgen de 3-ladder in de
-kaart zelf. Zie per spel.  **bedden geeft geen hulp** — eigenaar 2026-09-24,
-§3.4 — alleen een teleurgesteld dier en dezelfde vraag.)
+**Geen hulp na een fout (eigenaar 2026-09-24):** "Nee geef geen hulp na
+fouten. Kinderen moeten zelf leren rekenen. Fout antwoord kiezen moet niet
+beloond worden met hulp maar juist een teleurgesteld dier of andere
+"bestraffing" in het spel".  De hulpladder (1e poging samen doortellen, 2e
+nog eens, 3e spookvormen, en de helper buurvrouw Els na twee missers) is weg
+uit sleutels, meubels, tobbe en voerkar: na een fout verschijnt niets dat
+helpt — geen hulpregel, geen spookcijfers of -munten, geen oplichtende buren,
+geen wolkje met wat er nog bij moet, geen helper. Wat het kind ziet is het
+teleurgestelde dier van de beurt (`sip` met `🔄 Nog een keer`, `Ui.misser`;
+games-b.md §0.6), of bij een spel zonder dier van de beurt datzelfde wolkje
+bij het ding van de kaart, en dezelfde vraag. (`bedden` is herbouwd tot
+"Verdeel bedden over de kamers" en geeft evenmin hulp: het dier loopt eerst naar de
+kamer, `🛏 geen bed` / `🛏 te veel bedden`, en dan dezelfde vraag; zie §3.)
 
 ### 1.4 Geluiden (snd.js) — namen zoals aangeroepen
 
@@ -554,7 +562,7 @@ en boven zijn deur in de gang komt een plaatje `💡 14`.
 Welke gasten meedoen: `gastenMetBed()` = alle gasten met een `bed` én een
 `kamer`. Heeft niemand een bed → wolkje op het sleutelbord, 🛏 `"nog geen
 gasten"`, klas `hulp`, hoog 26, en na **1900 ms** sluit het spel zichzelf.
-Helper is **buurvrouw Els** (🩺).
+(Tot 2026-09-24 was **buurvrouw Els** (🩺) de helper; zij bestaat niet meer.)
 
 **Het dier van de beurt** (eigenaar 2026-09-23, world.md §5.8) is de gast van de
 sleutel in de hand; de spelbalk toont hem (`🐶 Boef 🔄`). `spelers()` =
@@ -649,7 +657,6 @@ De receptie is 120 × 120. Alles staat als breuk (`Rooms.plek`,
 | `HAAK_Y` | `hoogte(0.6)` | 72 |
 | `GAST_PLEK` | `plek(0.75, 0.85)` | (90, 102), `GAST_SOM` = 192 |
 | `KEY_PLEK` | `plek(0.675, 0.975)` | (81, 117) |
-| `ELS_PLEK` | `plek(0.25, 0.975)`, y = `hoogte(0.075)` | (30, 117), y 9 |
 | `KAART_HOOG` | `hoogte(0.775)` | 93 |
 | `WOLK_HOOG` | `hoogte(0.4625)` | 56 |
 | `KEY_HOOG` | `hoogte(0.05)` | 6 |
@@ -750,7 +757,7 @@ reist naar `GAST_PLEK` met `na: 'wacht'` — tenzij hij daar al staat.
 pas begint wanneer het dier er is." Het halen is `ctx.wacht_op(gast, GAST_PLEK,
 {marge: 6})` (world.md §5.3; 6 voxels is de oude "binnen 8 voxels manhattan"). Zolang
 hij door het hotel loopt staat er niets van het bord — geen vraagkaart, geen strook,
-geen haakjes, geen sleutel, geen wolkje, geen Els; alleen de 💡-plaatjes in de gang
+geen haakjes, geen sleutel, geen wolkje; alleen de 💡-plaatjes in de gang
 blijven — en bij de deur hangt het hotelwolkje `🐶 Boef komt eraan` met zijn balk en
 `👀 Volg` (world.md §6.3). Staat hij aan de balie, dan tekent het bord zich zoals
 hieronder. Dat geldt voor elke sleutel: na een opgehangen sleutel komt de volgende gast
@@ -759,7 +766,7 @@ opstelling `naast` (liggende telefoon) is de kolom van de kaart zo breed als de
 breedste van kaart en strook: de gast aan de balie neemt dan de vloer naast de kaart in
 en de strook stapelt boven in die kolom, niet op het eerste haakje.
 
-**Tikken op een plaatje met een getal:** `licht = i`, buren uit,
+**Tikken op een plaatje met een getal:** `licht = i`,
 `Snd.tik()`, hertekenen, en `ui.spreek(...)` leest het voor
 (variant `kamers`: de volledige zin, anders alleen het getal).
 Het plaatje wordt groter: `1.7rem`, of `1.35rem` bij drie cijfers; een gewoon
@@ -771,7 +778,7 @@ haakje terwijl je een sleutel hebt):
 * `h.w === s.nummer` → **goed**.
 
 **Goed:**
-`h.sleutel = gast`, `s.op = true`, buren uit, spookcijfers weg,
+`h.sleutel = gast`, `s.op = true`,
 `Snd.munt()` (het rinkelen) + `Snd.ja()`,
 `state.tel(s.mis === 0, nu - P.t0)`, `P.t0 = nu`, de gast gaat slapen in zijn
 eigen bed (`wereld.slaap(gast, kamer, bed)`, `setMood('blij')`), `P.nu++`.
@@ -779,20 +786,19 @@ Een kort wolkje aan de gast: 💤 + nummer + `"naar mijn kamer"`, klas `goed`,
 hoog 40, prio 13, na **2600 ms** weg. Is er nog een sleutel → volgende gast
 halen (het bord wacht op hem, zie hierboven) en opslaan; anders `klaar()`.
 
-**Mis:** `P.missers++`, `s.mis++`, licht uit, **de twee buurplaatjes lichten op**
-(`burenVan`: links en rechts; aan de rand de twee plaatjes die er wél zijn, dus
-`i+2` of `i-2`), `Snd.zacht()` + `Snd.terug()` (de sleutel glijdt terug),
-hertekenen, en het haakje **wiebelt** (CSS-klasse `wiggle`, opnieuw getriggerd
-via een reflow; staat stil in rustmodus).
-In het antwoordvakje van de kaart komt dan het getallenlijntje
-`burenTekst()`: de buren en het gat op volgorde, met ` … ` ertussen, waarbij
-het gat `?` is. Voorbeeld: `10 … ? … 20`.
-
-**Els** (vanaf 2 missers, knop `sl_els` op `ELS_PLEK`, klas `hotwolk hulp`,
-prio 8): `spook = true` → op elk leeg haakje komt het góede getal als
-spookcijfer (klas `hotspook`), en de kaart krijgt een hulpregel
-`tip`: `"om en om"` bij label `oneven`/`even`, anders `"+ " + stap`.
-Verder `zetGezien('sleutels_els')` en `Snd.brief()`.
+**Mis** (een fout getal op de strook, of de sleutel op het verkeerde of een
+bezet haakje): `P.missers++`, `s.mis++`, licht uit, `Snd.zacht()` +
+`Snd.terug()` (de sleutel glijdt terug), het haakje **wiebelt** (staat stil in
+rustmodus), en de gast aan de balie is even sip met `🔄 Nog een keer`
+(`ctx.ui.misser`; bij het getal doet de strook dat al, en staat ze 1,2 s op
+slot).  **Verder niets** (eigenaar 2026-09-24): er lichten geen buurplaatjes op,
+er komt geen getallenlijntje `10 … ? … 20` in het hulpregeltje, het wolkje van
+de gast zegt niet `kijk bij de buren`, en buurvrouw Els (tot die datum vanaf 2
+missers, met spookcijfers op de lege haakjes en de tip `om en om` / `+ 5`)
+bestaat niet meer.  De kaart wordt na een misser niet opnieuw gebouwd, zodat
+de pauze van de strook houdt.  Het hulpregeltje houdt de vaste regel van de
+stap: `tel met de sprongen mee` bij de vraag, `sleep of tik het lege haakje`
+bij het hangen — die staat er vanaf het begin.
 
 **Klaar:** `P.klaar = true`, `taakKlaar('sleutels', {sterren: 1})`,
 `Snd.tover()`, opslaan, hertekenen, dan **naar de gang**: daar hangen de
@@ -818,13 +824,13 @@ knoppen terug, `Hotel.render()`.
 | sommenkaart, som | `rijTekst`: (`label: ` als er een label is) + de getallen met `, ` ertussen, waarbij een leeg haakje `__` is — bijv. `5, 10, __, 20, 25` of `verdieping 2: 211, __, 213, 214` |
 | sommenkaart, regel | `Welk nummer hoort in het gat?` — bij variant `kamers`: `Welk kamernummer hoort in het gat?` — als alles op is: `De rij is nu af` |
 | sommenkaart, antwoordvak | `🔑<nummer>` |
-| sommenkaart, hulpregel | `10 … ? … 20` (buren) of `om en om` / `+ 5` (Els) |
-| wolkje bij de gast | 🔑 + nummer + ` ` + `hang mij op`, na een misser `kijk bij de buren` (klas `hulp`) |
+| sommenkaart, hulpregel | vast per stap: `tel met de sprongen mee` (de vraag) / `sleep of tik het lege haakje` (het hangen); een misser verandert hem niet (2026-09-24) |
+| wolkje bij de gast | 🔑 + nummer + ` ` + `hang mij op` (in de hang-stap; na een misser niets anders) |
+| misser | de gast sip, `🔄 Nog een keer` |
 | sleutel (titel) | `de sleutel van ` + naam + `: ` + (`kamer <w>` bij variant `kamers`, anders `nummer <w>`) |
-| leeg haakje (titel) | `leeg haakje`, met Els: `hier hoort ` + w |
+| leeg haakje (titel) | `leeg haakje` |
 | gevuld haakje (titel) | `nummer <w>` / `kamer <w>` |
 | voorlezen (variant kamers) | `kamer 214, verdieping 2, kamer 14` |
-| Els (titel) | `buurvrouw Els doet het voor` |
 | gast loopt weg | 💤 + nummer + ` ` + `naar mijn kamer` |
 | einde | ⭐ `alle sleutels hangen` |
 | deurplaatje | `💡 14 · 15`, titel `Boef en Muis slaapt hier: 14 en 15` |
@@ -884,7 +890,6 @@ komt; `rest = munten - cap` blijft in de kassa. De buidel zelf komt uit
 | `BUIDELPLEK` | `plek(0.075, 0.875)` | (9, 105) | je geldbuidel, y 10 |
 | `OKPLEK` | `plek(0.95, 0.25)` | (114, 30) | ✔ klaar met tellen, y 8 |
 | `TERUGPLEK` | `plek(0.375, 0.975)` | (45, 117) | ↩ munt terug / 📖 terug naar het boek, y 6 |
-| `SPOOKPLEK` | `plek(0.75, 0.625)` | (90, 75) | de spookmunten, y 6 |
 
 `MUNTSOORT = [1, 2, 5, 10]`.
 
@@ -925,7 +930,8 @@ Te weinig → spaarchip `⭐ <nodig>` + `💰 <heb>` en wolkje ⭐ + nodig +
 
 `koop(types)` zet `V.bet` op:
 `{types, totaal, stap: types.length > 1 ? 'som' : 'munten', hand: Econ.buidel(cap),
-bank: [], somPog: 0, telPog: 0, wisPog: 0, spook: null, hulp: null, rest, soort, t0}`.
+bank: [], somPog: 0, telPog: 0, wisPog: 0, rest, soort, t0}` (geen `spook`/`hulp`
+meer sinds 2026-09-24).
 Het paneel gaat leeg — de wereld is nu het speelvlak — en je gaat naar de receptie.
 
 **Stap `som`** (alleen als er twee dingen op het lijstje staan, dus groep 4/5):
@@ -933,9 +939,10 @@ sommenkaart `mb_som` op de kassa, `open: true`, `max: 2` cijfers, icoon 🛒;
 som = de prijzen met ` + ` ertussen + ` =`; regels:
 `[somZin, "Hoeveel euro is dat samen?"]` met
 `somZin = "Plant €1 en mandje €3"` (eerste letter een hoofdletter).
-* fout → `somPog++`, `Snd.zacht()`;
-* vanaf **1 poging**: hulpregel `doorTellen(prijs van het eerste ding, prijs van het tweede)` — samen doortellen, bijv. `2 … 3 … 4` (maximaal 12 stappen);
-* vanaf **3 pogingen**: spookmunten (`spookZet(totaal, "zoveel is het samen")`);
+* fout → `somPog++`, `Snd.zacht()`, en de misser van `Ui`: de strook 1,2 s op
+  slot met `🔄 Nog een keer` bij de kassa (er is geen dier van de beurt),
+  dezelfde vier bedragen; de kaart wordt niet opnieuw gebouwd. **Geen hulp**
+  (eigenaar 2026-09-24): geen doortelregel en geen spookmunten meer;
 * goed → `zet(€n).klaar()`, `Snd.ja()`, en **450 ms** later door naar `munten`.
 
 **Stap `munten`:** kaart `mb_bon` (`pad: false`, hoog 24) met
@@ -959,24 +966,24 @@ tikken op de toonbank legt de munt die je in je hand hebt neer.
 ```
 t = som(bank) ; p = totaal
 t == p                      -> betaald(0)
-t <  p  : telPog++ ; hulp = "🪙 +€<mist>" + nieuwe regel + doorTellen(t, mist)
-          telPog >= 3 -> spookmunten van <mist>, label "dit moet er nog bij"
+t <  p  : telPog++ ; Snd.zacht() ; ctx.ui.misser(bon, "")
 t >  p en band >= 4 : stap = 'wissel'
-t >  p en band == 3 : telPog++ ; hulp = "↩ €<t-p> te veel"
-          telPog >= 3 -> spookmunten van <p>, label "zoveel moet het zijn"
+t >  p en band == 3 : telPog++ ; Snd.zacht() ; ctx.ui.misser(bon, "")
 ```
+De misser is `🔄 Nog een keer` bij de kassa en verder niets: de bon houdt zijn
+bedrag, er komt geen `"🪙 +€<mist>"` en geen `"« €<t-p> te veel"` meer, en geen
+spookmunten (eigenaar 2026-09-24).  Te veel in groep 3: de `« terug`-knop
+staat er gewoon, zoals altijd als er iets op de toonbank ligt.
 
 **Stap `wissel`** (groep 4/5): kaart `mb_wissel`, `open: true`, `max: 2`,
 hoog 26, icoon 👛, som `€<betaald> − €<prijs> =`, regels
 `["Je gaf €<betaald>, het kost €<prijs>", "Hoeveel krijg je terug?"]`.
-Fout → `wisPog++`; vanaf 1 poging hulpregel `doorTellen(prijs, betaald - prijs)`;
-vanaf 3 pogingen spookmunten met label `"zoveel krijg je terug"`.
+Fout → `wisPog++`, `Snd.zacht()` en dezelfde misser van `Ui` (strook op slot,
+`🔄 Nog een keer`) — geen doortelregel, geen spookmunten.
 Een munt neerleggen of terugpakken tijdens deze stap zet hem terug op `munten`
 en `wisPog = 0`.
 
-**Spookmunten** (`spookZet`): `Econ.splits(bedrag)`, hooguit 4 munten, als één
-kaartje `mb_spook` bij `SPOOKPLEK`, klas `hotwolk hotspook`, prio 12; tikken
-leest het label voor.
+*(De spookmunten `mb_spook` van `spookZet` bestaan sinds 2026-09-24 niet meer.)*
 
 **Betaald:** `state.munt(-totaal)`,
 `state.tel(somPog + telPog + wisPog === 0, nu - t0)`,
@@ -1049,11 +1056,15 @@ Wereld: `is genoeg`; `je hebt €<n>` / `je hebt <n>`;
 `Leg de 🪙 munten op de toonbank`; `tik een getal`;
 `de toonbank: €n`; `munt van 5 euro (2 in je buidel)`; `klaar met tellen`;
 `een munt terugpakken`; `terug naar het meubelboek`;
-`zoveel is het samen` / `zoveel krijg je terug` / `dit moet er nog bij` /
-`zoveel moet het zijn` / `zo ziet het uit` / `zoveel is het`;
 `terug` / `betaald`; `<naam> neerzetten`; `sleep naar een plekje`;
 `hier neerzetten`; `meer plekjes`; `bezet`; `gasten`; `iemand slaapt`;
 `bed draaien`; `<naam> oppakken`.
+Na een misser: `🔄 Nog een keer` bij de kassa (`Ui.misser`). De spooklabels
+`zoveel is het samen` / `zoveel krijg je terug` / `dit moet er nog bij` /
+`zoveel moet het zijn` / `zo ziet het uit` / `zoveel is het`, de doortelregels en
+`🪙 +€<n>` / `« €<n> te veel` bestaan sinds 2026-09-24 niet meer.  Dat geldt ook
+voor de openingsvraag bij de kassa (`💰 Hoeveel euro heb je?`, PLAN N6): een fout
+antwoord geeft dezelfde misser en geen telladder langs de munten.
 
 ---
 
@@ -1182,8 +1193,10 @@ bovenrand komt en corrigeert met hele hoogtestappen (`somLift`, geklemd op
 overloop. Het **peilglaasje** op de knop is 30 × 34 px: de waterhoogte is
 `min(100, round(n * 100 / max(per + 2, 3)))` procent, de streep staat op
 `round(per * 100 / cap)` procent en is groen (`#5EBE97`) als het klopt, roze
-(`#E58FA8`) als niet — maar alleen als `S.lijn` aan staat (na een misser of als
-het goed is). In het glaasje staat altijd het getal (12 px vet, tekstbodem), en
+(`#E58FA8`) als niet — maar alleen als `S.lijn` aan staat, en dat is sinds
+2026-09-24 alleen nog ná het goede antwoord op de sopvraag (een misser zet hem
+niet meer aan: de streep en de titel `tobbe 1: 3 van 5` zouden het antwoord
+verklappen). In het glaasje staat altijd het getal (12 px vet, tekstbodem), en
 ernaast 🫧 (of 💦 bij een overloop).
 
 ### 6.5 Beurtverloop
@@ -1200,9 +1213,12 @@ cijferpad:
   rest is, anders `["De helft van " + mv(T, "schepje", "schepjes"), "Hoeveel in elke helft?"]`.
   Goed antwoord = `per`.
 
-Fout → `missers++`, `lijn = 1`, `Snd.zacht()`, antwoordvak leeg en een
-hulpregel `ui.telMee(...)`: bij `dubbel` `telMee(basis, 2)` (`"6 … 12."`), bij
-`half` `telMee(per, 2, rest ? " … en <rest> over." : ".")`.
+Fout → `missers++`, `Snd.zacht()`, en de misser van `Ui`: de strook 1,2 s op
+slot met `🔄 Nog een keer` bij de kaart (tobbe heeft geen dier van de beurt),
+het vakje daarna leeg, dezelfde vier getallen; wie er in de tuin staat is even
+sip. **Geen hulp** (eigenaar
+2026-09-24): geen `telMee`-regel meer (tot die datum `"6 … 12."` bij `dubbel`,
+`telMee(per, 2, …)` bij `half`) en `lijn` blijft uit.
 Goed → `zet(n).klaar()`, `Snd.ja()`; bij `dubbel` komt `rek = T`, bij `half`
 worden `tob[0]` en `tob[1]` alvast `per` en `kan = rest` (met wolkje
 🫗 + rest + `"blijft over"`). Daarna `stap = 'vullen'`, `lijn = 1`, en na
@@ -1217,44 +1233,43 @@ dus het geluid stijgt met de schepgrootte.
   schepjes over naar de **leegste** andere tobbe — zo kun je ook zonder kraantje
   eerlijk verdelen.
 * **Overloop** (`tob[i] > per + 2`): al het sop van die tobbe gaat terug op het
-  rek, `missers++`, `lijn = 1`, `mors = i`, `Snd.zacht()`, wolkje 🦆 `"te vol"`,
-  en alle gasten in de tuin krijgen `setMood('bouncy')` — **ze lachen**, er komt
-  nooit een kruis. Na **1400 ms** verdwijnt de 💦.
+  rek (dat is de tobbe zelf, geen hint), `missers++`, `mors = i`, `Snd.zacht()`,
+  `🔄 Nog een keer` bij de kaart, en wie er in de tuin staat is even **sip** —
+  teleurgesteld, niet meer lachend (eigenaar 2026-09-24: "een teleurgesteld
+  dier"). Geen wolkje `"te vol"` meer, en nooit een kruis. Na **1400 ms**
+  verdwijnt de 💦.
 
 **Het splitskraantje 🚰** halveert de **volste** tobbe naar de **leegste**:
 `m = tob[bron]`, `h = floor(m/2)`, `r = m - 2h`.
 * `tob[bron] < 2` of geen doel → `Snd.zacht()` + wolkje 🚰 `"eerst sop erin"`.
-* `r != 0` en **band < 5** → dat mag niet: `lijn = 1`, `Snd.zacht()`, wolkje
-  ⚖️ + m + `"is oneven"` (even/oneven, groep 3).
+* `r != 0` en **band < 5** → dat mag niet (even/oneven, groep 3/4):
+  `Snd.zacht()` en `🔄 Nog een keer` bij de kaart — sinds 2026-09-24 zonder de
+  uitleg ⚖️ + m + `"is oneven"`.
 * Anders: `bron = h`, `doel += h`, `kan += r`, `Snd.plop(2)`, wolkje
   🫗 + r + `"blijft over"` als er een rest is, anders 🚰 + h + `"en <h>"`
   (klas `goed`).
 
-**Opnieuw ↩** (`tb_opnieuw`, alleen als er al iets gebeurd is en er nog geen 2
-missers zijn): alle tobbes leeg, `kan = 0`, `rek = T` (bij `half`: `tob[0] = T`,
-`rek = 0`), hulp uit, `Snd.terug()`.
+**Opnieuw ↩** (`tb_opnieuw`, alleen als er al iets gebeurd is; tot 2026-09-24
+stond op die plek na 2 missers buurvrouw Els): alle tobbes leeg, `kan = 0`,
+`rek = T` (bij `half`: `tob[0] = T`, `rek = 0`), `Snd.terug()`.
 
 **C. Controle ✓** (`check`), in deze volgorde:
 
 | test | reactie |
 |---|---|
-| `rek > 0` | wolkje 🥄 + rek + `"nog op het rek"` |
+| `rek > 0` | misser |
 | een tobbe boven `per` | overloop van die tobbe |
-| tobbes niet allemaal gelijk | wolkje ⚖️ `"even hoog"` |
-| `kan != rest` | wolkje 🫗 + rest + `"hoort hierin"` |
-| `tob[0] != per` | wolkje 🥄 + (per − tob[0]) + `"erbij"` |
+| tobbes niet allemaal gelijk, `kan != rest` of `tob[0] != per` | misser |
 | alles klopt | `geslaagd()` |
 
-Elke misser: `missers++`, `lijn = 1`, `mors = -1`, `Snd.zacht()`.
+Elke misser: `missers++`, `mors = -1`, `Snd.zacht()`, `🔄 Nog een keer` bij de
+kaart en wie in de tuin staat even sip.  **Geen hulp** (eigenaar 2026-09-24):
+geen wolkje meer met `"nog op het rek"`, `"even hoog"`, `"hoort hierin"` of
+`"erbij"` — die zeiden wat er mis was — en buurvrouw Els (tot die datum vanaf 2
+missers: `"ieder evenveel"` en de spookcijfers `per` op elke tobbe en `rest` bij
+het kannetje) bestaat niet meer.
 
-**Els** (vanaf 2 missers): `hulp = 1`, wolkje 🩺 + per + `"ieder evenveel"`,
-`zetGezien('tobbe_els')`, `Snd.brief()`. Op elke tobbe komt `per` als
-spookcijfer (`getalTag`, klas `hotspook`, titel `"zoveel hoort erin"`), en bij
-een rest ook `rest` bij het kannetje (titel `"zoveel blijft over"`). De gewone
-cijfers op de tobbes verdwijnen zolang Els meekijkt — anders zouden er twee
-getallen op één tobbe staan én is er ruimte tekort (hooguit 16 knoppen).
-
-**D. Geslaagd:** `stap = 'baden'`, spookcijfers weg,
+**D. Geslaagd:** `stap = 'baden'`,
 `state.tel(missers === 0, nu - t0)`, `Snd.tover()`, en iedereen die nog in bad
 moet komt zelf aanlopen (`reis(gast, 'tuin', {x: max(12, P[0].x - 16), z: P[0].z, na:'wacht'})`).
 **Port (eigenaar 2026-09-23: "Zorg dat de minigame pas begint wanneer het dier er
@@ -1305,13 +1320,14 @@ sommenkaart som `3 + 3 =` (of met kannetje `4 + 4 + 1 =`),
 regel bezig `["<T> in <M> tobbes", "Verdeel het eerlijk"]`,
 regel af `["Overal <per> erin", "Zo is het goed!"]`;
 `splitskraantje: halveren`; `kannetje: <n>`; `zo is het goed`;
-`klaar met badderen`; `buurvrouw Els doet het voor`; `opnieuw beginnen`;
+`klaar met badderen`; `opnieuw beginnen`;
 `morgen dubbel`; `Morgen twee keer 6`; `Hoeveel samen?`;
 `in twee helften`; `helft van 21 =`; `21 halveren, 1 over`;
 `De helft van 10 schepjes`; `Hoeveel in elke helft?`;
-`rek is leeg`; `blijft over`; `en 5`; `is oneven`; `eerst sop erin`;
-`te vol`; `nog op het rek`; `even hoog`; `hoort hierin`; `erbij`;
-`ieder evenveel`; `zoveel hoort erin`; `zoveel blijft over`;
+`rek is leeg`; `blijft over`; `en 5`; `eerst sop erin`; `even hoog` (✅, bij
+het goede antwoord); na een misser `🔄 Nog een keer` (sinds 2026-09-24 zonder
+`is oneven`, `te vol`, `nog op het rek`, `hoort hierin`, `erbij`,
+`ieder evenveel`, `zoveel hoort erin`, `zoveel blijft over`);
 `<naam> wil in bad`; `zit vol`; `lekker warm`;
 `mag in de tobbe` / `mogen in de tobbe`; `blinkend schoon`.
 Meervoud via `mv(n, enk, meerv)`, net als bij bedden.
@@ -1418,6 +1434,12 @@ knoppen → de zak → de bakjes.
 
 ### 7.4 De kaartjes
 
+*(De vul-fase hieronder, §7.4 en §7.5, is de HTML van vóór V2; de poort heeft
+hem niet meer — de kar vertrekt vol. Komt hij met V3 terug, dan zonder de hulp
+na een misser (eigenaar 2026-09-24): geen staartje `· <n> erbij` / `· <n> eraf`,
+geen doelgetal `→ <n>`, geen buurvrouw Els en geen `🩺 Iedereen <per>, rest in de
+pot`; een misser is het teleurgestelde dier en dezelfde vraag, games-b.md §0.5.)*
+
 `chip(ico, woord, getal, erbij, doel)` bouwt elk kaartje:
 `<ico><woord><getal>` en, na een misser, het staartje `· <n> erbij` /
 `· <n> eraf`; met Els erbij lichtgrijs het doelgetal `→ <n>`.
@@ -1522,7 +1544,8 @@ allemaal klikbaar lijken"*). Wat iets doet is een knop (`ctx.hotspots.bron` /
   niet in die kamer, dan gebeurt er niets (daar is het bakje ook geen knop).
 * **Eén wolkje tegelijk**, `vk_zeg`, bij de kar (prio 10, hoog 30, icoon op maat
   `icoon` zodat het één band hoog blijft op 740 × 360). Het zegt de volgende stap:
-  1. wat Els net zei (`🩺 Iedereen <per>, rest in de pot`), tot de volgende tik;
+  1. *(tot 2026-09-24: wat Els net zei; Els bestaat niet meer, ook niet met
+     missers uit een oude opslag)*;
   2. de kar staat in een open kamer → `👉 Tik op het bakje` — dit wolkje hangt
      bij het bakje (hoog 26) en houdt het bakje vrij zoals het **getekend** wordt
      (`World.vlak_van("kom", x, z, 0, {}, Art.KOM_ANKER)`);
@@ -1553,13 +1576,12 @@ allemaal klikbaar lijken"*). Wat iets doet is een knop (`ctx.hotspots.bron` /
 ### 7.7 Alle kinderteksten van voerkar
 
 `nog geen gasten`; `Verdeel 17 koekjes over 5 gasten`;
-`🫙 Ieder evenveel, de rest in de pot`; `🩺 Iedereen 4, rest in de pot`;
+`🫙 Ieder evenveel, de rest in de pot`;
 `12 : 3`; `pak 1` / `pak 2` / `pak 5`;
 `zak met 12 koekjes, pak 2 per tik`; `nog in de zak`; `zak is leeg`;
 `pot`; `<naam> heeft 12 koekjes`; `de snoeppot: 0 koekjes`;
 `8 erbij` / `8 eraf`; `hier hoort 4 in`;
 `🛒 Klaar` (`de kar is klaar`); `↩ Opnieuw` (`alles opnieuw verdelen`);
-`🩺 Els helpt` (`buurvrouw Els doet het voor`);
 `de voerkar: nog 1 kamer` / `de voerkar: nog 2 kamers` (de uitleg bij de kar);
 `🛒 Pak de kar`; `🛒 Je duwt de kar`;
 `🍪 Breng 4 koekjes naar elke gast`; `👉 Tik op de kar`; `👉 Tik op een deur`;
@@ -1568,20 +1590,24 @@ allemaal klikbaar lijken"*). Wat iets doet is een knop (`ctx.hotspots.bron` /
 pictogram van de kamer.
 *Vervallen 2026-09-23 (tikken):* `🛒 nog 2 kamers` (op de kar), `kar is leeg` /
 `de voerkar is leeg`, `Sleep de kar naar een deur`, `Sleep de kar hierheen`.
+*Vervallen 2026-09-24 (geen hulp na een fout):* `🩺 Iedereen 4, rest in de pot`,
+`🩺 Els helpt` (`buurvrouw Els doet het voor`).
 
 ---
 
 ## 8. Wat alle vijf gemeen hebben (de checklist voor de poort)
 
 1. **Nooit straffen.** Er is geen rood kruis, geen fouten-teller in beeld, geen
-   klok, geen terugzetten. Een misser is `Snd.zacht()` plus één pictogram met
-   een getal, precies bij het plekje waar het over gaat. (bedden, 2026-09-24:
-   een teleurgesteld dier met `🛏 geen bed` / `🛏 te veel bedden`, en dezelfde vraag.)
+   klok, geen terugzetten. Een misser is `Snd.zacht()` plus het teleurgestelde
+   dier (`sip`, `🔄 Nog een keer`, `Ui.misser`) — sinds 2026-09-24 geen pictogram
+   met een getal meer dat zegt hoeveel er bij of af moet.
 2. **Eén ster per ronde**, voor het meedoen. `state.tel()` loopt apart en raakt
    nooit sterren, munten of toegang.
-3. **De hulp komt na twee pogingen** als knop (sleutels/tobbe/voerkar 🩺; bedden
-   geeft sinds 2026-09-24 geen hulp meer) en blijft daarna staan; binnen een kaart is het 1e/2e keer samen
-   doortellen en pas de **3e** keer spookvormen (meubels, voerkar).
+3. **Geen hulp na een fout** (eigenaar 2026-09-24): geen helperknop na twee
+   pogingen (tot die datum 🩺 buurvrouw Els bij sleutels/tobbe/voerkar), geen
+   doortelregel en geen spookvormen; dezelfde vraag blijft staan en het goede
+   antwoord werkt gewoon. (`bedden` is herbouwd zonder 🐑 Wolkje: het dier loopt naar de
+   kamer, `🛏 geen bed` / `🛏 te veel bedden`, en dezelfde vraag.)
 4. **Alles hangt in de wereld.** Eén sommenkaart tegelijk; het cijferpad is het
    enige 2D-ding; het meubelboek-overzicht is de enige toegestane uitzondering.
 5. **Elke kaart draagt een zin** van ≤ 8 woorden en ≤ 40 tekens, met het

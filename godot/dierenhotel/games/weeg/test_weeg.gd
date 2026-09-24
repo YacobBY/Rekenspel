@@ -12,8 +12,6 @@ const KAART := "wg_som"
 const STROOK := "wg_som_keuzes"
 const ERAF := "wg_eraf"
 const ZEG := "wg_zeg"
-const HULP := "wg_hulp"
-const SPOOK := "wg_spook"
 const AF := "wg_af"
 const LEEG := "wg_leeg"
 const SCHAAL := "wg_schaal"
@@ -284,7 +282,6 @@ func test_de_balans() -> void:
 	gelijk(Beurt.splits(17, [1, 2, 5, 10]), [10, 5, 2], "zo min mogelijk gewichten, zwaarste eerst")
 	gelijk(Beurt.splits(26, [1, 5, 10, 20]), [20, 5, 1], "groep 5 zonder 2 kilo")
 	gelijk(Beurt.som_regel([10, 5, 2]), "10 + 5 + 2 =", "de somregel")
-	gelijk(Beurt.hulp([10, 5, 2]), "10 ▸ 15 ▸ 17", "doortellen")
 	var liever := Beurt.liever([10, 5, 2])
 	waar(liever.has(15), "een gewicht vergeten")
 	waar(liever.has(3), "de gewichten geteld in plaats van opgeteld")
@@ -292,7 +289,7 @@ func test_de_balans() -> void:
 func test_elke_zin_past() -> void:
 	if Ui.thema == null or Ui.thema.default_font == null:
 		Ui._bouw_thema(17)
-	var zinnen := [Beurt.T_RECHT, Beurt.T_VOL]
+	var zinnen := [Beurt.T_RECHT]
 	for ding in ["pompoen", "meloen", "zak"]:
 		zinnen.append(Beurt.vraag(ding))
 		zinnen.append(Beurt.af(ding, 59))
@@ -302,7 +299,7 @@ func test_elke_zin_past() -> void:
 		waar(("🎃 " + zin).length() <= 40, "met het pictogram ≤ 40 tekens: %s" % zin)
 		gelijk(Ui.mist_tekens(zin).size(), 0, "alle tekens bestaan: %s" % zin)
 	for teken in [Beurt.ICOON, Beurt.ICOON_LICHT, Beurt.ICOON_ZWAAR, Beurt.ICOON_ERAF,
-			Beurt.ICOON_HULP, Beurt.ICOON_AF, Beurt.ICOON_LEG]:
+			Beurt.ICOON_AF, Beurt.ICOON_LEG]:
 		gelijk(Ui.mist_tekens(teken).size(), 0, "het pictogram %s staat in de fontsubset" % teken)
 	gelijk(Beurt.vraag("pompoen"), "Hoeveel kilo is de pompoen?", "de leesvraag")
 	gelijk(Beurt.af("zak", 9), "De zak weegt 9 kilo!", "de slotzin")
@@ -329,15 +326,15 @@ func test_een_beurt_in_groep_4() -> void:
 	waar(World.decor_plek(RUST, KAMER).is_empty(), "het rustspul is weg zolang er gespeeld wordt")
 	for kg in o["rek"]:
 		waar(not World.decor_plek("wg_kg%d" % int(kg), KAMER).is_empty(), "het gewicht van %d kg staat klaar" % int(kg))
-	# a miss costs nothing and brings the same four choices back
+	# a miss costs nothing, brings the same four choices back and no help: the
+	# weigher is disappointed (owner, 2026-09-24)
 	var keuzes := _getallen()
 	gelijk(keuzes.size(), 4, "vier antwoorden")
 	var sterren := int(State.s["sterren"])
 	_kies(_fout_getal(int(o["gewicht1"])))
 	gelijk(int(_stand().get("missers", 0)), 1, "de misser is geteld")
-	waar(_knoop(HULP) != null, "de hulp hangt bij de weegschaal")
-	waar(_wolk_tekst(HULP).begins_with(Beurt.ICOON_HULP) and _wolk_tekst(HULP).contains(Beurt.hulp(o["set1"])),
-		"en telt de gewichten op (%s)" % _wolk_tekst(HULP))
+	waar(is_sip(str(_stand().get("gast", ""))), "de weger is teleurgesteld")
+	gelijk(_kaart_tekst("Kolom/Hulp"), "", "en er komt geen hulpregel")
 	gelijk(int(State.s["sterren"]), sterren, "een misser kost niets")
 	await _wacht_mispauze()
 	gelijk(str(_getallen()), str(keuzes), "dezelfde vier keuzes in dezelfde volgorde")
@@ -408,7 +405,10 @@ func test_groep_3_en_5() -> void:
 			gelijk(int(_schaal()["params"]["lm"]), 2, "groep 5: de reuzenpompoen")
 		_af()
 
-## At most PAN_MAX weights on the pan: a sixth is refused kindly.
+## At most PAN_MAX weights on the pan: a sixth is refused.  The weigher is
+## disappointed, the balance keeps saying what it said ("nog te licht"), and
+## there is no tip about heavier weights (owner, 2026-09-24) — and it is no
+## miss for the adaptive signal.
 func test_de_schaal_is_vol() -> void:
 	_op()
 	_wereld(4, 4)
@@ -416,40 +416,75 @@ func test_de_schaal_is_vol() -> void:
 	var o := Beurt.opzet(4, 4, 2)
 	_kies(int(o["gewicht1"]))
 	await _wacht_kaart()
-	for i in Beurt.PAN_MAX + 1:
+	for i in Beurt.PAN_MAX:
 		_leg(1)
+	var zeg := _wolk_tekst(ZEG)
+	var voor := beeld(SPEL)
+	_leg(1)
 	gelijk((_stand()["pan"] as Array).size(), Beurt.PAN_MAX, "niet meer dan %d gewichten" % Beurt.PAN_MAX)
-	waar(_wolk_tekst(ZEG).contains(Beurt.T_VOL), "het wolkje zegt: neem een zwaarder gewicht")
+	waar(is_sip(str(_stand().get("gast", ""))), "de weger is teleurgesteld")
+	waar(mis_wolk(KAART), "met 🔄 Nog een keer")
+	gelijk(_wolk_tekst(ZEG), zeg, "de balans zegt wat hij zei, geen tip")
+	waar(not _wolk_tekst(ZEG).contains("zwaarder"), "niets over een zwaarder gewicht")
 	gelijk(int(_stand().get("missers", 0)), 0, "en dat is geen misser")
+	await _wacht_mispauze()
+	niets_erbij(voor, beeld(SPEL), "na het zesde gewicht")
 	_af()
 
-## The help ladder: count on after a miss, the answer pale on the balance at the
-## third, and while weighing, after many weights, the recipe.
-func test_de_hulpladder() -> void:
+## The owner, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten zelf
+## leren rekenen."  One, two and three wrong readings of both questions: the
+## weigher sulks every time with `🔄 Nog een keer`, and after the pause the
+## balance, the card and the strip are exactly what they were — no counting
+## line, no pale number on the balance.  Weighing up and down many times
+## brings no recipe either.  The same question stays and the right answer
+## still goes on.
+func test_geen_hulp_na_een_fout() -> void:
 	_op()
 	_wereld(4, 4)
 	waar(Games.start(SPEL), "het spel start")
 	var o := Beurt.opzet(4, 4, 2)
-	var mis := _fout_getal(int(o["gewicht1"]))
-	for i in 3:
-		_kies(mis)
-		waar(_knoop(HULP) != null, "misser %d: hulp bij de weegschaal" % (i + 1))
-		if i < 2:
-			waar(_knoop(SPOOK) == null, "misser %d: nog geen spookgetal" % (i + 1))
-		await _wacht_mispauze()
-	waar(_knoop(SPOOK) != null, "de derde misser: het antwoord bleek op de weegschaal")
-	gelijk((_knoop(SPOOK) as Label).text if _knoop(SPOOK) is Label else "", str(int(o["gewicht1"])),
-		"zoveel weegt het")
+	var gast := str(_stand().get("gast", ""))
+	await _lees_fout_drie_keer("lees1", int(o["gewicht1"]), gast)
 	_kies(int(o["gewicht1"]))
 	await _wacht_kaart()
-	waar(_knoop(HULP) == null and _knoop(SPOOK) == null, "goed: de hulp is weg")
-	for i in Spel.SPOOK_LEG / 2:
+	gelijk(_stand().get("stap", ""), "leg", "goed: nu wegen")
+	# many weights on and off: the balance leans, but no recipe appears
+	for i in 6:
 		_leg(1)
 		_tik(ERAF)
-	var recept := " + ".join(PackedStringArray(Beurt.splits(int(o["gewicht2"]), o["rek"]).map(
-		func(v): return str(v))))
-	waar(_wolk_tekst(HULP).contains(recept), "na veel gewichten het recept (%s)" % _wolk_tekst(HULP))
+	waar(int(_stand().get("acties", 0)) >= 12, "twaalf keer gewogen")
+	waar(Hits.spot("wg_hulp") == null, "geen recept bij de weegschaal")
+	gelijk(_kaart_tekst("Kolom/Hulp"), "", "en niet op de kaart")
+	var oplossing := Beurt.splits(int(o["gewicht2"]), o["rek"])
+	for kg in oplossing:
+		_leg(int(kg))
+	await _wacht_recht()
+	gelijk(_stand().get("stap", ""), "lees2", "recht: nu aflezen")
+	await _lees_fout_drie_keer("lees2", int(o["gewicht2"]), gast)
+	_kies(int(o["gewicht2"]))
+	gelijk(_stand().get("stap", ""), "af", "het goede antwoord gaat gewoon door")
+	gelijk(int(_stand().get("missers", 0)), 6, "zes missers geteld, voor het adaptieve signaal")
 	_af()
+
+func _lees_fout_drie_keer(stap: String, goed: int, gast: String) -> void:
+	var regel := _kaart_tekst("Kolom/Regel")
+	var keuzes := _getallen()
+	var voor := beeld(SPEL)
+	waar(voor.has(KAART) and voor.has(STROOK) and voor.has("decor " + SCHAAL),
+		"%s: het beeld kent de kaart, de strook en de weegschaal" % stap)
+	var sterren := int(State.s["sterren"])
+	for i in 3:
+		var wat := "%s, misser %d" % [stap, i + 1]
+		_kies(_fout_getal(goed))
+		waar(is_sip(gast), "%s: de weger is teleurgesteld" % wat)
+		waar(mis_wolk(KAART), "%s: met 🔄 Nog een keer" % wat)
+		gelijk(_kaart_tekst("Kolom/Hulp"), "", "%s: geen hulpregel" % wat)
+		await _wacht_mispauze()
+		niets_erbij(voor, beeld(SPEL), wat)
+		gelijk(_stand().get("stap", ""), stap, "%s: dezelfde vraag" % wat)
+		gelijk(_kaart_tekst("Kolom/Regel"), regel, "%s: dezelfde zin" % wat)
+		gelijk(str(_getallen()), str(keuzes), "%s: dezelfde vier keuzes" % wat)
+	gelijk(int(State.s["sterren"]), sterren, "%s: niets verloren" % stap)
 
 ## "Een methode om te wisselen met welk dier je de spellen speelt" (owner,
 ## 2026-09-23, world.md §5.8): every guest with a bed may weigh, in check-in
@@ -643,11 +678,10 @@ func test_de_knoppen_op_vier_schermen() -> void:
 		for _f in 3:
 			await boom.process_frame
 		_keur(kader.size, "%s misser" % str(maat))
-		if minf(kader.size.x, kader.size.y) >= 400.0:
-			_bij_zijn_ding(HULP, "%s: het hulpwolkje" % str(maat))
-		else:
-			waar(_knoop(HULP) == null, "%s: op de telefoon geen hulpwolkje" % str(maat))
-			waar(_kaart_tekst("Kolom/Hulp").contains("▸"), "%s: maar de hulpregel op de kaart" % str(maat))
+		gelijk(_kaart_tekst("Kolom/Hulp"), "", "%s: geen hulpregel op de kaart" % str(maat))
+		waar(Hits.spot("wg_hulp") == null and Hits.spot("wg_spook") == null,
+			"%s: geen hulpwolkje en geen spookgetal" % str(maat))
+		waar(mis_wolk(KAART), "%s: alleen 🔄 Nog een keer" % str(maat))
 		await _wacht_mispauze()
 		_kies(int(o["gewicht1"]))
 		await _wacht_kaart()

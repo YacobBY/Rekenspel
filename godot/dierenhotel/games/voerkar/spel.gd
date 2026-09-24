@@ -10,9 +10,11 @@ extends MiniGame
 ## route door de echte som-poort (`_som_kaart`/`_op_som`), waar
 ## `op_kar = per * n` uit het antwoord van het kind valt.
 ##
-## Bindend en ongewijzigd: de getallen (`Sommen.Voerkar.*`), de hulpladder
-## (Els vanaf twee missers, en ze blijft staan), nooit straffen (alleen
-## `zacht()`), één ster voor het meedoen, en de kar die thuis komt.
+## Bindend en ongewijzigd: de getallen (`Sommen.Voerkar.*`), nooit straffen
+## (alleen `zacht()`), één ster voor het meedoen, en de kar die thuis komt.
+## De hulpladder is weg (eigenaar 2026-09-24: "Nee geef geen hulp na fouten.
+## Kinderen moeten zelf leren rekenen"): buurvrouw Els komt niet meer, ook niet
+## met missers uit een oude opslag, en de kaart zegt nooit haar doelgetal.
 ##
 ## TIKKEN (eigenaar, 2026-09-23: "Zorg dat je op de kar kan klikken en daarna
 ## op een deur en zo de kar mee kan nemen").  Slepen was de enige weg, en alleen
@@ -48,7 +50,6 @@ const DIER_ONBEKEND := "🐾"
 const T_GEEN_GASTEN := "nog geen gasten"
 const T_VERDEEL := "Verdeel %d koekjes over %s"
 const T_IEDER := "🫙 Ieder evenveel, de rest in de pot"
-const T_ELS_ZIN := "🩺 Iedereen %d, rest in de pot"
 const T_PAK := "pak %d"
 const T_ZAK_TITEL := "zak met %d koekjes, pak %d per tik"
 const T_NOG_IN_ZAK := "nog in de zak"
@@ -63,8 +64,6 @@ const T_KLAAR := "Klaar"
 const T_KLAAR_TITEL := "de kar is klaar"
 const T_OPNIEUW := "Opnieuw"
 const T_OPNIEUW_TITEL := "alles opnieuw verdelen"
-const T_ELS := "Els helpt"
-const T_ELS_TITEL := "buurvrouw Els doet het voor"
 const T_KAMER := "kamer"
 const T_KAMERS := "kamers"
 const T_KAR_TITEL := "de voerkar: nog %d %s"
@@ -84,7 +83,6 @@ const T_KEUZE_TITEL := "hoeveel pak je per tik"
 
 const ICO_KOEK := "🍪"
 const ICO_POT := "🫙"
-const ICO_ELS := "🩺"
 const ICO_KAR := "🛒"
 const ICO_BED := "🛏"
 const ICO_WIJS := "👉"
@@ -115,7 +113,7 @@ const WIJS_META := "vk_wijs"
 # --------------------------------------------------------------- toestand
 
 var K: Dictionary = {}            ## state.kar; de vorm van V2 (PLAN.md §7):
-## {T, per, rest, op_kar, pot, stap, geleverd, missers, spook, t0}
+## {T, per, rest, op_kar, pot, stap, geleverd, missers, t0}
 ## `stap` is "som" (de poort die V3 bouwt) of "duwen" (het rondje).
 var _kaart = null                 ## Ui.Kaart
 var _sluit_bezig := false
@@ -125,8 +123,6 @@ var _mee := false
 ## Had het kind de kar deze beurt al eens vast?  Dan is de opdracht gelezen en
 ## zegt een neergezette kar kort `👉 Tik op de kar`.
 var _ooit_mee := false
-## Wat Els net zei: het wolkje toont het tot de volgende tik.
-var _hint := ""
 ## Het smulwolkje hangt 2,6 s bij de dieren van deze kamer; zolang wacht het
 ## wolkje van de kar (één wolkje tegelijk).  `_smul_nr` hoort bij de laatste
 ## levering, zodat een oud wachtje een nieuw smulwolkje niet weghaalt.
@@ -188,7 +184,6 @@ func stop() -> void:
 	_kaart = null
 	_mee = false
 	_ooit_mee = false
-	_hint = ""
 	_smul_kamer = ""
 	if ctx != null:
 		ctx.hotspots.laat()
@@ -245,7 +240,7 @@ func _lees_kar(g: Array) -> void:
 		K = {
 			"T": int(som["T"]), "per": int(som["k"]), "rest": int(som["r"]),
 			"op_kar": 0, "pot": 0, "stap": "som",
-			"geleverd": {}, "missers": 0, "spook": 0,
+			"geleverd": {}, "missers": 0,
 			"t0": Time.get_ticks_msec(), "dag": int(ctx.state.s["dag"]),
 		}
 	_bewaar_kar()
@@ -275,7 +270,6 @@ func _herstel(d: Dictionary) -> Dictionary:
 		"pot": int(d.get("pot", 0)),
 		"stap": stap,
 		"geleverd": {}, "missers": int(d.get("missers", 0)),
-		"spook": int(d.get("spook", 0)),
 		"t0": int(d.get("t0", Time.get_ticks_msec())),
 	}
 	var geleverd = d.get("geleverd", {})
@@ -355,8 +349,7 @@ func _meld_probe(fase: String) -> void:
 ## rondje — maar de tekst en de somregel blijven zoals games-a.md §7.7 ze
 ## voorschrijft.
 func _zinnen(n: int) -> Array:
-	return [T_VERDEEL % [int(K["T"]), Ui.meervoud(n, "gast", "gasten")],
-		(T_ELS_ZIN % int(K["per"])) if int(K["spook"]) > 0 else T_IEDER]
+	return [T_VERDEEL % [int(K["T"]), Ui.meervoud(n, "gast", "gasten")], T_IEDER]
 
 func som_regel(n: int) -> String:
 	return Sommen.Voerkar.som_regel(ctx.state.band(), int(K["T"]), n, int(K["rest"]))
@@ -410,31 +403,6 @@ func _dier_ico(g: Dictionary) -> String:
 		return KIND_ICO[str(g.get("kind", ""))]
 	return DIER_ONBEKEND
 
-func _verf(id: String, kleur: Color) -> void:
-	var s := Hits.spot(id)
-	if s == null or not is_instance_valid(s.knoop):
-		return
-	s.knoop.add_theme_stylebox_override("normal",
-		UiThema.vulling(UiThema.vlak(kleur, 16, 2, UiThema.WIT), 8, 6))
-
-func _tik_els(_s = null) -> void:
-	hulp()
-
-## Els doet het voor: haar doelgetal komt op de kaart te staan (games-a.md
-## §7.5).  De knop overleeft de sloop van de vul-fase en hangt nu bij het
-## rondje mee (PLAN.md V2: "Els blijft"); haar spookgetal ziet het kind weer
-## zodra V3 de kaart de poort laat zijn.  Tot dan zegt ze het in het wolkje
-## van de kar, zodat haar tik iets laat zien (tot de volgende tik).
-func hulp() -> void:
-	if K.is_empty() or str(K.get("stap", "")) != "duwen":
-		return
-	K["spook"] = 1
-	_bewaar_kar()
-	ctx.state.zet_gezien("voerkar_els")
-	ctx.snd.brief()
-	_hint = T_ELS_ZIN % int(K["per"])
-	_rondje()
-
 # -------------------------------------------------------------- het rondje
 
 ## Kamers met een meespelende gast én een bakje.
@@ -468,7 +436,6 @@ func _rondje() -> void:
 		# deur of bakje — alleen het slotwolkje, en na 2,6 s gaat het spel dicht.
 		# Een wolkje doet niets als je erop tikt (Ui.wolk = informatie).
 		_mee = false
-		_hint = ""
 		ctx.ui.wolk({"id": ZEG, "kamer": World.kamer_nu(),
 			"x": _kar_x(), "z": _kar_z(), "hoog": 22.0, "icoon": ICO_VOL,
 			"tekst": T_ALLE_VOL, "klas": "goed", "prio": 12,
@@ -481,20 +448,10 @@ func _rondje() -> void:
 	_kar_hotspot(open.size())
 	_leen_doelen()
 	_zeg()
-	if int(K["missers"]) >= 2:
-		# Els blijft: haar knop is uit `_knoppen_neer` verhuisd naar de
-		# tekenlaag van het rondje en hangt nu naast de kar mee (PLAN.md V2).
-		ctx.hotspots.maak({"id": "vk_els", "kamer": World.kamer_nu(),
-			"x": _kar_x(), "z": _kar_z(), "y": 44.0,
-			"icoon": ICO_ELS, "label": T_ELS, "titel": T_ELS_TITEL,
-			"klas": "hotwolk hulp", "prio": 8, "aan": _tik_els,
-			"volg": _volg_kar(44.0)})
-		_verf("vk_els", UiThema.WOLK_HULP)
 	ctx.wereld.vuil()
 	_meld_probe("rondje")
 
 ## Het ene wolkje bij de kar: de volgende stap, in één zin.
-##   * wat Els net zei, tot de volgende tik;
 ##   * de kar staat in een kamer waar nog iemand op zijn koekjes wacht →
 ##     👉 "Tik op het bakje" (vast of niet: het bakje staat ernaast);
 ##   * de kar is vast → 👉 "Tik op een deur" (de goede deuren dragen een 👉);
@@ -514,11 +471,7 @@ func _zeg() -> void:
 	var tekst := ""
 	var klas := ""
 	var bak := {}
-	if not _hint.is_empty():
-		icoon = ICO_ELS
-		tekst = _hint.trim_prefix(ICO_ELS + " ")
-		klas = "hulp"
-	elif _kar_bij_honger():
+	if _kar_bij_honger():
 		tekst = T_TIK_BAK
 		bak = _bak_hier()
 	elif _mee:
@@ -698,7 +651,6 @@ func _tik_kar(_s = null) -> void:
 		return
 	_mee = not _mee
 	_ooit_mee = true
-	_hint = ""
 	if OS.has_feature("web"):
 		print("[probe] vk tik_kar mee=", _mee)
 	_rondje()
@@ -790,7 +742,6 @@ func duw_naar(kamer_id: String) -> void:
 		return
 	_mee = true
 	_ooit_mee = true
-	_hint = ""
 	var plek := _kar_plek(kamer_id)
 	ctx.wereld.ding_zet("kar", {"kamer": kamer_id, "x": plek.x, "z": plek.y})
 	ctx.wereld.naar(kamer_id)
@@ -843,7 +794,6 @@ func lever(kamer_id: String, slot_id: String) -> bool:
 		g["blij"] = false
 		ids.append(id)
 	K["geleverd"][kamer_id] = samen
-	_hint = ""
 	ctx.wereld.set_bak(kamer_id, slot_id, 4)
 	ctx.wereld.feest(ids)
 	ctx.snd.plop(3)

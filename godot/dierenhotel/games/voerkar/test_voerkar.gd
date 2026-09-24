@@ -300,7 +300,6 @@ func test_kindteksten_staan_er_verbatim() -> void:
 			"nog geen gasten",
 			"Verdeel %d koekjes over %s",
 			"🫙 Ieder evenveel, de rest in de pot",
-			"🩺 Iedereen %d, rest in de pot",
 			"pak %d",
 			"zak met %d koekjes, pak %d per tik",
 			"nog in de zak", "zak is leeg",
@@ -308,14 +307,17 @@ func test_kindteksten_staan_er_verbatim() -> void:
 			"%d erbij", "%d eraf", "hier hoort %d in",
 			"Klaar", "de kar is klaar",
 			"Opnieuw", "alles opnieuw verdelen",
-			"Els helpt", "buurvrouw Els doet het voor",
 			"de voerkar: nog %d %s",
 			"Pak de kar", "Je duwt de kar",
 			"Breng %d koekjes naar elke gast", "Tik op de kar", "Tik op een deur", "Tik op het bakje",
 			"Alle bakjes vol!",
 			"koekjes", "koekjes elk",
-			"🔄", "🛒", "🍪", "🫙", "🩺", "🛏", "👉", "✅", "😋"]:
+			"🔄", "🛒", "🍪", "🫙", "🛏", "👉", "✅", "😋"]:
 		waar(bron.contains(zin), 'games-a.md §7.7: "%s" staat in de bron' % zin)
+	# buurvrouw Els is weg (eigenaar 2026-09-24: geen hulp na een fout)
+	for weg in ["\"Els helpt\"", "buurvrouw Els doet het voor", "Iedereen %d, rest in de pot",
+			"\"🩺\"", "vk_els"]:
+		waar(not bron.contains(weg), "geen Els meer in de bron: %s" % weg)
 	# tikken, niet slepen (eigenaar, 2026-09-23): geen enkele zin vraagt nog
 	# om te slepen, en de oude knop- en wolkteksten van de kar zijn weg
 	for weg in ["Sleep de kar", "\"kar is leeg\"", "\"nog %d %s\""]:
@@ -323,7 +325,7 @@ func test_kindteksten_staan_er_verbatim() -> void:
 	# elk kindwoord moet ook een glyph hebben in het meegeleverde font
 	var mist: Array[String] = []
 	for zin in ["🍪 Verdeel 17 koekjes over 5 gasten", "🫙 Ieder evenveel, de rest in de pot",
-			"🩺 Iedereen 4, rest in de pot", "🛒 Klaar", "🩺 Els helpt", "🛏 nog geen gasten",
+			"🛒 Klaar", "🛏 nog geen gasten",
 			"🛒 Pak de kar", "🛒 Je duwt de kar ☝", "🍪 Breng 4 koekjes naar elke gast",
 			"👉 Tik op de kar", "👉 Tik op een deur", "👉 Tik op het bakje", "👉 🚪 Gang",
 			"✅ Alle bakjes vol!", "😋 4 koekjes elk",
@@ -353,7 +355,6 @@ func test_de_kaart_past_binnen_f4() -> void:
 				else:
 					gelijk(regel, "", "delen mét rest hoort pas in groep 5")
 	_keur_regel(spel.T_IEDER, "de tweede zin")
-	_keur_regel(spel.T_ELS_ZIN % 10, "de tweede zin met Els")
 	spel.free()
 	_af()
 
@@ -715,12 +716,14 @@ func test_kar_staat_na_de_ronde_weer_in_de_keuken() -> void:
 		"en dan hangt hij op de thuisplek van de kar")
 	_af()
 
-# ------------------------------------------------------- Els en de ronde
+# ------------------------------------------------ geen Els, en de ronde
 
 ## Nooit straffend: een levering die niet kan, kost niets, zet niets terug en
-## geeft geen ster.  Els overleeft de sloop van de vul-fase: haar knop hangt
-## nu bij het rondje mee en blijft staan zolang er twee pogingen op zitten.
-func test_els_blijft_en_de_ronde_straft_niet() -> void:
+## geeft geen ster.  En geen hulp na een fout (eigenaar 2026-09-24: "Nee geef
+## geen hulp na fouten"): buurvrouw Els bestaat niet meer — ook niet met twee,
+## drie of vier missers uit een oude opslag — en het wolkje van de kar zegt
+## nooit haar doelgetal; de kaart houdt haar gewone tweede zin.
+func test_geen_els_en_de_ronde_straft_niet() -> void:
 	_op()
 	var spel := _start(3, 3, 1, 3)
 	waar(spel != null, "het spel draait")
@@ -740,25 +743,19 @@ func test_els_blijft_en_de_ronde_straft_niet() -> void:
 	waar(not _zichtbaar(_bak_id(q)), "een bakje zonder kar erbij is geen knop")
 	gelijk(_tekst("vk_zeg"), "🍪 Breng %d koekjes naar elke gast" % int(spel.K["per"]),
 		"het wolkje blijft de opdracht zeggen")
-	# Els' knop komt pas bij twee missers; in V2 zijn die in de keuken niet
-	# meer te verdienen, dus de stand wordt gezet en het rondje hertekend
-	gelijk(_knop("vk_els"), null, "zonder missers is er geen Els")
-	spel.K["missers"] = 2
-	spel._rondje()
-	Hits.plaats()
-	waar(_knop("vk_els") != null, "na twee pogingen staat Els er (HOTEL.md §5)")
-	gelijk(_tekst("vk_els"), "🩺 Els helpt", "met pictogram én woord")
-	gelijk(_titel("vk_els"), "buurvrouw Els doet het voor", "en een uitleg")
-	_tik("vk_els")
-	gelijk(int(spel.K["spook"]), 1, "Els doet het voor")
-	waar(State.gezien("voerkar_els"), "en dat wordt onthouden")
-	waar(_knop("vk_els") != null, "Els blijft staan zolang er twee pogingen op zitten")
-	# haar tik laat iets zien: het ene wolkje zegt haar zin, tot de volgende tik
-	gelijk(_tekst("vk_zeg"), "🩺 Iedereen %d, rest in de pot" % int(spel.K["per"]),
-		"Els zegt het in het wolkje van de kar")
-	gelijk(str(_wolkjes()), '["vk_zeg"]', "en er komt geen tweede wolkje bij")
+	# missers uit een oude opslag brengen niemand die het voordoet
+	for missers in [2, 3, 4]:
+		spel.K["missers"] = missers
+		spel._rondje()
+		Hits.plaats()
+		waar(_knop("vk_els") == null, "%d missers: geen Els" % missers)
+		waar(not _tekst("vk_zeg").contains("🩺"), "%d missers: het wolkje zegt niets van Els" % missers)
+		gelijk(str(_wolkjes()), '["vk_zeg"]', "%d missers: één wolkje, zoals altijd" % missers)
+	waar(not spel.K.has("spook"), "de kar kent geen spookgetal meer")
+	var g: Array = spel.deelnemers()
+	gelijk(spel._zinnen(g.size())[1], spel.T_IEDER, "de kaart houdt haar gewone tweede zin")
 	_tik("karhot")
-	gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "de volgende tik zegt weer de volgende stap")
+	gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "de volgende tik zegt de volgende stap")
 	_af()
 
 ## S5, open punt 2026-09-20: de voerkar geeft het dier van de beurt door met
@@ -926,11 +923,11 @@ func test_stop_laat_de_wereld_schoon() -> void:
 # --------------------------------------------------------- knoppen en dekking
 
 ## De harde regel van architecture.md §4.3/§12.2: geen knop van dit spel dekt
-## ook maar één voorwerp af, in vier kaders.  Drie beelden van de ronde, elk
-## met Els erbij (het drukste dat de ronde kent): de keuken bij de start (de
-## kar, het opdrachtwolkje, Els), de keuken met de kar vast (de gangdeur draagt
-## dan een 👉 en is breder), en kamer1 met de kar naast het hongerige bakje —
-## het beeld waar de eigenaar drie witte vakjes zag.
+## ook maar één voorwerp af, in vier kaders.  Drie beelden van de ronde: de
+## keuken bij de start (de kar en het opdrachtwolkje), de keuken met de kar
+## vast (de gangdeur draagt dan een 👉 en is breder), en kamer1 met de kar naast
+## het hongerige bakje — het beeld waar de eigenaar drie witte vakjes zag.
+## (Tot 2026-09-24 stond buurvrouw Els er nog bij; zij bestaat niet meer.)
 func test_dekking_nul_in_vier_kaders() -> void:
 	var boom := Engine.get_main_loop() as SceneTree
 	_onthoud()
@@ -957,13 +954,13 @@ func test_dekking_nul_in_vier_kaders() -> void:
 		var spel := _spel()
 		waar(spel != null and spel.deelnemers().size() == 6,
 			"%s: zes gasten doen mee" % str(maat))
-		# Els erbij, zodat het drukste beeld op tafel staat
+		# missers uit een oude opslag: ook dan geen Els (eigenaar 2026-09-24)
 		spel.K["missers"] = 2
 		spel._rondje()
 		for _f in 2:
 			await boom.process_frame
 		waar(_knop("karhot") != null, "%s: de kar is een knop" % str(maat))
-		waar(_knop("vk_els") != null, "%s: Els staat er na twee pogingen" % str(maat))
+		waar(_knop("vk_els") == null, "%s: geen Els, ook niet na twee missers" % str(maat))
 		var kader: Control = shell.get_node("Scherm/Kolom/Middenrij/Kaderdoos/Kader")
 		_keur_dekking(kader, "%s keuken" % str(maat))
 		# de kar vast: de gangdeur draagt een 👉
@@ -1040,7 +1037,8 @@ func _keur_dekking(kader: Control, wat: String) -> void:
 			var snij := r.intersection(v)
 			gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
 				"%s: %s dekt het voorwerp van %s af" % [wat, id, ander])
-	waar(eigen >= 3, "%s: %d knoppen van de voerkar in beeld" % [wat, eigen])
+	# the cart and its one bubble (buurvrouw Els made it three until 2026-09-24)
+	waar(eigen >= 2, "%s: %d knoppen van de voerkar in beeld" % [wat, eigen])
 
 # ---------------------------------------------------------------- slepen
 

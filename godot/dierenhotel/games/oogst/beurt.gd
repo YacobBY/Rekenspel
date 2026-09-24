@@ -37,9 +37,7 @@ const T_PLUK_KNOP := "Pluk"
 const T_PLUK10_KNOP := "Pluk een bakje"
 const T_PLUK_TITEL := "pluk een aardbei"
 const T_PLUK10_TITEL := "pluk een heel bakje vol"
-const T_SPOOK := "zoveel is het"
 const ICOON_PLUK10 := "🧺"
-const ICOON_HULP := "💛"
 const ICOON_AF := "✅"
 const ICOON_LEKKER := "😋"
 
@@ -136,47 +134,3 @@ static func pluk_stap(o: Dictionary, geplukt: int) -> int:
 	if tot_vol > 0:
 		return 1
 	return mini(10, rest)
-
-## Counting on together (the help ladder, step 1 and 2).
-static func hulp_tel(o: Dictionary) -> String:
-	var vol := int(o["vol"])
-	var los := int(o["los"])
-	if vol == 0:
-		if los > 5:
-			return "5 en nog %d" % (los - 5)
-		return " … ".join(_reeks(1, los, 1))
-	var l := PackedStringArray()
-	for i in vol:
-		l.append(str(10 * (i + 1)))
-	return " … ".join(l) + " en nog %d" % los
-
-static func hulp_bij(o: Dictionary) -> String:
-	var t := int(o["T"])
-	if int(o["band"]) >= 5:
-		var l := PackedStringArray([str(t)])
-		var v := (int(t / 10.0) + 1) * 10
-		while v <= 100:
-			l.append(str(v))
-			v += 10
-		return " ▸ ".join(l)
-	return " … ".join(_reeks(int(o["los"]) + 1, 10, 1))
-
-## The third step: the answer shown in pale numbers on the table.
-static func spook_tel(o: Dictionary) -> String:
-	if int(o["vol"]) == 0:
-		return "5 + %d" % (int(o["los"]) - 5) if int(o["los"]) > 5 else str(int(o["los"]))
-	return "%d + %d" % [10 * int(o["vol"]), int(o["los"])]
-
-static func spook_bij(o: Dictionary) -> String:
-	var los := int(o["los"])
-	if int(o["band"]) >= 5:
-		return "%d + %d" % [10 - los, 100 - 10 * (int(o["vol"]) + 1)]
-	return "+%d" % (10 - los)
-
-static func _reeks(van: int, tot: int, stap: int) -> PackedStringArray:
-	var uit := PackedStringArray()
-	var v := van
-	while v <= tot:
-		uit.append(str(v))
-		v += stap
-	return uit

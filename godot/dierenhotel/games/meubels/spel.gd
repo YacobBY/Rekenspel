@@ -16,6 +16,14 @@ extends MiniGame
 ## Alle getallen komen uit `Sommen.Meubels` en `Sommen.buidel/splits`
 ## (architecture.md §1.1 F1); dit bestand rekent zelf niets uit dat daar staat.
 ##
+## Een misser helpt niet (eigenaar 2026-09-24: "Nee geef geen hulp na fouten.
+## Kinderen moeten zelf leren rekenen").  Een fout bedrag op de kassa, een
+## foute som of een fout wisselgeld, en "klaar" met te weinig of te veel op de
+## toonbank: een zacht geluid, `🔄 Nog een keer` bij de kassa (dit spel heeft
+## geen dier van de beurt) en de strook even op slot — en verder niets: geen
+## telregel, geen wolkje met wat er nog bij moet of wat te veel is, geen
+## spookmunten.
+##
 ## Twee afwijkingen van de HTML, allebei omdat Godot iets anders biedt dan de
 ## DOM, en allebei bewust (zie het rapport bij dit ticket):
 ##  * `Ui.blad_open` is MODAAL — de HTML had een zijpaneel naast de wereld.  De
@@ -51,12 +59,6 @@ const T_TIK_GETAL := "tik een getal"
 const T_KLAAR_TELLEN := "klaar met tellen"
 const T_MUNT_TERUG := "een munt terugpakken"
 const T_TERUG_BOEK := "terug naar het meubelboek"
-const T_SPOOK_SAMEN := "zoveel is het samen"
-const T_SPOOK_WISSEL := "zoveel krijg je terug"
-const T_SPOOK_BIJ := "dit moet er nog bij"
-const T_SPOOK_MOET := "zoveel moet het zijn"
-const T_SPOOK_UIT := "zo ziet het uit"
-const T_SPOOK_ZOVEEL := "zoveel is het"
 const T_TERUG := "terug"
 const T_BETAALD := "betaald"
 const T_SLEEP := "sleep naar een plekje"
@@ -274,13 +276,6 @@ static func _som_zin(types: Array) -> String:
 		delen.append("%s %s" % [_naam_van(str(t)), _eur(int(_artikel(str(t))["prijs"]))])
 	return _kap(" en ".join(delen))
 
-## Samen doortellen: "6 … 7 … 8" — nooit een lap tekst, nooit een kruis.
-static func _door_tellen(van: int, stappen: int) -> String:
-	var l := PackedStringArray()
-	for i in range(1, mini(stappen, 12) + 1):
-		l.append(str(van + i))
-	return " … ".join(l)
-
 ## Een plek in de ruimte waar je NU staat: een wolkje in een andere kamer zou
 ## je nooit zien.
 func _hier() -> Dictionary:
@@ -377,12 +372,6 @@ func _kassa_teken() -> void:
 		"vlak": _kaart_vlak(), "regel": T_HOEVEEL,
 		"keuzes": _munt_keuzes(goed), "keuze_titel": T_TIK_GETAL})
 	_kas["kaart"] = kaart
-	# Nooit een kruis: één misser zet de telladder eronder, drie missers leggen
-	# de spookmunten erbij — dezelfde ladder als bij het afrekenen.
-	if int(_kas["pog"]) >= 1:
-		kaart.hulp(_tel_munten(munten))
-	if int(_kas["pog"]) >= 3:
-		_spook_zet(goed, T_SPOOK_ZOVEEL)
 
 	# de munten zelf, op de toonbank, met hun waarde erop (R5: getallen staan
 	# óp voorwerpen — het kind telt ze, het raadt niet).
@@ -440,29 +429,22 @@ static func _munt_rij(munten: Array) -> String:
 		l.append("+%d" % (munten.size() - 6))
 	return " ".join(l)
 
-## Samen de buidel doortellen: de stand ná elke munt ("2 … 4 … 6 … 8 … 9").
-static func _tel_munten(munten: Array) -> String:
-	var l := PackedStringArray()
-	var som := 0
-	for i in mini(munten.size(), 12):
-		som += int(munten[i])
-		l.append(str(som))
-	return " … ".join(l)
-
 func _kas_ok(n: int) -> void:
 	if not actief or _kas.is_empty():
 		return
 	var goed := _som(_kas["munten"])
 	if n != goed:
+		# nooit een kruis, nooit een straf — en nooit een hulpje (eigenaar
+		# 2026-09-24): de strook even op slot met `🔄 Nog een keer`, en dezelfde
+		# munten op de toonbank; de kaart wordt niet opnieuw gebouwd
 		_kas["pog"] = int(_kas["pog"]) + 1
-		ctx.snd.zacht()                        # nooit een kruis, nooit een straf
-		_kassa_teken()
+		ctx.snd.zacht()
+		ctx.ui.misser(_kas.get("kaart"), "")
 		return
 	var kaart = _kas.get("kaart")
 	if kaart != null:
 		kaart.som("💰 = %s" % _eur(goed))
 		kaart.klaar()                          # het vinkje, de strook gaat weg
-	_spook_weg()
 	ctx.snd.ja()
 	var b: Dictionary = World.mik("kassa", "receptie")
 	_wolk({"kamer": "receptie", "x": float(b.get("x", 60)), "z": float(b.get("z", 20))},
@@ -496,7 +478,7 @@ func _meld_kassa() -> void:
 		return
 	print("[probe] mb=kassa munten=", _munten(),
 		" stuks=", (_kas["munten"] as Array).size(), " pog=", int(_kas["pog"]))
-	for id in ["mb_kas", "mb_munten", "mb_buidel", "mb_spook"]:
+	for id in ["mb_kas", "mb_munten", "mb_buidel"]:
 		var s := Hits.spot(id)
 		if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
 			print("[probe] mb=hot ", id, "=", s.knoop.get_global_rect(),
@@ -955,7 +937,7 @@ func _koop(types: Array) -> void:
 		"stap": "som" if soorten.size() > 1 else "munten",
 		"hand": ctx.econ.buidel(cap), "bank": [] as Array[int],
 		"som_pog": 0, "tel_pog": 0, "wis_pog": 0,
-		"spook": {}, "hulp": "", "rest": _munten() - cap,
+		"rest": _munten() - cap,
 		"kaart": null, "soort": 1,
 	}
 	_kies_soort(1)
@@ -1028,11 +1010,6 @@ func _betaal_teken() -> void:
 			"regel": _som_zin(types), "regel2": T_SAMEN,
 			"on_ok": func(n) -> void: _som_ok(n)})
 		_bet["kaart"] = kaart
-		if int(_bet["som_pog"]) >= 1:
-			kaart.hulp(_door_tellen(int(_artikel(str(types[0]))["prijs"]),
-				int(_artikel(str(types[1]))["prijs"])))
-		if int(_bet["som_pog"]) >= 3:
-			_spook_zet(totaal, T_SPOOK_SAMEN)
 	elif stap == "wissel":
 		var betaald := _som(_bet["bank"])
 		var kaart := ctx.ui.somkaart(_kaart_obj(),
@@ -1044,10 +1021,6 @@ func _betaal_teken() -> void:
 			"regel2": T_TERUG_VRAAG,
 			"on_ok": func(n) -> void: _wissel_ok(n)})
 		_bet["kaart"] = kaart
-		if int(_bet["wis_pog"]) >= 1:
-			kaart.hulp(_door_tellen(totaal, betaald - totaal))
-		if int(_bet["wis_pog"]) >= 3:
-			_spook_zet(betaald - totaal, T_SPOOK_WISSEL)
 	else:
 		# De prijs als afgevinkt sommenkaartje.  De pictogram-som ("🪑 =")
 		# staat er nooit zonder zin erboven (HOTEL.md §9).
@@ -1058,11 +1031,6 @@ func _betaal_teken() -> void:
 			"regel": _prijs_zin(types, totaal), "regel2": T_LEG_MUNTEN})
 		_bet["kaart"] = kaart
 		kaart.zet(_eur(totaal))
-		if not str(_bet["hulp"]).is_empty():
-			kaart.hulp(str(_bet["hulp"]))
-		var spook: Dictionary = _bet["spook"]
-		if not spook.is_empty():
-			_spook_zet(int(spook["bedrag"]), str(spook["label"]))
 
 	# de toonbank: sleep de munten hierheen, het bedrag staat erop.  Tikken
 	# legt de munt die je in je hand hebt neer — zo kun je ook zonder slepen.
@@ -1189,7 +1157,7 @@ func _meld_betaal() -> void:
 	print("[probe] mb=betaal stap=", _bet["stap"], " totaal=", _bet["totaal"],
 		" bank=", _som(_bet["bank"]), " soort=", _bet["soort"])
 	for id in ["mb_som", "mb_wissel", "mb_bon", "mb_bank", "mb_buidel", "mb_ok",
-			"mb_terug", "mb_boek", "mb_spook"]:
+			"mb_terug", "mb_boek"]:
 		var s := Hits.spot(id)
 		if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
 			print("[probe] mb=hot ", id, "=", s.knoop.get_global_rect(),
@@ -1209,25 +1177,6 @@ func _meld_keuzes(kaart) -> void:
 	for k in rij.get_children():
 		print("[probe] mb=keuze ", k.name, "=", (k as Control).get_global_rect())
 
-# ----------------------------------------------------------- de spookmunten
-
-func _spook_weg() -> void:
-	ctx.hotspots.weg("mb_spook")
-
-## `Econ.splits(bedrag)`, hooguit 4 munten, als één kaartje bij SPOOKPLEK.
-func _spook_zet(bedrag: int, label: String) -> void:
-	var m: Array = ctx.econ.splits(maxi(0, bedrag))
-	var delen := PackedStringArray()
-	for i in mini(m.size(), 4):
-		delen.append(_eur(int(m[i])))
-	var plek := Rooms.plek("receptie", 0.75, 0.625)
-	var lbl := label if not label.is_empty() else T_SPOOK_UIT
-	ctx.ui.wolk({"id": "mb_spook", "kamer": "receptie",
-		"x": float(plek["x"]), "z": float(plek["z"]), "hoog": 6.0,
-		"icoon": "🪙", "getal": " ".join(delen), "tekst": "",
-		"klas": "hotspook hulp", "prio": 12, "titel": lbl,
-		"tik": func(_s) -> void: Ui.spreek(lbl if not lbl.is_empty() else T_SPOOK_ZOVEEL)})
-
 # ------------------------------------------------------------- de handelingen
 
 func _leg_neer(v: int) -> void:
@@ -1238,11 +1187,9 @@ func _leg_neer(v: int) -> void:
 		if int(hand[i]) == v:
 			hand.remove_at(i)
 			(_bet["bank"] as Array).append(v)
-			_bet["hulp"] = ""
 			if str(_bet["stap"]) == "wissel":
 				_bet["stap"] = "munten"
 				_bet["wis_pog"] = 0
-				_bet["spook"] = {}
 			if _heeft(v) == 0:
 				_kies_soort(v)                # die soort is op: pak de volgende
 			ctx.snd.munt()
@@ -1260,8 +1207,6 @@ func _munt_terug() -> void:
 	hand.append(bank.pop_back())
 	hand.sort()
 	hand.reverse()
-	_bet["hulp"] = ""
-	_bet["spook"] = {}
 	if str(_bet["stap"]) == "wissel":
 		_bet["stap"] = "munten"
 		_bet["wis_pog"] = 0
@@ -1283,9 +1228,10 @@ func _som_ok(n) -> void:
 		ctx.snd.ja()
 		_na_som()
 		return
+	# geen hulp (eigenaar 2026-09-24): `Ui` zet de strook even op slot met
+	# `🔄 Nog een keer`; de kaart wordt niet opnieuw gebouwd, dus die pauze houdt
 	_bet["som_pog"] = int(_bet["som_pog"]) + 1
 	ctx.snd.zacht()
-	_betaal_teken()
 
 func _na_som() -> void:
 	if not await na(0.45):
@@ -1311,29 +1257,25 @@ func _klaar_met_tellen() -> void:
 	if t == p:
 		_betaald(0)
 		return
-	if t < p:                                   # nog niet genoeg: samen doortellen
+	if t < p:                                   # nog niet genoeg
 		_bet["tel_pog"] = int(_bet["tel_pog"]) + 1
-		var mist := p - t
-		_bet["hulp"] = "🪙 +%s\n%s" % [_eur(mist), _door_tellen(t, mist)]
-		_bet["spook"] = {"bedrag": mist, "label": T_SPOOK_BIJ} \
-			if int(_bet["tel_pog"]) >= 3 else {}
-		ctx.snd.zacht()
-		_betaal_teken()
+		_mis_betaal()
 		return
 	if Sommen.Meubels.wisselgeld(_band()):      # groep 4/5: wisselgeld uitrekenen
 		_bet["stap"] = "wissel"
 		_bet["wis_pog"] = 0
-		_bet["hulp"] = ""
-		_bet["spook"] = {}
 		_betaal_teken()
 		return
 	# groep 3 rekent nog geen wisselgeld: precies leggen, munt terugpakken mag
 	_bet["tel_pog"] = int(_bet["tel_pog"]) + 1
-	_bet["hulp"] = "« %s te veel" % _eur(t - p)
-	_bet["spook"] = {"bedrag": p, "label": T_SPOOK_MOET} \
-		if int(_bet["tel_pog"]) >= 3 else {}
+	_mis_betaal()
+
+## "Klaar" terwijl het bedrag op de toonbank niet klopt: een zacht geluid en
+## `🔄 Nog een keer` bij de kassa, en de bon blijft zoals hij was — niets over
+## hoeveel er nog bij moet of hoeveel te veel het is (eigenaar 2026-09-24).
+func _mis_betaal() -> void:
 	ctx.snd.zacht()
-	_betaal_teken()
+	ctx.ui.misser(_bet.get("kaart"), "")
 
 func _wissel_ok(n) -> void:
 	if _bet.is_empty():
@@ -1345,9 +1287,9 @@ func _wissel_ok(n) -> void:
 	if int(n) == goed:
 		_betaald(goed)
 		return
+	# geen hulp (eigenaar 2026-09-24): de pauze van `Ui` en dezelfde vier getallen
 	_bet["wis_pog"] = int(_bet["wis_pog"]) + 1
 	ctx.snd.zacht()
-	_betaal_teken()
 
 ## Betaald!  De munten gaan uit de kassa, het meubel gaat in de doos en er is
 ## één ster voor het meedoen — nooit voor goed rekenen (F5).

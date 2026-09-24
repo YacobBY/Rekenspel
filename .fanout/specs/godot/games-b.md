@@ -103,26 +103,46 @@ ctx.ui.somkaart(obj, som, {
 * Maximaal **±16 knoppen per kamer**; daarboven verdwijnen de knoppen met de
   laagste `prio`.
 
-### 0.5 De hulpladder (GAMES-API §6, HOTEL.md §5) — bindend
+### 0.5 Geen hulp na een fout (eigenaar 2026-09-24) — bindend
 
-Overal dezelfde drie treden: **1e poging** samen tellen (een `hulp`-regel op de
-kaart), **2e poging** nog eens (of een gerichtere zin), en pas bij de **derde**
-poging *spookvormen*: bleke cijfers of vormen die het antwoord voordoen. De
-wekker wijkt hier bewust van af (spookwijzers al vanaf de 2e misser, zie §2).
+> "Nee geef geen hulp na fouten. Kinderen moeten zelf leren rekenen. Fout
+> antwoord kiezen moet niet beloond worden met hulp maar juist een teleurgesteld
+> dier of andere "bestraffing" in het spel"
+
+De hulpladder is weg, in alle vijf de spellen (en in alle andere; HOTEL.md §9).
+Na een fout antwoord verschijnt **niets dat helpt**: geen `hulp`-regel op de
+kaart, geen telladder, geen gerichtere zin, geen spookvormen of bleke cijfers,
+geen oplichtende knoppen of strepen, geen wolkje dat zegt hoeveel er nog bij
+moet of dat het te ver was, geen helper die het voordoet. Wat het kind wél ziet
+is het **teleurgestelde dier** van de beurt (`sip`, met `🔄 Nog een keer`
+ernaast, §0.6) — of, waar een spel geen dier van de beurt heeft, hetzelfde
+wolkje bij het ding van de kaart — en daarna dezelfde vraag. De vaste zinnen
+die er vanaf het begin van een beurt staan (de opdracht, de vaste doe-regel van
+de wekker) blijven; ze veranderen na een misser niet. (Tot 2026-09-24 stond hier
+de hulpladder van GAMES-API §6: samen tellen, nog eens, en bij de derde poging
+spookvormen; de wekker al bij de tweede.)
 
 ### 0.6 Nooit straffend (HOTEL.md §9) — bindend
 
 Geen rood, geen kruis, geen buzzer, geen timer, geen ster minder, geen herhaling
 van een beurt als straf. Een fout antwoord levert een zacht geluid (`snd.zacht`)
-plus een hulpje. De ster hangt aan het **meedoen**, niet aan goed rekenen.
+plus een teleurgesteld dier — nooit een hulpje (§0.5). De ster hangt aan het
+**meedoen**, niet aan goed rekenen.
 
 S5 (eigenaar 2026-09-20) maakt dat scherper: geen herhaling van een *beurt* als
 straf, wél dezelfde vraag opnieuw na een sip-pauze van ~1,2 s — het dier van de
 beurt is even sip (`World.pose(id, "sip", 22)`), de antwoordstrook van `Ui` staat
 in die tijd op slot, en daarna komen **dezelfde vier keuzes in dezelfde volgorde**
-terug met leeg antwoordvakje. Het spel houdt zijn eigen `missers`, `snd.zacht()`
-en hulpladder; `Ui.misser(kaart, dier)` doet het centraal, de spellen hoeven er
-niets voor te doen.
+terug met leeg antwoordvakje. Het spel houdt zijn eigen `missers` (voor het
+adaptieve signaal) en `snd.zacht()`, en verder niets; `Ui.misser(kaart, dier)`
+doet het centraal voor de getallenstrook. Een spel zonder getallenstrook (eigen
+keuzes, slepen, zwemmen) roept `ctx.ui.misser(kaart, dier)` zelf aan; `kaart`
+mag `null` zijn (alleen het dier, geen slot). Heeft een kaart geen dier van de
+beurt in beeld (de was, de slaper van de wekker ligt in zijn eigen kamer), dan
+hangt `🔄 Nog een keer` bij het ding waar de kaart op mikt. Sinds 2026-09-24 duurt
+de sip `Ui.SIP_TIKKEN` = 30 tikken (~2 s), iets langer dan het slot van 1,2 s:
+het teleurgestelde dier is nu het hele antwoord op een misser. Een strook zonder
+getallen (wekker, weeg, was groep 3, meubels) gaat net zo op slot.
 
 ### 0.7 Geluiden (namen, `ctx.snd.<naam>()`, geen argumenten)
 
@@ -443,13 +463,19 @@ het dier in het water op meter `p` ligt, zwem `meters` meter, en daarna:
 | `ver` | de bots (§1.7) | `au` |
 | `p ≥ L` na het zwemmen | precies aan de overkant (§1.7) | `ja` |
 | `goed` | wolkje `✅ <meters> m gezwommen`, dan een nieuwe vraagkaart | `ja` |
-| `veel` | wolkje `🏊 hooguit <M> m`, dan een nieuwe vraagkaart | `zacht` |
-| `kort` | wolkje `🏊 nog <L−p> m`, dan een nieuwe vraagkaart | `zacht` |
+| `veel` | het dier zwemt `M`, is dan even sip in het water met `🔄 Nog een keer` (1,4 s, `MIS_S` in `games/zwembad/spel.gd`), daarna drijft het weer en komt een nieuwe vraagkaart | `zacht` |
+| `kort` | het dier zwemt zover, is dan even sip met `🔄 Nog een keer`, en daarna een nieuwe vraagkaart | `zacht` |
 
-**Nooit straffend:** te kort → het dier zwemt zover en stopt, er komt een nieuwe
-kaart met de rest; te veel → het mag maar `M` per keer, dus het zwemt `M` en de
-rest volgt op de volgende kaart; te ver → het bótst zacht tegen de wand. Geen
-rood, geen ster minder, geen herhaling van de beurt.
+**Nooit straffend en nooit helpend (eigenaar 2026-09-24):** te kort → het dier
+zwemt zover en stopt, kijkt teleurgesteld, en er komt een nieuwe kaart met de
+rest; te veel → het mag maar `M` per keer, dus het zwemt `M`, kijkt
+teleurgesteld, en de rest volgt op de volgende kaart; te ver → het bótst zacht
+tegen de wand. Geen rood, geen ster minder, geen herhaling van de beurt — en geen
+wolkje met `'nog <L−p> m'` of `'hooguit <M> m'` (tot 2026-09-24), geen hulpregel
+op de volgende kaart, geen oplichtende strepen en geen bleke streep in het water.
+De sip in het water duurt korter dan de pose van `Ui.misser`, zodat het spel hem
+daarna zelf weer laat drijven (`World.blijf(gast, "zwem")`): een pose die in het
+water afliep liet hem wegpeddelen.
 
 ### 1.6 Zwemmen zelf
 
@@ -534,8 +560,8 @@ gezwommen en ligt met zijn neus tegen de wand (§1.6); dan, in deze volgorde:
    sombalk `'<L> − <p'> ='`, en de knoppen uit `keuzeGetallen(L, M, p', band,
    leg)`. Een andere afstand, dus opnieuw rekenen.
 
-Er gaat niets af: geen ster, geen etappe; de misser voedt alleen de
-hulpladder. In rustmodus ligt hij stil tegen de wand zolang `💛 Au!` staat
+Er gaat niets af: geen ster, geen etappe; de misser voedt alleen het adaptieve
+signaal. In rustmodus ligt hij stil tegen de wand zolang `💛 Au!` staat
 (1200 ms) en daarna meteen op `x(p')`, zonder deeltjes.
 
 `bots_plek(L, M, p, leg)` — deterministisch, per slag:
@@ -730,8 +756,7 @@ eindkaart 3,4 s over het bad en over de meterstrepen.
 | kaart n (p > 0) | regels `'<naam> is bij <p> meter'` / `'Nog hoeveel meter?'`; sombalk `'<L> − <p> ='` |
 | keuzestrook | titel `'hoeveel meter zwemt hij?'`, knoppen `🏊 <v> m` |
 | goed | wolkje `✅` + `'<meters> m'` + `'gezwommen'` |
-| te veel | wolkje `🏊` + `'hooguit <M> m'` |
-| te kort | wolkje `🏊` + `'nog <L−p> m'` |
+| te veel / te kort | het dier sip in het water met `🔄 Nog een keer` — geen tekst met de rest of het maximum (eigenaar 2026-09-24) |
 | bots | wolkje `💛` + `'Au!'` (1200 ms) |
 | kaart na een bots | pictogram `🙃`, regels `'<naam> botste terug naar <p> meter'` / `'Nog hoeveel meter?'`; sombalk `'<L> − <p> ='` |
 | eind precies | kaart `✅`, `'Precies aan de overkant!'` / `'<naam> zwom <L> meter'` |
@@ -933,8 +958,9 @@ naarVox(X, Y) = [ round(X/2), round((X/2 − Y)/2) ]
 Stralen **op het scherm**: `R_KAST 25`, `R_RAND 22`, `R_PLAAT 19`,
 `R_STREEP 16,5`, `R_UUR 10`, `R_MIN 15,5`.
 Kleuren: kast `#7E6255`, rand `#E8C58E`, plaat `#FFF7E4`, streep `#7E6255`,
-uurwijzer `#4A3B33`, minuutwijzer `#C9788F`, hart `#E0A86B`, bel `#E8C58E`,
-spookuurwijzer `#9A8578`, spookminuutwijzer `#D9A0B0`.
+uurwijzer `#4A3B33`, minuutwijzer `#C9788F`, hart `#E0A86B`, bel `#E8C58E`.
+(De bleke spookwijzers `#9A8578` / `#D9A0B0` bestaan sinds 2026-09-24 niet meer:
+geen hulp na een fout, §0.5.)
 
 Opbouw:
 1. voor `dx = −13…13`, `dy = −19…19`: `X = 2dx`, `Y = dx − 2dy`, `d2 = X² + Y²`;
@@ -946,13 +972,11 @@ Opbouw:
 3. twaalf uurstreepjes: hoek `a = i·π/6` voor `i = 1…12`; is `i mod 3 == 0`, dan
    een streepje van `R_STREEP − 2,5` tot `R_STREEP + 0,5` (dikte 0,5), anders één
    stipje op `naarVox(R_STREEP·sin a, −R_STREEP·cos a)`; alles op `z = 2`.
-4. eventueel de **spookwijzers** (eerst, zodat de echte er overheen komen):
-   uur van 2 tot `R_UUR` (dikte 1) en minuut van 2 tot `R_MIN` (dikte 0,5), beide
-   met stap **1,5** — dat maakt ze gestippeld, zodat ze als hint lezen en niet
-   als een tweede stel echte wijzers.
-5. de echte wijzers: uur van 0 tot `R_UUR` (dikte 1), minuut van 0 tot `R_MIN`
-   (dikte 0,5), stap 0,5, op `z = 2`.
-6. het hart: `bx(−1, CY − 1, 2, 2, 2, 1)` in `hart`.
+4. de wijzers: uur van 0 tot `R_UUR` (dikte 1), minuut van 0 tot `R_MIN`
+   (dikte 0,5), stap 0,5, op `z = 2`.  Er komen geen spookwijzers meer bij
+   (eigenaar 2026-09-24); een oude `spookU`/`spookM` in de parameters tekent
+   niets.
+5. het hart: `bx(−1, CY − 1, 2, 2, 2, 1)` in `hart`.
 
 Hoeken (0 = 12 uur, met de klok mee):
 `hoekUur(u, m) = ((u mod 12 + m/60) / 12)·2π`, `hoekMin(m) = ((m mod 60)/60)·2π`.
@@ -994,9 +1018,11 @@ van één woord per regel zolang de labels niet op hun breedte staan, en daarmee
 hing de kaart ver onder de vloer en viel ze op de onderrand, 290 eenheden van de
 klok.  Tussen klok en kaart blijft één band vrij voor het tijdplaatje van de klok
 (`wk_tijd`, "10 uur"); zonder die ruimte duwde de kaart het plaatje onder zich en
-ging de knoppenstrook, die onder de kaart kleeft, naar de voet van het kader.  Een
-kaart met een hulpregel is zo breed als die regel, tot haar eigen maximum, zodat
-de hulp op één regel blijft en de kaart over de stappen even hoog (K3).
+ging de knoppenstrook, die onder de kaart kleeft, naar de voet van het kader.  De
+kaart draagt vanaf de eerste tik één vaste hulpregel, `'💛 draai tot de klok
+klopt'` (K3); die is zo breed als hij is, tot het eigen maximum van de kaart, en
+verandert na een misser niet (eigenaar 2026-09-24), dus de kaart is over de
+stappen even hoog.
 
 **De zin** (`zinZet`), met `naam` = de gast en `wil = tijdWoord(doelU, doelM)`:
 
@@ -1051,25 +1077,23 @@ tijdsduurvraag doet draaien niets.
 
 **✅ Klaar** (`klaarTik`): goed is `inMin(u,m) == inMin(doelU, doelM)`.
 
-*Fout:* `missers++`, `stap = 'mis'`, `snd.zacht()`, en de hulpregel
-
-* eerste misser: `'💛 draai nog wat verder'`
-* vanaf de tweede misser: `'👻 de spookwijzers wijzen mee'` — en dan komen de
-  **spookwijzers** op de wijzerplaat (`params.spookU/spookM = doel`), zowel op de
-  gewone zetkaart als op de misserkaart. De wijzers blijven staan waar ze staan,
-  zodat je verder kunt draaien. Het dier draait zich om en slaapt door.
+*Fout:* is er sinds de vorige keuring aan de wijzers gedraaid, dan `missers++`
+en `stap = 'mis'` (twee keer ✅ zonder draai is geen tweede poging, R3 — voor het
+adaptieve signaal); in beide gevallen `snd.zacht()`, het wekkerkaartje bij de
+gast zegt `'slaapt nog'`, en `ctx.ui.misser(kaart, gast)`: de strook staat
+1,2 s op slot met `🔄 Nog een keer` bij de klok — de slaper ligt in zijn eigen
+kamer en wordt niet uit bed gehaald. **Verder niets** (eigenaar 2026-09-24): de
+vaste hulpregel blijft staan, er komt geen `'💛 draai nog wat verder'`, geen
+`'💛 draai eerst aan de wijzers'`, geen telladder en geen spookwijzers. De wijzers
+blijven staan waar ze staan, zodat je verder kunt draaien. Het dier draait zich
+om en slaapt door.
 
 *Goed:* `wakkerWorden()`.
 
-**De hulpladder wijkt hier bewust af** van de standaard (spookvormen pas bij de
-derde poging): de spookwijzers komen al bij de tweede misser, conform
-HOTEL.md §5 "spookwijzer na 2 pogingen".
-
 **Een tijd kiezen** (`kiesTijd(u)`, alleen in de tijdsduurstap): fout →
-`missers++`, `snd.zacht()`, hulp = de telladder `'💛 <u> … <u+1> … … <doelU>'`
-(samen tellen van nu naar de wektijd, uur voor uur, `duur + 1` getallen). Goed →
-`snd.ja()`, `stap = 'zet'` en de kaart wordt met de andere knoppen opnieuw
-gebouwd.
+`missers++`, `snd.zacht()` en dezelfde misser (strook op slot, `🔄 Nog een
+keer`), geen telladder. Goed → `snd.ja()`, `stap = 'zet'` en de kaart wordt met
+de andere knoppen opnieuw gebouwd.
 
 ### 2.9 Wakker worden
 
@@ -1108,7 +1132,8 @@ sterstand blijft behouden (er valt hooguit één ster per ronde).
 | sombalk | `'nu: <tijd>'` (leeg na een misser) |
 | knoppen | `'uur erbij'`/`'uur'`, `'kwartier erbij'`/`'kwartier'`, `'5 minuten erbij'`/`'5 min'`, `'Klaar'`; tijdsduur: `'<u> uur'` |
 | strooktitel | `'draai de klok'` / `'hoe laat wordt hij wakker?'` |
-| hulp | `'💛 draai nog wat verder'` → `'👻 de spookwijzers wijzen mee'`; tijdsduur `'💛 <u> … <u+1> … …'` |
+| hulp | vast, vanaf de eerste tik: `'💛 draai tot de klok klopt'`; na een misser verandert hij niet (geen hulpladder meer, 2026-09-24) |
+| misser | `🔄 Nog een keer` bij de klok, de strook 1,2 s op slot |
 | bij de gast | `'<tijd>'`, na een misser `'slaapt nog'` of `'nog niet'` |
 | wakker | kaart `'<naam> is wakker'`, wolkje `☀ 'goedemorgen'` |
 | ronde af | wolkje op de klok `⏰ 'allemaal gewekt'` |
@@ -1412,7 +1437,8 @@ en de kaart vraagt van daaruit verder.
 `hop(aantal)`: richting `r = doel ≥ s ? +1 : −1`; het aantal wordt geklemd zodat
 er nooit van de lijn af gehinkeld wordt
 (`max = r > 0 ? floor((E − s)/sprong) : floor(s/sprong)`). Is dat 0, dan
-`snd.zacht()` en de telhulp op de kaart. Anders punten
+`snd.zacht()` en `ctx.ui.misser(kaart, gast)` — het dier is even sip, de strook
+op slot — en géén telhulp op de kaart (eigenaar 2026-09-24). Anders punten
 `{x: dierX(s + r·sprong·i), z: zDier}` voor `i = 1…hops`, fase → `hop`, `tel = 0`,
 en `stappen(..., {pose: 'spring', tempo: 1.25, perStap})`. In `perStap(i)`:
 `tel = i + 1`, `snd.hup()`, en de cijferchip op het dier wordt op `tel` gezet
@@ -1426,10 +1452,15 @@ fase terug naar `sprong` met `sprong = null`.
 `geland(pos)`: `s = pos`, `tel = 0`.
 
 * `pos == doel` → `gelukt()`;
-* anders `sprong = null`, fase → `sprong`, `melding = 'ver'` of `'kort'`,
-  `snd.zacht()`, en een zacht praatje bij het dier (wolkje `hk_zeg`, `hoog 52`,
-  `prio 9`, **2400 ms**): te ver → `🙃` + `<pos>` + `'te ver'` met klas `hulp`;
-  te kort → `🪨` + `<pos>` + `'nog verder'`. **Nooit een kruis.**
+* anders `sprong = null`, fase → `sprong`, `melding = ''`, `snd.zacht()`, de
+  kaart van de gewone sprongvraag vanaf de steen waar hij landde, en
+  `ctx.ui.misser(kaart, gast)`: het dier is even sip met `🔄 Nog een keer`, de
+  nieuwe strook staat 1,2 s op slot. **Nooit een kruis, en nooit een hint**
+  (eigenaar 2026-09-24): geen wolkje `'te ver'`/`'nog verder'` meer (tot die
+  datum `hk_zeg`, 2400 ms), geen kaart `'Oei, te ver!'` / `'Kies je sprong
+  terug'` of `'Nog even verder'`, en geen telhulp. Dat hij terug moet, vertelt
+  de strook zelf: vanaf een steen voorbij de trap staan er alleen
+  `'terug <k>'`-knoppen.
 
 `gelukt()`: fase → `af`, `snd.ja()`, opnieuw tekenen; eenmalig
 `taakKlaar('hinkel', {sterren: 1})`; had de gast de wens 🧶, dan
@@ -1454,15 +1485,14 @@ bewaarde stand gewist en sluit het spel zichzelf.
 | sombalk (altijd, behalve op het eind) | — | `'van <s> naar <doel>'` |
 | gast komt eraan | — | **geen kaart meer** (eigenaar 2026-09-23, §3.6): het hotelwolkje `'<naam> komt eraan'` met balk en `👀 Volg` bij de tuindeur (world.md §6.3) |
 | kies je sprong | diersoort | `'<naam> staat op <s>, trap bij <doel>'` / `'Kies je sprong'` (krap: `'Kies je sprong'`) |
-| te kort | diersoort | `'<naam> staat op <s>'` / `'Nog even verder'` (krap: `'Nog even verder'`) |
-| te ver | diersoort | `'Oei, te ver!'` / `'Kies je sprong terug'` (krap: `'Oei, te ver!'`) |
+| na een foute landing | diersoort | dezelfde kaart als "kies je sprong", vanaf de nieuwe steen (tot 2026-09-24: `'Nog even verder'` / `'Oei, te ver!'` / `'Kies je sprong terug'`) |
 | hoeveel sprongen | 🪨 | `'<naam> springt <k> per keer'` (terug: `'<naam> springt <k> terug'`) / `'Hoeveel sprongen?'` (krap: `'Hoeveel sprongen?'`) |
 | tijdens het hinkelen | diersoort | `'<naam> hinkelt'` / `'Tel maar mee'` (krap: `'Tel maar mee'`) |
 | eind | ✅ | `'Precies op de trap!'` (sombalk leeg, kaart met vinkje) |
 | knoppen sprong | 🪨 | `'sprong <k>'` of `'terug <k>'`, strooktitel `'kies je sprong'` |
 | knoppen aantal | 🪨 | `'<n> keer'`, strooktitel `'hoeveel sprongen?'` |
-| hulp (vanaf 2 missers, niet op een krap kader) | — | `'<s+k> … <s+2k> … <s+3k> … <s+4k> … … <doel>.'` (hooguit 4 stappen, dan `…` en het doel) |
-| bij het dier na een sprong | 🙃 / 🪨 | `'te ver'` / `'nog verder'` met het getal |
+| hulp | — | geen: na een misser komt er geen telregel (eigenaar 2026-09-24) |
+| bij het dier na een foute sprong | 🔄 | `'Nog een keer'`, het dier sip (`Ui.misser`) |
 | bij het dier op het eind | ⭐ | `'op de trap'` |
 
 Diersoortpictogrammen: `puppy 🐶`, `poes 🐱`, `konijn 🐰`, `gans 🦆`, onbekend
@@ -1748,12 +1778,16 @@ het nooit bij de naamplaatjes boven de stapels in de weg komt, en zegt
   zelf slepen.
 * **Goed**: `vak[i]++`, `i++`, `snd.plop(1)`.
 * **Mis**: de krat **wipt even op** (`snd.terug()`), het stuk ligt weer op de
-  berg. Geen tekst, geen rood, geen ster minder. Het wipje is
+  berg, en bij die krat hangt 1,2 s `🔄 Nog een keer` (het spel heeft geen dier
+  van de beurt en tijdens het sorteren geen kaart; eigenaar 2026-09-24). Geen
+  tekst over welke krat het had moeten zijn, geen rood, geen ster minder. Het wipje is
   `[[0 ms, 3 voxels], [140, 2], [200, 1], [260, 0]]` en leeft in losse
   variabelen (níet in het decorstuk zelf), want het decor wordt bij elke tik
   opnieuw gezet en zou een losse `hoog: 3` in dezelfde tik weer op 0 zetten.
 * **Lege hand op een krat**: `snd.zacht()` en de berg krijgt even de klasse
   `hulp` (320 ms), zodat het kind ziet waar het begint. Er gebeurt verder niets.
+  (Dat is geen antwoord maar een tik op de verkeerde plek; het wijst de bediening
+  aan, niet de som, en blijft dus.)
 
 Is de rij op, dan `klaarMetSorteren()`: stap → `vraag1`, `missers = 0`, de klok
 opnieuw, `snd.ja()`, en de vraagkaart komt.
@@ -1772,24 +1806,18 @@ de grootste respectievelijk kleinste stapel (ze zijn altijd uniek).
 Bij band 5 staat er **geen** sombalk (die is leeg): de opgave is het omrekenen
 zelf.
 
-**De hulpladder:**
-
-| geval | 1e/2e poging | 3e poging |
-|---|---|---|
-| band 3 | `'tel de blokjes'`, vanaf de 2e misser `'kijk naar de hoogste stapel'` | spookcijfers op de kratten |
-| band 4 vraag 1, band 5 vraag 2 (het verschil) | doortellen van de lage stapel naar de hoge: `'<stuks(l)> … … <stuks(h)> …'` in stappen van `per` (hooguit 12 stappen) | spookcijfers |
-| band 4 vraag 2 (alles samen) | de cumulatieve sommen: `'<s1> … <s1+s2> … <s1+s2+s3> …'` | spookcijfers |
-| band 5 vraag 1 (blokjes × 2) | `ui.telMee(2, min(8, vak[h]), ' …')` → `'2 … 4 … 6 … 8 …'` | spookcijfers |
-
-**Spookcijfers** (`spook()`): op elke krat het echte aantal stuks als `getalTag`
-op `y = kratY(i) − 2`, `prio 3`. Ze gaan weg zodra het antwoord goed is
-(`spookWeg`).
+**Geen hulp na een fout** (eigenaar 2026-09-24, §0.5): de hulpladder van
+vroeger — `'tel de blokjes'`, `'kijk naar de hoogste stapel'`, de teller-rijen en
+bij de derde poging de spookcijfers op de kratten of op de berg — bestaat niet
+meer, ook niet na een herlaad.
 
 **Goed antwoord**: `snd.ja()`, de kaart krijgt het antwoord en een vinkje
-(`k.zet(n).klaar()` — bij band 3 `kaart.zet('✓').klaar()`), spookcijfers weg,
-`volgende()`. **Fout**: `snd.zacht()`, `missers++`, het antwoordvakje wordt
-geleegd (`k.zet(null)`), de hulpregel komt, en vanaf 3 missers de spookcijfers.
-Elk antwoord (goed of fout) meldt `state.tel(goed, ms sinds de vraag)`.
+(`k.zet(n).klaar()` — bij band 3 `kaart.zet('✓').klaar()`), `volgende()`.
+**Fout**: `snd.zacht()`, `missers++`, en de misser van `Ui`: de strook staat
+1,2 s op slot (ook de soortenstrook van band 3) met `🔄 Nog een keer` bij de
+kaart, het vakje toont zolang het getikte getal en is daarna leeg, en dezelfde
+keuzes komen terug. Geen hulpregel, geen spookcijfers. Elk antwoord (goed of
+fout) meldt `state.tel(goed, ms sinds de vraag)`.
 
 `volgende()`: `missers = 0`; bij band 3, of als vraag 2 net is beantwoord, stap →
 `af` en de ster valt; anders stap → `vraag2`. Na **750 ms** komt de nieuwe kaart.
@@ -1819,7 +1847,7 @@ niet op de kaart zelf past (krap kader). Bij `stap === 'af'` staat hij er niet.
 | band 3 | `'Welke stapel is het hoogst?'`, strooktitel `'kies een stapel'` |
 | band 4 | `'Hoeveel meer <a> dan <b>?'`, dan `'Hoeveel stuks samen?'` |
 | band 5 | `'Hoeveel <a> zijn het?'`, dan `'Hoeveel meer <a> dan <b>?'` |
-| hulp | `'tel de blokjes'`, `'kijk naar de hoogste stapel'`, of een teller-rij |
+| misser | `🔄 Nog een keer` (bij de kaart, of bij de krat na een foute sortering) — geen hulpregel meer (2026-09-24) |
 | eind | `'Alles gesorteerd!'` met knop `'klaar'` |
 
 ### 4.11 Stoppen en herstellen
@@ -1829,9 +1857,8 @@ geleende knoppen terug, al het eigen decor weg.
 
 `start()` hergebruikt de bewaarde stand alleen als hij bestaat, een rij en vakken
 heeft, niet `af` is en `dag`, `N` en `band` nog kloppen. Staat de stand al bij de
-vragen, dan komt de vraagkaart meteen terug — **inclusief de hulp die het kind al
-verdiend had**: bij 3 missers liggen de spookcijfers er weer, anders het
-samen-tel-lijntje. Anders zou herladen een straf zijn ("mijn hulp is weg").
+vragen, dan komt de vraagkaart meteen terug, met de missers geteld maar zonder
+hulp (die bestaat sinds 2026-09-24 niet meer).
 
 ---
 
@@ -1935,8 +1962,9 @@ bal `basis[0]+3 = 7`, tas 12. `i0 = 11 mod 3 = 2` → keus = bal + hoedje =
 €7 + €6 = **€13**; `13 > 9` → betaald **€20**, wissel **€7**, doel €7, som
 `'€20 − €13 ='`.
 
-**De spookmunten** (voordoen-rij) gebruiken `SPOOK_MUNT = [5, 2, 1]` en hooguit
-`SPOOK_MAX = 4` munten: met €5, €2 en €1 is elk bedrag t/m €13 in hooguit vier
+**De spookmunten** (voordoen-rij) worden sinds 2026-09-24 niet meer getoond (geen
+hulp na een fout, §0.5); de bevroren kern draagt ze nog, byte-gelijk:
+`SPOOK_MUNT = [5, 2, 1]` en hooguit `SPOOK_MAX = 4` munten: met €5, €2 en €1 is elk bedrag t/m €13 in hooguit vier
 munten te leggen, en vier is precies wat er naast elkaar past. Met alleen €1 en
 €2 zou €9 vijf munten kosten en werd er €8 voorgedaan waar €9 hoort (G5-F1).
 `splitsMet(bedrag, munten)` is de gewone gulzige verdeling (grootste munt eerst).
@@ -1998,9 +2026,9 @@ bankD  = xm + bankZ   = 171       (de diepte-lijn waarop de spullen liggen)
   en één knop is al 84 × 48 px: twee knoppen naast elkaar passen daar niet (de
   laag schoof de buidel naar x = 90). Muntknoppen staan op
   `opGras(−60 − i·62)` (een muntknop is ≈ 56 px breed omdat er alleen "€2" in
-  staat), het klaar-knopje op `opGras(−160)`, de spookmunten op
-  `opGras(−160 + i·40, 32)`. Dat gras ligt met `z ≥ 100` ruim buiten de
-  hinkelzone.
+  staat) en het klaar-knopje op `opGras(−160)` (tot 2026-09-24 lagen daar ook de
+  spookmunten, `opGras(−160 + i·40, 32)`). Dat gras ligt met `z ≥ 100` ruim
+  buiten de hinkelzone.
 
 **De uitgestalde spullen zijn met opzet flink** (op de tuinschaal is één voxel
 maar 2 css-px): `kr_hoedje` (mint `#6BC5A4`, brede rand
@@ -2111,40 +2139,42 @@ je niets mee kunt. Icoon: `✅` (af), `👛` (band 5), anders `🎁`.
   dekt knop én blad, dus je kunt ook gewoon naar de tafel slepen.
 * **Te veel gelegd** (`som + v > doel`): de munt gaat er even op en **schuift na
   750 ms terug**; `snd.munt()` bij het leggen, `snd.terug()` bij het
-  terugschuiven, en het wolkje zegt `🪙 '€<teveel>' 'terug'`. Zolang er een munt
-  terugschuift neemt de kraam er geen nieuwe aan (dan alleen `snd.zacht()` en
-  hetzelfde wolkje) — zonder die poort legt elke tik in dat halve seconde-venster
-  een munt bij terwijl er maar één terugkomt.
+  terugschuiven, `missers++`, en de klant is even sip met `🔄 Nog een keer`
+  (`ctx.ui.misser`, geen slot: de munten liggen niet op een strook). Er komt
+  géén wolkje meer dat zegt hoeveel te veel het was (tot 2026-09-24
+  `🪙 '€<teveel>' 'terug'`). Zolang er een munt terugschuift neemt de kraam er
+  geen nieuwe aan (dan alleen `snd.zacht()`) — zonder die poort legt elke tik in
+  dat halve seconde-venster een munt bij terwijl er maar één terugkomt.
   **De geweigerde munt ligt alleen op het beeld, nooit in de opslag**: `gelegd`
   houdt altijd een geldige stand (`≤ doel`). Anders bleef een herlaad midden in
-  die halve seconde met een volle toonbank zitten en zei elke tik "€1 terug" —
-  de beurt liep vast (G5-F1 punt 1). `herstelBank()` haalt bij het starten een
+  die halve seconde met een volle toonbank zitten en weigerde elke tik — de beurt
+  liep vast (G5-F1 punt 1). `herstelBank()` haalt bij het starten een
   eventueel teveel gewoon van de toonbank af.
-* **✔ klaar** (`klaarMetTellen`): klopt het bedrag, dan `gelukt()`. Ligt er te
-  weinig: `snd.zacht()` en `🪙 '+€<verschil>' 'erbij'`; ligt er te veel:
-  `🪙 '€<verschil>' 'terug'`. Nooit rood, nooit een kruis. Vanaf de **tweede**
-  poging komt de hulpregel `splitsMet(doel, munten)` als
-  `'€2 + €2 + €1'`; vanaf de **derde** poging liggen de spookmunten op het gras
-  (titel `'dit moet er nog bij'`) — de gewone hulpladder.
+* **✔ klaar** (`klaarMetTellen`): klopt het bedrag, dan `gelukt()`. Klopt het
+  niet: `legPog++`, `missers++`, `snd.zacht()` en de klant is even sip met
+  `🔄 Nog een keer`. Nooit rood, nooit een kruis — en nooit een hint (eigenaar
+  2026-09-24): geen `'+€<verschil>' 'erbij'`, geen hulpregel
+  `'€2 + €2 + €1'`, geen spookmunten. De tweede kaartregel `'Nog €<rest> erbij'`
+  (N7) telt wél af zodra er iets ligt: die staat er vanaf de eerste munt, bij
+  goed en fout gelijk, en is dus geen antwoord op een misser.
 
 ### 5.9 Het cijferpad (band 4 en 5)
 
 `antwoordSom(n, k)`:
 
 * `n == null` (op OK getikt zonder cijfer): wolkje `☝ 'tik een getal'`;
-* fout: `somPog++`, `missers++`, `snd.zacht()`, het vakje wordt geleegd, en de
-  hulpregel is bij band 4 `telVanaf(prijs1, prijs2)` — samen doortellen dat écht
-  op de som eindigt, `'5 … 6 … 7 … 8 … 9.'` — en bij band 5
-  `'€<kosten> → €<betaald>'`. Vanaf de **derde** poging legt de kaart de
-  spookmunten van het antwoord neer (titel `'zoveel is het'`).
-  *(Waarom niet `ui.telMee`: die telt met stappen van de prijs, `'5 … 10.'`, en
-  dat is bij €5 + €4 het verkeerde antwoord — G5-F1.)*
+* fout: `somPog++`, `missers++`, `snd.zacht()`, en de misser van `Ui` via de
+  kaart (die sinds 2026-09-24 `dier` = de klant meekrijgt): hij is even sip met
+  `🔄 Nog een keer`, de strook staat 1,2 s op slot en dezelfde vier bedragen
+  komen terug. De kaart wordt daarvoor niet opnieuw gebouwd. Geen hulpregel (tot
+  2026-09-24: `telVanaf(prijs1, prijs2)` en `'€<kosten> → €<betaald>'`) en geen
+  spookmunten.
 * goed: `state.tel(somPog == 0, ms)`, `snd.ja()`, het vakje krijgt `'€<n>'`, stap
-  → `leg`, hulp en wolkje leeg, spookmunten weg, en na **600 ms** opnieuw tekenen.
+  → `leg`, wolkje leeg, en na **600 ms** opnieuw tekenen.
 
 ### 5.10 Gelukt
 
-1. stap → `af`, spook/hulp/wolkje leeg;
+1. stap → `af`, wolkje leeg;
 2. het gekochte gaat **zichtbaar op het dier**: voor elk gekocht stuk met een
    accessoire `ctx.wereld.accessoire(gastId, acc)` — eenmalig, en het blijft
    staan tot uitchecken;
@@ -2178,13 +2208,10 @@ je niets mee kunt. Icoon: `✅` (af), `👛` (band 5), anders `🎁`.
 | toonbank | `🧾 '€<som>'`, titel `'op de toonbank ligt €<som> van €<doel>'` |
 | munt | `'€<v>'`, titel `'munt van <v> euro'` (+ `', in je hand'`) |
 | klaar-knop | `✔ 'klaar'`, titel `'klaar met tellen'` |
-| wolkjes | `🪙 '€<v>' 'in je hand'`, `🪙 '€<x>' 'terug'`, `🪙 '+€<x>' 'erbij'`, `☝ 'tik een getal'` |
-| hulp | `'5 … 6 … 7 … 8 … 9.'` (band 4), `'€13 → €20'` (band 5), `'€2 + €2 + €1'` (bij het leggen) |
-| spookmunten (titel) | `'zoveel is het'` (bij de som) / `'dit moet er nog bij'` (bij het leggen) |
+| wolkjes | `🪙 '€<v>' 'in je hand'`, `☝ 'tik een getal'` |
+| misser | de klant sip met `🔄 Nog een keer` (geen hulpregel, geen spookmunten, geen `'terug'`/`'erbij'`-wolkje: eigenaar 2026-09-24) |
 
-Zolang de spookmunten liggen houdt alleen het gekochte spulletje zijn
-prijskaartje; anders blijven alle uitgestalde spullen hun kaartje houden. Zo
-blijft de tuin onder de 16 knoppen.
+Alle uitgestalde spullen houden altijd hun prijskaartje.
 
 ### 5.12 Stoppen en herstellen
 
@@ -2227,7 +2254,8 @@ wordt de kleinste munt gepakt.
    11000 ms) lopen onveranderd door. Moet de port die in rustmodus verkorten? Als
    ja: met welke factor, en welke wachttijden zijn *leestijd* (mag niet korter)
    en welke *animatietijd* (mag weg)?
-6. **De wekker en de hulpladder.** GAMES-API §6 schrijft spookvormen pas bij de
+6. *(Vervallen 2026-09-24: er is geen hulpladder meer, §0.5.)* **De wekker en de
+   hulpladder.** GAMES-API §6 schrijft spookvormen pas bij de
    **derde** poging voor; `wekker.js` zet de spookwijzers al bij de **tweede**
    (conform HOTEL.md §5 "spookwijzer na 2 pogingen"). Welke van de twee geldt
    voor de port? Ik heb het codegedrag gespecificeerd.
@@ -2240,12 +2268,15 @@ wordt de kleinste munt gepakt.
    het dier dat aantal springen en de beurt gaat vanaf de nieuwe steen verder.
    Dat is "nooit straffend", maar het betekent ook dat een kind een beurt kan
    verlengen tot het pad op is (`hop` klemt op de laatste steen en doet dan
-   niets behalve `snd.zacht()` + de telhulp). Er is geen bovengrens aan het
+   niets behalve `snd.zacht()` + het sippe dier; sinds 2026-09-24 geen telhulp
+   meer). Er is geen bovengrens aan het
    aantal pogingen; is dat bedoeld?
 9. **`hinkel`: `melding` is nooit `'start'` na de eerste sprong.** `nieuweStand`
    zet `melding: 'start'`, maar `zinnen()` kent alleen `'ver'` en `'kort'` en
    valt anders terug op "Kies je sprong". `'start'` is dus effectief hetzelfde
-   als "geen melding"; de port kan dat veld weglaten. **(inferred)**
+   als "geen melding"; de port kan dat veld weglaten. **(inferred)** Sinds
+   2026-09-24 kent `zinnen()` ook `'ver'` en `'kort'` niet meer (geen hint na een
+   foute landing, §3.8); `melding` blijft leeg.
 10. **`kraam`: `€10` wisselgeld.** Bij `kosten = 10` wordt er met €20 betaald en
     is het wisselgeld ook €10 — hetzelfde bedrag als de kosten. Dat is
     curriculair prima, maar het maakt de vraag "€20 − €10" wel de makkelijkste

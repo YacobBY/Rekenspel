@@ -19,7 +19,12 @@ const TAP := UiThema.HOT             ## px; minimum tap target (44 below 360 px)
 const TOAST_MS := 2600
 const PLAAT := "naam_"               ## hotspot id prefix of a name plate
 const MIS_WOLK := "mis_"             ## hotspot id prefix of the miss bubble (S5)
-const SIP_TIKKEN := 22               ## ~1,5 s of `sip` at World.TIK = 1/15 s
+const MIS_DIER := "dier_"            ## the stand-in card of a miss without a card
+const MIS_BOVEN := 10.0              ## voxels over a card's aim for the bubble without an animal
+## ~2 s of `sip` at World.TIK = 1/15 s: since 2026-09-24 the sulk is the whole
+## answer to a miss (no help follows it), so it stays a little longer than the
+## lock of the strip.
+const SIP_TIKKEN := 30
 const MIS_PAUZE := 1.2               ## s the answer strip is locked after a miss
 
 ## The breakpoint moved: the chrome rebuilds its own labels at the new size.
@@ -922,28 +927,59 @@ func _getal_keuzes(id: String, goed: int, kaart: Kaart, o: Dictionary) -> Array:
 # ------------------------------------------------------------------ de misser
 
 ## A wrong answer has to do something a child can see, and it has to cost
-## nothing (S5, owner 2026-09-20; R6 in HOTEL.md §1 stays intact).  Three
-## things happen: the animal of the turn goes `sip` for `SIP_TIKKEN` ticks, a
+## nothing (S5, owner 2026-09-20; R6 in HOTEL.md §1 stays intact) — and it is
+## ALL a wrong answer does (owner, 2026-09-24: "Nee geef geen hulp na fouten.
+## Kinderen moeten zelf leren rekenen.  Fout antwoord kiezen moet niet beloond
+## worden met hulp maar juist een teleurgesteld dier"): no game shows a help
+## line, a ghost answer or a helper after it.  Three things happen: the animal
+## of the turn sulks — `sip`, ears down, tail low — for `SIP_TIKKEN` ticks, a
 ## small bubble says `🔄 Nog een keer` beside it, and the answer strip locks
 ## for `MIS_PAUZE` seconds.  Then the strip opens again, the box is empty,
 ## and the SAME four choices stand in the SAME order — the seed of the card
 ## never moved, so this is not a new question wearing an old one.
 ##
-## Public, because the drag games (was, bedden, kraam, the hanging keys)
-## have no number strip and call this from their own miss path.  They do that
-## in their own task, not here: this commit changes only the strip.
-func misser(kaart: Kaart, dier: String) -> void:
-	if kaart == null or kaart.pauze:
+## Public, because the games without a number strip (a drag, a clock, a
+## stroke in the pool) call it from their own miss path, mostly through
+## `ctx.ui.misser`.  A card with no animal of the turn (the laundry, the
+## furniture book, the clock in the hall) hangs the bubble at the card's own
+## thing instead, so the miss is still seen.  `kaart == null` is a miss
+## without a card — a coin that slides back, a stroke that fell short — and is
+## only the animal; `door` then stamps the bubble for its game.
+func misser(kaart: Kaart, dier: String, door := "") -> void:
+	if kaart == null:
+		var los = World.dier(dier)
+		if dier.is_empty() or los == null:
+			return
+		# a stand-in: it carries the pause and the bubble's id, and it has no
+		# strip and no box, so the end of the pause touches nothing else
+		kaart = Kaart.new()
+		kaart.id = MIS_DIER + dier
+		kaart.door = door
+		kaart.kamer = str(los.kamer)
+		kaart.dier = dier
+	if kaart.pauze:
 		return
 	kaart.pauze = true
 	var wolk_id := MIS_WOLK + kaart.id
-	if not dier.is_empty() and World.dier(dier) != null:
+	var o := {"id": wolk_id, "door": kaart.door, "kamer": kaart.kamer, "prio": 12,
+		"icoon": UiTekst.MIS_ICOON, "tekst": UiTekst.MIS_ZIN}
+	var plek := Hits.spot(kaart.id)
+	var wie = World.dier(dier) if not dier.is_empty() else null
+	if wie != null and str(wie.kamer) == kaart.kamer:
 		World.pose(dier, "sip", SIP_TIKKEN)
-		wolk({
-			"id": wolk_id, "door": kaart.door, "kamer": kaart.kamer,
-			"volg": _volg_dier(dier), "hoog": 46.0, "prio": 12,
-			"icoon": UiTekst.MIS_ICOON, "tekst": UiTekst.MIS_ZIN,
-		})
+		o["volg"] = _volg_dier(dier)
+		o["hoog"] = 46.0
+		wolk(o)
+	elif plek != null:
+		# nobody's turn in view — no animal, or one asleep in another room: the
+		# bubble goes where the card points, at the thing the question is about
+		o["x"] = plek.x
+		o["z"] = plek.z
+		o["hoog"] = plek.y + MIS_BOVEN
+		wolk(o)
+	var eigen := Hits.spot(wolk_id)
+	if eigen != null:
+		kaart.set_meta(MIS_WOLK, eigen.knoop)
 	_strook_slot(kaart, true)
 	# The pause hangs on the card, not on the game: whoever calls this may
 	# walk away, and if the card is gone when the timer fires nothing wakes up
@@ -960,13 +996,25 @@ func misser(kaart: Kaart, dier: String) -> void:
 ## A card that was ticked or closed while the timer ran has already cleared
 ## `pauze` itself, and then nothing here may touch what it wrote — a ✓ that
 ## erases itself one second later is worse than no bubble at all.
+##
+## Only what THIS miss put up comes down: a game that rebuilt its card under
+## the same id in the meantime owns a new strip, a new box and perhaps a miss
+## of its own.  And only a strip's box is emptied: without a strip the box is
+## the game's (the coins on the counter, the number on the key).
 func _mis_vrij(kaart: Kaart) -> void:
 	if kaart == null or not kaart.pauze:
 		return
 	kaart.pauze = false
-	wolk_weg(MIS_WOLK + kaart.id)
+	var wolk_id := MIS_WOLK + kaart.id
+	var eigen := Hits.spot(wolk_id)
+	if eigen != null and (not kaart.has_meta(MIS_WOLK)
+			or eigen.knoop == kaart.get_meta(MIS_WOLK)):
+		wolk_weg(wolk_id)
+	if _kaarten.get(kaart.id) != kaart:
+		return
 	_strook_slot(kaart, false)
-	kaart.zet("")
+	if not kaart.strook_id.is_empty():
+		kaart.zet("")
 
 
 func _strook_slot(kaart: Kaart, aan: bool) -> void:

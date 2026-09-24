@@ -324,82 +324,104 @@ func _waar(o: Dictionary, id: String) -> Dictionary:
 			return w
 	return {}
 
-# ---------------------------------------------------------------- hulpladder
+# ------------------------------------------------------ geen hulp na een fout
 
-## §5.9: a wrong sum never punishes; the help counts on BY ONES and really ends
-## on the answer, and only the third try puts the ghost coins down.
-func test_hulpladder_bij_de_som() -> void:
+## The owner, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten zelf
+## leren rekenen.  Fout antwoord kiezen moet niet beloond worden met hulp maar
+## juist een teleurgesteld dier."  One, two and three wrong sums: the shopper
+## sulks every time with `🔄 Nog een keer`, the strip pauses, and after the
+## pause the stall is exactly what it was — no counting line on the card, no
+## ghost coins on the grass, every price tag still there.  The same question
+## stays, nothing is lost, and the right sum still goes on.
+func test_geen_hulp_bij_de_som() -> void:
 	_op()
-	_wereld(4, 4)
+	var gasten := _wereld(4, 4)
 	Games.start(SPEL)
 	var o := Sommen.Kraam.opzet(4, 4, 2)
 	var goed := int(o["vraag"]["goed"])
+	var gast := str(gasten[0]["id"])
 	var sterren := int(State.s["sterren"])
-	_tel_in(goed + 1)
-	gelijk(_stand().get("stap", ""), "som", "fout: je blijft bij de som")
-	gelijk(int(_stand().get("som_pog", 0)), 1, "poging geteld")
-	var k1 := _waar(o, str(o["keus"][0]))
-	var k2 := _waar(o, str(o["keus"][1]))
-	var hulp := Sommen.Kraam.tel_vanaf(int(k1["prijs"]), int(k2["prijs"]))
-	gelijk(_kaart_tekst("Kolom/Hulp"), hulp, "samen doortellen met stapjes van één")
-	waar(hulp.ends_with("%d." % goed), "en het eindigt echt op het antwoord")
-	waar(not hulp.contains("+"), "geen som, alleen tellen")
-	waar(_knoop("kr_sp0") == null, "nog geen spookmunten na één misser")
-	_tel_in(goed + 1)
-	waar(_knoop("kr_sp0") == null, "nog geen spookmunten na twee missers")
-	_tel_in(goed + 1)
-	gelijk(int(_stand().get("som_pog", 0)), 3, "drie pogingen")
-	var spook := Sommen.Kraam.splits_met(goed, Sommen.Kraam.SPOOK_MUNT)
-	waar(spook.size() <= Sommen.Kraam.SPOOK_MAX, "hooguit vier spookmunten")
-	for i in spook.size():
-		var t := _knoop("kr_sp%d" % i) as Label
-		waar(t != null, "spookmunt %d ligt er" % i)
-		if t != null:
-			gelijk(t.text, Sommen.Kraam.euro(int(spook[i])), "spookmunt %d" % i)
-			gelijk(t.tooltip_text, "zoveel is het", "titel van de voordoen-rij")
-	# never punishing: no star was taken away and the turn simply goes on
-	gelijk(int(State.s["sterren"]), sterren, "geen ster erbij en geen ster eraf")
-	# while the ghosts lie there only the bought things keep their price tag
-	var over := 0
+	var regel := _kaart_tekst("Kolom/Regel")
+	var keuzes := _strook_getallen()
+	var voor := beeld(SPEL)
+	waar(voor.has(KAART) and voor.has(STROOK), "het beeld kent de kaart en de strook")
+	for i in 3:
+		var wat := "misser %d" % (i + 1)
+		_tel_in(_fout_getal(goed))
+		gelijk(_stand().get("stap", ""), "som", "%s: je blijft bij de som" % wat)
+		waar(is_sip(gast), "%s: de klant is teleurgesteld" % wat)
+		waar(mis_wolk(KAART), "%s: met 🔄 Nog een keer" % wat)
+		var strook := _knoop(STROOK) as UiKeuzes
+		waar(strook != null and strook.op_slot, "%s: de strook staat even op slot" % wat)
+		gelijk(_kaart_tekst("Kolom/Hulp"), "", "%s: geen hulpregel" % wat)
+		waar(_knoop("kr_sp0") == null, "%s: geen spookmunten" % wat)
+		await _wacht(Ui.MIS_PAUZE + 0.25)
+		niets_erbij(voor, beeld(SPEL), wat)
+		gelijk(_kaart_tekst("Kolom/Regel"), regel, "%s: dezelfde vraag" % wat)
+		gelijk(str(_strook_getallen()), str(keuzes), "%s: dezelfde vier keuzes" % wat)
+	gelijk(int(_stand().get("som_pog", 0)), 3, "drie pogingen geteld")
 	for i in (o["waren"] as Array).size():
-		if _knoop("kr_p%d" % i) != null:
-			over += 1
-	gelijk(over, (o["keus"] as Array).size(),
-		"alleen het gekochte houdt zijn prijskaartje")
+		waar(_knoop("kr_p%d" % i) != null, "waar %d houdt zijn prijskaartje" % i)
+	gelijk(int(State.s["sterren"]), sterren, "geen ster erbij en geen ster eraf")
 	_tel_in(goed)
 	gelijk(_stand().get("stap", ""), "leg", "goed antwoord na drie missers, gewoon door")
-	waar(_knoop("kr_sp0") == null, "de spookmunten zijn weg")
 	_af()
 
-## §5.8: too little is a calm bubble, from the second try a split-up help line,
-## from the third the ghost coins on the grass.
-func test_hulpladder_bij_het_leggen() -> void:
+## "klaar" with too little on the counter, three times: the shopper sulks, and
+## no bubble says how much is missing, no help line splits the price, no ghost
+## coins lie on the grass.  The turn simply goes on.
+func test_geen_hulp_bij_het_leggen() -> void:
 	_op()
-	_wereld(1, 3)
+	var gasten := _wereld(1, 3)
 	Games.start(SPEL)
 	var o := Sommen.Kraam.opzet(1, 3, 2)
-	var doel := int(o["doel"])
-	_tik(KLAAR)
-	gelijk(_stand().get("leg_pog", 0), 1, "eerste poging geteld")
-	var wolk := _knoop("kr_zeg")
-	waar(wolk != null, "er staat een rustig wolkje")
-	if wolk != null:
-		gelijk(wolk.tooltip_text, "🪙 +%s erbij" % Sommen.Kraam.euro(doel),
-			"het zegt hoeveel er nog bij moet")
-	_tik(KLAAR)
-	var deel: Array = []
-	for m in Sommen.Kraam.splits_met(doel, o["munten"]):
-		deel.append(Sommen.Kraam.euro(int(m)))
-	gelijk(_kaart_tekst("Kolom/Hulp"), " + ".join(deel), "de hulpregel splitst het bedrag")
-	waar(_knoop("kr_sp0") == null, "nog geen spookmunten")
-	_tik(KLAAR)
-	gelijk(int(_stand().get("spook", 0)), 1, "derde poging: spookmunten")
-	var t := _knoop("kr_sp0") as Label
-	waar(t != null, "de eerste spookmunt ligt er")
-	if t != null:
-		gelijk(t.tooltip_text, "dit moet er nog bij", "de titel bij het leggen")
-	gelijk(_stand().get("stap", ""), "leg", "de beurt loopt gewoon door")
+	var gast := str(gasten[0]["id"])
+	_tik("kr_m1")
+	_tik(BANK)
+	var voor := beeld(SPEL)
+	for i in 3:
+		var wat := "klaar %d" % (i + 1)
+		_tik(KLAAR)
+		gelijk(int(_stand().get("leg_pog", 0)), i + 1, "%s: poging geteld" % wat)
+		waar(is_sip(gast), "%s: de klant is teleurgesteld" % wat)
+		waar(mis_wolk(KAART), "%s: met 🔄 Nog een keer" % wat)
+		var zeg := _knoop("kr_zeg")
+		waar(zeg == null or not zeg.tooltip_text.contains("erbij"),
+			"%s: geen wolkje met hoeveel er nog bij moet" % wat)
+		gelijk(_kaart_tekst("Kolom/Hulp"), "", "%s: geen hulpregel" % wat)
+		waar(_knoop("kr_sp0") == null, "%s: geen spookmunten" % wat)
+		gelijk(_kaart_tekst("Kolom/Rij/Vak"), Sommen.Kraam.euro(1),
+			"%s: het vakje zegt nog wat er ligt" % wat)
+		await _wacht(Ui.MIS_PAUZE + 0.25)
+		niets_erbij(voor, beeld(SPEL), wat)
+		gelijk(_stand().get("stap", ""), "leg", "%s: de beurt loopt gewoon door" % wat)
+	for v in Sommen.Kraam.splits_met(int(o["doel"]) - 1, o["munten"]):
+		_tik("kr_m%d" % int(v))
+		_tik(BANK)
+	gelijk(_stand().get("stap", ""), "af", "en met het goede bedrag is hij af")
 	_af()
+
+## The numbers on the strip, in order.
+func _strook_getallen() -> Array[int]:
+	var uit: Array[int] = []
+	var strook := _knoop(STROOK)
+	if strook == null:
+		return uit
+	var rij := strook.get_node_or_null("Rij")
+	if rij == null:
+		return uit
+	for k in rij.get_children():
+		var naam := str(k.name)
+		if naam.begins_with("Kn"):
+			uit.append(int(naam.substr(2)))
+	return uit
+
+## A number on the strip that is not the answer.
+func _fout_getal(goed: int) -> int:
+	for k in _strook_getallen():
+		if k != goed:
+			return k
+	return goed + 1
 
 ## N7: as soon as something lies on the counter the second line counts the rest
 ## down.  Until then it is the instruction, and while a coin too many is sliding
@@ -540,9 +562,12 @@ func test_te_veel_gelegd_schuift_terug() -> void:
 		gelijk(bank.tooltip_text, "op de toonbank ligt %s van %s"
 			% [Sommen.Kraam.euro(doel + 1), Sommen.Kraam.euro(doel)],
 			"op het beeld ligt hij er wel")
+	# the shopper sulks, and nothing says by how much (owner, 2026-09-24)
+	waar(is_sip(str(State.s["gasten"][0]["id"])), "de klant is teleurgesteld")
+	waar(mis_wolk(KAART), "met 🔄 Nog een keer")
 	var wolk := _knoop("kr_zeg")
-	if wolk != null:
-		gelijk(wolk.tooltip_text, "🪙 %s terug" % Sommen.Kraam.euro(1), "🪙 €1 terug")
+	waar(wolk == null or not wolk.tooltip_text.contains("terug"), "geen wolkje met hoeveel te veel")
+	gelijk(int(_stand().get("missers", 0)), 1, "te veel is een misser")
 	# the gate: a second coin in that half second is not accepted
 	_tik("kr_m1")
 	_tik(BANK)
@@ -794,7 +819,9 @@ func test_de_kaart_wacht_op_de_klant() -> void:
 
 # --------------------------------------------------------------- de getallen
 
-## The ghost coins are exactly [5, 2, 1] and never more than four (§5.3).
+## The frozen core still carries the ghost coins, exactly [5, 2, 1] and never
+## more than four (§5.3) — the stall no longer shows them after a miss (owner,
+## 2026-09-24), but `core/sommen.gd` stays byte-identical.
 func test_spookmunten_zijn_exact() -> void:
 	gelijk(str(Sommen.Kraam.SPOOK_MUNT), "[5, 2, 1]", "de voordoen-munten")
 	gelijk(Sommen.Kraam.SPOOK_MAX, 4, "hooguit vier naast elkaar")
@@ -833,12 +860,15 @@ func test_kindtekst_letterlijk() -> void:
 	for zin in ["nog geen gasten", "Leg de munten op de toonbank", "Nog %s erbij",
 			"Hoeveel euro samen?", "Hoeveel krijgt hij terug?",
 			"Leg het wisselgeld neer", "Veel plezier ermee!", "klaar met tellen",
-			"in je hand", "tik een getal", "zoveel is het", "dit moet er nog bij",
+			"in je hand", "tik een getal",
 			"op de toonbank ligt %s van %s", "munt van %d euro%s",
 			"%s heeft zijn souvenir", "%s %s kost %d euro",
 			"%s wil %s %s van %s", "Samen kost het %s", "%s gaf %s, het kost %s",
 			"%s krijgt %s terug", "%s wil een souvenir", "Souvenir", "Kraam"]:
 		waar(bron.contains('"%s"' % zin), "de tekst %s staat er letterlijk" % zin)
+	# and the words of the old help ladder are gone (owner, 2026-09-24)
+	for weg in ["zoveel is het", "dit moet er nog bij", "hotspook"]:
+		waar(not bron.contains('"%s"' % weg), "geen %s meer in spel.gd" % weg)
 	# every sentence, with the longest name of the pool, inside the F4 budget
 	var naam := "Stampertje"
 	var zinnen: Array[String] = ["Veel plezier ermee!", "Leg de munten op de toonbank",

@@ -348,8 +348,34 @@ func _komt_eraan_in_beeld(id: String) -> bool:
 	var w := Hits.spot("komt_" + id)
 	return w != null and is_instance_valid(w.knoop) and w.knoop.visible
 
-## A miss costs nothing: the turn goes on, the star count does not move.
-func test_misser_helpt_en_straft_nooit() -> void:
+## Wait out the pause `Ui.misser` puts on the strip after a miss (S5).
+func _wacht_mispauze() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var eind := Time.get_ticks_msec() + int(Ui.MIS_PAUZE * 1000.0) + 250
+	while Time.get_ticks_msec() < eind:
+		await boom.process_frame
+
+## A number on the strip that is not the answer.
+func _fout_getal(goed: int) -> int:
+	var s := Hits.spot("tb_vraag_keuzes")
+	if s == null or not is_instance_valid(s.knoop):
+		return -1
+	for k in s.knoop.get_node("Rij").get_children():
+		var n := int(str(k.name).trim_prefix("Kn"))
+		if n != goed:
+			return n
+	return -1
+
+## The owner, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten zelf
+## leren rekenen.  Fout antwoord kiezen moet niet beloond worden met hulp maar
+## juist een teleurgesteld dier."  One, two and three wrong answers to the soap
+## sum: the strip pauses with `🔄 Nog een keer` at the card, and after the pause
+## the card and the tubs are exactly what they were — no counting line, no
+## "... van 5" on the tubs.  Then ✓ on a wrong filling, three times: nothing
+## says what is still on the rack, that the tubs must be even or where the rest
+## goes, and buurvrouw Els never comes with her ghost numbers.  A miss costs
+## nothing, and a right filling still works.
+func test_geen_hulp_na_een_fout() -> void:
 	_op()
 	_gasten(2, 1, 3)
 	waar(Games.start(ID), "het spel start")
@@ -362,12 +388,79 @@ func test_misser_helpt_en_straft_nooit() -> void:
 		_af()
 		return
 	var sterren := int(State.s["sterren"])
-	waar(_tik_keuze(int(s["per"])), "eerst de som goed beantwoorden")
-	spel._check()                                  # nothing moved yet: the rack is full
-	gelijk(int(spel._s["missers"]), 1, "één misser geteld")
-	gelijk(str(spel._s["stap"]), "vullen", "de beurt loopt door")
+	var toeschouwer := str(State.s["gasten"][0]["id"])
+	World.zet(toeschouwer, "tuin", 40.0, 100.0)
+	# the sum
+	var voor := beeld(ID)
+	waar(voor.has("tb_vraag") and voor.has("tb_vraag_keuzes"), "het beeld kent de somkaart")
+	for keer in 3:
+		var wat := "som, misser %d" % (keer + 1)
+		waar(_tik_keuze(_fout_getal(int(s["per"]))), "%s: een fout getal" % wat)
+		gelijk(int(spel._s["missers"]), keer + 1, "%s: geteld" % wat)
+		gelijk(str(spel._s["stap"]), "vraag", "%s: dezelfde vraag" % wat)
+		waar(mis_wolk("tb_vraag"), "%s: 🔄 Nog een keer bij de kaart" % wat)
+		waar(is_sip(toeschouwer), "%s: wie in de tuin staat is teleurgesteld" % wat)
+		var strook := Hits.spot("tb_vraag_keuzes")
+		waar(strook != null and (strook.knoop as UiKeuzes).op_slot, "%s: de strook even op slot" % wat)
+		var kaart := Hits.spot("tb_vraag").knoop as UiSomkaart
+		waar(not kaart.hulp_label.visible, "%s: geen telregel" % wat)
+		for i in int(s["M"]):
+			var kuip := Hits.spot("tb_kuip%d" % i)
+			waar(kuip == null or not (kuip.knoop as Control).tooltip_text.contains(" van "),
+				"%s: tobbe %d verklapt niet hoeveel erin moet" % [wat, i + 1])
+		await _wacht_mispauze()
+		niets_erbij(voor, beeld(ID), wat)
+	waar(_tik_keuze(int(s["per"])), "het goede getal")
+	gelijk(str(spel._s["stap"]), "vullen", "daarna mag er geschept worden")
+	# ✓ with everything still on the rack, three times
+	for keer in 3:
+		var wat := "klaar, misser %d" % (keer + 1)
+		spel._check()
+		gelijk(int(spel._s["missers"]), 4 + keer, "%s: geteld" % wat)
+		gelijk(str(spel._s["stap"]), "vullen", "%s: de beurt loopt door" % wat)
+		waar((spel._s["zeg"] as Dictionary).is_empty(), "%s: het spel zegt niet wat er mis is" % wat)
+		waar(Hits.spot("tb_zeg") == null, "%s: geen wolkje met een tip" % wat)
+		waar(mis_wolk("tb_som"), "%s: 🔄 Nog een keer" % wat)
+		waar(Hits.spot("tb_els") == null, "%s: geen buurvrouw Els" % wat)
+		waar(Hits.spot("tb_s0") == null and Hits.spot("tb_sk") == null, "%s: geen spookcijfers" % wat)
+		await _wacht_mispauze()
 	gelijk(int(State.s["sterren"]), sterren, "geen ster erbij of eraf")
-	waar(not spel._s["zeg"].is_empty(), "het spel zegt wat er nog moet")
+	# the right filling still works
+	for i in int(s["M"]):
+		spel._s["tob"][i] = int(s["per"])
+	spel._s["rek"] = 0
+	spel._s["kan"] = int(s["rest"])
+	spel._check()
+	gelijk(str(spel._s["stap"]), "baden", "een goede verdeling: iedereen mag in bad")
+	_af()
+
+## Too full: the soap goes back on the rack and the guests in the garden look
+## disappointed (`sip`) — they no longer laugh, and no bubble says "te vol".
+func test_te_vol_is_een_teleurstelling() -> void:
+	_op()
+	var gasten := _gasten(2, 1, 3)
+	waar(Games.start(ID), "het spel start")
+	var spel = _spel()
+	if spel == null:
+		_af()
+		return
+	var s: Dictionary = spel._s
+	if str(s["soort"]) != "eerlijk":
+		_af()
+		return
+	waar(_tik_keuze(int(s["per"])), "eerst de som")
+	var id := str(gasten[0]["id"])
+	World.zet(id, "tuin", 40.0, 100.0)
+	# everything scooped, one tub one too full: ✓ finds it overflowing
+	spel._s["rek"] = 0
+	spel._s["tob"][0] = int(s["per"]) + 1
+	spel._check()
+	gelijk(int(spel._s["tob"][0]), 0, "de volle tobbe is leeg")
+	gelijk(int(spel._s["rek"]), int(s["per"]) + 1, "het sop is terug op het rek")
+	gelijk(int(spel._s["missers"]), 1, "een misser")
+	waar(is_sip(id), "de gast in de tuin kijkt teleurgesteld")
+	waar(mis_wolk("tb_som"), "🔄 Nog een keer")
+	waar(Hits.spot("tb_zeg") == null, "geen wolkje met te vol")
 	_af()
 
 # --------------------------------------------------------- 4. herlaad, stop
@@ -476,15 +569,19 @@ func test_alle_teksten_staan_er_woordelijk() -> void:
 		return
 	var bron := f.get_as_text()
 	for zin in ["nog geen gasten", "geen plek", "Verdeel het eerlijk", "Zo is het goed!",
-			"zo is het goed", "klaar met badderen", "buurvrouw Els doet het voor",
+			"zo is het goed", "klaar met badderen",
 			"opnieuw beginnen", "morgen dubbel", "Hoeveel samen?", "in twee helften",
-			"Hoeveel in elke helft?", "rek is leeg", "blijft over", "is oneven",
-			"eerst sop erin", "te vol", "nog op het rek", "even hoog", "hoort hierin",
+			"Hoeveel in elke helft?", "rek is leeg", "blijft over",
+			"eerst sop erin", "even hoog",
 			"%d schepjes, %d tobbes", "Hoeveel in elke tobbe?", "de som van het sop",
-			"erbij", "ieder evenveel", "zoveel hoort erin", "zoveel blijft over",
 			"wil in bad", "zit vol", "lekker warm", "mag in de tobbe",
 			"mogen in de tobbe", "blinkend schoon"]:
 		waar(bron.contains(zin), "letterlijk in de bron: %s" % zin)
+	# what came after a miss is gone (owner, 2026-09-24)
+	for weg in ["buurvrouw Els doet het voor", "is oneven", "te vol", "nog op het rek",
+			"hoort hierin", "erbij", "ieder evenveel", "zoveel hoort erin",
+			"zoveel blijft over", "hotspook"]:
+		waar(not bron.contains('"%s"' % weg), "geen hulp na een misser meer: %s" % weg)
 
 ## De openingszin van `eerlijk` past bij ELK recept dat de bevroren kern kan
 ## maken (HOTEL.md §9: <= 8 woorden en <= 40 tekens), en elk teken zit in het

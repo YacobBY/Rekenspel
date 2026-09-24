@@ -344,54 +344,84 @@ func _maak_af(node: Node) -> void:
 			return
 		Hits.plaats()
 
-# ============================================================ de hulpladder
+# ======================================================= geen hulp na een fout
 
-## A wrong answer still hops, is never punished, and from the SECOND slip the
-## card counts along out loud (games-b.md §0.5, §0.6, §3.8).
-func test_fout_antwoord_hinkelt_toch_en_helpt() -> void:
+## Wait out the pause `Ui.misser` puts on the strip after a miss (S5), the way
+## a child with a real finger does.
+func _wacht_mispauze() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var eind := Time.get_ticks_msec() + int(Ui.MIS_PAUZE * 1000.0) + 250
+	while Time.get_ticks_msec() < eind:
+		await boom.process_frame
+
+## A count on the strip that is NOT the right number of hops.
+func _fout_aantal(node: Node) -> int:
+	var st: Dictionary = node.proef_stand()
+	@warning_ignore("integer_division")
+	var goed: int = absi(int(st["doel"]) - int(st["s"])) / maxi(1, int(st["sprong"]))
+	for w in _keuze_woorden():
+		var n := int(w.trim_prefix("🪨 ").trim_suffix(" keer"))
+		if n > 0 and n != goed:
+			return n
+	return -1
+
+## The owner, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten zelf
+## leren rekenen.  Fout antwoord kiezen moet niet beloond worden met hulp maar
+## juist een teleurgesteld dier."  A wrong number of hops, one, two and three
+## times: the animal still hops what was chosen (never punishing) and then he
+## is disappointed — `sip`, `🔄 Nog een keer`, the strip locked for a moment.
+## Nothing helps: no bubble that says he is short or too far, no card that says
+## which way to go, no counting line on the next card.  The card asks the same
+## question as always from where he landed, and the right hops still finish.
+func test_geen_hulp_na_een_fout() -> void:
 	_op()
 	var node := await _speel(5, 1, 3)          # band 4: van 10 naar 20 met 2, 5 sprongen
 	if node == null:
 		await _af()
 		return
-	waar(_tik_keuze("k2"), "de sprongmaat 2")
-	Hits.plaats()
-	var goed := 5
-	waar(_tik_keuze("n%d" % (goed - 1)), "en één sprong te weinig")
-	Hits.plaats()
-	var st: Dictionary = node.proef_stand()
-	gelijk(int(st["missers"]), 1, "één misser geteld")
-	gelijk(int(st["pogingen"]), 1, "en één poging")
-	gelijk(int(st["s"]), 18, "het dier hinkelde tóch: van 10 naar 18")
-	gelijk(str(st["fase"]), "sprong", "en de kaart vraagt van daaruit verder")
-	gelijk(str(st["melding"]), "kort", "hij staat nog vóór de trap")
-	gelijk(int(State.s["sterren"]), 0, "een misser kost geen ster en geeft er geen")
-	var zeg := Hits.spot("hk_zeg")
-	waar(zeg != null, "er staat een zacht praatje bij het dier")
-	if zeg != null:
-		gelijk(zeg.knoop.tooltip_text, "🪨 18 nog verder", "woordelijk, en zonder kruis")
-	for regel in _regels():
-		waar(not regel.contains("✗") and not regel.contains("❌") and not regel.contains("fout"),
-			"nooit een kruis op de kaart (%s)" % regel)
-	var kaart := _kaart_knoop()
-	waar(kaart != null and not kaart.hulp_label.visible,
-		"bij de eerste misser nog geen telhulp")
-
-	# second slip: now the card counts along
-	waar(_tik_keuze("k2"), "opnieuw de maat 2")
-	Hits.plaats()
-	waar(_tik_keuze("n2"), "en weer te weinig")
-	Hits.plaats()
-	st = node.proef_stand()
-	gelijk(int(st["missers"]), 2, "twee missers")
-	waar(_tik_keuze("k2"), "de maat voor de derde keer")
-	Hits.plaats()
-	kaart = _kaart_knoop()
-	waar(kaart != null and kaart.hulp_label.visible, "nu telt de kaart samen mee")
-	if kaart != null:
-		gelijk(kaart.hulp_label.text, "20.", "de telregel langs de lijn")
+	var gast := str(node.proef_stand()["gast"])
+	var naam := str(State.gast_van(gast).get("naam", ""))
+	for i in 3:
+		var wat := "misser %d" % (i + 1)
+		var maten: Array = node.proef_maten()
+		waar(not maten.is_empty() and _tik_keuze("k%d" % int(maten[0])), "%s: een sprongmaat" % wat)
+		Hits.plaats()
+		var kaart := _kaart_knoop()
+		waar(kaart != null and not kaart.hulp_label.visible, "%s: bij de vraag geen telhulp" % wat)
+		var n := _fout_aantal(node)
+		waar(n > 0, "%s: er staat een fout aantal op de strook" % wat)
+		waar(_tik_keuze("n%d" % n), "%s: %d keer, fout" % [wat, n])
+		Hits.plaats()
+		var st: Dictionary = node.proef_stand()
+		gelijk(int(st["missers"]), i + 1, "%s: geteld" % wat)
+		gelijk(str(st["fase"]), "sprong", "%s: de kaart vraagt van daaruit verder" % wat)
+		waar(int(st["s"]) != int(st["doel"]), "%s: hij staat niet op de trap" % wat)
+		waar(is_sip(gast), "%s: het dier is teleurgesteld" % wat)
+		waar(mis_wolk("hk_som"), "%s: met 🔄 Nog een keer" % wat)
+		var strook := Hits.spot("hk_som_keuzes")
+		waar(strook != null and (strook.knoop as UiKeuzes).op_slot,
+			"%s: de strook staat even op slot" % wat)
+		waar(Hits.spot("hk_zeg") == null, "%s: geen wolkje met te ver of nog verder" % wat)
+		var regels := _regels()
+		waar(regels.size() == 2 and regels[0].ends_with(
+			"%s staat op %d, trap bij %d" % [naam, int(st["s"]), int(st["doel"])])
+			and regels[1] == "Kies je sprong",
+			"%s: dezelfde vraag als altijd, vanaf zijn steen (%s)" % [wat, str(regels)])
+		kaart = _kaart_knoop()
+		waar(kaart != null and not kaart.hulp_label.visible, "%s: geen hulpregel" % wat)
+		for regel in _regels():
+			waar(not regel.contains("✗") and not regel.contains("❌") and not regel.contains("fout"),
+				"%s: nooit een kruis op de kaart (%s)" % [wat, regel])
+		gelijk(int(State.s["sterren"]), 0, "%s: een misser kost geen ster" % wat)
+		var voor := beeld("hinkel")
+		await _wacht_mispauze()
+		waar(not (Hits.spot("hk_som_keuzes").knoop as UiKeuzes).op_slot, "%s: de strook is weer open" % wat)
+		var na := beeld("hinkel")
+		for id in na.keys():
+			waar(voor.has(id), "%s: na de pauze verschijnt %s niet (%s)" % [wat, id, str(na[id])])
 	# and the star is still there for taking part
 	_maak_af(node)
+	gelijk(str(node.proef_stand()["fase"]), "af", "de goede sprongen maken het af")
 	gelijk(int(State.s["sterren"]), 1, "de ster hangt aan het meedoen")
 	await _af()
 
@@ -649,13 +679,16 @@ func test_kindtekst_staat_woordelijk_in_het_bestand() -> void:
 	for zin in ["Hinkelen", "%s wil hinkelen", "Hinkel op de stenen",
 			"nog geen gasten", "van %d naar %d",
 			"%s staat op %d, trap bij %d", "Kies je sprong",
-			"Nog even verder", "Oei, te ver!", "Kies je sprong terug",
 			"%s springt %d", " terug", " per keer", "Hoeveel sprongen?",
 			"%s hinkelt", "Tel maar mee", "Precies op de trap!",
 			"sprong %d", "terug %d", "%d keer", "kies je sprong",
-			"hoeveel sprongen?", "te ver", "nog verder", "op de trap",
-			"🪨", "🛏", "✅", "⭐", "🙃", "🐶", "🐱", "🐰", "🦆", "🐾"]:
+			"hoeveel sprongen?", "op de trap",
+			"🪨", "🛏", "✅", "⭐", "🐶", "🐱", "🐰", "🦆", "🐾"]:
 		waar(bron.contains(zin), "de tekst staat er woordelijk: %s" % zin)
+	# what came after a miss is gone (owner, 2026-09-24): no hint of the way
+	for weg in ["Nog even verder", "Oei, te ver!", "Kies je sprong terug",
+			"\"te ver\"", "\"nog verder\"", "tel_pad"]:
+		waar(not bron.contains(weg), "geen hulp na een misser meer: %s" % weg)
 
 ## F4: every sentence of every phase is one Dutch sentence of <= 8 words and
 ## <= 40 characters, on the longest name the hotel can produce.

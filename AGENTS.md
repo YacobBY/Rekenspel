@@ -120,8 +120,11 @@ The design contract the code must keep serving (details: `ANALYSIS.md` §1,
    only the size of the next sum.
 2. **The loop closes through furniture.** Maths → coins → beds → more guests →
    bigger N → harder sums. Stars reward participation, coins come from maths.
-3. **Never punishing.** No red X, no timers except a 2 s help window on
-   memorisation items, wrong answers get a worked example.
+3. **Never punishing, never helping after a miss.** No red X, no timers except
+   a 2 s help window on memorisation items.  A wrong answer gets NO help (owner,
+   2026-09-24: "Nee geef geen hulp na fouten"): the animal of the turn is
+   disappointed (`Ui.misser`: `sip` + `🔄 Nog een keer`, the strip locked for a
+   moment) and the same question stays — no help line, ghost, hint or helper.
 4. **No reading required.** Every card sentence ≤ 8 words AND ≤ 40 characters,
    pictogram AND word on every button, answers are one tap on a strip of at
    most four choices. There is **no keypad** (removed 2026-09-14).
@@ -291,7 +294,7 @@ Sounds: `ctx.snd.plop(i)`, `ja()`, `hoera()` … Particles: `World.spetter`.
 | `tobbe` | Tobbe-tijd | tuin | fair sharing (division) of soap scoops | games-a §6 |
 | `voerkar` | De voerkar | keuken → rooms | k·N biscuits, filling and distributing bowls; reference for HOTEL.md §9 | games-a §7 |
 | `zwembad` | Zwembad | zwembad | the pool is a number line 0…L; lanes vary per day (`Sommen.Zwembad`) | games-b §1 |
-| `wekker` | De wekkerdienst | gang | clock reading; ghost hands at the 2nd miss | games-b §2 |
+| `wekker` | De wekkerdienst | gang | clock reading (no ghost hands: no help after a miss) | games-b §2 |
 | `hinkel` | Hinkelpad | tuin (zone hinkel) | number line of stepping stones 0…E | games-b §3 |
 | `was` | Wasmandtoren | wasserij | sorting/tallying into crates, bar chart | games-b §4 |
 | `kraam` | Souvenirkraam | tuin (zone kraam) | money, paying and change | games-b §5 |

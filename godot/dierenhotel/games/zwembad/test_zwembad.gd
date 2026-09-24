@@ -296,9 +296,7 @@ func test_de_zinnen_staan_er_woordelijk() -> void:
 					ZwembadBeurt.regel_verder(naam, m), ZwembadBeurt.regel2_verder(),
 					ZwembadBeurt.regel_bots_terug(naam, l - 1),
 					ZwembadBeurt.eind_regel2_precies(naam, l),
-					ZwembadBeurt.eind_regel_bots(naam), ZwembadBeurt.eind_regel2_bots(l),
-					ZwembadBeurt.hulp_regel(1, m), ZwembadBeurt.hulp_regel(2, m),
-					ZwembadBeurt.hulp_regel(3, m)]:
+					ZwembadBeurt.eind_regel_bots(naam), ZwembadBeurt.eind_regel2_bots(l)]:
 				waar(zin.split(" ", false).size() <= 8 and zin.length() <= 40,
 					'"%s" past in het tekstbudget (%d woorden, %d tekens)'
 						% [zin, zin.split(" ", false).size(), zin.length()])
@@ -307,8 +305,12 @@ func test_de_zinnen_staan_er_woordelijk() -> void:
 			ZwembadBeurt.TOAST_BOTS, ZwembadBeurt.ICOON, ZwembadBeurt.PRECIES_ICOON,
 			ZwembadBeurt.BOTS_ICOON, ZwembadBeurt.BOTS_KAART_ICOON,
 			ZwembadBeurt.regel_bots_terug("Muis", 12), ZwembadBeurt.som_verder(43, 30),
-			ZwembadBeurt.som_af(43, 0, 43, false), ZwembadBeurt.hulp_regel(1, 30)]:
+			ZwembadBeurt.som_af(43, 0, 43, false)]:
 		gelijk(str(Ui.mist_tekens(zin)), "[]", 'geen ontbrekend teken in "%s"' % zin)
+	# the help ladder is gone (owner, 2026-09-24)
+	waar(not ZwembadBeurt.new().has_method("hulp_regel") and not (ZwembadBeurt as Script)
+		.get_script_method_list().any(func(mt): return str(mt["name"]) == "hulp_regel"),
+		"ZwembadBeurt heeft geen hulp_regel meer")
 
 # ------------------------------------------------------------ de bewaarde beurt
 
@@ -456,66 +458,60 @@ func _beurt_per_band(n_gasten: int, band: int) -> void:
 	waar(Hits.spot(STROOK) == null, "de keuzestrook is van tafel")
 	await _af()
 
-## Never punishing (§0.6, F5): a wrong answer costs no star, gives a soft sound
-## and a help line, and the turn simply goes on with the rest.
-func test_fout_antwoord_helpt_en_straft_nooit() -> void:
+## The owner, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten zelf
+## leren rekenen.  Fout antwoord kiezen moet niet beloond worden met hulp maar
+## juist een teleurgesteld dier."  A stroke that is too short, one, two and
+## three times: he swims what the answer bought, and then he sulks in the water
+## (`sip`) with `🔄 Nog een keer` beside him — no bubble with the metres that
+## are left, no help line on the next card, no marker lighting up, no pale
+## marker in the water.  Never punishing either: no star less, the turn goes
+## on, and the right answers still reach the other side.
+func test_geen_hulp_na_een_fout() -> void:
 	_op()
-	_gasten(4)
+	var gasten := _gasten(4)
+	var gast := str(gasten[0]["id"])
 	var sterren_voor := int(State.s["sterren"])
 	waar(Games.start(ID), "het spel start")
 	waar(await _wacht(_kaart_staat), "de vraagkaart staat er")
-	var l := int(_beurt()["L"])
-	var m := int(_beurt()["M"])
-	# too short: he swims that far and a new card asks for the rest
-	var kort := _kort_antwoord()
-	waar(kort > 0, "er staat een te korte knop op de strook (%d)" % kort)
-	waar(_druk(kort), "de te korte knop is aan te tikken")
-	waar(await _wacht(_kaart_staat), "er komt gewoon een nieuwe kaart")
-	gelijk(int(_beurt()["p"]), kort, "hij zwom precies zo ver als gevraagd")
-	gelijk(int(_beurt()["misser"]), 1, "één misser geteld")
-	gelijk(int(State.s["sterren"]), sterren_voor, "en geen ster minder")
-	var kaart := _kaart_knoop()
-	waar(kaart != null and kaart.hulp_label.visible, "trede 1: er staat een hulpregel")
-	if kaart != null:
-		gelijk(kaart.hulp_label.text, ZwembadBeurt.hulp_regel(1, m), "trede 1 letterlijk")
-		waar(not kaart.regel_label.text.contains("✗"), "geen kruis op de kaart")
-	# a second slip: a more pointed line, still no punishment
-	var kort2 := _kort_antwoord()
-	if kort2 > 0:
-		waar(_druk(kort2), "nog een te korte knop")
-		waar(await _wacht(func() -> bool: return _kaart_staat() or not _klaar().is_empty()),
-			"en het spel gaat verder")
-	if _klaar().is_empty():
-		gelijk(int(_beurt()["misser"]), 2, "twee missers")
-		var k2 := _kaart_knoop()
-		if k2 != null:
-			gelijk(k2.hulp_label.text, ZwembadBeurt.hulp_regel(2, m), "trede 2 letterlijk")
-	gelijk(int(State.s["sterren"]), sterren_voor, "nog steeds geen ster minder")
-	waar(l > 0, "de baan is er nog")
-	await _af()
-
-## The third slip shows the answer as a pale marker in the water (§0.5).
-func test_derde_misser_zet_een_spookstreep() -> void:
-	_op()
-	_gasten(4)
-	waar(Games.start(ID), "het spel start")
-	waar(await _wacht(_kaart_staat), "de vraagkaart staat er")
-	for _i in 3:
+	var missers := 0
+	for i in 3:
 		var kort := _kort_antwoord()
-		if kort <= 0:
+		if kort <= 0 or not _klaar().is_empty():
 			break
-		_druk(kort)
-		await _wacht(func() -> bool: return _kaart_staat() or not _klaar().is_empty())
-	if int(_beurt()["misser"]) >= 3 and _klaar().is_empty():
-		waar(not World.decor_plek("zb_spook", ID).is_empty(),
-			"er ligt een bleke streep in het water")
-		waar(Hits.spot("zb_spooktag") != null, "met het antwoord erop")
+		var wat := "misser %d" % (i + 1)
+		var p_voor := int(_beurt()["p"])
+		waar(_druk(kort), "%s: de te korte knop %d is aan te tikken" % [wat, kort])
+		waar(await _wacht(func() -> bool: return is_sip(gast)), "%s: hij wordt sip" % wat)
+		missers += 1
+		gelijk(int(_beurt()["p"]), p_voor + kort, "%s: hij zwom zo ver als gevraagd" % wat)
+		gelijk(int(_beurt()["misser"]), missers, "%s: geteld" % wat)
+		waar(mis_wolk("", gast), "%s: met 🔄 Nog een keer naast zich" % wat)
+		var wolk := Hits.spot("zb_wolk")
+		waar(wolk == null, "%s: geen wolkje met hoeveel of hooguit" % wat)
+		waar(not _kaart_staat(), "%s: eerst het sippe dier, dan de kaart" % wat)
+		waar(await _wacht(_kaart_staat), "%s: daarna gewoon een nieuwe kaart" % wat)
+		var d = World.dier(gast)
+		waar(d != null and str(d.staat) == "zwem", "%s: en hij drijft weer (%s)"
+			% [wat, str(d.staat) if d != null else "?"])
 		var kaart := _kaart_knoop()
+		waar(kaart != null and not kaart.hulp_label.visible, "%s: geen hulpregel" % wat)
 		if kaart != null:
-			gelijk(kaart.hulp_label.text, ZwembadBeurt.hulp_regel(3, int(_beurt()["M"])),
-				"trede 3 letterlijk")
-	else:
-		waar(true, "de baan was te kort voor drie missers")
+			waar(not kaart.regel_label.text.contains("✗"), "%s: geen kruis" % wat)
+		for stuk in World.decor_lijst(ID):
+			var par: Dictionary = stuk.get("params", {})
+			waar(not par.has("licht") and not par.has("bleek"),
+				"%s: %s licht niet op en is niet bleek" % [wat, str(stuk.get("id", ""))])
+		waar(World.decor_plek("zb_spook", ID).is_empty() and Hits.spot("zb_spooktag") == null,
+			"%s: geen bleke streep met het antwoord" % wat)
+	waar(missers >= 1, "er viel minstens één te korte slag (%d)" % missers)
+	gelijk(int(State.s["sterren"]), sterren_voor, "en geen ster minder")
+	# the right answers still get him to the other side
+	var slagen := 0
+	while _klaar().is_empty() and slagen < 6:
+		waar(_druk(_juist_nu()), "het goede antwoord staat op de strook")
+		await _wacht(func() -> bool: return _kaart_staat() or not _klaar().is_empty(), 8000)
+		slagen += 1
+	gelijk(_klaar(), "precies", "precies aan de overkant")
 	await _af()
 
 ## PLAN N3 (open question V1) and the owner, 2026-09-23 ("Bij stoten moet de
@@ -553,7 +549,7 @@ func test_een_te_ver_antwoord_eindigt_de_beurt_niet() -> void:
 	waar(p_na > 0 and p_na < l, "maar wel in de baan (%d m)" % p_na)
 	waar(l - p_na != rest_voor, "dus het is een andere afstand (%d, was %d)"
 		% [l - p_na, rest_voor])
-	gelijk(int(_beurt()["misser"]), missers_voor + 1, "de misser telt voor de hulptrap")
+	gelijk(int(_beurt()["misser"]), missers_voor + 1, "de misser telt voor het adaptieve signaal")
 	gelijk(int(State.s["sterren"]), sterren_voor, "en er viel geen ster")
 	var kaart := _kaart_knoop()
 	waar(kaart != null, "er staat weer een somkaart")
@@ -615,7 +611,7 @@ func test_de_kaart_na_een_bots_past_in_het_kader() -> void:
 			"en ze staat heel in het kader (%s)" % str(r))
 	var kaart := _kaart_knoop()
 	if kaart != null:
-		waar(kaart.hulp_label.visible, "met de eerste hulptrede erop")
+		waar(not kaart.hulp_label.visible, "zonder hulpregel (eigenaar 2026-09-24)")
 	await _af()
 
 ## En het sluitstuk van R3: de ster valt alleen bij `precies`.  Dezelfde beurt,
@@ -924,7 +920,8 @@ func test_stop_laat_de_wereld_schoon_achter() -> void:
 		waar(str(stuk.get("door", "")) != ID, "geen eigen decor bleef staan: %s" % stuk["id"])
 	for id in Hits.lijst():
 		waar(Hits.spot(id).door != ID, "geen eigen hotspot bleef staan: %s" % id)
-	for id in [KAART, STROOK, VLAG_TAG, GAST_TAG, "zb_wolk", "zb_spooktag"]:
+	for id in [KAART, STROOK, VLAG_TAG, GAST_TAG, "zb_wolk",
+			Ui.MIS_WOLK + Ui.MIS_DIER + str(gasten[0]["id"])]:
 		waar(Hits.spot(id) == null, "%s is weg" % id)
 	var d = World.dier(str(gasten[0]["id"]))
 	waar(d.z > float(Rooms.get_kamer(ID).bad["z1"]), "de gast staat op het dek")
@@ -994,10 +991,13 @@ func test_eigen_modellen_bakken() -> void:
 	waar(Art.heeft_model("zwembad_streep"), "de meterstreep is geregistreerd")
 	waar(Art.heeft_model("zwembad_vlag"), "de vlag ook")
 	waar(not Art.is_wereldmodel("zwembad_streep"), "en het is geen wereldmodel")
-	for params in [{"groot": true}, {"groot": false}, {"groot": true, "bleek": true}]:
+	for params in [{"groot": true}, {"groot": false}, {"groot": true, "gehaald": true}]:
 		var p = Art.plaat("zwembad_streep", 3, params)
 		waar(p != null and p.w > 0 and p.h > 0,
 			"de streep bakt met %s (%s)" % [str(params), str(p)])
+	# no pale ghost marker and no lit marker any more (owner, 2026-09-24)
+	gelijk(str(ZwembadModellen.streep({"groot": true, "bleek": true, "licht": true})),
+		str(ZwembadModellen.streep({"groot": true})), "bleek en licht tekenen niets anders")
 	var v = Art.plaat("zwembad_vlag", 3, {})
 	waar(v != null and v.w > 0 and v.h > 0, "de vlag bakt")
 	# the marker never wears the almost white of the stone rim
@@ -1157,10 +1157,10 @@ func test_gehaalde_strepen_kleuren_mee() -> void:
 	waar(alle - gehaald >= 1, "en minstens één vóór hem is nog wit")
 	await _af()
 
-## De eerste trede van de hulptrap zegt "tel de strepen tot de vlag": zolang die
-## kaart opstaat, lichten alle strepen vóór de vlag op — de gehaalde houden
-## hun roos.  Bij de volgende slag gaan de lichtjes weer uit.
-func test_eerste_hulp_licht_de_strepen_op() -> void:
+## Na een te korte slag licht er niets op (eigenaar 2026-09-24: geen hulp na
+## een fout): geen enkele streep vóór de vlag gloeit, en wat hij al zwom houdt
+## gewoon zijn roze knop.
+func test_na_een_misser_licht_niets_op() -> void:
 	_op()
 	_gasten(1)
 	gelijk(State.band(), 3, "één gast baant weg op band 3")
@@ -1172,29 +1172,19 @@ func test_eerste_hulp_licht_de_strepen_op() -> void:
 	gelijk(int(_beurt()["misser"]), 1, "het ís de eerste misser")
 	var p := int(_beurt()["p"])
 	var Strepen := "zb_streep_".length()
-	var licht := 0
+	var strepen := 0
 	for stuk in World.decor_lijst(ID):
 		var id := str(stuk.get("id", ""))
 		if not id.begins_with("zb_streep_"):
 			continue
+		strepen += 1
 		var m := int(id.substr(Strepen))
 		var par: Dictionary = stuk.get("params", {})
-		var lt := bool(par.get("licht", false))
+		waar(not bool(par.get("licht", false)), "streep op %d m licht niet op" % m)
 		var ge := bool(par.get("gehaald", false))
-		waar(lt == (m > p), "streep op %d m %s (hij ligt op %d m)"
-			% [m, "licht op" if lt else "blijft doof", p])
 		waar(ge == (m > 0 and m <= p), "streep op %d m is %s (hij ligt op %d m)"
 			% [m, "gehaald" if ge else "nog wit", p])
-		if lt:
-			licht += 1
-	waar(licht >= 1, "minstens één streep vóór de vlag licht op")
-	waar(_druk(_juist_nu()), "de volgende slag gaat weer zelf")
-	for stuk in World.decor_lijst(ID):    # nog vóór de nieuwe kaart: licht uit
-		var id2 := str(stuk.get("id", ""))
-		if not id2.begins_with("zb_streep_"):
-			continue
-		waar(not bool(stuk.get("params", {}).get("licht", false)),
-			"met de slag gaat het licht uit (%s)" % id2)
+	waar(strepen >= 1, "er liggen strepen op de rand")
 	await _af()
 
 # ------------------------------------------------------ het dier van de beurt

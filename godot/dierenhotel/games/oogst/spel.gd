@@ -10,10 +10,11 @@ extends MiniGame
 ## beurt staat naast de tafel en eet mee.
 ##
 ## Rekenen eerst (PLAN.md R1): de telvraag staat er meteen, het plukken komt pas
-## na de twee sommen (R2/R3).  Een misser kost niets (HOTEL.md §9, S5): de
-## centrale strook van `Ui` doet de pauze en dezelfde vier keuzes, dit spel
-## geeft de hulpladder — samen tellen, nog eens, en bij de derde misser een
-## bleek getal op de tafel of bleke aardbeien in het open bakje.
+## na de twee sommen (R2/R3).  Een misser kost niets en helpt ook niet
+## (HOTEL.md §9, S5; eigenaar 2026-09-24: "geef geen hulp na fouten"): de
+## centrale strook van `Ui` maakt de plukker sip, doet de pauze en zet dezelfde
+## vier keuzes terug, en verder verschijnt er niets — geen telrij, geen bleek
+## getal op de tafel, geen bleke aardbeien in het bakje.
 ##
 ## De getallen komen uit `beurt.gd` (eigen gezaaide generator, `core/sommen.gd`
 ## blijft bevroren); de tafel met haar bakjes is één model (`modellen.gd`).
@@ -32,8 +33,6 @@ const BAK_Z := 38
 const KAART_ID := "og_som"
 const STROOK_ID := "og_som_keuzes"
 const PLUK_ID := "og_pluk"
-const HULP_ID := "og_hulp"
-const SPOOK_ID := "og_spook"
 const LEKKER_ID := "og_lekker"
 const LEEG_ID := "og_leeg"
 
@@ -49,15 +48,12 @@ const RUST_BAKJES := [0, 0, 0, 0, 0]
 
 const KAART_HOOG := 26.0     ## the card's aim over the table (when it floats)
 const PLUK_HOOG := 12.0
-const HULP_HOOG := 14.0
-const SPOOK_HOOG := 18.0
 const LEKKER_HOOG := 44.0
 
 const SOM_S := 0.6           ## a right answer, then the next card this much later
 const AF_S := 3.4            ## the end card is readable this long before it closes
 const LEEG_S := 1.8
 const BLIJF_S := 1.5         ## how often the guest of the turn is kept at his spot
-const SPOOK_NA := 3          ## the ghost numbers come at the third miss (games-b.md §0.5)
 
 ## The turn.  Lives in `ctx.data()["stand"]`; every number is read back through
 ## `int()`, because JSON hands them back as floats.
@@ -67,7 +63,6 @@ var S: Dictionary = {}
 var O: Dictionary = {}
 var _kaart = null            ## Ui.Kaart
 var _kaart_stap := ""        ## the step the card on screen was built for
-var _kaart_hulp := ""        ## the help line the card carries now (small frames)
 var _t0 := 0
 
 # ------------------------------------------------------------- aanmelding
@@ -253,9 +248,9 @@ func _houd_bij_de_tafel() -> void:
 
 # ------------------------------------------------------------------ de kaart
 
-## The card for the step the turn is in.  Built once per step: a miss only
-## changes its help line, so the answer strip keeps its pause and its four
-## choices (S5) — rebuilding it would hand the child a fresh, unlocked strip.
+## The card for the step the turn is in.  Built once per step: a miss changes
+## nothing on it, so the answer strip keeps its pause and its four choices
+## (S5) — rebuilding it would hand the child a fresh, unlocked strip.
 func _kaart_neer() -> void:
 	if not actief or S.is_empty() or O.is_empty():
 		return
@@ -266,7 +261,6 @@ func _kaart_neer() -> void:
 		_kaart.weg()
 		_kaart = null
 	_kaart_stap = stap
-	_kaart_hulp = ""
 	var o := {"id": KAART_ID, "kamer": KAMER, "hoog": KAART_HOOG, "icoon": Beurt.ICOON,
 		"max": 3, "dier": _gast_id(), "titel": "de pluktafel"}
 	var som := ""
@@ -317,15 +311,11 @@ func _totaal() -> int:
 func _nog() -> int:
 	return maxi(0, int(O.get("nodig", 0)) - int(S.get("geplukt", 0)))
 
-func _hulp_tekst() -> String:
-	return Beurt.hulp_tel(O) if _stap() == "tel" else Beurt.hulp_bij(O)
-
-## One tap on the strip.  Wrong: a soft sound and the next step of the help
-## ladder — counting along in a bubble ON THE TABLE, where the punnets are, so
-## the card keeps its size and stays in the maths bar (a help line on the card
-## made it too tall for the bar and it jumped out, over the planter).  The
-## pause and the same four choices are `Ui`'s (S5).  Right: a tick, a happy
-## sound, and the next card a moment later.
+## One tap on the strip.  Wrong: a soft sound, and that is all this game adds —
+## the picker's sulk, the pause and the same four choices are `Ui`'s (S5), and
+## no help follows a miss (owner, 2026-09-24): the child counts the punnets
+## again himself.  Right: a tick, a happy sound, and the next card a moment
+## later.
 func _antwoord(n, k) -> void:
 	if n == null or S.is_empty() or O.is_empty():
 		return
@@ -338,7 +328,6 @@ func _antwoord(n, k) -> void:
 		S["missers"] = int(S["missers"]) + 1
 		ctx.snd.zacht()
 		_bewaar()
-		_teken()
 		return
 	if k != null:
 		k.zet(str(goed))
@@ -414,10 +403,7 @@ func _zet_tafel() -> void:
 		"x": float(TAFEL_X), "z": float(TAFEL_Z), "params": _tafel_params()})
 
 func _tafel_params() -> Dictionary:
-	var spook := -1
-	if _stap() == "bij" and int(S["pog"]) >= SPOOK_NA and int(O["band"]) < 5:
-		spook = int(O["vol"])
-	return {"b": Beurt.bakjes(O, int(S["geplukt"])), "spook": spook}
+	return {"b": Beurt.bakjes(O, int(S["geplukt"]))}
 
 ## Everything on the table and around it, but never the card (see `_kaart_neer`).
 func _teken() -> void:
@@ -436,31 +422,6 @@ func _teken() -> void:
 			"prio": 12, "aan": func(_s) -> void: pluk()})
 	else:
 		ctx.hotspots.weg(PLUK_ID)
-	# the help ladder (games-b.md §0.5): after a miss, count along together; at
-	# the third miss the answer in pale numbers on the table
-	var vraag := stap == "tel" or stap == "bij"
-	var hulp := _hulp_tekst() if vraag and int(S["pog"]) >= 1 else ""
-	if not hulp.is_empty() and not _klein_kader():
-		ctx.ui.wolk({"id": HULP_ID, "kamer": KAMER, "obj": TAFEL_ID, "op": "aan",
-			"x": float(TAFEL_X), "z": float(TAFEL_Z), "hoog": HULP_HOOG,
-			"icoon": Beurt.ICOON_HULP, "tekst": hulp, "klas": "hulp", "prio": 11})
-	else:
-		ctx.ui.wolk_weg(HULP_ID)
-	var op_kaart := hulp if _klein_kader() else ""
-	if _kaart != null and vraag and op_kaart != _kaart_hulp:
-		_kaart_hulp = op_kaart
-		_kaart.hulp(op_kaart)
-	var spook := ""
-	if vraag and int(S["pog"]) >= SPOOK_NA:
-		if stap == "tel":
-			spook = Beurt.spook_tel(O)
-		elif int(O["band"]) >= 5:
-			spook = Beurt.spook_bij(O)
-	if spook.is_empty():
-		ctx.ui.getal_tag(TAFEL_ID, null, {"id": SPOOK_ID})
-	else:
-		ctx.ui.getal_tag(TAFEL_ID, spook, {"id": SPOOK_ID, "kamer": KAMER,
-			"y": SPOOK_HOOG, "klas": "hotspook", "prio": 7, "titel": Beurt.T_SPOOK})
 	if stap == "af":
 		var id := _gast_id()
 		if World.dier(id) != null:
@@ -469,16 +430,6 @@ func _teken() -> void:
 				"klas": "goed", "prio": 12})
 	ctx.wereld.vuil()
 	_meld()
-
-## Where the counting-along goes.  On a tablet or a desktop in a bubble on the
-## table: as a help line on the card it made the card too tall for the maths
-## bar, and the card jumped out of the bar over the planter.  On a phone the
-## frame has no room for a bubble next to the table (it landed 143 units away,
-## or on the table itself at 740 × 360), so there it is the card's help line,
-## the place games-b.md §0.5 names for it.
-func _klein_kader() -> bool:
-	var k := World.kader_rect().size
-	return k.x > 0.0 and minf(k.x, k.y) < 400.0
 
 func _volg_dier(id: String) -> Callable:
 	return func() -> Dictionary:
