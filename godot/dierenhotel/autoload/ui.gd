@@ -918,8 +918,9 @@ func _getal_keuzes(id: String, goed: int, kaart: Kaart, o: Dictionary) -> Array:
 					# The miss is answered here, centrally, so every game that
 					# hands out four numbers gets it without knowing about it.
 					# `on_ok` still runs right after: the game keeps its own
-					# misser count, its own `Snd.zacht()` and its help ladder
-					# exactly as they are (S5 step 3).
+					# misser count (for the adaptive signal) and its own
+					# `Snd.zacht()` (S5 step 3) — and shows no help after a
+					# mistake, in any game (owner 2026-09-24).
 					misser(k, k.dier)
 				roep(k.on_ok, [n, k])})
 	return uit
