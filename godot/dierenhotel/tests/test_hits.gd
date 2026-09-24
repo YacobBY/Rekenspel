@@ -1174,6 +1174,7 @@ func test_elk_bordje_op_zijn_deur_en_elke_knop_aan_zijn_ding() -> void:
 		var h: Dictionary = await _hotel_op(maat)
 		var deuren := 0
 		var op_deur := 0
+		var geschoven := 0
 		var telefoon: bool = mini(maat.x, maat.y) < 400
 		for kamer in Rooms.lijst():
 			Hotel.naar_kamer(kamer)
@@ -1190,29 +1191,201 @@ func test_elk_bordje_op_zijn_deur_en_elke_knop_aan_zijn_ding() -> void:
 				var gat_x := maxf(0.0, maxf(vlak.position.x - r.end.x, r.position.x - vlak.end.x))
 				var gat_y := maxf(0.0, maxf(vlak.position.y - r.end.y, r.position.y - vlak.end.y))
 				if s.klas.contains("hotdeur"):
-					# on the door; on a phone the doors of the corridor stand
-					# closer together than two signs are wide, and then one
-					# hangs right over its door instead
-					deuren += 1
-					var snij := r.intersection(vlak)
-					if snij.size.x > 0.0 and snij.size.y > 0.0:
-						op_deur += 1
-					waar((snij.size.x > 0.0 and snij.size.y > 0.0)
-						or (gat_x <= Hits.GAT + 1.0 and gat_y <= Hits.GAT + 1.0),
-						"%s %s: het bordje %s hangt op of aan zijn deur (%s, deur %s)"
-							% [str(maat), kamer, id, str(r), str(vlak)])
-					continue
+					continue          # the door signs: `_keur_deurbordjes` below
 				# touching its thing; on a phone, where the bands fill up, at
 				# most one band away from it
 				var mag := Hits.GAT + 1.0 if not telefoon else float(Hits.RIJ) + Hits.GAT
 				waar(gat_x <= mag and gat_y <= mag,
 					"%s %s: %s staat bij zijn ding (gat %.0f, %.0f; knop %s, ding %s)"
 						% [str(maat), kamer, id, gat_x, gat_y, str(r), str(vlak)])
+			var tel := _keur_deurbordjes("%s %s" % [str(maat), kamer], h["kader"])
+			deuren += int(tel["deur"]) + int(tel["latei"])
+			op_deur += int(tel["deur"])
+			geschoven += int(tel["geschoven"])
+		print("  deurbordjes %s: %d deuren, %d midden op de deur, %d boven de latei, %d opzij geschoven"
+			% [str(maat), deuren, op_deur, deuren - op_deur, geschoven])
 		waar(deuren >= 15, "%s: alle deuren gemeten (%d)" % [str(maat), deuren])
 		if not telefoon:
-			gelijk(op_deur, deuren, "%s: elk bordje hangt óp zijn deur" % str(maat))
+			gelijk(op_deur, deuren, "%s: elk bordje hangt midden op zijn deur" % str(maat))
 		await _hotel_af(h)
 	State.s = bewaard
+
+## Owner, 2026-09-24, with a picture of the corridor during the voerkar: "Kamer 2
+## staat onder de deur maar kamer 1 boven de deur. Dit is geen consistente
+## plaats om de iconen te zetten."  Every door sign stands at ONE of two places,
+## the same for every door in every room: centred on its door opening at the
+## opening's half height, or — only when a thing with a button of its own stands
+## in that opening, or a neighbouring door's sign already hangs there — centred
+## just over its lintel.  Never on the foot of the door, never under it, never
+## wherever the bands had room.  Returns how many stood where.
+func _keur_deurbordjes(wat: String, kader: Vector2) -> Dictionary:
+	var tel := {"deur": 0, "latei": 0, "geschoven": 0}
+	var dbg := Hits.debug()
+	for id in dbg.keys():
+		var s = Hits.spot(id)
+		if s == null or not str(s.klas).contains("hotdeur"):
+			continue
+		var d: Dictionary = dbg[id]
+		var r: Rect2 = d["rect"]
+		var deur: Rect2 = d["vlak"]
+		var plek := str(d.get("deurplek", ""))
+		waar(Hits.DEURPLEK.has(plek),
+			"%s: het bordje %s staat op zijn deur of erboven, niet ergens (%s, deur %s)"
+				% [wat, id, str(r), str(deur)])
+		if not Hits.DEURPLEK.has(plek):
+			continue
+		tel[plek] = int(tel[plek]) + 1
+		var hart := r.get_center()
+		var cx := deur.get_center().x
+		# exactly at one of the heights of the rule
+		var plekken := Hits.deurbord_plekken(deur, r.size)
+		var hoogte := false
+		for i in plekken.size():
+			if Hits.DEURPLEK[i] == plek and absf(plekken[i].position.y - r.position.y) <= 0.5:
+				hoogte = true
+		waar(hoogte, "%s: %s hangt op een hoogte van de regel (%s: %s, deur %s)"
+			% [wat, id, plek, str(r), str(deur)])
+		waar(r.position.y < deur.end.y,
+			"%s: %s staat nooit onder zijn deur (%s, deur %s)" % [wat, id, str(r), str(deur)])
+		# centred on the door; only the frame edge or a neighbouring sign may
+		# have pushed it sideways, and never off the middle of its door
+		var midden := absf(hart.x - cx) <= 0.5
+		if not midden:
+			tel["geschoven"] = int(tel["geschoven"]) + 1
+		waar(midden or (r.position.x <= cx - Hits.DEUR_RAND + 0.5
+				and r.end.x >= cx + Hits.DEUR_RAND - 0.5),
+			"%s: %s staat recht op of boven het midden van zijn deur (%s, deur %s)"
+				% [wat, id, str(r), str(deur)])
+		waar(r.position.x >= 0.0 and r.end.x <= kader.x + 0.01,
+			"%s: %s staat binnen het kader" % [wat, id])
+		if plek == "deur" and midden:
+			waar(deur.has_point(hart),
+				"%s: het midden van %s ligt in de deuropening (%s, deur %s)"
+					% [wat, id, str(hart), str(deur)])
+	return tel
+
+## The corridor during the voerkar, the trolley held: pushed through the
+## kitchen door it stands in the middle of the corridor, right in front of the
+## Kamer 1 door on a tablet — the owner's picture.  The door signs keep their
+## places (on the door, or over the lintel where the trolley stands in the
+## opening), and the trolley's button and its bubble give way to them: every
+## invariant of `_keur` holds with all of them on screen.
+func test_deurbordjes_in_de_gang_met_de_voerkar() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var kar_voor: Dictionary = World.ding("kar")
+	var boom := Engine.get_main_loop() as SceneTree
+	var ui_rust := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	for maat in SCHERMEN:
+		var h: Dictionary = await _hotel_op(maat)
+		# four guests in the beds of kamer1 and kamer2: two rooms to feed
+		var pool := State.gasten_pool()
+		var gasten: Array = []
+		var bedden := State.alle_bedden()
+		for i in mini(4, bedden.size()):
+			var g: Dictionary = pool[i]
+			g["kamer"] = str(bedden[i]["kamer"])
+			g["bed"] = str(bedden[i]["slot"])
+			g["waar"] = g["kamer"]
+			g["nachten"] = 100
+			gasten.append(g)
+		State.s["gasten"] = gasten
+		World.sync(Hotel.alle_dieren())
+		Hotel.naar_kamer("keuken")
+		for _f in 3:
+			await boom.process_frame
+		Games.start("voerkar")
+		for _f in 3:
+			await boom.process_frame
+		gelijk(Games.actief(), "voerkar", "%s: de voerkar draait" % str(maat))
+		# a tap on the corridor door takes the trolley along, held
+		var deur := Hits.spot("deur_keuken_gang")
+		waar(deur != null, "%s: de gangdeur staat er" % str(maat))
+		if deur != null:
+			(deur.knoop as BaseButton).emit_signal("pressed")
+		for _f in 3:
+			await boom.process_frame
+		gelijk(World.kamer_nu(), "gang", "%s: de camera staat in de gang" % str(maat))
+		gelijk(str(World.ding("kar").get("kamer", "")), "gang", "%s: de kar ook" % str(maat))
+		var kar := Hits.spot("karhot")
+		waar(kar != null and kar.knoop.visible, "%s: de kar is een knop" % str(maat))
+		if kar != null:
+			gelijk(str((kar.knoop as Button).text), "🛒 Je duwt de kar",
+				"%s: en je hebt hem vast" % str(maat))
+		var dbg := Hits.debug()
+		waar(dbg.has("vk_zeg"), "%s: het wolkje bij de kar hangt er" % str(maat))
+		var tel := _keur_deurbordjes("%s gang, kar vast" % str(maat), h["kader"])
+		gelijk(int(tel["deur"]) + int(tel["latei"]), 4, "%s: vier deurbordjes in de gang" % str(maat))
+		if maat == Vector2i(1024, 768) and dbg.has("karhot") and dbg.has("deur_gang_kamer1"):
+			# the owner's picture: the trolley stands in the Kamer 1 opening, so
+			# that sign goes over the lintel — and the other signs stay on their door
+			var kar_vlak: Rect2 = dbg["karhot"]["vlak"]
+			var k1: Rect2 = dbg["deur_gang_kamer1"]["vlak"]
+			waar(kar_vlak.intersects(k1), "de kar staat voor de deur van kamer 1")
+			gelijk(str(dbg["deur_gang_kamer1"]["deurplek"]), "latei",
+				"dat bordje hangt boven de latei")
+			gelijk(str(dbg["deur_gang_receptie"]["deurplek"]), "deur", "Receptie op zijn deur")
+			gelijk(str(dbg["deur_gang_keuken"]["deurplek"]), "deur", "Keuken op zijn deur")
+		_keur(Vector2(h["kader"]), "%s gang, kar vast" % str(maat))
+		Games.stop()
+		for _f in 2:
+			await boom.process_frame
+		await _hotel_af(h)
+	Ui.zet_rust_modus(ui_rust)
+	if not kar_voor.is_empty():
+		World.zet_ding("kar", kar_voor)
+	State.s = bewaard
+
+## The other side of the same rule: whatever else wants the very place of a
+## door sign gives way to it.  Before, a fixed card (the first layer) and the
+## game's own buttons and bubbles (the second) chose first, and the sign dodged
+## to the foot of its door, under it or over it — whatever was left.
+func test_alles_wijkt_voor_het_deurbordje() -> void:
+	var kader := Vector2(1000, 648)
+	_op(kader)
+	var nu := World.kamer_nu()
+	var mik := World.mik_punt(80.0, 20.0, 9.0)
+	var deur := Rect2(mik - Vector2(24, 64), Vector2(48, 128))
+	Hits.maak({"id": "d_gang", "kamer": nu, "x": 80.0, "z": 20.0, "y": 9.0,
+		"icoon": "🚪", "label": "Gang", "door": "hotel", "klas": "hotdeur", "op": "aan",
+		"prio": 11, "vlak": deur})
+	# a fixed card aimed at the middle of that same opening: a card may stand
+	# over the world, so it used to take the door's place
+	Hits.maak({"id": "s_kaart", "kamer": nu, "x": 80.0, "z": 20.0, "y": 9.0,
+		"op": "midden", "vast": true, "prio": 14, "label": "Hoeveel koekjes?",
+		"maat": Vector2(200, 78), "door": "spel", "geen_vlak": true})
+	Hits.voorrang("spel")
+	waar(Hits.leen("d_gang", "spel", func(_s) -> void: pass), "de deur is te lenen")
+	Hits.plaats()
+	var dbg := Hits.debug()
+	gelijk(str(dbg["d_gang"]["deurplek"]), "deur", "het bordje blijft midden op zijn deur")
+	var r: Rect2 = dbg["d_gang"]["rect"]
+	waar(r.get_center().is_equal_approx(deur.get_center()),
+		"precies op het midden van de opening (%s, deur %s)" % [str(r), str(deur)])
+	var kaart: Rect2 = dbg["s_kaart"]["rect"]
+	waar(not kaart.intersects(r), "de kaart wijkt (%s, bordje %s)" % [str(kaart), str(r)])
+	_keur(kader, "kaart wijkt voor deur")
+	Hits.weg("s_kaart")
+	# The trolley pushed into the opening, with its own button and the game's
+	# one bubble: the sign cannot stand on the door without hiding the trolley,
+	# so it goes to its one fallback, straight over the lintel — and the
+	# trolley's bubble, which wanted that band, gives way.
+	var kar := Rect2(mik + Vector2(-60, -10), Vector2(120, 90))
+	Hits.maak({"id": "s_kar", "kamer": nu, "x": 80.0, "z": 20.0, "y": 16.0,
+		"icoon": "🛒", "label": "Je duwt de kar", "op": "aan", "prio": 11, "door": "spel",
+		"vlak": kar})
+	Hits.maak({"id": "s_zeg", "kind": "wolk", "kamer": nu, "x": 80.0, "z": 20.0, "y": 30.0,
+		"icoon": "👉", "tekst": "Tik op een deur", "prio": 10, "door": "spel", "vlak": kar})
+	Hits.plaats()
+	dbg = Hits.debug()
+	gelijk(str(dbg["d_gang"]["deurplek"]), "latei", "met de kar in de deur: boven de latei")
+	r = dbg["d_gang"]["rect"]
+	gelijk(r.end.y, deur.position.y - Hits.GAT, "vlak boven de latei")
+	gelijk(r.get_center().x, deur.get_center().x, "recht boven de deur")
+	_keur(kader, "kar in de deur")
+	Hits.geef_terug("spel")
+	Hits.voorrang("")
+	_af()
 
 ## Owner, 2026-09-23: "Plaatjes als [de receptie met het open bord] zijn veel te
 ## druk in iconen. en wekker zetten is bijvoorbeeld helemaal niet relevant aan

@@ -658,11 +658,15 @@ func _volg_kar(hoog: float = 16.0) -> Callable:
 			"kamer": str(q["kamer"]),
 			"vlak": World.vlak_van(str(q["model"]), float(q["x"]), float(q["z"]), 0.0)}
 
-## De kar is zelf een knop, en hij zegt wat een tik doet: `🛒 Pak de kar`, of —
-## vastgepakt — `🛒 Je duwt de kar`, ingedrukt (de thema-kleur van een
-## ingedrukte knop) en met de ☝ van de bron ("in je hand", world.md §5.6).  Het
-## pilletje telt de koekjes op de kar.  Slepen kan nog steeds (`_kar_invoer`),
-## maar hoeft nooit.
+## De kar is zelf een knop, en hij zegt wat een tik doet: `🛒 Pak de kar`, een
+## gewone knop op zijn drukrand.  Vastgepakt zegt hij `🛒 Je duwt de kar`, met
+## de ☝ van de bron ("in je hand", world.md §5.6) — en dat is een STAND, geen
+## opdracht (eigenaar, 2026-09-24: "Hints als 'tik op een deur' of 'je duwt de
+## kar' lijken erg op bubbeltjes waar interactie voor is").  Dan draagt hij het
+## stille jasje van een wolkje (`UiThema.info_vlak`): licht, doorschijnend,
+## een dun lijntje, gewone letters.  Hij blijft wel een schakelaar: een tik zet
+## de kar neer, en slepen kan nog steeds (`_kar_invoer`), maar hoeft nooit.
+## Het pilletje telt de koekjes op de kar.
 func _kar_hotspot(open_n: int) -> void:
 	var kar: Dictionary = ctx.wereld.ding("kar")
 	if kar.is_empty():
@@ -684,11 +688,24 @@ func _kar_hotspot(open_n: int) -> void:
 	if b != null:
 		b.text = "%s %s" % [ICO_KAR, T_DUW_KAR if _mee else T_PAK_KAR]
 		# de letters van de wereld, zoals de deurbordjes (op een telefoon `klein`)
-		b.add_theme_font_size_override("font_size",
-			int(Ui.maten.get("wereld", Ui.maten.get("klein", 13))))
-		# een schakelaar: Godot tekent hem ingedrukt zolang je de kar vast hebt
+		var letters := int(Ui.maten.get("wereld", Ui.maten.get("klein", 13)))
+		b.add_theme_font_size_override("font_size", letters)
+		# een schakelaar die aan staat zolang je de kar vast hebt
 		b.toggle_mode = true
 		b.set_pressed_no_signal(_mee)
+		if _mee:
+			# vast: een stand, geen knop om op te drukken — in elke toestand
+			# hetzelfde stille vlak, gewone letters, een maatje kleiner
+			var stil := UiThema.info_vlak()
+			for staat in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
+				b.add_theme_stylebox_override(staat, stil)
+			var gewoon := UiThema.laad_font(false)
+			if gewoon != null:
+				b.add_theme_font_override("font", gewoon)
+			b.add_theme_font_size_override("font_size", UiThema.info_maat(letters))
+			for kleur in ["font_color", "font_hover_color", "font_pressed_color",
+					"font_hover_pressed_color", "font_focus_color"]:
+				b.add_theme_color_override(kleur, UiThema.INKT)
 		b.gui_input.connect(_kar_invoer.bind(b))
 	_druk_op = Vector2.INF
 

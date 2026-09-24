@@ -1507,9 +1507,25 @@ right of its slot point).  Each place must touch no placed element and no other 
 thing; of those, the first that hides nothing of any OTHER thing in the room wins
 (fixed decor, slots, movable things, loose decor, guests — a share of at least 15 % of that
 thing counts), else the one that hides the least.  So "Sleutels" hangs over its key board
-and not on the plant in front of it.  A **door** carries its sign ON itself: in the middle
-of the opening, else at its foot inside the opening, and only then in front of or above it;
-on its own door nothing next to the opening counts.  In front of a door is where the
+and not on the plant in front of it.  A **door** carries its sign ON itself, in ONE place
+the same for every door in every room and state (owner 2026-09-24: "Kamer 2 staat onder de
+deur maar kamer 1 boven de deur. Dit is geen consistente plaats"): centred on the door
+opening at its half height (`Hits.deurbord_plekken`, `debug()[id].deurplek == "deur"`).
+Only when a thing with a button of its own stands in that opening (the voerkar's trolley,
+the corridor's clock, a guest with a name plate) or a neighbouring sign already hangs there
+does it take its ONE fallback: straight over the door, just above its lintel
+(`deurplek == "latei"`), with a second row one sign higher for the phone corridor, whose
+four doors stand closer together than two signs are wide.  Never on the foot of the door,
+never under it, never on the band grid (`deurplek == ""` fails the tests).  The heights are
+fixed; sideways a sign is only pushed by the frame edge or slides past a neighbour or a
+thing, and never so far that the middle of its door leaves it (`Hits.DEUR_RAND` = 8
+units).  The signs of a room are chosen as ONE set (`_kies_deurborden`: the cheapest set of
+heights that fits, all on the door first) and placed **before everything else**, fixed
+cards and name plates included, so the other elements give way to them and not the other
+way round: a name plate slides along its row (staying over its guest) before it steps a
+band, and a band-placed element that finds no free block of cells left gets one more pass
+with the real rectangles, sliding along each band (`_kies_plek`, pass 1c).  On its own door
+nothing next to the opening counts.  In front of a door is where the
 furniture stands (the bench, the chest, the ball pit, the ironing board); the opening is
 kept clear of furniture (test_rooms).  An `aan` button chooses afresh every pass, also
 after it once fell back on a band.  The desk the cards keep off is its pieces (the two
@@ -1599,8 +1615,21 @@ gives way to them. Use at most one at a time.
   thicker key edge at the bottom (`KNOP_LIP` 5) and a small shadow, and pressing it pushes
   the edge in (`UiThema.knop_staten`).  A bubble WITH its own `tik` (`UiWolk.actie`: the
   "komt eraan" bubble with `👀 Volg`, a wish, "Alle bakjes vol!") wears the same key; a
-  bubble without one is flat warm paper (`WOLK_INFO`, 90 % opaque, no border, no shadow),
-  the same in every state, takes no focus and lets a tap through (`MOUSE_FILTER_IGNORE`).
+  bubble without one is a **speech bubble** (owner 2026-09-24: "Hints als 'tik op een
+  deur' of 'je duwt de kar' lijken erg op bubbeltjes waar interactie voor is"): the Button
+  draws no face of its own, `UiWolk._draw()` draws body and tail as ONE shape — warm paper
+  at `UiThema.INFO_VUL_ALFA` (80 %) with a thin soft outline (`INFO_LIJN`, ink at 35 %,
+  1.5 units), small corners (`INFO_RONDING` 10) instead of the pill, no shadow, no key edge —
+  and a comic tail (14 wide at its foot, 7–16 long) that points at what the bubble talks
+  about: `Hits.plaats()` hands every `UiWolk` the point of its thing nearest to it, or its
+  aim point (`UiWolk.richt`).  The tail is drawn outside the rectangle `Hits` placed, so no
+  size and no placement changes.  Its words are regular weight (a `Label`, not the bold
+  of a `Button`) and `INFO_KLEINER` (2 px) under a button's, never under 12 px; its
+  pictogram is `icoon`, not `icoon_wolk`.  It is the same in every state, takes no focus and
+  lets a tap through (`MOUSE_FILTER_IGNORE`).
+  A button that SAYS a state wears the same quiet face (`UiThema.info_vlak`) while it is
+  in that state: the voerkar's trolley is `🛒 Pak de kar` on its key edge, and held it is
+  `🛒 Je duwt de kar` flat and quiet — still a toggle a tap turns off, still draggable.
 * `Ui.bron(obj, {icoon, aantal, hand, klas, prio, titel, tik, sleep})` — a drag source with
   a counter and a "in your hand" badge; `zet(aantal, hand)`, `weg()`. One tap delivers
   exactly once (the browser's follow-up click is swallowed).

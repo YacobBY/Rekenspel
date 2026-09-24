@@ -134,6 +134,57 @@ func test_knop_en_mededeling_zien_er_anders_uit() -> void:
 	waar(antwoord.border_width_bottom >= UiThema.KNOP_LIP, "een antwoordknop ook")
 	_af()
 
+## Owner, 2026-09-24: "Hints als 'tik op een deur' of 'je duwt de kar' lijken
+## erg op bubbeltjes waar interactie voor is. Kan je dat duidelijker maken zodat
+## text bubbels zonder interactie minder prominent zijn en niet zo klikbaar
+## lijken?"  A bubble that only speaks is a speech bubble: the Button draws no
+## face of its own, the bubble draws itself see-through with a thin outline and
+## a comic tail pointing at what it talks about, and its words are regular and a
+## size under a button's.  A bubble a tap acts on stays a key, without a tail.
+func test_een_mededeling_is_een_praatwolkje() -> void:
+	_op(Vector2(1000, 648))
+	Ui.wolk({"id": "zeg", "kamer": World.kamer_nu(), "x": 20.0, "z": 20.0,
+		"icoon": "👉", "tekst": "Tik op een deur"})
+	Ui.wolk({"id": "doe", "kamer": World.kamer_nu(), "x": 60.0, "z": 20.0,
+		"icoon": "🐶", "tekst": "Boef komt eraan", "tik": func(_s) -> void: pass})
+	Hits.plaats()
+	var zeg := Hits.spot("zeg").knoop as UiWolk
+	var doe := Hits.spot("doe").knoop as UiWolk
+	var vlak := zeg.get_theme_stylebox("normal") as StyleBoxFlat
+	waar(not vlak.draw_center and vlak.bg_color.a <= 0.0, "de knop zelf tekent geen vlak")
+	waar(UiThema.INFO_VUL_ALFA < 0.9, "de wolk is doorschijnender dan eerst (%.2f)" % UiThema.INFO_VUL_ALFA)
+	waar(UiThema.INFO_RONDING < 16, "kleine hoeken, geen pil als een knop")
+	# the tail: outside the rectangle `Hits` placed, towards the aim point
+	var dbg: Dictionary = Hits.debug()["zeg"]
+	var r: Rect2 = dbg["rect"]
+	var punt := zeg.staart_punt()
+	waar(punt != Vector2.INF, "een mededeling heeft een staartje")
+	if punt != Vector2.INF:
+		waar(not Rect2(Vector2.ZERO, zeg.size).has_point(punt),
+			"het staartje steekt uit de wolk (%s, wolk %s)" % [str(punt), str(zeg.size)])
+		var doel: Vector2 = dbg["mik"]
+		var vlak_ding: Rect2 = dbg["vlak"]
+		if vlak_ding.size.x > 0.0:
+			doel = vlak_ding.get_center()
+		var hart := r.size * 0.5
+		waar((punt - hart).dot(doel - r.get_center()) > 0.0,
+			"en wijst naar waar de wolk over gaat (punt %s, doel %s, wolk %s)"
+				% [str(punt), str(doel), str(r)])
+		waar((punt - hart).length() <= r.size.length() * 0.5 + UiThema.INFO_LIJN_DIK
+			+ UiWolk.STAART_MAX, "kort: het wijst, het reikt er niet overheen")
+	gelijk(doe.staart_punt(), Vector2.INF, "een wolk met een tik is een knop, zonder staartje")
+	# quieter words: regular, and a size under a button's (never under the floor)
+	var wereld := int(Ui.maten["wereld"])
+	gelijk(zeg.zeg_label.get_theme_font_size("font_size"), UiThema.info_maat(wereld),
+		"een maatje kleiner dan de woorden op een knop")
+	waar(zeg.zeg_label.get_theme_font_size("font_size") >= UiThema.VLOER, "en nooit onder 12")
+	gelijk(doe.zeg_label.get_theme_font_size("font_size"), maxi(UiThema.VLOER, wereld),
+		"een wolk met een tik houdt de woorden van een knop")
+	waar(zeg.zeg_label.get_theme_font("font") != Ui.thema.get_font("font", "Hotknop"),
+		"gewone letters, niet de vette van een knop")
+	gelijk(UiThema.INKT, zeg.zeg_label.get_theme_color("font_color"), "donkere inkt: goed te lezen")
+	_af()
+
 # --------------------------------------------------------------- F4: de zin
 
 ## HOTEL.md §9 / architecture.md §1.1 F4: one plain Dutch sentence, at most

@@ -616,16 +616,30 @@ One pass per drawn frame:
 2. **layer** — `VAST (0)` fixed cards, number tags and the keypad · `SPEL (1)` the game
    that has priority · `HOTEL (2)` · `WENS (3)` wish bubbles;
 3. **cull** — sort by layer, then priority descending, then depth; everything past
-   `MAX_PER_KAMER` is hidden;
-4. **place**, front-most first inside a layer, into a grid of
+   `MAX_PER_KAMER` is hidden.  **The door signs (`klas hotdeur`, `op aan`) come before
+   every layer** (owner 2026-09-24: "Kamer 2 staat onder de deur maar kamer 1 boven de
+   deur. Dit is geen consistente plaats"): a sign has one place, and the rest gives way;
+4. **door signs** — the signs of the room are chosen as ONE set before anything else is
+   placed (`_kies_deurborden`): each takes the cheapest of its fixed heights
+   (`Hits.deurbord_plekken`: centred on the door opening at half height; else straight
+   over the lintel; else one sign higher, for the phone corridor) such that the set is
+   free of the maths bar, of every object box but its own door and of each other.  The
+   frame edge may push a sign sideways, and a sign may slide sideways past a neighbour or
+   a thing, as long as the middle of its door stays `DEUR_RAND` (8) units inside it —
+   never up or down, never under the door.  `debug()[id].deurplek` says `deur` or
+   `latei`; empty means the band grid had to take it, and the tests fail on that;
+5. **place**, front-most first inside a layer, into a grid of
    `rijen = (frame_h − 2·RAND) / RIJ` bands × `kolommen = (frame_w − 2·RAND) / KOL`
    columns:
    * `midden` (fixed cards, `y ≤ 0`, own html): on the aim point, clamped to the frame,
-     and it reserves every cell it covers — everything else gives way to it;
+     and it reserves every cell it covers — everything but the door signs gives way to it;
    * `rand` (number tags and **name plates**): bottom edge just over the object's top
      edge, covering at most `TAG_IN` of it (a name plate keeps 2 units of air and covers
      nothing); it reserves its cells too, and steps up in whole bands when the place it
-     wants is taken — that reservation is what keeps a plate off a button (I1 finding 3);
+     wants is taken — that reservation is what keeps a plate off a button (I1 finding 3).
+     A name plate first slides along its row (staying over its guest) on every band it
+     tries: a door sign over the head of a guest in front of that door is a few units in
+     the way, not a whole band;
    * `kleef` (a choice strip under its card): top edge `KLEEF = 5` units under the rect
      of the hotspot named in `kleef_aan`, horizontally centred on it, and above it
      instead when there is no room below. `kleef` elements are placed last inside their
@@ -653,7 +667,13 @@ One pass per drawn frame:
      object, then — only if that fails anywhere in the frame — for the free cell block
      with the least object overlap. Both passes walk the bands closest-to-the-object
      first, then the other side, then every remaining band from the top down (the HTML's
-     "stacking" round);
+     "stacking" round).  Between the two sits one more pass (2026-09-24): when no free
+     block of cells is left, every band once more with the REAL rectangles — the element
+     slides along the band to the nearest place that touches nothing placed and no
+     object box.  The door signs stand at their own heights, not on the grid, so a sign
+     straddling two bands takes both in the cell count; on a 558 × 289 kitchen the
+     voerkar's bubble found no block left without this pass.  It comes after the cell
+     passes, so every arrangement that found a place before keeps it;
    * if not one cell in the whole frame is free, the button falls back to its aim point
      and `debug()[id].krap` is `true`. That is a diagnosis, not a silent overlap: the
      tests fail on any `krap`;
@@ -728,8 +748,11 @@ Hits.voorrang(spel_id: String) -> void      # "" = nobody
 Hits.leen(id, door, fn) -> bool             # ctx.hotspots.pak: borrow a hotel button
 Hits.geef_terug(door: String) -> void       # ctx.hotspots.laat; wis_eigenaar does it too
 Hits.spot(id: String) -> Hits.Spot
-Hits.debug() -> Dictionary   # id -> {rect, vlak, dekking, op, laag, prio, krap, gestapeld}
+Hits.debug() -> Dictionary   # id -> {rect, vlak, dekking, op, laag, prio, krap, gestapeld,
+#                                     mik, deurplek}
 #   gestapeld: the band directly above/below the object had no free block left
+#   deurplek:  a door sign's place — "deur" (on the opening) or "latei" (over it)
+Hits.deurbord_plekken(deur: Rect2, maat: Vector2) -> Array[Rect2]   # the fixed heights
 Hits.dekking(id: String) -> float           # % of its own object covered — must be 0
 signal hotspot_getikt(id: String)
 ```
