@@ -362,6 +362,8 @@ func _speel(naam: String, bouw: Callable, vers := false) -> void:
 	_volgende = (_volgende + 1) % STEMMEN
 	p.stream = stream
 	p.play()
+	# the animal voices (see "de dieren" below) listen to what just started
+	_begonnen(naam, p)
 
 ## Not more often than every `ms` milliseconds — the hall clock may be turned
 ## with a fast finger and must not stutter (architecture.md §6.5, step 8).
@@ -390,6 +392,10 @@ func terug() -> void:
 
 ## dat is het nog niet - zacht meedenken, nooit een nee-geluid
 func zacht() -> void:
+	# an animal of the turn just said its own sad "aww" (`dier_sip`, 2026-09-24):
+	# that IS the "not yet" of this moment, so this one stays quiet under it
+	if _net_sip():
+		return
 	_speel("zacht", _bouw.bind("zacht"))
 
 ## dat klopt! twee vrolijke toontjes
@@ -465,6 +471,8 @@ func hup() -> void:
 ## §15.3.  Public, because `tests/test_snd.gd` measures peak and audible length
 ## on it without waking the audio band.
 func _bouw(naam: String, hand := 0) -> PackedFloat32Array:
+	if DIER_LENGTE.has(naam):
+		return _bouw_dier(naam)       # the eight animal voices, below
 	var b := _maak(LENGTE.get(naam, 0.5))
 	match naam:
 		"tik":
@@ -554,3 +562,263 @@ func stream(naam: String, hand := 0) -> AudioStreamWAV:
 ## Whether a sound uses `papier()` and therefore sounds different every time.
 func is_ruis(naam: String) -> bool:
 	return RUIS.has(naam)
+
+# ------------------------------------------------------------------ de dieren
+#
+# Every guest kind has two little voices of its own (owner, 2026-09-24: "Kan je
+# ook een passend droevig teleurgesteld geluidje en een enthousiast bij success
+# geluidje bij elk dier maken?"): `<kind>_sip` when the animal of the turn is
+# disappointed after a wrong answer, `<kind>_blij` when its answer was right.
+# They are not in the HTML table — `namen()` stays the eighteen, with their
+# oracle — but they are made the same way: oscillators only, cached per name,
+# bit-identical on every call (no noise, so nothing to seed).
+#
+# The house rules hold for them too: short (at most half a second), under the
+# master gain, no buzzer and no harsh fall — the sad one is an "aww", never a
+# "nee".
+#
+# Where they sound (art-sound-rules.md §15.5, architecture.md §8):
+#   sad    `Ui.misser`: the animal in view goes `sip` and says so; a wrong
+#          payment in a shop sends it out with the same sound.  The animal's
+#          "aww" REPLACES the neutral `zacht()` of the same moment, in either
+#          order within `SLIK_MS`, so a miss is one sound and not two.
+#   happy  every `ja()` ("dat klopt!"): `Ui` hears it through `gespeeld`, and
+#          the animal of the turn, when it stands in view, cheers `BLIJ_NA`
+#          seconds later — first the two notes, then the animal, never on top.
+
+## Buffer length per animal voice: max(wacht + duur) plus a little air.
+const DIER_LENGTE := {
+	"hond_sip": 0.58, "hond_blij": 0.30,
+	"poes_sip": 0.58, "poes_blij": 0.40,
+	"konijn_sip": 0.38, "konijn_blij": 0.38,
+	"gans_sip": 0.50, "gans_blij": 0.40,
+}
+const DIEREN := ["hond", "poes", "konijn", "gans"]   ## = ArtGasten.SOORTEN
+const DIER_MS := 400      ## one animal voice per mood within this many ms
+const SLIK_MS := 150      ## a `zacht` this close to an animal's "aww" is swallowed
+const BLIJ_NA := 0.20     ## s after `ja()` before the animal of the turn cheers
+const GEHOORD_MAX := 32
+
+## A sound was handed to a voice (after `play()`): `Ui` listens for "ja" to let
+## the animal of the turn cheer.
+signal gespeeld(naam: String)
+
+var laatste := ""                    ## the last sound that really started
+var _gehoord: Array[String] = []      ## the last GEHOORD_MAX starts; "stil:x" = x cut short
+var _begin: Dictionary = {}           ## name -> [ticks_msec, player] of its last start
+var _sip_ms := -100000                ## ticks_msec of the last animal "aww"
+
+func _begonnen(naam: String, p: AudioStreamPlayer) -> void:
+	laatste = naam
+	_begin[naam] = [Time.get_ticks_msec(), p]
+	_onthoud(naam)
+	gespeeld.emit(naam)
+
+func _onthoud(wat: String) -> void:
+	_gehoord.append(wat)
+	if _gehoord.size() > GEHOORD_MAX:
+		_gehoord.remove_at(0)
+
+## What started lately, oldest first — for the tests and the probe.
+func gehoord() -> Array[String]:
+	return _gehoord.duplicate()
+
+## Did `naam` start within the last `ms` milliseconds?
+func _net(naam: String, ms: int) -> bool:
+	return _begin.has(naam) and Time.get_ticks_msec() - int(_begin[naam][0]) <= ms
+
+func _net_sip() -> bool:
+	return Time.get_ticks_msec() - _sip_ms <= SLIK_MS
+
+## Cut `naam` short when it started within `ms` and its voice still has it.
+func _smoor(naam: String, ms: int) -> void:
+	if not _net(naam, ms):
+		return
+	var p = _begin[naam][1]
+	_begin.erase(naam)
+	if p is AudioStreamPlayer and is_instance_valid(p) and p.stream == _cache.get(naam):
+		p.stop()
+		_onthoud("stil:" + naam)
+
+## The eight voices, kind by kind, the sad one first.
+func dier_namen() -> Array:
+	var uit := []
+	for kind in DIEREN:
+		uit.append("%s_sip" % kind)
+		uit.append("%s_blij" % kind)
+	return uit
+
+## The guest kind of `wie` — a kind itself ("hond") or a guest id ("boef") —
+## or "" when it is neither.
+func soort_van(wie: String) -> String:
+	if wie.is_empty():
+		return ""
+	if DIEREN.has(wie):
+		return wie
+	var d = World.dier(wie)
+	if d != null and DIEREN.has(str(d.kind)):
+		return str(d.kind)
+	if State.s is Dictionary and State.s.has("gasten"):
+		var kind := str(State.gast_van(wie).get("kind", ""))
+		if DIEREN.has(kind):
+			return kind
+	return ""
+
+## The sound `dier_sip`/`dier_blij` plays for `wie`.  An unknown kind gets the
+## neutral pair every game already knows: `zacht` when sad, `ja` when happy.
+func dier_geluid(wie: String, blij: bool) -> String:
+	var kind := soort_van(wie)
+	if kind.is_empty():
+		return "ja" if blij else "zacht"
+	return "%s_%s" % [kind, "blij" if blij else "sip"]
+
+## The animal of the turn is disappointed: its own soft, sad little sound, in
+## the place of a `zacht()` that started just before it.
+func dier_sip(wie: String) -> void:
+	if _uit or not _wakker:
+		return
+	var naam := dier_geluid(wie, false)
+	if naam == "zacht":
+		if not _net("zacht", SLIK_MS):
+			zacht()
+		return
+	if _te_snel("dier_sip", DIER_MS):
+		return
+	_smoor("zacht", SLIK_MS)
+	_speel(naam, _bouw.bind(naam))
+	_sip_ms = Time.get_ticks_msec()
+
+## The animal of the turn got it right: its own short, happy sound — at once,
+## or `wacht` seconds later (`Ui` waits `BLIJ_NA` for the notes of `ja()`).
+func dier_blij(wie: String, wacht := 0.0) -> void:
+	if _uit or not _wakker:
+		return
+	var naam := dier_geluid(wie, true)
+	if naam == "ja" and _net("ja", DIER_MS):
+		return                      # the neutral "dat klopt!" has just sounded
+	if _te_snel("dier_blij", DIER_MS):
+		return
+	if wacht <= 0.0 or not is_inside_tree():
+		_speel(naam, _bouw.bind(naam))
+		return
+	# `_speel` looks at the mute again when the timer fires
+	get_tree().create_timer(wacht).timeout.connect(_speel.bind(naam, _bouw.bind(naam)))
+
+## `stem(f, piek, naar, duur, top, wacht, o)` — an animal's voice.  One pitch
+## contour in two exponential glides (f to `piek` over the first `knik` of the
+## note, `piek` to `naar` over the rest; `piek` 0 is one glide f to `naar`), a
+## few harmonics whose balance moves from `boven` to `boven_naar` (a vowel that
+## closes: the bright "mi" of "miauw" into its round "auw"), an optional
+## vibrato (`tril`, a fraction of the pitch, at `tril_hz`), an optional purr of
+## the loudness (`rol` Hz, the cat's trill) and an optional decay (`verval`).
+## The envelope rises as sin² over `aan` seconds and falls as cos² over the
+## last `los` of the note to exactly zero, so a voice never clicks; the
+## harmonics are normalised, so `top` is a ceiling as it is for `_noot`.
+func _stem(uit: PackedFloat32Array, f: float, piek: float, naar: float, duur: float,
+		top: float, wacht: float, o: Dictionary = {}) -> void:
+	var boven: Array = o.get("boven", [1.0, 0.3, 0.1])
+	var boven_naar: Array = o.get("boven_naar", boven)
+	var knik: float = clampf(float(o.get("knik", 0.3)), 0.05, 0.95)
+	var aan: float = maxf(0.002, float(o.get("aan", 0.02)))
+	var los: float = clampf(float(o.get("los", 0.35)), 0.05, 1.0)
+	var tril: float = float(o.get("tril", 0.0))
+	var tril_hz: float = float(o.get("tril_hz", 6.0))
+	var rol: float = float(o.get("rol", 0.0))
+	var verval: float = float(o.get("verval", 0.0))
+	var n := int(duur * SR)
+	var start := int(wacht * SR)
+	var h := maxi(boven.size(), boven_naar.size())
+	var los_van := duur * (1.0 - los)
+	var fase := 0.0
+	for i in n:
+		var t := float(i) / SR
+		var u := t / duur
+		var freq := f
+		if piek <= 0.0:
+			freq = f * pow(naar / f, u)
+		elif u < knik:
+			freq = f * pow(piek / f, u / knik)
+		else:
+			freq = piek * pow(naar / piek, (u - knik) / (1.0 - knik))
+		if tril > 0.0:
+			freq *= 1.0 + tril * sin(TAU * tril_hz * t)
+		fase += TAU * freq / SR
+		var v := 0.0
+		var som := 0.0
+		for k in h:
+			var a0: float = float(boven[k]) if k < boven.size() else 0.0
+			var a1: float = float(boven_naar[k]) if k < boven_naar.size() else 0.0
+			var a := lerpf(a0, a1, u)
+			v += a * sin(fase * float(k + 1))
+			som += a
+		v /= maxf(1.0, som)
+		var g := 1.0
+		if t < aan:
+			g = pow(sin(0.5 * PI * t / aan), 2.0)
+		if t > los_van:
+			g *= pow(cos(0.5 * PI * (t - los_van) / maxf(0.001, duur - los_van)), 2.0)
+		if rol > 0.0:
+			g *= 0.6 + 0.4 * cos(TAU * rol * t)
+		if verval > 0.0:
+			g *= exp(-verval * u)
+		var j := start + i
+		if j >= 0 and j < uit.size():
+			uit[j] += v * g * top * MEESTER
+
+## The eight recipes.  Every pitch stays in the band a tablet speaker plays
+## well (a thump is a quick fall from ~240 Hz, not a sub-bass), every top stays
+## at or under the one of `ja` (0.42).
+func _bouw_dier(naam: String) -> PackedFloat32Array:
+	var b := _maak(float(DIER_LENGTE[naam]))
+	match naam:
+		"hond_sip":
+			# a soft whimper: a small "hn", then a long trembling "iieuw" that
+			# falls away — the ears go down with it
+			_stem(b, 760, 840, 690, 0.13, 0.17, 0.0,
+				{"boven": [1.0, 0.25, 0.08], "knik": 0.35, "los": 0.5})
+			_stem(b, 900, 980, 520, 0.38, 0.21, 0.15,
+				{"boven": [1.0, 0.3, 0.1], "boven_naar": [1.0, 0.1, 0.02], "knik": 0.18,
+				"tril": 0.03, "tril_hz": 9.0, "los": 0.5, "verval": 0.6})
+		"hond_blij":
+			# two bright little yips, the second one higher: "wuf-wuf!"
+			var yip := {"boven": [1.0, 0.55, 0.3, 0.12], "knik": 0.3, "aan": 0.008, "los": 0.55}
+			_stem(b, 520, 860, 600, 0.09, 0.30, 0.0, yip)
+			_stem(b, 600, 1000, 700, 0.10, 0.30, 0.14, yip)
+		"poes_sip":
+			# a small "miauw" that goes down: a bright "mi", a round "auw"
+			_stem(b, 640, 780, 440, 0.52, 0.25, 0.0,
+				{"boven": [1.0, 0.5, 0.3, 0.12], "boven_naar": [1.0, 0.12, 0.03, 0.0],
+				"knik": 0.28, "aan": 0.05, "tril": 0.012, "tril_hz": 6.0, "los": 0.4,
+				"verval": 0.4})
+		"poes_blij":
+			# a purring trill that climbs, and a chirp on top of it: "mrrrp!"
+			_stem(b, 430, 0, 660, 0.22, 0.21, 0.0,
+				{"boven": [1.0, 0.3, 0.1], "rol": 30.0, "aan": 0.02, "los": 0.25})
+			_stem(b, 720, 1120, 960, 0.12, 0.24, 0.21,
+				{"boven": [1.0, 0.35, 0.12], "knik": 0.45, "aan": 0.01, "los": 0.5})
+		"konijn_sip":
+			# a small low squeak, and a soft thump of a hind paw
+			_stem(b, 700, 760, 520, 0.16, 0.20, 0.0,
+				{"boven": [1.0, 0.15], "knik": 0.25, "aan": 0.012, "los": 0.5})
+			_stem(b, 230, 0, 85, 0.09, 0.30, 0.22,
+				{"boven": [1.0, 0.4, 0.15], "aan": 0.004, "los": 0.75})
+		"konijn_blij":
+			# a happy hop: two quick high squeaks, each landing on a soft thump
+			var piep := {"boven": [1.0, 0.2], "knik": 0.5, "aan": 0.006, "los": 0.5}
+			var bons := {"boven": [1.0, 0.4, 0.15], "aan": 0.004, "los": 0.75}
+			_stem(b, 1100, 1400, 1250, 0.06, 0.20, 0.0, piep)
+			_stem(b, 240, 0, 90, 0.07, 0.28, 0.07, bons)
+			_stem(b, 1250, 1600, 1450, 0.06, 0.20, 0.17, piep)
+			_stem(b, 250, 0, 95, 0.07, 0.28, 0.24, bons)
+		"gans_sip":
+			# one low honk that sinks: a goose that had hoped for more
+			_stem(b, 330, 350, 230, 0.44, 0.28, 0.0,
+				{"boven": [1.0, 0.55, 0.4, 0.25, 0.12], "boven_naar": [1.0, 0.3, 0.15, 0.06, 0.02],
+				"knik": 0.15, "aan": 0.03, "tril": 0.02, "tril_hz": 5.0, "los": 0.45,
+				"verval": 0.4})
+		"gans_blij":
+			# two honks that go up: "hoenk-HOENK!"
+			var toet := {"boven": [1.0, 0.5, 0.35, 0.2, 0.1], "aan": 0.015, "los": 0.4}
+			_stem(b, 360, 0, 450, 0.15, 0.30, 0.0, toet)
+			_stem(b, 430, 0, 560, 0.18, 0.32, 0.17, toet)
+	return b
