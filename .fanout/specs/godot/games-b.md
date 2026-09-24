@@ -496,7 +496,8 @@ water afliep liet hem wegpeddelen.
   hij er is, met een geduld van **25 000 ms**. Daarna naar de **trappenvoet
   van het startblok** bij het westeinde van het water, `x = blok_x − 8 = 6`,
   `z = 28`, met `tempo 1.2` — `omHetWater` houdt de wandeling droog en binnen
-  het hek. Dan **drie trage hopjes** het trappetje op (`pose: 'spring'`,
+  het hek (sinds 2026-09-24 doet `World.looppad` dat, en loopt hij ook om het
+  startblok en de hekpalen heen: world.md §2.5). Dan **drie trage hopjes** het trappetje op (`pose: 'spring'`,
   `tempo 0.85`, `land_hoogte` 3, 6, 8) en ten slotte een hop naar de
   **voorkant van het blok** (`land_hoogte 9`), een **adem van 0,7 s**, en de
   **duik** naar `x = bad.x0 + 2.5 = 20.5` met `tempo 1.6` en

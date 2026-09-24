@@ -391,6 +391,48 @@ func om_het_water(kamer_id: String, van: Vector2, naar: Vector2) -> Array:
 				beste = [a, b]
 	return beste
 
+## What stands on the floor of a room, for the walking grid (`World.looppad`,
+## `wereld/looppad.gd`; owner, 2026-09-24: "Dieren lopen ook vaak door objecten
+## heen").  Read from the room as it is NOW, so bought furniture is in it the
+## moment it is bought:
+##   * every piece of fixed or bought decor that stands on the floor — not what
+##     hangs on a wall (`ver`), not the grass tufts (`pol`);
+##   * every slot: a bed as its model, a bowl as the bowl (`kom`, on its own
+##     anchor, also a bought `bakje` without a model), the tub;
+##   * the water, as a floor rectangle — the pool is walked round, and a guest
+##     who climbs out takes the shortest way out (`om_het_water` did the same);
+##   * the desk and the strip behind it, back to the wall: the owner's walkable
+##     lobby is the floor in front of the counter (Q-X1-13).
+## `{model, params, x, z, y, rot, ax, az}` for a model, `{x0, x1, z0, z1}` for a
+## rectangle.  `World` adds the two movable things and a game's loose decor.
+func hindernissen(kamer_id: String) -> Array:
+	var uit: Array = []
+	var r := get_kamer(kamer_id)
+	if r == null:
+		return uit
+	for stuk in r.decor:
+		if bool(stuk.get("ver", false)) or bool(stuk.get("pol", false)):
+			continue
+		uit.append({"model": str(stuk["n"]), "params": stuk.get("params", {}),
+			"x": float(stuk["x"]), "z": float(stuk["z"]), "y": float(stuk.get("y", 0.0)),
+			"rot": int(stuk.get("rot", 0)), "ax": 0.0, "az": 0.0})
+	for sid in r.slots:
+		var slot: Dictionary = r.slots[sid]
+		if str(slot.get("soort", "")) == "bak":
+			uit.append({"model": "kom", "params": {}, "x": float(slot["x"]),
+				"z": float(slot["z"]), "y": 0.0, "rot": 0,
+				"ax": Art.KOM_ANKER.x, "az": Art.KOM_ANKER.y})
+		elif not str(slot.get("model", "")).is_empty():
+			uit.append({"model": str(slot["model"]), "params": {}, "x": float(slot["x"]),
+				"z": float(slot["z"]), "y": 0.0, "rot": 0, "ax": 0.0, "az": 0.0})
+	if not r.bad.is_empty():
+		uit.append({"x0": float(r.bad["x0"]), "x1": float(r.bad["x1"]),
+			"z0": float(r.bad["z0"]), "z1": float(r.bad["z1"])})
+	if not r.balie.is_empty():
+		uit.append({"x0": float(r.balie["x0"]), "x1": float(r.balie["x1"]),
+			"z0": 0.0, "z1": float(r.balie["z1"])})
+	return uit
+
 ## Does the open segment a–b pass through the rectangle?  Liang–Barsky.
 static func _snijdt(r: Rect2, a: Vector2, b: Vector2) -> bool:
 	var d := b - a
