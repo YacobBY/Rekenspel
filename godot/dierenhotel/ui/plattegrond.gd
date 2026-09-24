@@ -1,12 +1,22 @@
 class_name UiPlattegrond
 extends Control
-## The map sheet (world.md §6.3/§7.3): a little 4 × 3 floor plan of the hotel.
+## The map sheet (world.md §6.3/§7.3): the hotel as a TOWER, seen from the side.
 ##
-## The grid positions are the hotel's floor plan, not a list — the child learns
-## where the kitchen is relative to the garden, which is why the empty cells
-## stay empty instead of the rooms closing ranks.  Every cell wears its own
-## floor colour, the room you are in is the sunny one, and the doors are drawn
-## in the gaps between the cells, so the plan reads as a map and not as a menu.
+## Owner, 2026-09-24: the hotel has to feel big and tall, like Habbo Hotel, so
+## the map is a cross-section of the building — one row per floor
+## (`Kamer.etage`), the top floor at the top and the cellar at the bottom.  In
+## every row the room the lift stops in comes first; the floor's other rooms
+## follow in the order their doors join them, so a door between two cells side
+## by side is drawn in the gap between them (a gate dashed).  Down the left runs
+## the lift shaft: a line through one small round floor button per row
+## (`Rooms.etage_teken`), lit on the floor the child is on, and that floor's
+## whole row wears a faint sunny band.  Every cell wears its own floor colour
+## and the room you are in is the sunny one, so the plan reads as a building
+## and not as a menu.  The same sheet is the lift's panel
+## (`scenes/main.gd::_toren`).
+##
+## The table is COMPUTED from `Rooms` (`kaart()`), never written down: a room
+## added later gets a cell on its own floor without anyone touching this file.
 ##
 ## WHY THIS LAYS ITSELF OUT.  This used to be a `GridContainer` of `Button`s
 ## with an anchored `VBoxContainer` inside every button.  A `Button` is not a
@@ -21,32 +31,113 @@ extends Control
 
 signal kamer_gekozen(kamer: String)
 
-## `kamer id -> [kolom, rij]`, one-based, exactly the KAART table of §6.3.
-const KAART := {
-	"receptie": [1, 2], "gang": [2, 2], "kamer1": [2, 1], "kamer2": [2, 3],
-	"keuken": [3, 2], "tuin": [4, 2], "wasserij": [3, 3], "zwembad": [4, 3],
-	"speelzaal": [1, 1], "kas": [4, 1], "winkels": [1, 3],
-}
-const KOLOMMEN := 4
-const RIJEN := 3
 const GAT := 8            ## air between two cells — the doors are drawn in it
-const GAT_KRAP := 4       ## ... and this little on a phone, so 4 × 64 still fits
-const CEL_MIN := 64       ## a tap target of 48 plus air, never less
+const GAT_KRAP := 4       ## ... and this little on a phone
+const CEL_WENS := 64      ## the width a cell would like: a 48 tap target plus air
+const CEL_MIN := 56       ## ... and the least it takes, when a phone has no more
 const CEL_MAX := 120
-const CEL_HOOG := 0.8     ## a cell is wider than it is tall, like a room
+const CEL_HOOG := 0.6     ## a floor of a tower is wide and low
 const CEL_HOOG_MIN := 56
 const LUCHT := 4.0        ## between a cell's edge and its text
+const LUCHT_KRAP := 2.0   ## ... in a cell under CEL_WENS, where "Zwembad" needs it all
+const SCHACHT := 36       ## the lift shaft column on the left, its air included
+const SCHACHT_KRAP := 24  ## ... on a phone
+const SCHACHT_DIK := 4.0  ## the shaft line
+const KNOP_R_MAX := 14.0  ## radius of a floor button in the shaft
 const ICOON_MIN := 16     ## the picture never shrinks past this — the cell grows
 const DEUR_DIK := 6.0     ## the doorway stroke in the gap
 const DEUR_DEEL := 0.4    ## ... spanning this much of the shared edge
 const BADGE_MIN := 18.0
+const BAND_ALFA := 0.35   ## the sunny band behind the floor the child is on
 
 var _maten: Dictionary = {}
 var _cellen: Dictionary = {}   ## kamer id -> {knop, icoon, naam, badge, plek}
-var _deuren: Array = []        ## [{a: Vector2i, b: Vector2i, poort: bool}], each pair once
+var _deuren: Array = []        ## [{a: Vector2i, b: Vector2i, poort: bool, sleutel}], each pair once
+var _etages: Array[int] = []   ## the floors top-down: row r is `_etages[r - 1]`
+var _kolommen := 1
 var _cel := Vector2(CEL_MAX, CEL_MAX * CEL_HOOG)
 var _gat := float(GAT)
+var _schacht := float(SCHACHT)
+var _lucht := LUCHT
 var _bezig := false
+
+# ------------------------------------------------------------------ de toren
+
+## `kamer id -> Vector2i(kolom, rij)`, one-based: row 1 is the top floor
+## (`Rooms.etages()`), column 1 the room the lift stops in on that floor.
+## Computed from `Rooms` every time, so every room of `lijst()` has a cell.
+static func kaart() -> Dictionary:
+	var uit: Dictionary = {}
+	var rij := 0
+	for e in Rooms.etages():
+		rij += 1
+		var kol := 0
+		for id in rij_van(int(e)):
+			kol += 1
+			uit[id] = Vector2i(kol, rij)
+	return uit
+
+## As many columns as the widest floor has rooms.
+static func kolommen() -> int:
+	var n := 1
+	for e in Rooms.etages():
+		n = maxi(n, Rooms.op_etage(int(e)).size())
+	return n
+
+## One row per floor.
+static func rijen() -> int:
+	return maxi(1, Rooms.etages().size())
+
+## The rooms of floor `e` from left to right.  The lift's room first; every next
+## cell is then a room with a door to the cell before it when there is one, so
+## rooms joined by a door stand side by side wherever one row allows it (the
+## door is drawn in their gap); otherwise the nearest room left on the floor —
+## breadth-first over the floor's own doors from the lift — and a room without
+## a door on its floor last, in `lijst()` order.
+static func rij_van(e: int) -> Array[String]:
+	var alle := Rooms.op_etage(e)
+	var rij: Array[String] = []
+	if alle.is_empty():
+		return rij
+	var begin := Rooms.lift_kamer(e)
+	if begin.is_empty():
+		begin = alle[0]
+	var dichtbij: Array[String] = [begin]
+	var i := 0
+	while i < dichtbij.size():
+		for n in _deur_buren(dichtbij[i], alle):
+			if not dichtbij.has(n):
+				dichtbij.append(n)
+		i += 1
+	for id in alle:
+		if not dichtbij.has(id):
+			dichtbij.append(id)
+	rij.append(begin)
+	while rij.size() < dichtbij.size():
+		var volgende := ""
+		for n in _deur_buren(rij[rij.size() - 1], alle):
+			if not rij.has(n):
+				volgende = n
+				break
+		if volgende.is_empty():
+			for id in dichtbij:
+				if not rij.has(id):
+					volgende = id
+					break
+		rij.append(volgende)
+	return rij
+
+## The rooms of `alle` (one floor) this room has a door to, in door order.
+static func _deur_buren(id: String, alle: Array[String]) -> Array[String]:
+	var uit: Array[String] = []
+	var r := Rooms.get_kamer(id)
+	if r == null:
+		return uit
+	for dr in r.deuren:
+		var naar := str(dr.get("naar", ""))
+		if alle.has(naar) and not uit.has(naar):
+			uit.append(naar)
+	return uit
 
 # ------------------------------------------------------------------ bouwen
 
@@ -64,33 +155,14 @@ func bouw(mt: Dictionary) -> void:
 		k.queue_free()
 	_cellen.clear()
 	_deuren.clear()
-	var plaatsen := _plaatsen()
-	for id in plaatsen:
-		_maak_cel(id, plaatsen[id])
+	_etages = Rooms.etages()
+	_kolommen = kolommen()
+	var plaatsen := kaart()
+	for id in Rooms.lijst():
+		if plaatsen.has(id):
+			_maak_cel(id, plaatsen[id])
 	_zoek_deuren()
 	_leg_uit()
-
-## Which cell every room gets.  Rooms without a place in the table (any room a
-## later run adds) take the first empty cells instead of vanishing.
-func _plaatsen() -> Dictionary:
-	var uit: Dictionary = {}
-	var bezet: Dictionary = {}
-	var rest: Array[String] = []
-	for id in Rooms.lijst():
-		if KAART.has(id):
-			var p: Array = KAART[id]
-			var plek := Vector2i(int(p[0]), int(p[1]))
-			uit[id] = plek
-			bezet["%d|%d" % [plek.x, plek.y]] = true
-		else:
-			rest.append(id)
-	for rij in range(1, RIJEN + 1):
-		for kol in range(1, KOLOMMEN + 1):
-			if rest.is_empty():
-				return uit
-			if not bezet.has("%d|%d" % [kol, rij]):
-				uit[rest.pop_front()] = Vector2i(kol, rij)
-	return uit
 
 func _maak_cel(id: String, plek: Vector2i) -> void:
 	var r := Rooms.get_kamer(id)
@@ -175,8 +247,9 @@ func _wacht(id: String) -> int:
 	return int(Hotel.call("wacht_in", id))
 
 ## Every door between two cells that share an edge, once per pair.  A door the
-## table cannot show (two rooms that are not neighbours on the plan) is left out
-## rather than drawn across the map.
+## tower cannot show (two rooms of one floor that are not side by side, like
+## the gang's doors to kamer 2 and the kitchen) is left out rather than drawn
+## across the map; the lift is no door and is the shaft instead.
 func _zoek_deuren() -> void:
 	var gezien: Dictionary = {}
 	for id in _cellen:
@@ -196,7 +269,8 @@ func _zoek_deuren() -> void:
 			if gezien.has(sleutel):
 				continue
 			gezien[sleutel] = true
-			_deuren.append({"a": a, "b": b, "poort": bool(dr.get("poort", false))})
+			_deuren.append({"a": a, "b": b, "poort": bool(dr.get("poort", false)),
+				"sleutel": sleutel})
 
 # ------------------------------------------------------------------ meten
 
@@ -221,7 +295,7 @@ func _beschikbaar() -> float:
 	if kader.x > 1.0:
 		return minf(float(UiBlad.BREED), maxf(240.0, kader.x - 2.0 * UiBlad.RAND)) \
 			- 2.0 * UiBlad.VULLING
-	return float(KOLOMMEN * CEL_MAX + (KOLOMMEN - 1) * GAT)
+	return float(SCHACHT) + GAT * 0.5 + float(_kolommen * CEL_MAX + (_kolommen - 1) * GAT)
 
 ## The whole plan: cell size from the width, then every button and every label
 ## placed by hand.  Re-entrant-safe — writing `custom_minimum_size` makes the
@@ -231,26 +305,37 @@ func _leg_uit() -> void:
 		return
 	_bezig = true
 	var breedte := _beschikbaar()
-	var cel_w := clampf(floor((breedte - (KOLOMMEN - 1) * GAT) / KOLOMMEN),
-		float(CEL_MIN), float(CEL_MAX))
-	# The cell never goes under 64 (a 48 tap target plus air); on the narrowest
-	# phone it is the GAP that gives way, so four cells still fit the sheet.
+	# On a narrow sheet this gives way in turn: first the gaps, then the lift
+	# shaft, and only then the cells — never under 56 (a 48 tap target plus
+	# air).  The 326 unit phone frame ends at a 24 shaft, 4 gaps and four cells
+	# of 59, which is 274: the whole sheet.
 	var gat := float(GAT)
-	if KOLOMMEN * cel_w + (KOLOMMEN - 1) * gat > breedte:
-		gat = clampf(floor((breedte - KOLOMMEN * cel_w) / (KOLOMMEN - 1)),
-			float(GAT_KRAP), float(GAT))
+	var schacht := float(SCHACHT)
+	var cel_w := _cel_breed(breedte, schacht, gat)
+	if cel_w < CEL_WENS:
+		gat = float(GAT_KRAP)
+		cel_w = _cel_breed(breedte, schacht, gat)
+	if cel_w < CEL_WENS:
+		schacht = float(SCHACHT_KRAP)
+		cel_w = _cel_breed(breedte, schacht, gat)
+	cel_w = clampf(cel_w, float(CEL_MIN), float(CEL_MAX))
+	# ... and in a cell that narrow the text keeps 2 units from the edge instead
+	# of 4, so "Zwembad" and "Speelzaal" (54 and 53 at 12 px) stay one word.
+	_lucht = LUCHT if cel_w >= CEL_WENS else LUCHT_KRAP
 	# The word is measured BEFORE the height is fixed: a cell that cannot show
 	# its picture and its word without them overlapping is a taller cell, not a
 	# smaller picture.  On a phone "Zwembad" drops to the 12 px floor rather
 	# than breaking in two (HOTEL.md §9: pictogram AND word, always readable).
 	var nodig := 0.0
 	for id in _cellen:
-		nodig = maxf(nodig, _meet_tekst(_cellen[id], cel_w - 2.0 * LUCHT))
+		nodig = maxf(nodig, _meet_tekst(_cellen[id], cel_w - 2.0 * _lucht))
 	_cel = Vector2(cel_w, maxf(maxf(float(CEL_HOOG_MIN), round(cel_w * CEL_HOOG)),
-		ceilf(nodig + 2.0 * LUCHT)))
+		ceilf(nodig + 2.0 * _lucht)))
 	_gat = gat
-	var maat := Vector2(KOLOMMEN * _cel.x + (KOLOMMEN - 1) * gat,
-		RIJEN * _cel.y + (RIJEN - 1) * gat)
+	_schacht = schacht
+	var rij_n := float(maxi(1, _etages.size()))
+	var maat := Vector2(_breedte(),
+		2.0 * _boven() + rij_n * _cel.y + (rij_n - 1.0) * gat)
 	if custom_minimum_size != maat:
 		custom_minimum_size = maat
 	if not (get_parent() is Container) and size != maat:
@@ -259,6 +344,30 @@ func _leg_uit() -> void:
 		_zet_cel(_cellen[id])
 	queue_redraw()
 	_bezig = false
+
+## The cell width that fills `breedte` with this shaft and these gaps.
+func _cel_breed(breedte: float, schacht: float, gat: float) -> float:
+	var k := float(_kolommen)
+	return floor((breedte - schacht - gat * 0.5 - (k - 1.0) * gat) / k)
+
+## Where column 1 begins: after the shaft and half a gap.
+func _links() -> float:
+	return _schacht + _gat * 0.5
+
+## Half a gap above the top floor and below the cellar, so the sunny band of
+## either has room to stick out of its row as far as it does on the others.
+func _boven() -> float:
+	return _gat * 0.5
+
+## The width of the whole tower: shaft, columns and the gaps between them.
+func _breedte() -> float:
+	var k := float(_kolommen)
+	return _links() + k * _cel.x + (k - 1.0) * _gat
+
+## The top-left corner of a cell.
+func _hoek(plek: Vector2i) -> Vector2:
+	return Vector2(_links() + (plek.x - 1) * (_cel.x + _gat),
+		_boven() + (plek.y - 1) * (_cel.y + _gat))
 
 ## How much height this cell's picture and word need at this width, and what
 ## font size the word gets: the biggest that still keeps the name on one line,
@@ -285,10 +394,10 @@ func _meet_tekst(c: Dictionary, breed: float) -> float:
 func _zet_cel(c: Dictionary) -> void:
 	var plek: Vector2i = c["plek"]
 	var knop: Button = c["knop"]
-	knop.position = Vector2((plek.x - 1) * (_cel.x + _gat), (plek.y - 1) * (_cel.y + _gat))
+	knop.position = _hoek(plek)
 	knop.size = _cel
-	var breed := _cel.x - 2.0 * LUCHT
-	var binnen := _cel.y - 2.0 * LUCHT
+	var breed := _cel.x - 2.0 * _lucht
+	var binnen := _cel.y - 2.0 * _lucht
 	var naam: Label = c["naam"]
 	naam.size = Vector2(breed, naam.size.y)
 	var naam_h := minf(float(c.get("naam_h", 0.0)), binnen)
@@ -305,11 +414,11 @@ func _zet_cel(c: Dictionary) -> void:
 			break
 		maat -= 1
 	ic_h = minf(ic_h, maxf(0.0, binnen - naam_h - 2.0))
-	var y := maxf(LUCHT, (_cel.y - (ic_h + 2.0 + naam_h)) * 0.5)
-	icoon.position = Vector2(LUCHT, y)
+	var y := maxf(_lucht, (_cel.y - (ic_h + 2.0 + naam_h)) * 0.5)
+	icoon.position = Vector2(_lucht, y)
 	icoon.size = Vector2(breed, ic_h)
-	naam.position = Vector2(LUCHT,
-		clampf(y + ic_h + 2.0, LUCHT, _cel.y - LUCHT - naam_h))
+	naam.position = Vector2(_lucht,
+		clampf(y + ic_h + 2.0, _lucht, _cel.y - _lucht - naam_h))
 	# The word's minimum is its OWN measurement, written down: `UiBlad._wrap()`
 	# hands every autowrapping label without one the full width of the sheet,
 	# and a Control is never smaller than its minimum — that is how the names
@@ -323,11 +432,56 @@ func _zet_cel(c: Dictionary) -> void:
 			clampf(m.y, BADGE_MIN, _cel.y - 6.0))
 		badge.position = Vector2(_cel.x - badge.size.x - 3.0, 3.0)
 
-# ------------------------------------------------------------------ deuren
+# ------------------------------------------------------------------ tekenen
+
+## Under the cells, back to front: the sunny band of the floor the child is on,
+## the lift shaft with its floor buttons, and the doors in the gaps.
+func _draw() -> void:
+	if _cellen.is_empty():
+		return
+	_teken_band()
+	_teken_schacht()
+	_teken_deuren()
+
+## The row of the floor the child is on, a faint sunny band from the shaft to
+## the last column that sticks out half a gap above and below its cells.
+func _teken_band() -> void:
+	var rij := band_rij()
+	if rij <= 0:
+		return
+	var y := _hoek(Vector2i(1, rij)).y - _gat * 0.5
+	var band := Rect2(0.0, y, _breedte(), _cel.y + _gat)
+	draw_style_box(UiThema.vlak(Color(UiThema.ZON, BAND_ALFA), 10), band)
+
+## The shaft: one line from the top floor down to the cellar, and on it a small
+## round button per floor with the floor's sign (`Rooms.etage_teken`) — like the
+## panel in a lift.  The button of the floor the child is on is lit.  They are
+## drawn, not tapped: the whole row of a floor is where a finger goes.
+func _teken_schacht() -> void:
+	if _etages.is_empty():
+		return
+	var x := _schacht * 0.5
+	var boven := _hoek(Vector2i(1, 1)).y
+	var onder := _hoek(Vector2i(1, _etages.size())).y + _cel.y
+	draw_line(Vector2(x, boven), Vector2(x, onder), UiThema.KNOP_RAND, SCHACHT_DIK, true)
+	var nu := band_rij()
+	var f := get_theme_font("font", "Label")
+	var maat := maxi(UiThema.VLOER, int(_maten.get("klein", UiThema.VLOER)))
+	for i in _etages.size():
+		var vak := lift_knop(_etages[i])
+		var c := vak.get_center()
+		var r := vak.size.x * 0.5
+		var hier := i + 1 == nu
+		draw_circle(c, r, UiThema.ZON if hier else UiThema.WIT, true, -1.0, true)
+		draw_circle(c, r, UiThema.PERZIK_D if hier else UiThema.KNOP_RAND, false, 2.0, true)
+		if f != null:
+			var basis := c.y + (f.get_ascent(maat) - f.get_descent(maat)) * 0.5
+			draw_string(f, Vector2(c.x - r, basis), Rooms.etage_teken(_etages[i]),
+				HORIZONTAL_ALIGNMENT_CENTER, 2.0 * r, maat, UiThema.INKT)
 
 ## The doors, in the gaps between the cells: a short thick stroke on the shared
 ## edge, dashed and lighter when it is a gate (`poort`) to the outside.
-func _draw() -> void:
+func _teken_deuren() -> void:
 	for d in _deuren:
 		var a: Vector2i = d["a"]
 		var b: Vector2i = d["b"]
@@ -336,14 +490,16 @@ func _draw() -> void:
 		var p1 := Vector2.ZERO
 		var p2 := Vector2.ZERO
 		if a.y == b.y:
-			var x := (mini(a.x, b.x) - 1) * (_cel.x + _gat) + _cel.x + _gat * 0.5
-			var mid := (a.y - 1) * (_cel.y + _gat) + _cel.y * 0.5
+			var hoek := _hoek(Vector2i(mini(a.x, b.x), a.y))
+			var x := hoek.x + _cel.x + _gat * 0.5
+			var mid := hoek.y + _cel.y * 0.5
 			var half := _cel.y * DEUR_DEEL * 0.5
 			p1 = Vector2(x, mid - half)
 			p2 = Vector2(x, mid + half)
 		else:
-			var y := (mini(a.y, b.y) - 1) * (_cel.y + _gat) + _cel.y + _gat * 0.5
-			var mid := (a.x - 1) * (_cel.x + _gat) + _cel.x * 0.5
+			var hoek := _hoek(Vector2i(a.x, mini(a.y, b.y)))
+			var y := hoek.y + _cel.y + _gat * 0.5
+			var mid := hoek.x + _cel.x * 0.5
 			var half := _cel.x * DEUR_DEEL * 0.5
 			p1 = Vector2(mid - half, y)
 			p2 = Vector2(mid + half, y)
@@ -366,8 +522,43 @@ func celmaat() -> Vector2:
 func gat() -> float:
 	return _gat
 
+## The width of the shaft column on the left.
+func schacht() -> float:
+	return _schacht
+
 func knop_van(id: String) -> Button:
 	return _cellen[id]["knop"] if _cellen.has(id) else null
 
+## Where a room sits on this map, `Vector2i(kolom, rij)` as in `kaart()`;
+## `Vector2i.ZERO` for a room without a cell.
+func plek_van(id: String) -> Vector2i:
+	return _cellen[id]["plek"] if _cellen.has(id) else Vector2i.ZERO
+
+## The floor button of floor `e` in the shaft, as the square around its circle
+## in this control's own units; an empty rectangle for a floor not on the map.
+func lift_knop(e: int) -> Rect2:
+	var i := _etages.find(e)
+	if i < 0:
+		return Rect2()
+	var r := minf(KNOP_R_MAX, minf(_schacht * 0.5 - 1.0, _cel.y * 0.5 - 2.0))
+	var c := Vector2(_schacht * 0.5, _hoek(Vector2i(1, i + 1)).y + _cel.y * 0.5)
+	return Rect2(c - Vector2(r, r), Vector2(2.0 * r, 2.0 * r))
+
+## The row that wears the sunny band — the floor of the room in view — or 0
+## when the camera is in no room of the map.
+func band_rij() -> int:
+	var nu := World.kamer_nu()
+	if not Rooms.bestaat(nu):
+		return 0
+	return _etages.find(Rooms.etage(nu)) + 1
+
 func deurparen() -> int:
 	return _deuren.size()
+
+## The doors the map draws, each as "a|b" (the two room ids, sorted), sorted.
+func deursleutels() -> Array[String]:
+	var uit: Array[String] = []
+	for d in _deuren:
+		uit.append(str(d["sleutel"]))
+	uit.sort()
+	return uit

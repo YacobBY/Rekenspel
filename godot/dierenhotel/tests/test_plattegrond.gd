@@ -10,11 +10,14 @@ extends Proef
 ## of them.
 
 const FRAMES := [Vector2(1000, 648), Vector2(326, 402), Vector2(534, 289)]
-const RIJ_MIDDEN := ["receptie", "gang", "keuken", "tuin"]
-const HOOG_MAX := UiPlattegrond.RIJEN * UiPlattegrond.CEL_MAX \
-	+ (UiPlattegrond.RIJEN - 1) * UiPlattegrond.GAT
 
 var _laag: Control = null
+
+## The whole tower is no taller than one floor of the widest cell per row
+## (`CEL_MAX` wide, `CEL_HOOG` of that tall) plus a gap per row.
+func _hoog_max() -> float:
+	return UiPlattegrond.rijen() * (UiPlattegrond.CEL_MAX * UiPlattegrond.CEL_HOOG
+		+ UiPlattegrond.GAT)
 var _gekozen: Array[String] = []
 
 func _op(kader: Vector2) -> void:
@@ -58,12 +61,15 @@ func test_acht_kamers_op_hun_plek() -> void:
 		if blad == null:
 			_af()
 			continue
-		gelijk(UiPlattegrond.KAART.size(), Rooms.lijst().size(),
+		var tafel := UiPlattegrond.kaart()
+		gelijk(tafel.size(), Rooms.lijst().size(),
 			"de tabel heeft een vak per kamer van het hotel")
 		# every room of the hotel, not every row of the table: a room added
 		# without its cell has to fail here (R1)
 		for id in Rooms.lijst():
-			waar(UiPlattegrond.KAART.has(id), "%s staat in de tabel" % id)
+			waar(tafel.has(id), "%s staat in de tabel" % id)
+			gelijk(kaart.plek_van(id), tafel.get(id, Vector2i.ZERO),
+				"%s staat op de kaart waar de tabel zegt" % id)
 			var knop: Button = kaart.get_node_or_null("P" + id)
 			waar(knop != null, "%s heeft een cel bij %s" % [id, str(kader)])
 			if knop != null:
@@ -72,9 +78,10 @@ func test_acht_kamers_op_hun_plek() -> void:
 					"de cel zegt waar hij heen gaat (%s)" % id)
 		_af()
 
-## Every cell is a tap target and stands on the sheet — and on the short frame,
-## where the sheet scrolls, at least within the sheet's width, with the whole
-## plan no taller than three cells of the maximum size.
+## Every cell is a tap target and stands on the sheet — and on the short frames,
+## where the five floors make the sheet scroll, at least within the sheet's
+## width, with the whole tower no taller than five floors of the maximum size.
+## On the desktop frame the whole tower fits without scrolling.
 func test_cellen_passen_op_het_blad() -> void:
 	for kader in FRAMES:
 		var uit: Array = await _open(kader)
@@ -85,19 +92,35 @@ func test_cellen_passen_op_het_blad() -> void:
 			continue
 		var paneel: Control = blad.get_node("Midden/Blad")
 		var rol: Control = blad.get_node("Midden/Blad/Rol")
+		var kolom: Control = blad.get_node("Midden/Blad/Rol/Kolom")
 		var pr := paneel.get_global_rect().grow(0.5)
 		var rolt := kaart.size.y > rol.size.y + 0.5
 		var ic: Label = kaart.get_node("Pzwembad/Icoon")
 		var nm: Label = kaart.get_node("Pzwembad/Naam")
-		print("[maat] plattegrond %s: cel %s gat %.0f plan %s rolt=%s zwembad icoon %s naam %s"
-			% [str(kader), str(kaart.celmaat()), kaart.gat(), str(kaart.size), str(rolt),
-				str(ic.size), str(nm.size)])
-		waar(kaart.size.y <= float(HOOG_MAX),
-			"de hele plattegrond blijft onder %d eenheden hoog bij %s (%s)"
-				% [HOOG_MAX, str(kader), str(kaart.size)])
+		print("[maat] plattegrond %s: cel %s gat %.0f schacht %.0f plan %s blad %s rol %s rolt=%s zwembad icoon %s naam %s"
+			% [str(kader), str(kaart.celmaat()), kaart.gat(), kaart.schacht(), str(kaart.size),
+				str(kolom.size), str(rol.size), str(rolt), str(ic.size), str(nm.size)])
+		waar(kaart.size.y <= _hoog_max(),
+			"de hele toren blijft onder %.0f eenheden hoog bij %s (%s)"
+				% [_hoog_max(), str(kader), str(kaart.size)])
 		waar(kaart.size.x <= pr.size.x,
 			"en niet breder dan het vel bij %s (%.1f > %.1f)"
 				% [str(kader), kaart.size.x, pr.size.x])
+		if kader == FRAMES[0]:
+			waar(kolom.size.y <= rol.size.y + 0.5,
+				"op het grote scherm past het hele blad met de toren zonder rollen (%s in %s)"
+					% [str(kolom.size), str(rol.size)])
+		# the lift shaft stays a narrow column: every floor button left of the
+		# first room column, inside the tower
+		var eerste := INF
+		for id in Rooms.lift_kamers():
+			eerste = minf(eerste, kaart.knop_van(id).position.x)
+		for e in Rooms.etages():
+			var lk := kaart.lift_knop(e)
+			waar(lk.size.x >= 20.0, "etage %s heeft een liftknop bij %s (%s)" % [e, str(kader), str(lk)])
+			waar(lk.position.x >= 0.0 and lk.end.x <= eerste,
+				"de liftknop van etage %s staat in de schacht bij %s (%s, kolom 1 op %.1f)"
+					% [e, str(kader), str(lk), eerste])
 		for id in Rooms.lijst():
 			var knop: Button = kaart.get_node_or_null("P" + id)
 			if knop == null:
@@ -122,31 +145,65 @@ func test_cellen_passen_op_het_blad() -> void:
 						% [id, naam, str(kader), str(l.get_global_rect()), str(kr)])
 		_af()
 
-## The plan is a plan: the four rooms of the middle row share one line, and the
-## two bedrooms sit above and below the corridor they open onto.
-func test_de_plattegrond_is_een_plattegrond() -> void:
+## The map is a tower (owner, 2026-09-24): every floor is one row, a higher
+## floor is higher on the sheet, the lift's rooms stand in the first room
+## column one above the other, and every floor button sits in the shaft on the
+## middle of its own row.
+func test_de_plattegrond_is_een_toren() -> void:
 	var uit: Array = await _open(Vector2(1000, 648))
 	var kaart: UiPlattegrond = uit[1]
+	var vorige := -INF
+	var lift_x := NAN
+	for e in Rooms.etages():
+		var ids := Rooms.op_etage(e)
+		waar(not ids.is_empty(), "etage %s heeft kamers" % e)
+		if ids.is_empty():
+			continue
+		var y0 := (kaart.get_node("P" + ids[0]) as Control).get_global_rect().position.y
+		for id in ids:
+			var r := (kaart.get_node("P" + id) as Control).get_global_rect()
+			waar(absf(r.position.y - y0) <= 0.5,
+				"%s staat op de rij van etage %s (%.1f vs %.1f)" % [id, e, r.position.y, y0])
+			gelijk(kaart.plek_van(id).y, Rooms.etages().find(e) + 1,
+				"%s staat in de rij van zijn etage" % id)
+		waar(y0 > vorige + 0.5, "etage %s staat onder de etage erboven (%.1f > %.1f)"
+			% [e, y0, vorige])
+		vorige = y0
+		var lift := Rooms.lift_kamer(e)
+		if not lift.is_empty():
+			gelijk(kaart.plek_van(lift).x, 1, "de lift van etage %s staat vooraan (%s)" % [e, lift])
+			var lx := kaart.knop_van(lift).position.x
+			if is_nan(lift_x):
+				lift_x = lx
+			waar(absf(lx - lift_x) <= 0.5, "%s staat in de liftkolom (%.1f vs %.1f)"
+				% [lift, lx, lift_x])
+			var cel := kaart.knop_van(lift).get_rect()
+			var knop := kaart.lift_knop(e)
+			waar(absf(knop.get_center().y - cel.get_center().y) <= 0.5,
+				"de liftknop van etage %s staat midden op zijn rij" % e)
+			waar(knop.end.x <= cel.position.x, "en links van %s, in de schacht" % lift)
+	# the building reads top-down: the guest rooms up high, the lobby on the
+	# ground, the laundry in the cellar
 	var gang := (kaart.get_node("Pgang") as Control).get_global_rect()
-	for id in RIJ_MIDDEN:
-		var r := (kaart.get_node("P" + id) as Control).get_global_rect()
-		waar(absf(r.position.y - gang.position.y) <= 0.5,
-			"%s staat op de rij van de gang (%.1f vs %.1f)" % [id, r.position.y, gang.position.y])
-	var links := (kaart.get_node("Preceptie") as Control).get_global_rect()
-	waar(links.end.x <= gang.position.x, "de receptie ligt links van de gang")
-	var keuken := (kaart.get_node("Pkeuken") as Control).get_global_rect()
-	waar(keuken.position.x >= gang.end.x, "de keuken ligt rechts van de gang")
-	var k1 := (kaart.get_node("Pkamer1") as Control).get_global_rect()
-	var k2 := (kaart.get_node("Pkamer2") as Control).get_global_rect()
-	waar(k1.end.y <= gang.position.y, "kamer 1 ligt boven de gang")
-	waar(k2.position.y >= gang.end.y, "kamer 2 ligt onder de gang")
-	waar(absf(k1.position.x - gang.position.x) <= 0.5 \
-		and absf(k2.position.x - gang.position.x) <= 0.5,
-		"en beide in de kolom van de gang")
-	# every door of the hotel between two neighbouring cells, once per pair
-	# (R2: de speelzaal-deur bij de receptie maakt er acht van; R3: de kas
-	# boven de tuin er negen; 2026-09-24: de winkels onder de receptie tien)
-	gelijk(kaart.deurparen(), 10, "tien deuren tussen buren")
+	var receptie := (kaart.get_node("Preceptie") as Control).get_global_rect()
+	var wasserij := (kaart.get_node("Pwasserij") as Control).get_global_rect()
+	waar(gang.end.y <= receptie.position.y, "de gang ligt boven de receptie")
+	waar(wasserij.position.y >= receptie.end.y, "de wasserij ligt onder de receptie")
+	gelijk(UiPlattegrond.rij_van(3), ["gang", "kamer1", "kamer2", "keuken"] as Array[String],
+		"de bovenste etage: de gang bij de lift, dan de kamers erlangs")
+	gelijk(UiPlattegrond.rij_van(0), ["receptie", "tuin", "zwembad", "kas"] as Array[String],
+		"de begane grond: receptie, tuin, en door de tuin naar buiten")
+	# every door between two cells side by side, once per pair: on the top floor
+	# gang|kamer1 (kamer 2 and the kitchen also open onto the gang but cannot
+	# stand beside it in one row), on the ground floor receptie|tuin and the
+	# gate tuin|zwembad (the tuin's door to the kas is not a neighbour); the
+	# floors of one room have none, and the lift is the shaft, not a door
+	gelijk(kaart.deursleutels(), ["gang|kamer1", "receptie|tuin", "tuin|zwembad"] as Array[String],
+		"de deuren die de toren tekent")
+	gelijk(kaart.deurparen(), 3, "drie deuren tussen buren")
+	# the floor in view wears the band
+	gelijk(kaart.band_rij(), Rooms.etages().find(Rooms.etage(World.kamer_nu())) + 1
+		if Rooms.bestaat(World.kamer_nu()) else 0, "de etage in beeld heeft de zonnige band")
 	_af()
 
 ## The tap: `scenes/main.gd` closes the sheet and walks to the room, so the
