@@ -136,18 +136,22 @@ func test_een_andere_verdieping_is_een_liftrit() -> void:
 	var h: Dictionary = await _hotel_op(SCHERMEN[0])
 	await _naar("receptie")
 	await _frames(40)
+	# what starts playing, straight from the signal: `gehoord()` keeps only the
+	# last 32, so after a long suite its length says nothing
+	var gehoord: Array[String] = []
+	var hoor := func(naam: String) -> void: gehoord.append(naam)
+	Snd.gespeeld.connect(hoor)
 	# [from, to, up (+1) / down (-1) / same floor (0)]
 	for rit in [["receptie", "winkels", 1], ["winkels", "wasserij", -1],
 			["wasserij", "gang", 1], ["gang", "kamer1", 0], ["kamer1", "gang", 0],
 			["gang", "receptie", -1], ["receptie", "tuin", 0]]:
 		await _naar(str(rit[0]))
 		await _frames(40)             # the last slide is done
-		var voor := Snd.gehoord().size()
+		gehoord.clear()
 		Hotel.naar_kamer(str(rit[1]))
 		var zij: Vector2 = World.get("_reis_zij")
 		var wat := "%s -> %s" % [rit[0], rit[1]]
 		waar(World.reist(), "%s: de camera beweegt" % wat)
-		var gehoord := Snd.gehoord().slice(voor)
 		match int(rit[2]):
 			1:
 				waar(zij.x == 0.0 and zij.y < 0.0, "%s: omhoog, de verdieping komt van boven (%s)" % [wat, str(zij)])
@@ -161,6 +165,7 @@ func test_een_andere_verdieping_is_een_liftrit() -> void:
 					"%s: een deur, geen lift (%s)" % [wat, str(gehoord)])
 	await _frames(40)
 	waar(not World.reist(), "de rit is voorbij")
+	Snd.gespeeld.disconnect(hoor)
 	for p in Snd.get("_spelers"):
 		(p as AudioStreamPlayer).stop()
 		(p as AudioStreamPlayer).stream = null
