@@ -241,19 +241,26 @@ ones a game or a feature normally needs.
 | `Rooms` | the rooms as data (`Kamer`, `lijst()` counts them), doors, paths, furniture slots | `get_kamer(id)`, `plek(kamer, fx, fz)`, `deur`, `pad(van, naar)`, `om_het_water`, `meubel_zet/meubel_weg/meubels`, `slots/slot`, `vrij_vak`, `ingang(kamer)` (the receptie's front door, outside the door graph) |
 | `Hits` | the hotspot layer: buttons/drop targets on world objects, band grid, 0 % overlap | `maak(o)`, `weg(id)`, `wis_eigenaar(door)`, `leen/geef_terug`, `spot(id)`, `dekking(id)`, `lijst()`; signal `hotspot_getikt` |
 | `World` | camera/room in view, guests (`Dier`), movement, decor, particles | `naar(kamer)`, `kamer_nu()`, `dier(id)`, `dieren(kamer)`, `await stappen(id, punten)`, `await ga(id, x, z)`, `reis(id, kamer)`, `kom_binnen(id, x, z)` (a new guest through the front door, per kind), `vlak_van_ingang()`, `slaap`, `pose`, `mood`, `decor(kamer, o)`, `decor_weg`, `zet_bak`, `spetter(kamer, x, z, n, kl)`, `scherm(x, z, y)`, `verberg_bed(kamer, slot)` (a free bed out of sight until the camera leaves the room); signals `kamer_veranderd`, `getekend`, `reis_gestart` |
-| `Snd` | 18 procedural sounds + per-room ambience loops | `tik plop ja hoera bel deur kar munt ster plons au klok hup tover dag brief terug zacht`, `sfeer(kamer)`, `dempt()` |
-| `Ui` | cards, bubbles, strips, toasts, sheets, theme, text rules | `somkaart(obj, som, o)`, `wolk(o)`, `wolk_weg`, `getal_tag(obj, n)`, `bron(obj, o)`, `toast(tekst)`, `blad_open/blad_dicht`, `naamplaat`, `keur_regel(id, zin)` |
-| `State` | the save (`State.s`, JSON in `user://dierenhotel.json`, atomic), band | `bewaar()`, `lees()`, `nieuw_spel()`, `spel_data(id)`, `band()`, `tel(goed, ms)`, `n_gasten()`, `max_gasten()`, `plek_voor_gast()`, `kamers_met_plek()`, `plek_in(kamer)`, `bed_plek(kamer)`, `bed_vrij(kamer?)`, `gasten_in(kamer)` — the guest cap is the bedrooms' free floor (2026-09-24) |
+| `Snd` | 18 procedural sounds + per-room ambience loops, and per guest kind a sad and a happy sound (2026-09-24) | `tik plop ja hoera bel deur kar munt ster plons au klok hup tover dag brief terug zacht`, `sfeer(kamer)`, `dempt()`; `dier_sip(wie)` (plays in `Ui.misser` and when a shop sends an animal out, instead of `zacht`), `dier_blij(wie)` (follows every `ja()` for the animal of the turn); tests listen via `gehoord()` |
+| `Ui` | cards, bubbles, strips, toasts, sheets, theme, text rules | `somkaart(obj, som, o)` (`reken: true` marks a maths card without a number answer or sum line), `wolk(o)`, `wolk_weg`, `getal_tag(obj, n)`, `bron(obj, o)`, `toast(tekst)`, `blad_open/blad_dicht`, `naamplaat`, `keur_regel(id, zin)`, `is_som(id)` (while a sum is on screen the room bar and the unborrowed door signs are hidden); `maak_knop` kind `"eigen"` = a game's own Control placed by `Hits` (the wekker's big clock) |
+| `State` | the save (`State.s`, JSON in `user://dierenhotel.json`, atomic), band | `bewaar()`, `lees()`, `nieuw_spel()`, `spel_data(id)`, `band()`, `tel(goed, ms)`, `n_gasten()`, `max_gasten()`, `plek_voor_gast()`, `kamers_met_plek()`, `plek_in(kamer)`, `bed_plek(kamer)`, `bed_vrij(kamer?)`, `gasten_in(kamer)`, `herstel_bedden()` — beds stand on fixed bed places per bedroom (4 each, `Rooms.meubel_zet` snaps to the next free one), so the hotel holds 8 guests (2026-09-24) |
 | `Econ` | stars, coins, the bill | `sterren(n)`, `geef_munt(n)`, `buidel(totaal)`, `splits(n)`, `rekening(o)`; signals `sterren_veranderd`, `munten_veranderd` |
 | `Games` | registry of minigames, start/stop/supersede | `lijst()`, `definitie(id)`, `actief()`, `ontgrendeld(id)`, `start(id)`, `stop()`, `hersteek()`, `verhuis(kamer)` (the running game's room walks along with its animal); signals `spel_gestart`, `spel_gestopt` |
 | `Hotel` | day cycle, wishes, board, check-in, evening round, letters, hotel buttons | `start()`, `bel()`, `morgen()`, `avondronde()`, `taak_af(id)`, `spel_taken()`, `wens_af(gast, welke)`, `kies_kamer(kamer)` / `checkin_terug()` / `wijs_bed(kamer, bed, {loop})` (check-in steps 3–4), `komt_eraan()`, `volg(id)`, `stop_volgen()`, `hotspots()`, `naar_kamer(id)` |
 
 Rooms (`Rooms.lijst()`): `receptie` (desk top-right, door top-left), `gang`,
-`kamer1`, `kamer2`, `keuken`, `tuin` (outdoor, zones `hinkel` and `kraam`),
+`kamer1`, `kamer2`, `keuken`, `tuin` (outdoor, zone `hinkel`; the souvenir
+stall moved to the shops on 2026-09-24),
 `zwembad` (outdoor since 2026-09-14; `bad` rect = the lane), `wasserij`,
 `speelzaal`, `kas` (glass house behind the garden), `winkels` (the shopping
-arcade beside the lobby, door right of the desk — walks go round the desk,
-`Rooms.om_het_water`).
+arcade beside the lobby, door right of the desk; inside, its door is on the left
+wall — stalls hoeden, sjaals, schoenen, souvenirs, the luxe shop and the mirror).
+Every walk leg inside a room goes round what stands there (`World.looppad`,
+A* in `wereld/looppad.gd` over `Rooms.hindernissen`, cached per obstacle set);
+swimming, jumping and `per_stap` walks keep their exact points.  Door signs
+stand on their door opening, or — the whole room at once — just above the
+lintel (`Hits._kies_deurborden`); bubbles without an action are see-through
+speech bubbles with a tail (`UiWolk.richt`).
 Guests: four kinds, fifteen HTML poses (golden plates, never change them) plus
 drawn extras in `POSE_EXTRA` (arrival, blink `knipper`, passing step `loopM`,
 wag `kwispelA/B`, sad walk `sjokA/B`); `Dier.beeld` is the drawn frame, `Dier.pose`
@@ -310,12 +317,12 @@ Sounds: `ctx.snd.plop(i)`, `ja()`, `hoera()` … Particles: `World.spetter`.
 | `sleutels` | Het sleutelbord | receptie | number line / neighbours (missing numbers on a key board) | games-a §4 |
 | `meubels` | Het meubelboek | receptie → room | money, the growth loop (buy beds/furniture) | games-a §5 |
 | `tobbe` | Tobbe-tijd | tuin | fair sharing (division) of soap scoops | games-a §6 |
-| `voerkar` | De voerkar | keuken → rooms | k·N biscuits, filling and distributing bowls; reference for HOTEL.md §9 | games-a §7 |
+| `voerkar` | De voerkar | keuken → rooms | k·N biscuits: every bowl asks its own sum (guests × per), then the guests walk to the bowl and eat there; reference for HOTEL.md §9 | games-a §7 |
 | `zwembad` | Zwembad | zwembad | the pool is a number line 0…L; lanes vary per day (`Sommen.Zwembad`) | games-b §1 |
-| `wekker` | De wekkerdienst | gang | clock reading (no ghost hands: no help after a miss) | games-b §2 |
+| `wekker` | De wekkerdienst | gang | clock reading on a big front-facing clock (`WekkerKlok`); no time in words anywhere; uur erbij / ⏪ uur eraf | games-b §2 |
 | `hinkel` | Hinkelpad | tuin (zone hinkel) | number line of stepping stones 0…E | games-b §3 |
 | `was` | Wasmandtoren | wasserij | sorting/tallying into crates, bar chart | games-b §4 |
-| `kraam` | Souvenirkraam | tuin (zone kraam) | money, paying and change | games-b §5 |
+| `kraam` | Souvenirkraam | winkels (a `WinkelSpel` stall since 2026-09-24) | choose a souvenir, pay exactly; fulfils the 🎁 wish | games-d §4.7 |
 | `oogst` | Aardbeien plukken | kas | place value, complements to 10 and 100 | games-c §2 |
 | `weeg` | Groenten wegen | kas | weighing in kg with a balance | games-c §3 |
 | `hoeden` `sjaals` `schoenen` | Hoeden-, Sjaal-, Schoenenkraam | winkels | choose a piece, pay exactly with real coins/notes; shoes: paws × price; groep 5: change | games-d §4 |
