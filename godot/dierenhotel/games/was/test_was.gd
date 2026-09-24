@@ -388,6 +388,8 @@ func test_alleen_groep_5_begint_met_een_vraag() -> void:
 		if band != 5:
 			gelijk(str(st["stap"]), "sorteren", "band %d sorteert meteen" % band)
 			waar(Hits.spot("ws_vraag") == null, "geen vraag over de berg (band %d)" % band)
+			if berg != null:
+				waar(int(berg.aantal) > 0, "en de berg is sleepbaar (band %d)" % band)
 			Games.stop()
 			continue
 		gelijk(str(st["stap"]), "vraag0", "band 5 begint met de opening")
@@ -674,6 +676,17 @@ func test_slepen_van_de_berg_naar_de_krat() -> void:
 	Hits.plaats()
 	var bron := Ui.bron_van("ws_berg")
 	waar(bron != null and bron.sleep_naam == "krat", "de berg draagt de sleepnaam 'krat'")
+	# the drag really starts on the pile: a source with nothing in it gives none.
+	# `_get_drag_data` sets a preview, which only exists while the viewport is
+	# dragging, so one is started by hand and cancelled again (as test_kraam).
+	var vp := _laag.get_viewport()
+	_laag.force_drag({"sleep": "proef"}, null)
+	var sleep = bron._get_drag_data(Vector2.ZERO) if bron != null else null
+	vp.gui_cancel_drag()
+	waar(sleep is Dictionary and str((sleep as Dictionary).get("sleep", "")) == "krat",
+		"een sleep van de berg begint echt")
+	waar(bron != null and bron.get_node("Tellers/Telling").visible == false,
+		"zonder getalbolletje op de berg")
 	var st := _stand()
 	var soort := int(st["rij"][int(st["i"])])
 	var doel := Hits.spot("ws_k%d" % soort)

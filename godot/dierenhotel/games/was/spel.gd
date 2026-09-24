@@ -436,6 +436,10 @@ func _kleed_berg(stuks: int, per: int, stil := false) -> void:
 	else:
 		b.text = BERG_ICOON if _berg_kort else "%s nog te sorteren" % BERG_ICOON
 	b.zet(0, 0)                      # the pills stay out: the count is in the sentence
+	# ... but the source itself still holds what the pile holds: `UiBron` gives
+	# no drag at all from a source with 0 in it (`_lading`), and zeroing it for
+	# the pills had left the pile undraggable — only a tap took a piece.
+	b.aantal = 0 if stil else stuks
 	var rij := b.get_node_or_null("Tellers")
 	if rij == null:
 		return
