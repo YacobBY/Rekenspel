@@ -32,6 +32,23 @@ extends MiniGame
 ##     kamer en daar wacht nog iemand op zijn koekjes (vast of niet vast).
 ## Eén wolkje tegelijk, altijd `vk_zeg` bij de kar: de volgende stap in één
 ## zin.  Wat iets doet is een knop, wat alleen vertelt is een wolkje.
+##
+## DE SOM BIJ HET BAKJE (eigenaar, 2026-09-24: "De koekjes kar naar de kamer
+## duwen heeft nu geen rekenwerk meer op het einde").  Een tik op het bakje (of
+## de kar erop slepen) vult het niet meer meteen: er komt een somkaart
+## (`vk_som`) met de vraag hoeveel koekjes erin gaan = de meespelende gasten van
+## die kamer × `K.per`, als keersom (`2 × 4 =`) waar de band die tafel kent, als
+## herhaalde optelling (`4 + 4 =`) in groep 3, en bij één gast alleen het getal.
+## Goed → het bakje gaat vol zoals altijd (`lever`).  Fout → alleen `misser`
+## (geen hulp, eigenaar 2026-09-24): het dier van de beurt loopt teleurgesteld
+## naar het lege bakje, het bakje blijft leeg en dezelfde vraag blijft staan.
+## De open vraag staat in `K.vraag`, zodat een herlaad hem terugzet.
+##
+## ETEN BIJ HET BAKJE (eigenaar, 2026-09-24: "Bij het vullen van het eten lopen
+## de dieren niet naar de voerbakjes toe.  De eet animatie gebeurt op het bed").
+## Na het goede antwoord staat elke gast van die kamer op, loopt naar een eigen
+## vrij plekje naast het bakje (`eet_plekken`: vrije vloer, niet op elkaar,
+## niet onder de kar) en eet daar (`World.eet_bij`).  Daarna zijn ze wakker.
 
 # --------------------------------------------------------------- vaste maten
 
@@ -80,6 +97,12 @@ const T_ALLE_VOL := "Alle bakjes vol!"
 const T_KOEKJES := "koekjes"
 const T_KOEKJES_ELK := "koekjes elk"
 const T_KEUZE_TITEL := "hoeveel pak je per tik"
+## De som bij het bakje (2026-09-24): de vraag, en wat elke gast krijgt.  De
+## tweede zin draagt het getal per gast met `Ui.meervoud` ("1 koekje").
+const T_HOEVEEL := "Hoeveel koekjes gaan in het bakje?"
+const T_ELK := "Elke gast krijgt %s"
+const T_SOM_TITEL := "de som van het bakje"
+const T_SOM_KIES := "hoeveel koekjes gaan erin"
 
 const ICO_KOEK := "🍪"
 const ICO_POT := "🫙"
@@ -109,13 +132,37 @@ const SLEEP_AF := 10.0
 const ZEG := "vk_zeg"
 ## De meta op een geleend deurbordje: staat er nu een 👉 op?
 const WIJS_META := "vk_wijs"
+## De somkaart bij het bakje; haar strook heet `vk_som_keuzes`.
+const KAART_BAK := "vk_som"
+
+## Waar de gasten bij het bakje gaan eten: plekjes rond het bakje, in voxels
+## vanaf het bakje, de mooiste eerst — schuin erachter en ernaast, zodat het
+## bakje in beeld blijft (een dier ervóór dekt het af).  Elk plekje ligt 15..17
+## voxels van het bakje: `Rooms.vrij_vak` houdt 15 (manhattan) rond een slot
+## vrij, en zo staat het dier er toch vlak naast.  Daarna een ring op
+## `ETEN_RING` (nog steeds naast het bakje, schuin erachter eerst), en pas voor
+## een echt volle kamer een ring op 1,6 keer de eerste afstand.
+const ETEN_PLEK := [Vector2(-13, -7), Vector2(7, -13), Vector2(12, -12), Vector2(-12, 12),
+	Vector2(-7, -13), Vector2(13, 7), Vector2(-15, 0), Vector2(0, -15),
+	Vector2(15, 0), Vector2(0, 15), Vector2(-13, 7), Vector2(13, -7),
+	Vector2(7, 13), Vector2(-7, 13)]
+const ETEN_RING := 18.5
+const ETEN_RING2 := 1.6
+## Zo ver (voxels) staan twee etende gasten minstens uit elkaar.
+const ETEN_AF := 11.0
+## De voet van de kar (ArtDecorKeuken.keukenkar, net als ArtDecor.kar: x −16..+14,
+## z −9..+10) plus een rand: daar gaat niemand staan eten.
+const KAR_VOET := Rect2(-16.0, -9.0, 30.0, 19.0)
+const KAR_RAND := 6.0
 
 # --------------------------------------------------------------- toestand
 
 var K: Dictionary = {}            ## state.kar; de vorm van V2 (PLAN.md §7):
-## {T, per, rest, op_kar, pot, stap, geleverd, missers, t0}
-## `stap` is "som" (de poort die V3 bouwt) of "duwen" (het rondje).
+## {T, per, rest, op_kar, pot, stap, geleverd, missers, t0, dag, vraag}
+## `stap` is "som" (de poort die V3 bouwt) of "duwen" (het rondje); `vraag` is
+## de kamer waar de som van het bakje open staat, of "".
 var _kaart = null                 ## Ui.Kaart
+var _som_kaart = null             ## Ui.Kaart van de som bij het bakje
 var _sluit_bezig := false
 ## Heeft het kind de kar vast?  Niet in de save: na een herlaad of een nieuwe
 ## start staat de kar thuis in de keuken, en daar is hij neergezet.
@@ -163,6 +210,16 @@ func start(_c: SpelCtx) -> void:
 		K["op_kar"] = int(K["T"])
 		K["stap"] = "duwen"
 		_bewaar_kar()
+	# Stond de som van een bakje nog open (herlaad, of het spel werd even
+	# weggezet)?  Dan staan de kar en de camera weer bij dat bakje en komt
+	# dezelfde vraag terug; is die kamer intussen gevoerd, dan vervalt hij.
+	var vraag := str(K.get("vraag", ""))
+	if not vraag.is_empty():
+		if _is_open(vraag):
+			_zet_kar_in(vraag)
+		else:
+			K["vraag"] = ""
+			_bewaar_kar()
 	_rondje()
 
 ## Geen enkele gast met een bed: één wolkje bij de kar en dan dicht.
@@ -182,6 +239,7 @@ func _geen_gasten() -> void:
 ## (games-a.md §7.6).  De camera blijft waar hij is; alleen de kar gaat naar huis.
 func stop() -> void:
 	_kaart = null
+	_som_kaart = null
 	_mee = false
 	_ooit_mee = false
 	_smul_kamer = ""
@@ -242,6 +300,7 @@ func _lees_kar(g: Array) -> void:
 			"op_kar": 0, "pot": 0, "stap": "som",
 			"geleverd": {}, "missers": 0,
 			"t0": Time.get_ticks_msec(), "dag": int(ctx.state.s["dag"]),
+			"vraag": "",
 		}
 	_bewaar_kar()
 
@@ -271,6 +330,9 @@ func _herstel(d: Dictionary) -> Dictionary:
 		"stap": stap,
 		"geleverd": {}, "missers": int(d.get("missers", 0)),
 		"t0": int(d.get("t0", Time.get_ticks_msec())),
+		# de kamer waar de som van het bakje open stond (2026-09-24); een oude
+		# stand kent hem niet
+		"vraag": str(d.get("vraag", "")) if d.get("vraag", null) is String else "",
 	}
 	var geleverd = d.get("geleverd", {})
 	if typeof(geleverd) == TYPE_DICTIONARY:
@@ -429,7 +491,11 @@ func open_kamers() -> Array:
 func _rondje() -> void:
 	if not actief or K.is_empty():
 		return
-	ctx.hotspots.wis_alles()
+	# de somkaart bij het bakje blijft staan zolang haar vraag hier open is: een
+	# tik op de kar of een nieuw beeld van het hotel bouwt haar niet opnieuw op,
+	# dus een misser houdt zijn pauze en de strook haar volgorde
+	var vraag := _vraag_hier()
+	_wis(vraag)
 	var open := open_kamers()
 	if open.is_empty():
 		# Alles rond: niets meer om aan te tikken — geen kar-knop, geen geleende
@@ -448,8 +514,26 @@ func _rondje() -> void:
 	_kar_hotspot(open.size())
 	_leen_doelen()
 	_zeg()
+	if vraag:
+		_bak_kaart()
 	ctx.wereld.vuil()
 	_meld_probe("rondje")
+
+## Alles van dit spel weg, zoals `wis_alles()` — maar met `houd_kaart` blijven
+## de somkaart van het bakje, haar strook en het wolkje van een misser staan.
+## De geleende knoppen gaan in beide gevallen terug; `_leen_doelen` leent wat
+## nu nodig is opnieuw.
+func _wis(houd_kaart: bool) -> void:
+	if not houd_kaart or Hits.spot(KAART_BAK) == null:
+		ctx.hotspots.wis_alles()
+		_som_kaart = null
+		return
+	ctx.hotspots.laat()
+	var houd := [KAART_BAK, KAART_BAK + "_keuzes", Ui.MIS_WOLK + KAART_BAK]
+	for id in Hits.lijst().duplicate():
+		var s := Hits.spot(id)
+		if s != null and s.door == ctx.id and not houd.has(id):
+			Hits.weg(id)
 
 ## Het ene wolkje bij de kar: de volgende stap, in één zin.
 ##   * de kar staat in een kamer waar nog iemand op zijn koekjes wacht →
@@ -464,7 +548,9 @@ func _rondje() -> void:
 func _zeg() -> void:
 	if not actief or K.is_empty():
 		return
-	if _smul_hier():
+	if _smul_hier() or _vraag_hier():
+		# de dieren smullen, of de som van het bakje staat open: die kaart IS
+		# de volgende stap, er komt geen tweede zin naast
 		ctx.ui.wolk_weg(ZEG)
 		return
 	var icoon := ICO_WIJS
@@ -666,7 +752,9 @@ func _leen_doelen() -> void:
 	if K.is_empty() or open_kamers().is_empty():
 		return
 	var nu := World.kamer_nu()
-	if _kar_bij_honger():
+	# staat de som van het bakje open, dan is het bakje even geen knop: de
+	# vraag hangt er al (een tweede tik zou niets nieuws doen)
+	if _kar_bij_honger() and not _vraag_hier():
 		for q in open_kamers():
 			if str(q["kamer"]) != nu:
 				continue
@@ -715,10 +803,11 @@ func _wijs_deur(s, naar: String, aan: bool) -> void:
 	s.knoop.zet_label(("%s %s" % [ICO_WIJS, icoon]) if aan else icoon, str(doel.naam))
 	s.knoop.set_meta(WIJS_META, aan)
 
+## Een tik op het bakje vult het niet meteen: eerst de som (2026-09-24).
 func _tik_bak(s = null) -> void:
 	if s == null:
 		return
-	lever(str(s.data.get("kamer", "")), str(s.data.get("slot", "")))
+	vraag_bak(str(s.data.get("kamer", "")), str(s.data.get("slot", "")))
 
 ## Een tik op een deur duwt de kar erdoor, ook als het kind hem nog niet had
 ## gepakt: dan neemt het de kar gewoon mee (nooit een dode tik).
@@ -728,7 +817,7 @@ func _tik_deur(s = null) -> void:
 	duw_naar(str(s.data.get("naar", "")))
 
 func _val_lever(_lading: Dictionary, data: Dictionary) -> void:
-	lever(str(data.get("kamer", "")), str(data.get("slot", "")))
+	vraag_bak(str(data.get("kamer", "")), str(data.get("slot", "")))
 
 func _val_duw(_lading: Dictionary, data: Dictionary) -> void:
 	if OS.has_feature("web"):
@@ -742,13 +831,23 @@ func duw_naar(kamer_id: String) -> void:
 		return
 	_mee = true
 	_ooit_mee = true
+	# wie met de kar een kamer uit gaat laat de som van dat bakje staan; tikt
+	# het kind daar later weer op het bakje, dan komt dezelfde vraag terug
+	if not str(K.get("vraag", "")).is_empty() and str(K["vraag"]) != kamer_id:
+		K["vraag"] = ""
+		_bewaar_kar()
+	ctx.snd.kar()
+	_zet_kar_in(kamer_id)
+	_rondje()
+
+## De kar en de camera in die kamer, naast het bakje; het hotel tekent zijn
+## knoppen daar opnieuw (dan kan `_leen_doelen` ze lenen).
+func _zet_kar_in(kamer_id: String) -> void:
 	var plek := _kar_plek(kamer_id)
 	ctx.wereld.ding_zet("kar", {"kamer": kamer_id, "x": plek.x, "z": plek.y})
 	ctx.wereld.naar(kamer_id)
 	ctx.state.s["kamerNu"] = kamer_id
-	ctx.snd.kar()
 	Hotel.render()
-	_rondje()
 
 ## Waar de kar in die kamer komt te staan: naast het bakje, anders midden in de
 ## kamer.  (De HTML liet hem op de keukenplek staan, ook als die in een muur van
@@ -764,8 +863,219 @@ func _kar_plek(kamer_id: String) -> Vector2:
 		break
 	return Vector2(clampf(doel.x, 8.0, r.w - 8.0), clampf(doel.y, 8.0, r.d - 8.0))
 
-## Het bakje vullen: wat de gasten in die kamer moeten hebben gaat erin en de
-## dieren smullen waar ze staan.  De kar draagt de hele lading (`op_kar`);
+# --------------------------------------------------- de som bij het bakje
+
+## De meespelende gasten die in deze kamer hun bed hebben, in vaste volgorde.
+func _gasten_in(kamer_id: String) -> Array:
+	var uit: Array = []
+	for g in deelnemers():
+		if str(g.get("kamer", "")) == kamer_id:
+			uit.append(g)
+	return uit
+
+## Het bak-slot van deze kamer, of "".
+func _bak_slot(kamer_id: String) -> String:
+	for slot in ctx.wereld.slots(kamer_id, "bak"):
+		return str(slot.get("id", ""))
+	return ""
+
+## Wacht er in deze kamer nog iemand op zijn koekjes?
+func _is_open(kamer_id: String) -> bool:
+	for q in open_kamers():
+		if str(q["kamer"]) == kamer_id:
+			return true
+	return false
+
+## Staat de som van het bakje open in de kamer die in beeld is, met de kar erbij?
+func _vraag_hier() -> bool:
+	if K.is_empty():
+		return false
+	var kamer := str(K.get("vraag", ""))
+	return not kamer.is_empty() and kamer == World.kamer_nu() and _kar_bij_honger()
+
+## Het goede antwoord: zoveel gasten in deze kamer, `per` koekjes elk.
+func bak_goed(kamer_id: String) -> int:
+	return int(K["per"]) * _gasten_in(kamer_id).size()
+
+## De somregel van het bakje voor `n` gasten.  Een keersom alleen waar de band
+## die tafel kent (`Sommen.TAFEL_SET`, de tafel van het getal per gast: `2 × 4`
+## is twee keer vier); groep 3 kent de keersom nog niet en krijgt de herhaalde
+## optelling (`4 + 4 =`); één gast is alleen het getal (`4 =`).
+func bak_som(n: int) -> String:
+	var per := int(K["per"])
+	if n <= 1:
+		return "%d =" % per
+	var band := clampi(ctx.state.band(), 3, 5)
+	var tafels: Array = Sommen.TAFEL_SET.get(band, [])
+	if band >= 4 and tafels.has(per) and n <= 10:
+		return "%d × %d =" % [n, per]
+	var delen := PackedStringArray()
+	for _i in n:
+		delen.append(str(per))
+	return " + ".join(delen) + " ="
+
+## Het dier van de beurt voor de kaart (S5): de eerste gast van deze kamer die
+## er ook echt is, zodat een misser in beeld sip wordt.
+func _bak_dier(kamer_id: String) -> String:
+	var hier := _gasten_in(kamer_id)
+	for g in hier:
+		var d = World.dier(str(g["id"]))
+		if d != null and str(d.kamer) == kamer_id:
+			return str(g["id"])
+	return "" if hier.is_empty() else str(hier[0]["id"])
+
+## Tik op het bakje (of de kar erop gesleept): de som van dit bakje gaat open.
+## Alleen waar vullen nu kan — de kar staat in die kamer en daar wacht nog
+## iemand — anders gebeurt er niets (daar is het bakje ook geen knop).
+func vraag_bak(kamer_id: String, _slot_id: String = "") -> bool:
+	if not actief or K.is_empty() or kamer_id.is_empty():
+		return false
+	var kar: Dictionary = ctx.wereld.ding("kar")
+	if kar.is_empty() or str(kar.get("kamer", "")) != kamer_id or not _is_open(kamer_id):
+		return false
+	if str(K.get("vraag", "")) == kamer_id and Hits.spot(KAART_BAK) != null:
+		return true
+	K["vraag"] = kamer_id
+	_bewaar_kar()
+	ctx.snd.tik()
+	_rondje()
+	return true
+
+## De somkaart bij het bakje: 🍪 "Hoeveel koekjes gaan in het bakje?", "Elke
+## gast krijgt 4 koekjes", de somregel en een strook van vier getallen.  Staat
+## ze er al, dan blijft ze staan zoals ze is.
+func _bak_kaart() -> void:
+	var kamer := str(K.get("vraag", ""))
+	var slot := _bak_slot(kamer)
+	var hier := _gasten_in(kamer)
+	if slot.is_empty() or hier.is_empty():
+		return
+	if Hits.spot(KAART_BAK) != null and _som_kaart != null:
+		return
+	var bak: Dictionary = ctx.wereld.slot(kamer, slot)
+	var per := int(K["per"])
+	var goed := bak_goed(kamer)
+	_som_kaart = ctx.ui.somkaart(
+		{"x": float(bak.get("x", 0.0)), "z": float(bak.get("z", 0.0))},
+		bak_som(hier.size()), {
+		"id": KAART_BAK, "kamer": kamer, "hoog": 20.0, "icoon": ICO_KOEK,
+		"regel": T_HOEVEEL, "regel2": T_ELK % Ui.meervoud(per, "koekje", "koekjes"),
+		"titel": T_SOM_TITEL, "keuze_titel": T_SOM_KIES,
+		"goed": goed, "liever": [goed + per, goed - per, goed + 1], "min": 1,
+		"max": 3 if goed > 99 else 2, "prio": 14,
+		"dier": _bak_dier(kamer), "on_ok": _op_bak_som,
+	})
+	_meld_probe("som")
+
+## Het antwoord op de som van het bakje.  Goed → het bakje gaat vol (`lever`).
+## Fout → alleen de misser (eigenaar 2026-09-24: geen hulp na een fout): de
+## strook heeft `Ui.misser` al gedaan — `sip`, `🔄 Nog een keer`, even op slot —,
+## hier telt de misser voor het adaptieve signaal, klinkt het zachte geluid en
+## loopt het dier van de beurt teleurgesteld naar zijn lege bakje.  Het bakje
+## blijft leeg en dezelfde vraag blijft staan.
+func _op_bak_som(n, kaart) -> void:
+	if not actief or K.is_empty() or n == null:
+		return
+	var kamer := str(K.get("vraag", ""))
+	if kamer.is_empty():
+		return
+	if int(n) != bak_goed(kamer):
+		K["missers"] = int(K["missers"]) + 1
+		ctx.snd.zacht()
+		_bewaar_kar()
+		var dier := _bak_dier(kamer)
+		ctx.ui.misser(kaart, dier)          # de strook deed hem al: dan niets
+		_sip_bij_bak(kamer, dier)
+		_meld_probe("mis")
+		return
+	ctx.snd.ja()
+	lever(kamer, _bak_slot(kamer))
+
+## Het dier van de beurt staat op en loopt naar zijn eigen plekje bij het lege
+## bakje, en is daar sip (liever dan sip in zijn bed te staan).
+func _sip_bij_bak(kamer_id: String, dier: String) -> void:
+	var d = World.dier(dier)
+	if d == null or str(d.kamer) != kamer_id:
+		return
+	var hier := _gasten_in(kamer_id)
+	var plekken := eet_plekken(kamer_id, _bak_slot(kamer_id), hier.size())
+	var i := 0
+	for j in hier.size():
+		if str(hier[j]["id"]) == dier:
+			i = j
+	if i >= plekken.size():
+		return
+	var p: Vector2 = plekken[i]
+	ctx.wereld.ga(dier, p.x, p.y, "sip")
+
+# ------------------------------------------------- eten bij het bakje
+
+## De plekjes waar `n` gasten bij het bakje eten: vrije vloer
+## (`Rooms.vrij_vak`), niet onder de kar, en minstens `ETEN_AF` uit elkaar.
+## Eerst de ring vlak naast het bakje, dan een tweede ring; is een kamer echt
+## vol, dan de staplek van het bakje zelf, een stapje uit elkaar — nooit te
+## weinig plekjes.
+func eet_plekken(kamer_id: String, slot_id: String, n: int) -> Array:
+	var uit: Array = []
+	var bak: Dictionary = ctx.wereld.slot(kamer_id, slot_id)
+	if bak.is_empty() or n <= 0:
+		return uit
+	var mid := Vector2(float(bak.get("x", 0.0)), float(bak.get("z", 0.0)))
+	for off in _eet_kandidaten():
+		if uit.size() >= n:
+			return uit
+		var p: Vector2 = mid + (off as Vector2)
+		if not Rooms.vrij_vak(kamer_id, p.x, p.y) or _onder_kar(kamer_id, p):
+			continue
+		var ver := true
+		for q in uit:
+			if (q as Vector2).distance_to(p) < ETEN_AF:
+				ver = false
+				break
+		if ver:
+			uit.append(p)
+	var staan := Vector2(float(bak.get("sx", mid.x - 13.0)), float(bak.get("sz", mid.y)))
+	while uit.size() < n:
+		uit.append(staan + Vector2(0.0, 5.0 * float(uit.size() % 3)))
+	return uit
+
+## De plekjes rond een bakje in volgorde van voorkeur, als afstand tot het
+## bakje: de vaste lijst vlak ernaast, dan de ring op `ETEN_RING` (om de 30°,
+## wat achter het bakje ligt eerst), dan de vaste lijst op 1,6 keer.
+func _eet_kandidaten() -> Array:
+	var uit: Array = ETEN_PLEK.duplicate()
+	var ring: Array = []
+	for i in 12:
+		ring.append(Vector2.from_angle(deg_to_rad(15.0 + 30.0 * i)) * ETEN_RING)
+	ring.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x + a.y < b.x + b.y)
+	uit.append_array(ring)
+	for off in ETEN_PLEK:
+		uit.append((off as Vector2) * ETEN_RING2)
+	return uit
+
+## Staat (x, z) op of vlak naast de kar?
+func _onder_kar(kamer_id: String, p: Vector2) -> bool:
+	var kar: Dictionary = ctx.wereld.ding("kar")
+	if kar.is_empty() or str(kar.get("kamer", "")) != kamer_id:
+		return false
+	var voet := KAR_VOET.grow(KAR_RAND)
+	voet.position += Vector2(float(kar.get("x", 0.0)), float(kar.get("z", 0.0)))
+	return voet.has_point(p)
+
+## Iedereen van deze kamer uit bed, naar zijn plekje naast het bakje, en eten
+## (`World.eet_bij`: met het gezicht naar het bakje; in rustmodus meteen).
+func _eet_bij_bak(kamer_id: String, slot_id: String, hier: Array) -> void:
+	var bak: Dictionary = ctx.wereld.slot(kamer_id, slot_id)
+	var mid := Vector2(float(bak.get("x", 0.0)), float(bak.get("z", 0.0)))
+	var plekken := eet_plekken(kamer_id, slot_id, hier.size())
+	for i in mini(hier.size(), plekken.size()):
+		var p: Vector2 = plekken[i]
+		ctx.wereld.eet_bij(str(hier[i]["id"]), kamer_id, p.x, p.y, mid)
+
+## Het bakje vullen — het goede antwoord op de som van het bakje: wat de
+## gasten in die kamer moeten hebben gaat erin, en elke gast van die kamer
+## staat op, loopt naar een plekje naast het bakje en eet daar (niet meer in
+## zijn bed, eigenaar 2026-09-24).  De kar draagt de hele lading (`op_kar`);
 ## bij de laatste levering gaat wat hij over heeft in de snoeppot — dat is de
 ## `rest` van de deling — en daar sluit de lus: één ster voor het meedoen en
 ## de band wordt gevoed zoals altijd.
@@ -784,18 +1094,17 @@ func lever(kamer_id: String, slot_id: String) -> bool:
 			hier.append(g)
 	if hier.is_empty() or (K["geleverd"] as Dictionary).has(kamer_id):
 		return false
+	# de som van dit bakje is beantwoord: de kaart gaat met het volgende beeld weg
+	K["vraag"] = ""
 	var samen := mini(int(K["per"]) * hier.size(), int(K["op_kar"]))
 	K["op_kar"] = int(K["op_kar"]) - samen
-	var ids: Array = []
 	for g in hier:
-		var id := str(g["id"])
 		g["gegeten"] = true
 		g["behoefte"] = "spelen"
 		g["blij"] = false
-		ids.append(id)
 	K["geleverd"][kamer_id] = samen
 	ctx.wereld.set_bak(kamer_id, slot_id, 4)
-	ctx.wereld.feest(ids)
+	_eet_bij_bak(kamer_id, slot_id, hier)
 	ctx.snd.plop(3)
 	_bewaar_kar()
 	# het smulwolkje komt zo; tot het weg is wacht het wolkje van de kar

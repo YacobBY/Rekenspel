@@ -1343,7 +1343,8 @@ de opdracht in twee gewone zinnen; uit de zak komen koekjes die je over de
 bakjes op de vloer verdeelt, met de rest in de snoeppot. **Het rondje**: zodra
 de kar klopt duw je hem door het hotel en vul je de bakjes in de kamers — met
 **tikken** (tik op de kar, dan op een deur; eigenaar 2026-09-23), slepen mag
-er nog bij (§7.6).
+er nog bij (§7.6). Elk bakje vraagt zijn eigen som (hoeveel koekjes gaan erin,
+2026-09-24) en de gasten eten naast het bakje, niet in bed (§7.6).
 
 Meespelende gasten: alle gasten met een bed. Geen gasten → wolkje 🛏
 `"nog geen gasten"` en na **1800 ms** sluiten.
@@ -1531,12 +1532,53 @@ allemaal klikbaar lijken"*). Wat iets doet is een knop (`ctx.hotspots.bron` /
   bordjes weer zonder 👉.
 * **Het bakje** is alleen een knop waar vullen nu kan: de kar staat in die kamer
   en de kamer is open — vast of neergezet maakt niet uit, de kar staat ernaast.
-  Dan wordt `bak_<kamer>_<slot>` geleend: tik = afleveren. Elders, en na het
-  vullen, is het bakje geen knop (het hotel verbergt wat het spel niet leende).
+  Dan wordt `bak_<kamer>_<slot>` geleend: tik = **de som van het bakje**
+  (hieronder). Elders, tijdens die som, en na het vullen, is het bakje geen
+  knop (het hotel verbergt wat het spel niet leende).
+* **De som van het bakje** (eigenaar 2026-09-24: *"De koekjes kar naar de kamer
+  duwen heeft nu geen rekenwerk meer op het einde"*). Een tik op het bakje (of
+  de kar erop slepen, `val = vraag_bak`) vult het nog niet: `K.vraag = kamer`
+  (in de savegame) en er komt één somkaart `vk_som` (`ctx.ui.somkaart`, in de
+  rekenbalk; mikpunt het bakje, prio 14, icoon 🍪):
+  * regel `Hoeveel koekjes gaan in het bakje?`, regel2 `Elke gast krijgt 4
+    koekjes` (`Ui.meervoud`: `1 koekje`);
+  * het goede antwoord `goed = n × per`, met `n` = de meespelende gasten die in
+    die kamer hun bed hebben; de strook van vier getallen komt uit
+    `ui/afleiders.gd` (`liever`: `goed ± per`, `goed + 1`; `min` 1);
+  * de somregel: bij één gast alleen het getal (`4 =`); in groep 3 de herhaalde
+    optelling (`4 + 4 + 4 =`, groep 3 kent de keersom niet); vanaf groep 4 de
+    keersom `n × per =` (`2 × 4 =`, twee keer vier) als de band de tafel van
+    `per` kent (`Sommen.TAFEL_SET`), anders ook de herhaalde optelling;
+  * `dier` = de eerste gast van die kamer die er echt is (het dier van de beurt).
+  **Goed** → `Snd.ja()` en afleveren (hieronder). **Fout** → alleen de misser
+  (§8.1, geen hulp): de strook doet `Ui.misser` (`🔄 Nog een keer`, even op
+  slot, dezelfde vier getallen), het spel telt `K.missers` (alleen voor
+  `state.tel`), `Snd.zacht()`, en het dier van de beurt staat op en loopt
+  teleurgesteld naar zijn eigen plekje bij het lege bakje (`sip` daar, niet in
+  zijn bed). Het bakje blijft leeg, de kar houdt zijn koekjes, dezelfde vraag
+  blijft staan. Zolang de som open staat hangt er geen `vk_zeg` (de kaart is de
+  volgende stap); de kar en de deuren blijven knoppen. Een deur uit die kamer
+  laat de vraag vervallen (`K.vraag = ""`); een nieuwe tik op het bakje geeft
+  dezelfde vraag terug. **Herladen** midden in de som: `start()` zet de kar en
+  de camera weer bij dat bakje en dezelfde kaart hangt er (is de kamer intussen
+  gevoerd, dan vervalt de vraag).
 * **Afleveren** (`lever`): alle koekjes van de gasten in die kamer worden opgeteld
   en op 0 gezet, `geleverd[kamer] = samen`, het bakje in de wereld gaat op
   niveau 4, elke gast krijgt `gegeten = true`, `behoefte = 'spelen'`,
-  `blij = false`, `wereld.feest(...)`, `Snd.plop(3)`, opslaan, prikbord bij.
+  `blij = false`, `Snd.plop(3)`, opslaan, prikbord bij.
+* **Eten bij het bakje** (eigenaar 2026-09-24: *"Bij het vullen van het eten
+  lopen de dieren niet naar de voerbakjes toe. De eet animatie gebeurt op het
+  bed"*): elke gast van die kamer staat op (uit bed: `_breek` zet hem op de
+  vloer en laat zijn bed los), loopt naar een eigen plekje naast het bakje en
+  eet daar met zijn gezicht naar het bakje (`World.eet_bij`, eindstaat `eet`);
+  wie in een andere kamer was loopt door de deuren. De plekjes (`eet_plekken`):
+  een vaste lijst op 15..17 voxels van het bakje, schuin erachter en ernaast
+  eerst (een dier vóór het bakje dekt het af), dan een ring op 18,5, dan 1,6
+  keer de eerste lijst; alleen vrije vloer (`Rooms.vrij_vak`), niet op de voet
+  van de kar (+6) en minstens 11 voxels uit elkaar. In rustmodus staan ze er
+  meteen; buiten beeld eet `_grof_tik` het bakje in één keer leeg. Na het eten
+  zijn ze wakker en blij en klimmen ze niet terug in bed. (Tot 2026-09-24:
+  `wereld.feest(...)` — eten waar je staat, dus in bed.)
   Daarna — ná het opnieuw tekenen, want dat begint met `wisAlles()` — het
   wolkje 😋 + `per` + `"koekjes"` (of `"koekjes elk"` als er twee gasten in die
   kamer liggen, zodat het getal niet als kamertotaal wordt gelezen), klas `goed`,
@@ -1588,6 +1630,10 @@ allemaal klikbaar lijken"*). Wat iets doet is een knop (`ctx.hotspots.bron` /
 `👉 Tik op het bakje`;
 `✅ Alle bakjes vol!`; `koekjes` / `koekjes elk`; op een deurbordje `👉` vóór het
 pictogram van de kamer.
+De som van het bakje (2026-09-24): `🍪 Hoeveel koekjes gaan in het bakje?`;
+`Elke gast krijgt 4 koekjes` / `Elke gast krijgt 1 koekje`; de somregel `4 =`,
+`4 + 4 =`, `2 × 4 =`; de uitleg `de som van het bakje` (kaart) en
+`hoeveel koekjes gaan erin` (strook); na een misser `🔄 Nog een keer` (`Ui`).
 *Vervallen 2026-09-23 (tikken):* `🛒 nog 2 kamers` (op de kar), `kar is leeg` /
 `de voerkar is leeg`, `Sleep de kar naar een deur`, `Sleep de kar hierheen`.
 *Vervallen 2026-09-24 (geen hulp na een fout):* `🩺 Iedereen 4, rest in de pot`,
