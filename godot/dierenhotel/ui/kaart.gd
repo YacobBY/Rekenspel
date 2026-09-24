@@ -436,6 +436,14 @@ func zet_af() -> void:
 	_af = true
 	add_theme_stylebox_override("panel", _papier())
 
+## Ticked (`Ui.Kaart.klaar()`): the question on this card has been answered.
+func is_af() -> bool:
+	return _af
+
+## The sum line as the card shows it now ("" when it has none).
+func som_tekst() -> String:
+	return _som
+
 # ------------------------------------------------------------------ slepen
 
 ## The card catches the finger (MOUSE_FILTER_STOP) and Godot stops a drop at the

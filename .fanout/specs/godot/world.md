@@ -1792,6 +1792,30 @@ gebruiker moet gewoon op de bel drukken"). `ui/intro.gd` (`UiIntro`), started by
   eaten (the tap feeds).  Doors, the prikbord and the lamp keep their rules.  While a game
   runs every hotel button is made as before: `Hits` keeps them off the glass anyway, and a
   game may borrow one (the voerkar takes the bowls and the doors).
+* **Port (owner 2026-09-24: "Kan je tijdens een rekensom de hotkeys voor mappen
+  verbergen"): during a sum the ways out of the room step aside.**  While a sum is being
+  answered on the glass, every chip of the room bar — the map chip too — fades out
+  (0.15 s, at once in reduced motion) and can be neither tapped nor focused (disabled,
+  `MOUSE_FILTER_IGNORE`, `FOCUS_NONE`; the bar itself lets the finger through), and the
+  hotel's door signs (`hotdeur`) leave the glass (`Hits.plaats`).  A door a running game
+  has BORROWED (`ctx.hotspots.pak`, §5.3) is that game's own tool — the voerkar pushes its
+  trolley through it — and stays.  When the sum is answered (the card is ticked,
+  `.klaar()`) or its card is gone, everything comes back as it was.  Nothing moves: the
+  chips keep their place and size in the shell, so the world frame keeps every unit (the
+  only rescale is the maths bar's own, PLAN.md §3.1).  **The rule** (`Ui.is_som`, one
+  function for the bar and the doors): a card counts while it is open, stands in the room
+  in view, is not ticked, and asks a sum — it asks for a number (`goed`, its strip is four
+  numbers) or carries a sum line (`som`: `2 + 1 =`, `3 × 4`, `€8 − €6 =`).  A card with
+  only word choices and no sum line (the check-in's room question, step 3) asks
+  something but no sum: the shortcuts stay.  A card in another room never counts, so a
+  child who followed a guest out of the receptie always has doors.  The way on is the sum
+  itself — four choices, a miss costs nothing (HOTEL.md §1 R6) — plus, in a game, the
+  game bar's `⬅ Terug` (§5.8), which never steps aside; the beds game's `⬅ Terug` brings
+  the check-in back to its room question (`Hotel.checkin_terug`).  The chrome (board,
+  evening, coins, letters, sound) stays.  Probe: `[probe] kamerbalk verstopt=<bool>
+  som=<card id>` on every change, and no `chip` lines while the chips are hidden; every
+  opened card now also reports its answer strip bare as `[probe] <id>_keuzes=<rect>`, so
+  `tools/speel.js` can answer the desk's questions (`ci_som_keuzes#3/4`).
 * **Door hotspots** (**port:** the sign hangs ON its door, prio 11 — §5.4 port rules): one per door of the room in view, at the door point, `y = 9`, icon and
   label of the target room, title `Ga naar <naam>`, badge `wachtIn(target)`, class
   `hotdeur`, prio 8, and a drop target `deur` with `data = {naar, kamer}` — that is how the

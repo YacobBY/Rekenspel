@@ -813,6 +813,11 @@ signal hotspot_getikt(id: String)
   reachable only by swiping. Measured on the real shell: 360 × 740 → frame 326 × 558
   (54 % → 75 %), 390 × 844 → 356 × 662 (60 % → 78 %); the tablets are untouched
   (1024 × 768 → 990 × 637).
+* **During a sum the room bar keeps its footprint** (owner 2026-09-24, world.md §6.3):
+  its chips fade out and stop taking taps and focus while `Ui.som_in_beeld()` holds, but
+  they are never hidden or removed from the grid — a hidden Container child is left out
+  of the layout, the bar would shrink and the frame would grow and rescale the world
+  under the card.  `UiKamerbalk.verstop(aan)` asks the rule once per frame.
 * `KADER_MIN = 200` units: if the frame would fall below it, the chrome gives way, never
   the world.
 * **The extreme case, spelled out for W3.** At the smallest legal frame (200 units high)

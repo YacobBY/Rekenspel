@@ -222,10 +222,17 @@ func _bouw_chroom() -> void:
 	if not kamerbalk.kamer_gekozen.is_connected(_naar_kamer):
 		kamerbalk.kamer_gekozen.connect(_naar_kamer)
 		kamerbalk.kaart_gevraagd.connect(_plattegrond)
+		kamerbalk.verstopt_veranderd.connect(_meld_verstopt)
 	_ververs_chroom()
 
 func _naar_kamer(id: String) -> void:
 	Hotel.naar_kamer(id)
+
+## A sum came up or went (owner, 2026-09-24): the room chips and the door
+## signs stepped aside or came back.  One line, so a browser probe knows why
+## the `chip` lines are missing and which card it is answering.
+func _meld_verstopt(aan: bool) -> void:
+	print("[probe] kamerbalk verstopt=", aan, " som=", Ui.som_kaart_in_beeld())
 
 # ---------------------------------------------------------------- spelbalk
 
@@ -525,6 +532,12 @@ func _meld_kaart(id: String) -> void:
 	print("[probe] kaart ", id, "=", kn.get_global_rect(),
 		" balk=", Ui.balk_rect(), " baas=", Ui.balk_kaart(),
 		" op=", str(Hits.debug().get(id, {}).get("op", "?")))
+	# ... and its answer strip, bare as `<id>_keuzes=`, the way `tools/speel.js`
+	# looks for a strip (`ci_som_keuzes#2/4`): the check-in's strip was never
+	# reported, so a played run could not answer the desk's questions
+	var st := Hits.spot(id + "_keuzes")
+	if st != null and is_instance_valid(st.knoop) and (st.knoop as Control).visible:
+		print("[probe] ", id, "_keuzes=", (st.knoop as Control).get_global_rect())
 
 ## One machine-readable line per fact, for the browser probe and the tests.
 func _meld_later() -> void:
@@ -606,8 +619,9 @@ func _meld_knoppen() -> void:
 		if spelbalk.speler_knop != null and spelbalk.speler_knop.visible:
 			print("[probe] spelbalk speler=", Games.speler(), " knop=",
 				spelbalk.speler_knop.get_global_rect())
-	# the room bar, so a probe can tap a room or the map ("kaart") by name
-	if kamerbalk != null:
+	# the room bar, so a probe can tap a room or the map ("kaart") by name —
+	# not while a sum has made the chips step aside: they cannot be tapped then
+	if kamerbalk != null and not kamerbalk.verstopt():
 		for id in kamerbalk.chips():
 			var b: Control = kamerbalk.chips()[id]
 			if is_instance_valid(b) and b.visible:

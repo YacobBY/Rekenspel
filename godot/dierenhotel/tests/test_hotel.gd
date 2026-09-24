@@ -849,3 +849,161 @@ func test_dag_overleeft_een_herlaad() -> void:
 	gelijk(JSON.stringify(State.s["taken"]), taken_voor, "het bord komt terug")
 	gelijk((State.s["gasten"] as Array).size(), 2, "de gasten ook")
 	gelijk(State.s["gasten"][0]["behoefte"], "spelen", "met hun wens")
+
+# ------------------------------------------------ een som in beeld (2026-09-24)
+
+## The hotel's door signs in a room, by their class.
+func _deurbordjes(kamer: String) -> Array[String]:
+	var uit: Array[String] = []
+	for id in Hits.lijst():
+		var s := Hits.spot(id)
+		if s != null and s.kamer == kamer and s.klas.contains("hotdeur"):
+			uit.append(id)
+	return uit
+
+func _op_het_glas(id: String) -> bool:
+	var s := Hits.spot(id)
+	return s != null and is_instance_valid(s.knoop) and s.zichtbaar and s.knoop.visible
+
+## Owner, 2026-09-24: "Kan je tijdens een rekensom de hotkeys voor mappen
+## verbergen".  The rule of `Ui.is_som`, card by card, and what `Hits` does
+## with the door signs: a card that asks a number or carries a sum line hides
+## them; a borrowed one stays; a ticked card, a card with word choices and no
+## sum line, and a card in another room do not count.
+func test_een_som_haalt_de_deurbordjes_weg() -> void:
+	_voor()
+	var boom := Engine.get_main_loop() as SceneTree
+	var laag := Control.new()
+	laag.size = Vector2(1000, 648)
+	boom.root.add_child(laag)
+	Ui.registreer_lagen(laag, laag, laag, laag, laag)
+	World.meet(Rect2(Vector2.ZERO, laag.size))
+	var rust := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	Hotel.naar_kamer("receptie")
+	Hits.plaats()
+	var deuren := _deurbordjes("receptie")
+	waar(deuren.size() >= 2, "de receptie heeft deurbordjes (%s)" % str(deuren))
+	for d in deuren:
+		waar(_op_het_glas(d), "zonder som: %s staat er" % d)
+	waar(not Ui.som_in_beeld(), "zonder kaart geen som")
+
+	# a card that asks for a number: the door signs step aside
+	var k = Ui.somkaart({"x": 40.0, "z": 40.0}, "2 + 1 =", {"id": "proef_som",
+		"kamer": "receptie", "goed": 3, "regel": "🥄 Hoeveel scheppen samen?"})
+	Hits.plaats()
+	waar(Ui.is_som("proef_som"), "een getal vragen is een som")
+	waar(Ui.som_in_beeld(), "er staat een som in beeld")
+	for d in deuren:
+		waar(Hits.spot(d) != null, "%s bestaat nog" % d)
+		waar(not _op_het_glas(d), "tijdens de som: %s is weg" % d)
+	# a door a game borrowed is its own tool: it stays
+	if deuren.size() >= 2:
+		waar(Hits.leen(deuren[0], "proef", func(_s) -> void: pass), "een spel leent een deur")
+		Hits.plaats()
+		waar(_op_het_glas(deuren[0]), "de geleende deur blijft staan")
+		waar(not _op_het_glas(deuren[1]), "de andere niet")
+		Hits.geef_terug("proef")
+		Hits.plaats()
+		waar(not _op_het_glas(deuren[0]), "teruggegeven is hij weer een hoteldeur")
+	# ticked: the sum is answered, the doors come back
+	k.klaar()
+	Hits.plaats()
+	waar(not Ui.is_som("proef_som"), "een afgevinkte kaart vraagt niets meer")
+	for d in deuren:
+		waar(_op_het_glas(d), "na het antwoord: %s staat er weer" % d)
+	k.weg()
+
+	# word choices without a sum line ask something, but no sum
+	var w = Ui.somkaart({"x": 40.0, "z": 40.0}, "", {"id": "proef_vraag",
+		"kamer": "receptie", "pad": false, "regel": "🛏 Welke kamer wil Muis?",
+		"keuzes": [{"id": "kamer1", "icoon": "🛏", "tekst": "Kamer 1", "kort": "1",
+			"kies": func(_id) -> void: pass}]})
+	Hits.plaats()
+	waar(not Ui.is_som("proef_vraag"), "een kamerkeuze is geen som")
+	for d in deuren:
+		waar(_op_het_glas(d), "bij een keuzevraag: %s blijft" % d)
+	w.weg()
+
+	# a sum line without an answer strip (coins, a drag) is a sum as well
+	var r = Ui.somkaart({"x": 40.0, "z": 40.0}, "3 × €2 =", {"id": "proef_regel",
+		"kamer": "receptie", "pad": false, "regel": "🛏 Boef sliep 3 nachten"})
+	Hits.plaats()
+	waar(Ui.is_som("proef_regel"), "een somregel is een som")
+	for d in deuren:
+		waar(not _op_het_glas(d), "bij een somregel: %s is weg" % d)
+	# ... but only in its own room: out of the receptie every door is there
+	Hotel.naar_kamer("gang")
+	Hits.plaats()
+	waar(not Ui.som_in_beeld(), "een som in een andere kamer telt niet")
+	var gang := _deurbordjes("gang")
+	waar(not gang.is_empty(), "de gang heeft deurbordjes")
+	for d in gang:
+		waar(_op_het_glas(d), "in de gang: %s staat er" % d)
+	r.weg()
+	Hotel.naar_kamer("receptie")
+	Hits.wis_alles()
+	Ui.registreer_lagen(null, null, null)
+	laag.queue_free()
+	Ui.zet_rust_modus(rust)
+	await boom.process_frame
+
+## The voerkar borrows the hotel's doors to push its trolley through them
+## (games-a.md §7): with a sum on the glass in the kitchen those doors stay —
+## they are the game's own buttons now, not a way out of the sum.
+func test_de_voerkar_houdt_zijn_deuren_bij_een_som() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var kar_voor := World.ding("kar")
+	herstel_spellen()
+	alleen_spellen(["voerkar"])
+	Rooms.herstel()
+	State.nieuw_spel()
+	State.start_gekozen()
+	var boom := Engine.get_main_loop() as SceneTree
+	var laag := Control.new()
+	laag.size = Vector2(1000, 648)
+	boom.root.add_child(laag)
+	Ui.registreer_lagen(laag, laag, laag, laag, laag)
+	World.meet(Rect2(Vector2.ZERO, laag.size))
+	# two guests in real beds, as the voerkar's own tests set them up
+	var pool := State.gasten_pool()
+	var bedden := State.alle_bedden()
+	var gasten: Array = []
+	for i in mini(2, bedden.size()):
+		var g: Dictionary = pool[i]
+		g["kamer"] = str(bedden[i]["kamer"])
+		g["bed"] = str(bedden[i]["slot"])
+		g["waar"] = g["kamer"]
+		g["nachten"] = 100
+		gasten.append(g)
+	State.s["gasten"] = gasten
+	State.s["kamerNu"] = "keuken"
+	World.sync(gasten)
+	World.naar("keuken")
+	waar(Games.start("voerkar"), "de voerkar start")
+	Hits.plaats()
+	var geleend: Array[String] = []
+	for d in _deurbordjes("keuken"):
+		var s := Hits.spot(d)
+		if s != null and s.geleend_door == "voerkar":
+			geleend.append(d)
+	waar(not geleend.is_empty(), "de voerkar leent de keukendeuren")
+	Ui.somkaart({"x": 40.0, "z": 40.0}, "2 + 2 =", {"id": "proef_som",
+		"kamer": "keuken", "goed": 4, "regel": "🍪 Hoeveel koekjes samen?"})
+	Hits.plaats()
+	waar(Ui.som_in_beeld(), "er staat een som in de keuken")
+	for d in geleend:
+		waar(_op_het_glas(d), "de geleende %s blijft staan" % d)
+	Hits.weg("proef_som")
+	Games.stop()
+	Hits.wis_alles()
+	World.decor_wis_alles()
+	Ui.registreer_lagen(null, null, null)
+	laag.queue_free()
+	if not kar_voor.is_empty():
+		World.zet_ding("kar", kar_voor)
+	for b in Hotel.alle_bakken():
+		World.zet_bak(str(b["kamer"]), str(b["slot"]), 0)
+	State.s = bewaard
+	Rooms.herstel()
+	await boom.process_frame
