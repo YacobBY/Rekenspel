@@ -19,6 +19,25 @@ extends ScrollContainer
 ## The scrolling is why this is a `ScrollContainer` with the grid inside it: with
 ## both scroll modes disabled it measures and lays out exactly like the plain
 ## grid it used to be.
+##
+## The hotel is a tower (owner, 2026-09-24, `Kamer.etage`), and the bar shows
+## it: the chips come per floor — the ground floor first, so the receptie where
+## the child starts stays the first chip, then up the tower (1, 2, 3), then the
+## cellar — and every floor after the first opens with a small round badge with
+## the floor's sign, the way the lift's buttons write it (`Rooms.etage_teken`).
+## The first group needs none: it is the floor the child starts on, and on the
+## 1000 unit tablet row every badge costs 18 units of a row that has none to
+## spare (`_rij_trappen`).  The badge only SAYS something: flat, see-through, a
+## thin outline, no key edge (the quiet style of `UiThema.info_vlak`), it takes
+## no finger and no focus — a swipe that starts on it scrolls the row — and it
+## fades with the chips during a sum.
+##
+## The badge shares ONE cell of the grid with its floor's first chip (`_cel`):
+## a GridContainer gives every column the width of its widest cell, so a badge
+## with a cell of its own would float in a wide empty column once the bar
+## wraps, or end a row while its floor starts the next one.  In a row the cell
+## lies (badge, chip); in the rail it stands, the badge above the chip, so the
+## rail keeps its three columns of 48 units.
 
 signal kamer_gekozen(kamer: String)
 signal kaart_gevraagd()
@@ -36,6 +55,13 @@ const VULLING := 6            ## the chip's own padding, both sides
 const VULLING_KRAP := 4
 
 var _chips: Dictionary = {}   ## kamer id -> Button ("" = the map chip)
+## floor -> Control, the badge that opens that floor's chips (never a Button);
+## the first floor in the bar has none
+var _merken: Dictionary = {}
+## The badge's diameter in units: a 12 px sign in a circle, far smaller than a
+## chip, so it reads as a label and costs the row little.
+const MERK := 16
+const MERK_GAT := 2           ## between a badge and its floor's first chip
 var _rail := false
 var _strook := false
 var _rolt := false            ## the rail ran out of height and scrolls (R1)
@@ -92,26 +118,149 @@ func vul() -> void:
 		_raster.remove_child(k)
 		k.queue_free()
 	_chips.clear()
-	for id in Rooms.lijst():
-		var r := Rooms.get_kamer(id)
-		if r == null:
+	_merken.clear()
+	for e in etage_volgorde():
+		var groep: Array[String] = []
+		for id in Rooms.op_etage(e):
+			if Rooms.get_kamer(id) != null:
+				groep.append(id)
+		if groep.is_empty():
 			continue
-		_chips[id] = _chip(id, r.icoon, r.naam, UiTekst.ga_naar(r.naam))
+		var ouder: Control = _raster
+		if not _chips.is_empty():
+			ouder = _cel(e)
+			_merken[e] = _merk(e, ouder)
+		for id in groep:
+			var r := Rooms.get_kamer(id)
+			_chips[id] = _chip(id, r.icoon, r.naam, UiTekst.ga_naar(r.naam), ouder)
+			ouder = _raster
 	_chips[""] = _chip("", "🗺️", "Plattegrond", UiTekst.KAART_TITEL)
 	pas_aan(size.x, _rail, 0.0, _strook)
+
+## The floors in the order the bar shows them: the ground floor first (the
+## receptie, where the child starts), then up the tower, then down into the
+## cellar.  Within a floor the rooms keep `Rooms.lijst()` order (`op_etage`).
+static func etage_volgorde() -> Array[int]:
+	var boven: Array[int] = []
+	var onder: Array[int] = []
+	for e in Rooms.etages():
+		if e >= 0:
+			boven.append(e)
+		else:
+			onder.append(e)
+	boven.sort()
+	onder.sort()
+	onder.reverse()
+	boven.append_array(onder)
+	return boven
 
 ## `kamer id -> Button` ("" = the map chip), for the probe.
 func chips() -> Dictionary:
 	return _chips
 
-func _chip(id: String, icoon: String, naam: String, titel: String) -> Button:
+## `floor -> Control`: the badge that opens each floor's chips, the first
+## floor's excepted.  Its sign is the child `Teken` (a Label); its parent is the
+## grid cell it shares with the floor's first chip.
+func merken() -> Dictionary:
+	return _merken
+
+## The grid cell a floor's badge shares with the floor's first chip.  A
+## Container, so it passes the finger on (MOUSE_FILTER_PASS) like the grid.
+## The badge stands closer to its own chip (MERK_GAT) than to the chip before
+## it (GAT), so it reads as the start of its floor and not the end of the last.
+func _cel(e: int) -> BoxContainer:
+	var cel := BoxContainer.new()
+	cel.name = "Etage" + Rooms.etage_teken(e)
+	cel.add_theme_constant_override("separation", MERK_GAT)
+	cel.vertical = _rail
+	cel.set_meta("etage", e)
+	_raster.add_child(cel)
+	return cel
+
+## The floor badge: the floor's sign in a small quiet circle.  No `Button`
+## anywhere in it, so it is no tap target (`test_ui` walks the shell's
+## buttons), and every part is `MOUSE_FILTER_IGNORE`: the finger lands on the
+## grid behind it, which passes it on to this ScrollContainer — a swipe that
+## starts on the badge scrolls the row like a swipe between two chips.
+##
+## The circle is a fixed MERK x MERK `Panel` and the sign a `Label` centred on
+## it: a Label alone is as tall as its line (21 units at 12 px, the emoji
+## fallback's), which would make the badge an oval and the row wider.
+func _merk(e: int, ouder: Control) -> Control:
+	var teken := Rooms.etage_teken(e)
+	var m := Control.new()
+	m.name = "Merk"
+	m.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	m.focus_mode = Control.FOCUS_NONE
+	m.custom_minimum_size = Vector2(MERK, MERK)
+	m.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	m.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	m.set_meta("etage", e)
+	ouder.add_child(m)
+	var rond := Panel.new()
+	rond.name = "Rond"
+	rond.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rond.add_theme_stylebox_override("panel", UiThema.vlak(
+		Color(UiThema.WOLK_INFO, UiThema.INFO_VUL_ALFA), 999, 1, UiThema.INFO_LIJN))
+	m.add_child(rond)
+	rond.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var l := _tekst("Teken", teken, UiThema.VLOER)
+	m.add_child(l)
+	# anchored on the centre and growing both ways: the Label takes its own
+	# height and stays centred on the circle whatever that height is
+	l.set_anchors_and_offsets_preset(Control.PRESET_CENTER, Control.PRESET_MODE_MINSIZE)
+	l.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	l.grow_vertical = Control.GROW_DIRECTION_BOTH
+	return m
+
+## What stands in the grid, in its order: chips, and the cells in which a
+## floor's badge leads its first chip.
+func _cellen() -> Array[Control]:
+	var uit: Array[Control] = []
+	if _raster == null:
+		return uit
+	for k in _raster.get_children():
+		if k is Control and (k as Control).visible and not k.is_queued_for_deletion():
+			uit.append(k)
+	return uit
+
+## Every chip in the grid (the badges left out), in grid order.
+func _knoppen() -> Array[Button]:
+	var uit: Array[Button] = []
+	for k in _cellen():
+		if k is Button:
+			uit.append(k)
+		else:
+			for kk in k.get_children():
+				if kk is Button and not kk.is_queued_for_deletion():
+					uit.append(kk)
+	return uit
+
+## Where a chip stands in the grid, also when it shares a floor's cell.
+func _in_raster(c: Control) -> Rect2:
+	var p := c.position
+	var o := c.get_parent()
+	while o != null and o != _raster and o is Control:
+		p += (o as Control).position
+		o = o.get_parent()
+	return Rect2(p, c.size)
+
+## `ouder` is the grid, or the floor cell the chip shares with its badge.
+func _chip(id: String, icoon: String, naam: String, titel: String,
+		ouder: Control = null) -> Button:
 	var b := Button.new()
 	b.name = "C" + (id if id != "" else "kaart")
 	b.theme_type_variation = "Kamerchip"
 	b.tooltip_text = titel
 	b.focus_mode = Control.FOCUS_ALL
 	b.toggle_mode = true
-	_raster.add_child(b)
+	if ouder != null and ouder != _raster:
+		# in its floor's cell the chip takes what the badge leaves of the column
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		ouder.add_child(b)
+	else:
+		_raster.add_child(b)
 	# A Button is not a Container, so the content is anchored to its rectangle
 	# and the chip's minimum size is taken from that content once, here.
 	var rij := BoxContainer.new()
@@ -188,12 +337,13 @@ func _toon_huidige() -> void:
 	var b: Button = _chips.get(World.kamer_nu())
 	if b == null or not is_instance_valid(b):
 		return
+	var plek := _in_raster(b)
 	if _strook:
-		var links := b.position.x - scroll_horizontal
+		var links := plek.position.x - scroll_horizontal
 		if links < 0.0 or links + b.size.x > size.x:
 			ensure_control_visible(b)
 	else:
-		var boven := b.position.y - scroll_vertical
+		var boven := plek.position.y - scroll_vertical
 		if boven < 0.0 or boven + b.size.y > size.y:
 			ensure_control_visible(b)
 
@@ -286,18 +436,20 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = fal
 	if not rail:
 		_rail_rolt(false, 0.0)
 	_zet_rollen(_strook, _rolt)
-	for b in _chips.values():
+	for c in _cellen():
+		if c is BoxContainer:
+			(c as BoxContainer).vertical = rail   # the badge beside or above its chip
+	for b in _knoppen():
 		var rij: BoxContainer = b.get_node_or_null("Rij")
 		if rij != null:
 			rij.vertical = rail
 		var ic: Label = b.get_node_or_null("Rij/Icoon")
 		if ic != null and not rail:
-			ic.add_theme_font_size_override("font_size", _maten["icoon"])
+			_letter(ic, int(_maten["icoon"]))
 		var nm: Label = b.get_node_or_null("Rij/Naam")
 		if nm != null:
 			if not rail:
-				nm.add_theme_font_size_override("font_size",
-					maxi(UiThema.VLOER, int(_maten["klein"])))
+				_letter(nm, maxi(UiThema.VLOER, int(_maten["klein"])))
 			# In the rail the word wraps under the picture instead of the chip
 			# growing sideways; outside it the word must NOT wrap, or its
 			# minimum width collapses to one letter and the bar turns into a
@@ -305,6 +457,7 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = fal
 			nm.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY if rail else TextServer.AUTOWRAP_OFF
 			nm.custom_minimum_size = Vector2.ZERO
 			nm.max_lines_visible = -1
+			_ververs(nm)
 	if rail:
 		_zet_vulling(VULLING)
 		_meet_rail(hoogte)
@@ -330,7 +483,7 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = fal
 			var gepast := false
 			for trap in _rij_trappen():
 				_zet_letters(int(trap[0]), int(trap[1]))
-				krap = _chip_breedtes(VULLING_KRAP)
+				krap = _chip_breedtes(int(trap[2]))
 				if _rij_breedte(krap, krap.size()) <= breedte:
 					breedtes = krap
 					gepast = true
@@ -341,7 +494,7 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = fal
 	if _strook:
 		# one row, as wide as it needs to be: the ScrollContainer takes the
 		# overflow instead of the world frame taking three rows of chips
-		_raster.columns = maxi(1, _chips.size())
+		_raster.columns = maxi(1, _cellen().size())
 		_toon_huidige()
 		return
 	# A GridContainer sizes each column to its OWN widest chip, so the honest
@@ -353,6 +506,30 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = fal
 		if _rij_breedte(breedtes, k) <= breedte:
 			_raster.columns = k
 			break
+	# A bar that wraps anyway breaks its rows where a floor starts, when a few
+	# columns less give the same number of rows (the upright tablet: the top
+	# floor opens the second row instead of ending the first) — the world frame
+	# keeps its height, the floors read as floors.
+	var n := breedtes.size()
+	var rijen_n := ceili(n / float(_raster.columns))
+	if rijen_n > 1 and not _rijen_op_etage(_raster.columns):
+		for k in range(_raster.columns - 1, 0, -1):
+			if ceili(n / float(k)) != rijen_n:
+				break
+			if _rij_breedte(breedtes, k) <= breedte and _rijen_op_etage(k):
+				_raster.columns = k
+				break
+
+## Does every row after the first start where a floor (or the map) starts, in
+## `kolommen_n` columns?
+func _rijen_op_etage(kolommen_n: int) -> bool:
+	var cellen := _cellen()
+	var i := kolommen_n
+	while i < cellen.size():
+		if not (cellen[i] is BoxContainer or cellen[i] == _chips.get("")):
+			return false
+		i += kolommen_n
+	return true
 
 ## How many columns the bar ended up with — one machine-readable number for the
 ## browser probe and the layout test.
@@ -360,47 +537,73 @@ func kolommen() -> int:
 	return _raster.columns if _raster != null else 0
 
 func rijen() -> int:
-	return int(ceil(_chips.size() / float(maxi(1, kolommen()))))
+	return int(ceil(_cellen().size() / float(maxi(1, kolommen()))))
 
 ## Give every chip `vulling` units of padding on both sides and its minimum
-## size for that padding; returns the widths in chip order.  The content is
+## size for that padding; returns the widths of the grid's cells in grid order
+## — a floor's cell is its badge, the gap and its chip.  The content is
 ## anchored to the chip with offsets (a Button lays out no children), so the
 ## offsets follow the padding or the word would be cut.
 func _chip_breedtes(vulling: int) -> Array[float]:
 	_zet_vulling(vulling)
-	var uit: Array[float] = []
-	for b in _chips.values():
+	for b in _knoppen():
 		var rij: BoxContainer = b.get_node_or_null("Rij")
 		if rij == null:
 			continue
 		var nodig := rij.get_combined_minimum_size()
 		b.custom_minimum_size = Vector2(maxf(UiThema.HOT, nodig.x + 2 * vulling),
 			maxf(UiThema.HOT, nodig.y + 4.0))
-		uit.append(b.custom_minimum_size.x)
+	var uit: Array[float] = []
+	for c in _cellen():
+		uit.append(c.get_combined_minimum_size().x)
 	return uit
 
-## The smaller steps a ROW takes before it wraps: [picture, word].
+## The smaller steps a ROW takes before it wraps: [picture, word, padding].
+## The last three came with the floor badges (2026-09-24): twelve chips and
+## four badges fill 966 of the 1000 unit tablet row with pictures of 17, and
+## every waiting guest's counter (`Wacht`, 18 units) on a chip when the shell
+## lays the bar out again (a game starts) must not push it onto a second row —
+## the world frame would lose a band.  They go down to the rail's smallest
+## picture (14) and, only then, a unit less padding: four counters still fit.
 func _rij_trappen() -> Array:
 	var ic := int(_maten["icoon"])
 	var kl := maxi(UiThema.VLOER, int(_maten["klein"]))
 	return [
-		[maxi(16, int(round(ic * 0.85))), kl],
-		[maxi(16, int(round(ic * 0.8))), maxi(UiThema.VLOER, kl - 1)],
-		[maxi(16, int(round(ic * 0.75))), UiThema.VLOER],
+		[maxi(16, int(round(ic * 0.85))), kl, VULLING_KRAP],
+		[maxi(16, int(round(ic * 0.8))), maxi(UiThema.VLOER, kl - 1), VULLING_KRAP],
+		[maxi(16, int(round(ic * 0.75))), UiThema.VLOER, VULLING_KRAP],
+		[maxi(16, int(round(ic * 0.7))), UiThema.VLOER, VULLING_KRAP],
+		[maxi(14, int(round(ic * 0.6))), UiThema.VLOER, VULLING_KRAP],
+		[maxi(14, int(round(ic * 0.6))), UiThema.VLOER, VULLING_KRAP - 1],
 	]
+
+## A new text size for a chip's picture or word, measured at once.  Godot 4.7:
+## the first minimum size a Label reports after its size (or wrapping) changed
+## still has the old WIDTH, and the containers above it keep that number — so
+## every step of the row's ladder measured the step before it, and a bar laid
+## out a second time (the shell does, whenever a game starts or ends) got its
+## full-size words in chips cut for the smaller step.  Asking once and then
+## dropping the cached sizes makes the next measurement the real one.
+func _letter(l: Label, maat: int) -> void:
+	l.add_theme_font_size_override("font_size", maat)
+	_ververs(l)
+
+func _ververs(l: Label) -> void:
+	l.get_minimum_size()
+	l.update_minimum_size()
 
 ## Picture and word size of every chip in a row (not the rail).
 func _zet_letters(icoon_maat: int, naam_maat: int) -> void:
-	for b in _chips.values():
+	for b in _knoppen():
 		var ic: Label = b.get_node_or_null("Rij/Icoon")
 		if ic != null:
-			ic.add_theme_font_size_override("font_size", icoon_maat)
+			_letter(ic, icoon_maat)
 		var nm: Label = b.get_node_or_null("Rij/Naam")
 		if nm != null:
-			nm.add_theme_font_size_override("font_size", maxi(UiThema.VLOER, naam_maat))
+			_letter(nm, maxi(UiThema.VLOER, naam_maat))
 
 func _zet_vulling(vulling: int) -> void:
-	for b in _chips.values():
+	for b in _knoppen():
 		var rij: BoxContainer = b.get_node_or_null("Rij")
 		if rij != null:
 			rij.offset_left = vulling
@@ -436,7 +639,7 @@ func _rij_breedte(breedtes: Array[float], kolommen_n: int) -> float:
 ## past the height it was given would push the world frame out of the shell, so
 ## the rail keeps that height and scrolls instead, exactly as the phone row does.
 func _meet_rail(hoogte: float) -> void:
-	var rijen_n := int(ceil(_chips.size() / float(RAIL_KOLOMMEN)))
+	var rijen_n := int(ceil(_cellen().size() / float(RAIL_KOLOMMEN)))
 	var trappen := [
 		[int(_maten["icoon_keuze"]), int(_maten["klein"])],
 		[18, maxi(UiThema.VLOER, int(_maten["klein"]) - 1)],
@@ -444,11 +647,26 @@ func _meet_rail(hoogte: float) -> void:
 		[14, UiThema.VLOER],
 	]
 	for trap in trappen:
-		var hoogst := _zet_rail(int(trap[0]), int(trap[1]))
-		if hoogte <= 0.0 or rijen_n * (hoogst + GAT) - GAT <= hoogte:
+		_zet_rail(int(trap[0]), int(trap[1]))
+		if hoogte <= 0.0 or _raster_hoogte(RAIL_KOLOMMEN, rijen_n) <= hoogte:
 			_rail_rolt(false, hoogte)
 			return
 	_rail_rolt(true, hoogte)
+
+## The height the grid needs in `kolommen_n` columns: every row as tall as its
+## tallest cell — in the rail a floor's cell carries its badge above the chip.
+## With no badges in the grid this is exactly rows x (tallest chip + gap).
+func _raster_hoogte(kolommen_n: int, rijen_n: int) -> float:
+	var cellen := _cellen()
+	var som := float(maxi(0, rijen_n - 1) * GAT)
+	for r in rijen_n:
+		var hoogst := 0.0
+		for k in kolommen_n:
+			var i := r * kolommen_n + k
+			if i < cellen.size():
+				hoogst = maxf(hoogst, cellen[i].get_combined_minimum_size().y)
+		som += hoogst
+	return som
 
 ## Scrolling rail on or off.  A `ScrollContainer` reports no minimum at all on
 ## the axis it scrolls, so the height it may use has to become its minimum —
@@ -465,18 +683,18 @@ func _rail_rolt(aan: bool, hoogte: float) -> void:
 func _zet_rail(icoon_maat: int, naam_maat: int) -> float:
 	var tekst_breed := RAIL_BREED - 2 * VULLING
 	var hoogst := float(UiThema.HOT)
-	for b in _chips.values():
+	for b in _knoppen():
 		var rij: BoxContainer = b.get_node_or_null("Rij")
 		var ic: Label = b.get_node_or_null("Rij/Icoon")
 		var nm: Label = b.get_node_or_null("Rij/Naam")
 		if rij == null or nm == null:
 			continue
 		if ic != null:
-			ic.add_theme_font_size_override("font_size", icoon_maat)
-		nm.add_theme_font_size_override("font_size", maxi(UiThema.VLOER, naam_maat))
+			_letter(ic, icoon_maat)
+		_letter(nm, maxi(UiThema.VLOER, naam_maat))
 		nm.custom_minimum_size = Vector2(tekst_breed, UiThema.wrap_hoogte(nm, tekst_breed))
 		hoogst = maxf(hoogst, rij.get_combined_minimum_size().y + 4.0)
-	for b in _chips.values():
+	for b in _knoppen():
 		b.custom_minimum_size = Vector2(RAIL_BREED, hoogst)
 	return hoogst
 

@@ -1822,8 +1822,18 @@ the six-page story of 2026-09-23 (guests walking in, wishes, a spotlight on the 
 
 ### 6.3 Room navigation
 
-* **Room bar** (`#kamerbalk`): one chip per room in `Rooms.lijst()` order — icon + name +
-  a badge with `wachtIn(room)` — plus a last chip `🗺️ Plattegrond`. The bar is built **once**
+* **Room bar** (`#kamerbalk`): one chip per room — icon + name + a badge with
+  `wachtIn(room)` — plus a last chip `🗺️ Plattegrond`. **Per floor** (owner, 2026-09-24: the
+  hotel is a tower, `Kamer.etage`): the ground floor first (the receptie stays the first
+  chip), then up the tower (1, 2, 3), then the cellar (`K`), the map last; within a floor
+  `Rooms.lijst()` order (`UiKamerbalk.etage_volgorde`, `Rooms.op_etage`). Every floor after
+  the first opens with a small quiet round badge carrying `Rooms.etage_teken(e)` — no
+  button, no key edge, `MOUSE_FILTER_IGNORE`, no focus, so a swipe may start on it — which
+  shares one grid cell with its floor's first chip (beside it in a row, above it in the
+  rail), so a wrapped bar never leaves a badge alone; a wrapping grid breaks its rows where
+  a floor starts when that costs no extra row. The badges fade with the chips during a sum.
+  The tablet row (1000 units) keeps one row with the badges and up to four waiting badges
+  by stepping its pictures down to 14 px (`_rij_trappen`). The bar is built **once**
   and only updated afterwards (otherwise the row scrolls back to the left on every event and
   the child taps the wrong room). `wachtIn(room)` counts the guests whose need is not yet
   fulfilled **and** whose waiting place is in that room, plus the guest at the desk for the
