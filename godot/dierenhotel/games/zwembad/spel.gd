@@ -538,7 +538,11 @@ func _bots_en_terug(p_voor: int) -> void:
 		# wandering off through the water).
 		_duizel()
 		for stap in ZwembadBeurt.BONK:
-			ctx.wereld.pose(_gast, str(stap[0]), 12)
+			# the pose outlasts its wait by a second of ticks: 12 ticks were 0.8 s
+			# against the 0.95 s the dazed look is held, so the pose ran out
+			# first and the idle choice could send him paddling off while 💛
+			# Au! was still up (seen as a flaky test_de_bots_als_film)
+			ctx.wereld.pose(_gast, str(stap[0]), int(ceil(float(stap[1]) / World.TIK)) + 15)
 			if not await na(float(stap[1])):
 				return
 	# 💛 Au! keeps its full time, counted from the touch (§1.7)

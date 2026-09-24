@@ -1521,6 +1521,8 @@ regel blijft zoals hij is; de balk geeft de knoppen zoveel extra breedte dat het
 
 - 2026-09-24 (Claude Opus) — **De kaart in de rekenbalk staat in het midden.** Bestanden: `ui/kaart.gd`, `tests/test_balk.gd`, spec `world.md` §5.5. **De melding:** "De text onderaan is niet goed gecentreerd" (schermafdruk van de balk met de scheppenvraag). In de hoge balk is de kaart zo breed als het kader en stonden de zin, de tweede regel en de som links tegen de rand, terwijl de antwoordknoppen in het midden staan. Nu staan ze in de hoge balk gecentreerd boven de knoppen; in de lage balk (kaart links, strook rechts) blijven ze links. Nieuwe test `test_de_kaart_in_de_balk_staat_in_het_midden`. (De schermafdruk toonde nog de vorige versie — "In huis", "weinig/over" — dus die browser had de nieuwe build nog niet geladen.)
 
+- 2026-09-24 (Claude Opus) — **Zwembad: de duizelpose houdt het tot na zijn wachttijd.** Bestand: `games/zwembad/spel.gd`. `test_de_bots_als_film` faalde één keer op twee: de bonk hield `kijk` 0,95 s vast maar gaf de pose 12 tikken (0,8 s), dus de pose liep eerst af en de rustkeuze kon hem laten wegpeddelen terwijl 💛 Au! er nog stond. Elke bonkpose duurt nu zijn wachttijd plus een seconde aan tikken. `test_zwembad` drie keer achter elkaar groen.
+
 Vink aan wat gemerged is op `main`. Zet erachter wie het deed en op welke datum.
 
 | batch | taken | klaar |
