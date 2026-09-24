@@ -509,16 +509,18 @@ func vlak_van_deur(kamer_id: String, naar: String) -> Rect2:
 		return vlak_van_lift(kamer_id)
 	return Rect2()
 
-## The screen rectangle of the lift in a room (`Kamer.lift`): the opening and
-## its steel frame, up to the floor lights over it.  `Rect2()` without a lift.
+## The screen rectangle of the lift in a room (`Kamer.lift`): its opening,
+## measured exactly as a door's (`vlak_van_deur`), so its sign hangs where the
+## door that stood there hung — the floor lights over the lintel are left out
+## on purpose: counted in, the sign rose a band and on a phone took the place
+## over the head of a guest in front of the lobby's lift.  `Rect2()` without one.
 func vlak_van_lift(kamer_id: String = "") -> Rect2:
 	var r := Rooms.get_kamer(kamer_id if kamer_id != "" else _kamer_nu)
 	if r == null or r.lift.is_empty():
 		return Rect2()
-	var a := float(r.lift.get("at", 0)) - 1.0
-	var b := a + float(r.lift.get("breed", 12)) + 2.0
-	# up to the top of the floor lights (`scenes/vloer.gd`, LIFT_LAMPEN_*)
-	var h := float(Rooms.deur_hoog(r, r.lift)) + 7.2
+	var a := float(r.lift.get("at", 0))
+	var b := a + float(r.lift.get("breed", 12))
+	var h := float(Rooms.deur_hoog(r, r.lift))
 	var randen: Array = [[a, 0.0], [b, 0.0]] if str(r.lift.get("wand", "z")) == "z" \
 		else [[0.0, a], [0.0, b]]
 	var vak := Rect2(mik_punt(float(randen[0][0]), float(randen[0][1]), 0.0), Vector2.ZERO)

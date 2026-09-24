@@ -42,7 +42,8 @@ func test_elke_kamer_is_compleet() -> void:
 		waar(not r.icoon.strip_edges().is_empty(), id + " heeft een pictogram")
 		waar(VLOEREN.has(r.vloer), "%s heeft een bekende vloer (%s)" % [id, r.vloer])
 		waar(UiPlattegrond.KAART.has(id), id + " heeft een vak op de plattegrond")
-		waar(r.deuren.size() >= 1, id + " heeft minstens één deur")
+		waar(r.deuren.size() >= 1 or not r.lift.is_empty(),
+			id + " heeft minstens één deur of de lift")
 		for dr in r.deuren:
 			var naar := String(dr["naar"])
 			waar(Rooms.bestaat(naar), "%s: de deur naar %s gaat ergens heen" % [id, naar])
@@ -110,8 +111,14 @@ func test_kamerkaders() -> void:
 ## The full door table of world.md §1.2, both the point and the inside step.
 func test_deurpunten() -> void:
 	var verwacht := [
-		# the receptie door moved to the left wall — owner decision, §13 Q-X1-13
+		# 2026-09-24, the tower: the lift in the lobby stands where the door to
+		# the gang was (the left wall — owner decision, §13 Q-X1-13), and in
+		# every other lift room where its door down to the lobby was, so these
+		# points did not move; a ride to any floor starts there
 		["receptie", "gang", 0, 30, 8, 30],
+		["receptie", "speelzaal", 0, 30, 8, 30],
+		["receptie", "winkels", 0, 30, 8, 30],
+		["receptie", "wasserij", 0, 30, 8, 30],
 		["gang", "receptie", 0, 16, 8, 16],
 		["gang", "kamer1", 30, 0, 30, 8],
 		["gang", "kamer2", 66, 0, 66, 8],
@@ -119,24 +126,19 @@ func test_deurpunten() -> void:
 		["kamer1", "gang", 78, 0, 78, 8],
 		["kamer2", "gang", 78, 0, 78, 8],
 		["keuken", "gang", 0, 81, 8, 81],
-		# the garden door moved into the corner at the end of the kitchen run
-		# (owner, 2026-09-23): in front of x 90..102 the fridge hid it
-		["keuken", "tuin", 110, 0, 110, 8],
-		["keuken", "wasserij", 0, 36, 8, 36],
-		["tuin", "keuken", 0, 40, 8, 40],
+		# the lobby's back door, where the shop door was (right of the desk),
+		# and in the garden the door in the facade that was the kitchen's
+		["receptie", "tuin", 112, 0, 112, 8],
+		["tuin", "receptie", 0, 40, 8, 40],
 		["tuin", "zwembad", 44, 0, 44, 8],
 		["zwembad", "tuin", 0, 66, 8, 66],
-		["wasserij", "keuken", 68, 0, 68, 8],
-		# R2: de speelzaal-deuren, gegenereerd uit een headless run (2026-09-21)
-		["receptie", "speelzaal", 0, 114, 8, 114],
+		# the laundry in the cellar: the lift where its kitchen door was
+		["wasserij", "receptie", 68, 0, 68, 8],
 		["speelzaal", "receptie", 63, 0, 63, 8],
 		# R3: de glazen deur van de kas in de achtergevel, waar het keukenraam
 		# hing, en de tuindeur van de kas midden in haar achterwand
 		["tuin", "kas", 0, 68, 8, 68],
 		["kas", "tuin", 58, 0, 58, 8],
-		# 2026-09-24: de winkelstraat, in de achterwand rechts van de balie; in de
-		# winkels zelf sinds de souvenirkraam (de vierde in de rij) in de linkerwand
-		["receptie", "winkels", 112, 0, 112, 8],
 		["winkels", "receptie", 0, 30, 8, 30],
 	]
 	for rij in verwacht:
@@ -150,16 +152,24 @@ func test_deurpunten() -> void:
 		gelijk(dp["iz"], rij[5], "%s->%s iz" % [rij[0], rij[1]])
 	waar(Rooms.deur("tuin", "zwembad")["poort"], "de tuinpoort is een poort")
 	waar(not Rooms.deur("gang", "kamer1")["poort"], "een gewone deur is geen poort")
-	# the kitchen's back door is a door on both sides now: a hole in the
-	# kitchen wall and a door in the hotel's facade in the garden
-	waar(not Rooms.deur("keuken", "tuin")["poort"], "de keuken heeft een echte tuindeur")
-	waar(not Rooms.deur("tuin", "keuken")["poort"], "de tuin gaat door een deur de keuken in")
+	# the lobby's back door is a door on both sides: a hole in the lobby's
+	# back wall and a door in the hotel's facade in the garden
+	waar(not Rooms.deur("receptie", "tuin")["poort"], "de receptie heeft een echte tuindeur")
+	waar(not Rooms.deur("tuin", "receptie")["poort"], "de tuin gaat door een deur de receptie in")
+	waar(not Rooms.via_lift("receptie", "tuin"), "naar de tuin loop je, zonder lift")
+	waar(Rooms.via_lift("receptie", "winkels"), "naar de winkels neem je de lift")
+	waar(Rooms.via_lift("wasserij", "gang"), "de lift gaat van de kelder naar boven")
+	waar(Rooms.deur("keuken", "tuin").is_empty(), "de keuken heeft geen tuindeur meer")
 
 ## `pad()` is a BFS that includes the start room.
 func test_pad_door_de_deuren() -> void:
 	_pad_is(Rooms.pad("gang", "kamer1"), ["gang", "kamer1"], "buur")
+	# the tower: down in the lift to the lobby, out through its back door
 	_pad_is(Rooms.pad("kamer1", "zwembad"),
-		["kamer1", "gang", "keuken", "tuin", "zwembad"], "vijf kamers")
+		["kamer1", "gang", "receptie", "tuin", "zwembad"], "vijf kamers")
+	# one ride, however many floors apart
+	_pad_is(Rooms.pad("wasserij", "kamer2"), ["wasserij", "gang", "kamer2"], "kelder naar boven")
+	_pad_is(Rooms.pad("winkels", "kas"), ["winkels", "receptie", "tuin", "kas"], "winkels naar de kas")
 	_pad_is(Rooms.pad("tuin", "tuin"), ["tuin"], "zelfde kamer")
 	gelijk(Rooms.pad("tuin", "nergens").size(), 0, "onbekende kamer")
 	gelijk(Rooms.pad("nergens", "tuin").size(), 0, "onbekende start")
@@ -341,7 +351,6 @@ func test_niemand_loopt_door_de_balie() -> void:
 	doelen.append(Vector2(72, 96))                       # het midden van de mat
 	doelen.append(Vector2(24, 114))                      # WACHTPLEK
 	doelen.append(Vector2(45, 93))                       # "wil een bed"
-	doelen.append(Vector2(8, 114))                       # R2: stap binnen uit de speelzaal
 	for p in r.plekken:
 		doelen.append(Vector2(p[0], p[1]))
 	for p in doelen:
@@ -357,22 +366,23 @@ func test_niemand_loopt_door_de_balie() -> void:
 		if op_balie.has(stuk["n"]):
 			waar(_in_vak(b, Vector2(stuk["x"], stuk["z"])),
 				"%s staat op de balie" % stuk["n"])
-	# and there are exactly three doors out of the receptie now (R2: the
-	# playroom in the far corner; 2026-09-24: the shops right of the desk), so
-	# exactly three door buttons
-	gelijk(r.deuren.size(), 3, "de receptie heeft drie deuren")
-	# The shop door is BEHIND the end of the desk, so the straight line to it
+	# and there is exactly one door out of the receptie now, to the garden
+	# (2026-09-24, the tower: every other room is a floor up or down), plus
+	# the lift
+	gelijk(r.deuren.size(), 1, "de receptie heeft één deur")
+	waar(not r.lift.is_empty(), "en de lift")
+	# The garden door is BEHIND the end of the desk, so the straight line to it
 	# would cut the counter: every walk to it goes round (`om_het_water`), and
 	# no leg of that walk touches the desk.
-	var winkel := Rooms.deur("receptie", "winkels")
-	var binnen := Vector2(winkel["ix"], winkel["iz"])
-	waar(not _in_vak(b, binnen), "de stap binnen bij de winkeldeur staat naast de balie")
+	var tuindeur := Rooms.deur("receptie", "tuin")
+	var binnen := Vector2(tuindeur["ix"], tuindeur["iz"])
+	waar(not _in_vak(b, binnen), "de stap binnen bij de tuindeur staat naast de balie")
 	for p in doelen:
 		var van: Vector2 = p
 		var legs: Array = Rooms.om_het_water("receptie", van, binnen)
 		legs.append(binnen)
 		for q in legs:
-			waar(not _kruist(b, van, q), "de loop van (%.0f, %.0f) naar de winkels gaat om de balie"
+			waar(not _kruist(b, van, q), "de loop van (%.0f, %.0f) naar de tuin gaat om de balie"
 				% [p.x, p.y])
 			van = q
 
@@ -812,8 +822,11 @@ func test_de_receptie_heeft_een_voordeur_buiten_de_deurgraaf() -> void:
 	gelijk(float(ing["dz"]), float(r.d) - 2.0, "de drempel, waar een gast verschijnt")
 	# it is not a door of the graph: the door pairs, points and paths stay as
 	# they were, and outside is no room
-	gelijk(r.deuren.size(), 3, "de receptie houdt drie deuren")
-	gelijk(r.deur_punten.size(), 3, "en drie deurpunten, dus drie deurknoppen")
+	gelijk(r.deuren.size(), 1, "de receptie houdt één deur")
+	# one to the garden and one per other floor the lift goes to — one door
+	# button and one lift button
+	gelijk(r.deur_punten.size(), 1 + Rooms.lift_kamers().size() - 1,
+		"en een deurpunt voor de tuin en elke andere verdieping")
 	for dr in r.deuren:
 		waar(str(dr["wand"]) != "z" or float(dr["at"]) + float(dr["breed"]) <= a - 2.0
 			or float(dr["at"]) >= b + 2.0,
@@ -883,15 +896,17 @@ func test_de_weg_van_de_voordeur_gaat_om_de_balie() -> void:
 func test_de_tuin_ligt_achter_het_hotel_en_naast_het_zwembad() -> void:
 	var tuin := Rooms.get_kamer("tuin")
 	gelijk(str(tuin.gevel.get("wand", "")), "x", "de tuin heeft de achtergevel op x = 0")
-	var keuken := {}
+	var achterdeur := {}
 	var poort := {}
 	for dr in tuin.deuren:
-		if dr["naar"] == "keuken":
-			keuken = dr
+		if dr["naar"] == "receptie":
+			achterdeur = dr
 		elif dr["naar"] == "zwembad":
 			poort = dr
-	gelijk(str(keuken.get("wand", "")), "x", "de keukendeur zit in de gevel")
-	gelijk(Rooms.deur_hoog(tuin, keuken), 26, "een echte deur, zo hoog als binnen")
+	gelijk(str(achterdeur.get("wand", "")), "x", "de achterdeur van de lobby zit in de gevel")
+	gelijk(Rooms.deur_hoog(tuin, achterdeur), 26, "een echte deur, zo hoog als binnen")
+	# 2026-09-24, the tower: over the ground floor the facade rises floors
+	waar(int(tuin.gevel.get("etages", 0)) >= 3, "de gevel rijst drie verdiepingen boven de tuin")
 	var mid := int(float(poort["at"]) + float(poort["breed"]) / 2.0)
 	waar(ArtVloer.TEGEL.has(Rooms.vloer_kleur(tuin, mid, 4)), "achter de poort ligt het tegeldek")
 	waar(ArtVloer.BADWATER.has(Rooms.vloer_kleur(tuin, mid + 16, -20)), "en daarachter het water")
@@ -934,7 +949,7 @@ func test_de_kas_is_een_glazen_kas_achter_het_hotel() -> void:
 		if dr["naar"] == "kas":
 			deur = dr
 	gelijk(str(deur.get("wand", "")), str(tuin.gevel.get("wand", "")), "de kasdeur zit in de achtergevel")
-	gelijk(Rooms.deur_hoog(tuin, deur), 26, "een echte deur, zo hoog als de keukendeur")
+	gelijk(Rooms.deur_hoog(tuin, deur), 26, "een echte deur, zo hoog als de achterdeur")
 	waar(not bool(deur.get("poort", false)), "geen poort: een gat in de gevel")
 	var luifel := _stuk(tuin, "kasluifelz")
 	waar(not luifel.is_empty() and bool(luifel.get("ver", false)), "een glazen luifel aan de gevel")
@@ -978,3 +993,46 @@ func _stuk(r: Rooms.Kamer, naam: String) -> Dictionary:
 		if stuk["n"] == naam:
 			return stuk
 	return {}
+
+## The tower (owner, 2026-09-24: "Ik wil de winkels op een andere etage. Het is
+## de bedoeling dat het hotel heel groot en hoog aanvoelt net als Habbo Hotel.
+## Op de begane grond zijn enkel de buiten dingen als het zwembad en de tuin").
+## The ground floor holds the lobby — the one way in from the street — and the
+## outdoors; the shops are a floor of their own; ONE lift joins every floor.
+func test_het_hotel_is_een_toren() -> void:
+	var etages := Rooms.etages()
+	waar(etages.size() >= 4, "minstens vier verdiepingen (%s)" % str(etages))
+	for j in range(1, etages.size()):
+		waar(etages[j] < etages[j - 1], "van boven naar beneden (%s)" % str(etages))
+	# the ground floor: the lobby and what is outside or under glass
+	for id in Rooms.op_etage(0):
+		var r := Rooms.get_kamer(id)
+		waar(id == "receptie" or r.erf or r.glas,
+			"%s op de begane grond is de lobby of buiten" % id)
+	for id in ["tuin", "zwembad", "kas", "receptie"]:
+		gelijk(Rooms.etage(id), 0, "%s ligt op de begane grond" % id)
+	waar(Rooms.etage("winkels") != 0, "de winkels liggen op een andere verdieping")
+	waar(Rooms.op_etage(Rooms.etage("winkels")).size() == 1,
+		"de winkels hebben een verdieping voor zich alleen")
+	# one lift room per floor, and a door never leaves its floor
+	for e in etages:
+		var lift := Rooms.lift_kamer(e)
+		waar(not lift.is_empty(), "de lift stopt op verdieping %d" % e)
+		for id in Rooms.op_etage(e):
+			var r := Rooms.get_kamer(id)
+			for dr in r.deuren:
+				gelijk(Rooms.etage(str(dr["naar"])), e,
+					"de deur %s -> %s blijft op de verdieping" % [id, dr["naar"]])
+			# every room of a floor is reached from its lift room on foot
+			var pad := Rooms.pad(lift, id)
+			for stap in pad:
+				gelijk(Rooms.etage(stap), e, "%s -> %s loopt over de verdieping" % [lift, id])
+	gelijk(Rooms.lift_kamers().size(), etages.size(), "de lift stopt één keer per verdieping")
+	# a ride is one step, whatever the distance
+	for van in Rooms.lift_kamers():
+		for naar in Rooms.lift_kamers():
+			if van != naar:
+				gelijk(Rooms.pad(van, naar).size(), 2, "%s -> %s is één liftrit" % [van, naar])
+				waar(Rooms.via_lift(van, naar), "%s -> %s gaat met de lift" % [van, naar])
+	gelijk(Rooms.etage_teken(-1), "K", "de kelder heet K in de lift")
+	gelijk(Rooms.etage_teken(2), "2", "een verdieping heet naar haar nummer")

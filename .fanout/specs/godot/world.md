@@ -107,31 +107,57 @@ real door on both sides — a hole in the kitchen wall, and a door in the hotel'
 for a door in a wall, the facade's height standing in for `wand` in the garden, and
 `POORT_HOOG = 18` for a gate.
 
+**The tower (port, owner 2026-09-24: "Ik wil de winkels op een andere etage. Het is de
+bedoeling dat het hotel heel groot en hoog aanvoelt net als Habbo Hotel. Op de begane grond
+zijn enkel de buiten dingen als het zwembad en de tuin").** Every room has a floor,
+`Kamer.etage`: 0 is the ground floor — the lobby, the one room indoors there, and the
+outdoors (tuin, zwembad, kas) — 1 the shops (`winkels`), 2 the playroom (`speelzaal`), 3 the
+guest floor (gang, kamer1, kamer2 and the keuken that feeds them) and −1 the cellar with the
+laundry (`wasserij`, "K" on the lift, `Rooms.etage_teken`). A door never leaves its floor.
+ONE lift joins the floors: `Kamer.lift = {wand, at, breed}` like a door, in exactly one room
+per floor (receptie x/24, winkels x/24, speelzaal z/57, gang x/10, wasserij z/62 — where
+each room's door down to the lobby used to be, so their door points did not move). The lift
+is not in `deuren`: `bouw_af()` gives every lift room an entry in `deur_punten` for every
+OTHER lift room, all on its one opening and marked `lift: true`, so `pad`, `World.reis`,
+the free cells and the furniture rules treat a ride like a walk through one door, while the
+wall drawing (`scenes/vloer.gd` `_lift`: an open steel cabin, the sliding doors pushed aside,
+one floor light per floor with this floor's lit, a call plate), the map and the door buttons
+draw it once. `Rooms.buren(kamer)` (doors first, then the lift), `etage(kamer)`, `etages()`
+(top down), `op_etage(e)`, `lift_kamers()`, `lift_kamer(e)`, `via_lift(van, naar)` and
+`lift_punt(kamer)` read it. The lift's one button (`Hotel`, id `lift_<kamer>`, 🛗 "Lift", a
+door sign by `klas: hotdeur`) opens the tower sheet (§6.3); `World.naar` between two floors
+is a lift ride — the new floor slides in from above going up, from below going down
+(`LIFT_S` 0.55 s, `LIFT_OP` 55 % of the frame height) — and `Hotel.naar_kamer` chimes
+`Snd.lift()` instead of the door sound. From the garden the facade rises three floors of
+windows over the lobby's back door (`gevel.etages`).
+
 | from | to | wand | at | breed | door point (x, z) | inside (ix, iz) |
 |---|---|---|---|---|---|---|
-| receptie | gang | z | 87 | 12 | (93, 0) | (93, 8) |
-| gang | receptie | x | 10 | 12 | (0, 16) | (8, 16) |
+| receptie | *lift* | x | 24 | 12 | (0, 30) | (8, 30) — to gang, speelzaal, winkels, wasserij |
+| receptie | tuin | z | 106 | 12 | (112, 0) | (112, 8) — the back door, right of the desk |
+| gang | *lift* | x | 10 | 12 | (0, 16) | (8, 16) |
 | gang | kamer1 | z | 24 | 12 | (30, 0) | (30, 8) |
 | gang | kamer2 | z | 60 | 12 | (66, 0) | (66, 8) |
 | gang | keuken | z | 96 | 12 | (102, 0) | (102, 8) |
 | kamer1 | gang | z | 72 | 12 | (78, 0) | (78, 8) |
 | kamer2 | gang | z | 72 | 12 | (78, 0) | (78, 8) |
 | keuken | gang | x | 75 | 12 | (0, 81) | (8, 81) |
-| keuken | tuin | z | 104 | 12 | (110, 0) | (110, 8) — the back door, in the corner after the fridge (2026-09-23) |
-| keuken | wasserij | x | 30 | 12 | (0, 36) | (8, 36) |
-| tuin | keuken | x | 34 | 12 | (0, 40) | (8, 40) — a door in the hotel's back wall (`gevel`) |
+| tuin | receptie | x | 34 | 12 | (0, 40) | (8, 40) — a door in the hotel's back wall (`gevel`) |
 | tuin | zwembad | z | 38 | 12 | (44, 0) | (44, 8) — `poort` |
 | zwembad | tuin | x | 60 | 12 | (0, 66) | (8, 66) — `poort` |
-| wasserij | keuken | z | 62 | 12 | (68, 0) | (68, 8) |
-| receptie | speelzaal | x | 108 | 12 | (0, 114) | (8, 114) |
-| speelzaal | receptie | z | 57 | 12 | (63, 0) | (63, 8) |
+| wasserij | *lift* | z | 62 | 12 | (68, 0) | (68, 8) |
+| speelzaal | *lift* | z | 57 | 12 | (63, 0) | (63, 8) |
+| winkels | *lift* | x | 24 | 12 | (0, 30) | (8, 30) |
 | tuin | kas | x | 62 | 12 | (0, 68) | (8, 68) — the kas's glass door in the hotel's back wall, where the kitchen window hung (R3) |
 | kas | tuin | z | 52 | 12 | (58, 0) | (58, 8) |
+
+(Until 2026-09-24 the kitchen had the garden door, z/104, and the laundry door, x/30; the
+lobby had doors to the gang, the playroom, x/108, and the shops, z/106.)
 
 `Rooms.pad(van, naar)` is a breadth-first search over this graph; it returns the full path
 *including* the start room (`['gang','kamer1']`), `[van]` when `van === naar`, and `[]`
 when a room does not exist. Example: `pad('kamer1','zwembad')` =
-`['kamer1','gang','keuken','tuin','zwembad']`.
+`['kamer1','gang','receptie','tuin','zwembad']` — down in the lift, out the back door.
 
 **The front door** (port, owner 2026-09-23: the guests "komen momenteel vanuit de gang binnen
 ipv ingang"). The receptie has one more opening that is NOT a door of this graph:

@@ -186,8 +186,12 @@ func test_aanmelding() -> void:
 		var unlock: Callable = def["unlock"]
 		waar(not unlock.call(0, 3), "%s: zonder gasten niet" % id)
 		waar(unlock.call(1, 3), "%s: vanaf één gast wel" % id)
-	# the arcade is off the lobby, and every shop's goods are real models
-	gelijk(Rooms.pad("receptie", KAMER).size(), 2, "de winkels liggen naast de receptie")
+	# the arcade is a floor of its own, one lift ride from the lobby (owner,
+	# 2026-09-24: "Ik wil de winkels op een andere etage"), and every shop's
+	# goods are real models
+	gelijk(Rooms.pad("receptie", KAMER).size(), 2, "de winkels zijn één liftrit van de receptie")
+	waar(Rooms.via_lift("receptie", KAMER), "met de lift")
+	waar(Rooms.etage(KAMER) != Rooms.etage("receptie"), "op een andere verdieping")
 	for naam in ArtGasten.KLEDING:
 		waar(Art.heeft_model("waar_" + str(naam)), "er is een uitstalmodel van %s" % naam)
 		var p = Art.plaat("waar_" + str(naam), 3)

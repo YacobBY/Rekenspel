@@ -68,6 +68,17 @@ const DAK_D := Color("#DA8C6D")
 const DAK_GOOT := Color("#B7876C")
 const GEVEL_EIND := 400.0                 ## the wall runs off the picture this far
 const DAK_RIJEN := 44                     ## ... and the roof this many 4-voxel rows
+# The floors over the ground floor (owner, 2026-09-24: "Het is de bedoeling dat
+# het hotel heel groot en hoog aanvoelt"): from the lawn the hotel is a tower —
+# over the lobby's back door the facade rises one band per floor, each with a
+# row of windows, and the roof only starts above the top one.
+const GEVEL_ETAGE := 30.0                 ## voxels per floor over the ground floor
+const GEVEL_RAAM_STAP := 24.0             ## a window every this many voxels
+const GEVEL_RAAM_BREED := 10.0
+const GEVEL_RAAM_ONDER := 9.0             ## ... from this far over the floor band
+const GEVEL_RAAM_HOOG := 14.0
+const GEVEL_RUIT := Color("#CFE4EE")      ## sky in the panes
+const GEVEL_RUIT_D := Color("#B7D2E0")
 
 ## The glass walls of the kas (`Kamer.glas`, PLAN.md R3): a brick knee wall with
 ## a darker course on top, panes that show the garden's green low down and the
@@ -538,14 +549,21 @@ func _gevel(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 	var g: Dictionary = r.gevel
 	if str(g.get("wand", "")) != "x":
 		return
-	var h := float(g.get("hoog", 30))
+	var h0 := float(g.get("hoog", 30))
 	var z0 := -2.0 * WAND_DIK
 	var z1 := GEVEL_EIND
+	# the ground floor, then `etages` floors over it; the roof sits on the top
+	var h := h0 + GEVEL_ETAGE * float(int(g.get("etages", 0)))
 	_vlak(v, k, i, [_proj(0, z0, 0), _proj(0, z1, 0), _proj(0, z1, h), _proj(0, z0, h)], GEVEL)
 	_vlak(v, k, i, [_proj(0, z0, 0), _proj(0, z1, 0), _proj(0, z1, 3), _proj(0, z0, 3)],
 		GEVEL_PLINT)
-	_vlak(v, k, i, [_proj(0, z0, h - 3), _proj(0, z1, h - 3), _proj(0, z1, h), _proj(0, z0, h)],
-		GEVEL_BAND)
+	var band := h0
+	while band <= h + 0.1:
+		_vlak(v, k, i, [_proj(0, z0, band - 3), _proj(0, z1, band - 3), _proj(0, z1, band),
+			_proj(0, z0, band)], GEVEL_BAND)
+		if band + GEVEL_RAAM_ONDER + GEVEL_RAAM_HOOG < h:
+			_gevelramen(band, z0, z1, v, k, i)
+		band += GEVEL_ETAGE
 	_vlak(v, k, i, [_proj(0, z0), _proj(0, z1), _proj(SCHADUW_BREED, z1),
 		_proj(SCHADUW_BREED, z0)], WAND_SCHADUW)
 	# the roof: 4-voxel rows at 45 degrees, from eaves that stick out 3 voxels
@@ -561,6 +579,30 @@ func _gevel(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 	_vlak(v, k, i, [_proj(WAND_DIK, z0, h - 1.5), _proj(WAND_DIK, z1, h - 1.5),
 		_proj(WAND_DIK, z1, h), _proj(WAND_DIK, z0, h)], DAK_GOOT)
 	_deuren(r, v, k, i, "x")
+
+## One row of windows along the facade on x = 0, over the floor band at `band`:
+## a white frame, sky in the panes, a cross of glazing bars and a sill.
+func _gevelramen(band: float, z0: float, z1: float, v: PackedVector2Array,
+		k: PackedColorArray, i: PackedInt32Array) -> void:
+	var y0 := band + GEVEL_RAAM_ONDER
+	var y1 := y0 + GEVEL_RAAM_HOOG
+	var z := z0 + 8.0
+	while z + GEVEL_RAAM_BREED < z1:
+		var a := z
+		var b := z + GEVEL_RAAM_BREED
+		_vlak(v, k, i, [_proj(0.1, a - 1, y0 - 1), _proj(0.1, b + 1, y0 - 1),
+			_proj(0.1, b + 1, y1 + 1), _proj(0.1, a - 1, y1 + 1)], KOZIJN_WIT)
+		_vlak_kl(v, k, i, [_proj(0.2, a, y0), _proj(0.2, b, y0), _proj(0.2, b, y1),
+			_proj(0.2, a, y1)], [GEVEL_RUIT_D, GEVEL_RUIT_D, GEVEL_RUIT, GEVEL_RUIT])
+		var zm := (a + b) * 0.5
+		var ym := (y0 + y1) * 0.5
+		_vlak(v, k, i, [_proj(0.3, zm - 0.5, y0), _proj(0.3, zm + 0.5, y0),
+			_proj(0.3, zm + 0.5, y1), _proj(0.3, zm - 0.5, y1)], KOZIJN_WIT)
+		_vlak(v, k, i, [_proj(0.3, a, ym - 0.5), _proj(0.3, b, ym - 0.5),
+			_proj(0.3, b, ym + 0.5), _proj(0.3, a, ym + 0.5)], KOZIJN_WIT)
+		_vlak(v, k, i, [_proj(0.1, a - 1.5, y0 - 1.6), _proj(0.1, b + 1.5, y0 - 1.6),
+			_proj(1.2, b + 1.5, y0 - 1.0), _proj(1.2, a - 1.5, y0 - 1.0)], KOZIJN_WIT_D)
+		z += GEVEL_RAAM_STAP
 
 ## A quad with a colour per corner (the lintel's fading shadow).
 func _vlak_kl(v: PackedVector2Array, k: PackedColorArray, i: PackedInt32Array,

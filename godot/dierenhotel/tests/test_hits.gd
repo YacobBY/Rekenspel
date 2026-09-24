@@ -1320,7 +1320,9 @@ func test_deurbordjes_in_de_gang_met_de_voerkar() -> void:
 		var dbg := Hits.debug()
 		waar(dbg.has("vk_zeg"), "%s: het wolkje bij de kar hangt er" % str(maat))
 		var tel := _keur_deurbordjes("%s gang, kar vast" % str(maat), h["kader"])
-		gelijk(int(tel["deur"]) + int(tel["latei"]), 4, "%s: vier deurbordjes in de gang" % str(maat))
+		# three: kamer 1, kamer 2 and the kitchen — the lift's sign steps aside
+		# while the game runs, the trolley does not ride the lift (2026-09-24)
+		gelijk(int(tel["deur"]) + int(tel["latei"]), 3, "%s: drie deurbordjes in de gang" % str(maat))
 		if maat == Vector2i(1024, 768) and dbg.has("karhot") and dbg.has("deur_gang_kamer1"):
 			# the owner's picture: the trolley stands in the Kamer 1 opening, so
 			# that sign goes over the lintel — and so do ALL signs of the room,
@@ -1328,7 +1330,7 @@ func test_deurbordjes_in_de_gang_met_de_voerkar() -> void:
 			var kar_vlak: Rect2 = dbg["karhot"]["vlak"]
 			var k1: Rect2 = dbg["deur_gang_kamer1"]["vlak"]
 			waar(kar_vlak.intersects(k1), "de kar staat voor de deur van kamer 1")
-			for id in ["deur_gang_kamer1", "deur_gang_kamer2", "deur_gang_receptie", "deur_gang_keuken"]:
+			for id in ["deur_gang_kamer1", "deur_gang_kamer2", "deur_gang_keuken"]:
 				if dbg.has(id):
 					gelijk(str(dbg[id]["deurplek"]), "latei", "%s hangt boven de latei" % id)
 		# one height per room: never on the door here and over the lintel there.

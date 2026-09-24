@@ -632,7 +632,11 @@ func test_een_tik_op_de_kar_pakt_hem() -> void:
 	if b != null:
 		waar((b.get_theme_stylebox("normal") as StyleBoxFlat).border_width_bottom >= UiThema.KNOP_LIP,
 			"'Pak de kar' is een knop op zijn drukrand")
-	for deur in ["deur_keuken_gang", "deur_keuken_tuin", "deur_keuken_wasserij"]:
+	# since the tower (2026-09-24) the kitchen is on the guest floor and has
+	# only the corridor door; the garden and the laundry are floors away
+	waar(Hits.spot("deur_keuken_tuin") == null and Hits.spot("deur_keuken_wasserij") == null,
+		"de keuken heeft alleen de gangdeur")
+	for deur in ["deur_keuken_gang"]:
 		waar(_zichtbaar(deur), "%s is een knop" % deur)
 		waar(not _wijst(deur), "%s wijst nog niet" % deur)
 	_tik("karhot")
@@ -652,8 +656,6 @@ func test_een_tik_op_de_kar_pakt_hem() -> void:
 		gelijk(b.aantal, int(spel.K["op_kar"]), "het pilletje telt de koekjes op de kar")
 	gelijk(spel.wijs_deuren(), ["gang"], "beide kamers liggen achter de gang")
 	gelijk(_tekst("deur_keuken_gang"), "👉 🚪 Gang", "die deur wijst de weg")
-	waar(not _wijst("deur_keuken_tuin"), "de tuin is geen weg naar de gasten")
-	waar(not _wijst("deur_keuken_wasserij"), "de wasserij ook niet")
 	gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "het wolkje zegt de volgende stap")
 	gelijk(str(_wolkjes()), '["vk_zeg"]', "één wolkje")
 	_af()
@@ -731,7 +733,7 @@ func test_een_tik_op_de_vaste_kar_zet_hem_neer() -> void:
 	waar(b != null and not b.button_pressed, "en staat niet meer ingedrukt")
 	if b != null:
 		gelijk(b.hand, 0, "zonder ☝")
-	for deur in ["deur_keuken_gang", "deur_keuken_tuin", "deur_keuken_wasserij"]:
+	for deur in ["deur_keuken_gang"]:
 		waar(not _wijst(deur), "%s wijst niet meer" % deur)
 	gelijk(_tekst("vk_zeg"), "👉 Tik op de kar",
 		"de opdracht is gelezen: het wolkje zegt kort wat nu")

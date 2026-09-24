@@ -234,12 +234,13 @@ func test_gekocht_bed_en_de_kar_staan_in_de_weg() -> void:
 	waar((om["weg"] as Array).size() >= 3, "hij loopt om de kar heen")
 	World.ding_thuis_zet("kar")
 	gelijk(World.looppad("kamer1", a, b), [b], "kar thuis: weer recht door")
-	# and in the kitchen the trolley stands where it belongs
+	# and in the kitchen the trolley stands where it belongs: from the corridor
+	# door to the corner under the window, where the garden door was until the
+	# kitchen moved upstairs (2026-09-24, the tower)
 	var k_af := _voetafdrukken("keuken")
 	var gang := Rooms.deur("keuken", "gang")
-	var tuin := Rooms.deur("keuken", "tuin")
-	_keur("keuken", k_af, "gang -> tuin langs de kar", Vector2(gang["ix"], gang["iz"]),
-		Vector2(tuin["ix"], tuin["iz"]))
+	_keur("keuken", k_af, "gang -> de hoek bij het raam langs de kar",
+		Vector2(gang["ix"], gang["iz"]), Vector2(110.0, 8.0))
 	_af()
 
 ## A game's loose decor is in the grid while it stands, and gone with it.
@@ -276,9 +277,10 @@ func test_platte_en_hoge_dingen_houden_niemand_tegen() -> void:
 
 # ------------------------------------------------------------------ echt lopen
 
-## A real journey on the think tick: from a bed in kamer 2 through the corridor
-## and the kitchen into the garden, and in every room he passes he never stands
-## in anything — also between two ticks.  He arrives where he was sent.
+## A real journey on the think tick: from a bed in kamer 2 through the corridor,
+## down in the lift, through the lobby — round the desk — into the garden, and
+## in every room he passes he never stands in anything, also between two ticks.
+## He arrives where he was sent.
 func test_reis_door_vier_kamers_loopt_nergens_doorheen() -> void:
 	Rooms.herstel()
 	var was: bool = Ui.rust_modus()
@@ -288,7 +290,7 @@ func test_reis_door_vier_kamers_loopt_nergens_doorheen() -> void:
 	var d := World.zet(T, "kamer2", float(bed["sx"]), float(bed["sz"]), {"kind": "hond"})
 	var doel := Vector2(112.0, 96.0)
 	var route := World.reis(T, "tuin", {"x": doel.x, "z": doel.y, "na": "wacht"})
-	gelijk(route, ["kamer2", "gang", "keuken", "tuin"], "door drie deuren")
+	gelijk(route, ["kamer2", "gang", "receptie", "tuin"], "twee deuren en de lift")
 	var afdrukken := {}
 	for k in route:
 		afdrukken[k] = _voetafdrukken(k)
@@ -311,7 +313,7 @@ func test_reis_door_vier_kamers_loopt_nergens_doorheen() -> void:
 	waar(botsing == "", "hij liep nergens doorheen (%s)" % botsing)
 	gelijk(d.kamer, "tuin", "hij is in de tuin")
 	gelijk(Vector2(d.x, d.z), doel, "op de plek waar hij heen moest")
-	waar(gezien.has("gang") and gezien.has("keuken"), "hij liep door de gang en de keuken")
+	waar(gezien.has("gang") and gezien.has("receptie"), "hij liep door de gang en de lobby")
 	Ui.set("_rust", was)
 	World.naar("receptie")
 	_af()

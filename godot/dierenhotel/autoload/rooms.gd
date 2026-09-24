@@ -1,5 +1,5 @@
 extends Node
-## Rooms — the eight rooms, their decor, slots, doors and furniture.
+## Rooms — the rooms, their floors, decor, slots, doors, the lift and furniture.
 ## Autoload #2.  Port of `demos/dierenhotel/rooms.js` (world.md §1).
 ##
 ## Everything a room knows is data: size, wall height, floor kind, walking
@@ -1137,7 +1137,9 @@ func _bouw_kamers() -> void:
 		"wand": 0, "vloer": "gras", "loop": 1.0, "erf": true, "etage": 0,
 		"hek_x": 0,
 		"vast_kader": [-170, 190, -70, 220],
-		"gevel": {"wand": "x", "hoog": 34, "stoep": 8},
+		# `etages`: over the ground floor the facade rises three floors, a row
+		# of windows each (`scenes/vloer.gd`, the tower of 2026-09-24)
+		"gevel": {"wand": "x", "hoog": 34, "stoep": 8, "etages": 3},
 		"uitzicht": [{"soort": "bad", "x0": 24, "x1": 124, "z0": -36, "z1": -4}],
 		"zones": {"hinkel": {"x0": 24, "x1": 100, "z0": 34, "z1": 50}},
 		# R3: the glass door of the kas sits in the hotel's back wall where the
@@ -1279,7 +1281,7 @@ func _bouw_kamers() -> void:
 	# De Winkelstraat 🛍 (owner, 2026-09-24: "Maak een level in een winkel level
 	# in het hotel met kraampjes en een luxe winkel waarin veel gerekend moet
 	# worden ... Maak verschillende winkels met verschillende items zoals hoeden
-	# sjalen, schoenen etc.").  A covered shopping arcade beside the lobby: a
+	# sjalen, schoenen etc.").  A covered shopping arcade one floor up: a
 	# tiled floor with a warm runner as the street, four market stalls with
 	# striped awnings along the back wall — hats (pink), scarves (mint), shoes
 	# (blue), souvenirs (yellow, see below) — the luxury shop with its gold

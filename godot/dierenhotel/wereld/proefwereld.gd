@@ -65,10 +65,10 @@ func start() -> void:
 	await Engine.get_main_loop().create_timer(1.4).timeout
 	# no door button of our own: the hotel builds one per door (world.md §6.3),
 	# and two buttons for one door is one button too many
-	var deur := Hits.spot("deur_receptie_gang")
+	var deur := Hits.spot("deur_receptie_tuin")
 	if deur != null and is_instance_valid(deur.knoop):
 		print("[probe] proef=deurknop=", deur.knoop.get_global_rect(),
-			" dekking=", "%.2f" % Hits.dekking("deur_receptie_gang"))
+			" dekking=", "%.2f" % Hits.dekking("deur_receptie_tuin"))
 	print("[probe] proef=klaar")
 	if rondje():
 		_rondje()
