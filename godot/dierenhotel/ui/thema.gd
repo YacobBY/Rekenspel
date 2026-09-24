@@ -261,6 +261,32 @@ static func knop_staten(sb: StyleBoxFlat) -> Dictionary:
 		"disabled": sb,
 		"focus": vlak(Color(0, 0, 0, 0), int(sb.corner_radius_top_left), 2, PERZIK_D)}
 
+## What only SAYS something — a hint, a status — is a speech bubble and not a
+## key (owner, 2026-09-24: "Hints als 'tik op een deur' of 'je duwt de kar'
+## lijken erg op bubbeltjes waar interactie voor is ... zodat text bubbels
+## zonder interactie minder prominent zijn en niet zo klikbaar lijken").  Next to
+## a button (warm border, thick key edge, shadow, bold words, round pill) it is
+## lighter and see-through, has a thin soft outline instead of a border, small
+## corners instead of the pill, no shadow and no key edge, and its words are
+## regular weight and `INFO_KLEINER` smaller.  A bubble also points a comic tail
+## at what it talks about (`UiWolk._draw`).  Dark ink on warm paper keeps it
+## easy to read.
+const INFO_VUL_ALFA := 0.8
+const INFO_LIJN := Color(0.29, 0.231, 0.2, 0.35)    ## the outline: ink at 35 %
+const INFO_LIJN_DIK := 1.5
+const INFO_RONDING := 10
+const INFO_KLEINER := 2                             ## px under a button's words, never under VLOER
+
+## The box of a status label that is still a (quiet) button: the held trolley
+## says "Je duwt de kar" and a tap puts it down again (games/voerkar).
+static func info_vlak(kleur := WOLK_INFO) -> StyleBoxFlat:
+	var sb := vlak(Color(kleur, INFO_VUL_ALFA), INFO_RONDING, 1, INFO_LIJN)
+	return vulling(sb, 8, 6)
+
+## The size of a bubble's words, from the size a button's words have there.
+static func info_maat(knop_maat: int) -> int:
+	return maxi(VLOER, knop_maat - INFO_KLEINER)
+
 static func vulling(sb: StyleBoxFlat, links: int, boven: int, rechts := -1, onder := -1) -> StyleBoxFlat:
 	sb.content_margin_left = links
 	sb.content_margin_top = boven

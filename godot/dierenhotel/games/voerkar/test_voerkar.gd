@@ -518,6 +518,9 @@ func test_een_tik_op_de_kar_pakt_hem() -> void:
 	var b := Ui.bron_van("karhot")
 	waar(b != null and b.toggle_mode and not b.button_pressed, "de kar is een schakelaar die uit staat")
 	gelijk(_tekst("karhot"), "🛒 Pak de kar", "en zegt wat een tik doet")
+	if b != null:
+		waar((b.get_theme_stylebox("normal") as StyleBoxFlat).border_width_bottom >= UiThema.KNOP_LIP,
+			"'Pak de kar' is een knop op zijn drukrand")
 	for deur in ["deur_keuken_gang", "deur_keuken_tuin", "deur_keuken_wasserij"]:
 		waar(_zichtbaar(deur), "%s is een knop" % deur)
 		waar(not _wijst(deur), "%s wijst nog niet" % deur)
@@ -527,6 +530,13 @@ func test_een_tik_op_de_kar_pakt_hem() -> void:
 	b = Ui.bron_van("karhot")
 	waar(b != null and b.button_pressed, "en staat ingedrukt")
 	if b != null:
+		# eigenaar, 2026-09-24: vast is een stand, geen ingedrukte knop — het
+		# stille vlak van een wolkje, gewone letters, een maatje kleiner
+		var stil := b.get_theme_stylebox("pressed") as StyleBoxFlat
+		waar(stil != null and stil.border_width_bottom < UiThema.KNOP_LIP and stil.shadow_size == 0,
+			"'Je duwt de kar' staat er stil bij, zonder drukrand")
+		waar(b.get_theme_font("font") != Ui.thema.get_font("font", "Hotknop"), "in gewone letters")
+		gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "de bindende tekst blijft")
 		gelijk(b.hand, 1, "met de ☝ van 'in je hand'")
 		gelijk(b.aantal, int(spel.K["op_kar"]), "het pilletje telt de koekjes op de kar")
 	gelijk(spel.wijs_deuren(), ["gang"], "beide kamers liggen achter de gang")

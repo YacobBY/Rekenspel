@@ -384,6 +384,14 @@ func plaats() -> void:
 			_verberg(s)
 	# cull: at most 16 per room, lowest layer and priority go first
 	lijstje.sort_custom(func(a: Spot, b: Spot) -> bool:
+		# The door signs before everything else, in every layer: a sign has ONE
+		# place — on its door — and every other element gives way to it, not
+		# the other way round (owner, 2026-09-24: "Kamer 2 staat onder de deur
+		# maar kamer 1 boven de deur. Dit is geen consistente plaats").
+		var ad := _is_deurbord(a)
+		var bd := _is_deurbord(b)
+		if ad != bd:
+			return ad
 		if a.laag != b.laag:
 			return a.laag < b.laag
 		var ak := a.kleef_aan != ""
@@ -432,6 +440,8 @@ func plaats() -> void:
 	if ingang.size.x > 0.0 and ingang.size.y > 0.0:
 		_vakken.append(ingang)
 	_verzamel_dingen(World.kamer_nu())
+	# the door signs of this room, chosen as one set before anything is placed
+	_kies_deurborden(lijstje, kader)
 	# place front-most first inside each layer
 	var rijen := maxi(1, int((kader.size.y - 2 * RAND) / RIJ))
 	var kolommen := maxi(1, int((kader.size.x - 2 * RAND) / KOL))
@@ -454,6 +464,9 @@ func plaats() -> void:
 		s.knoop.custom_minimum_size = maat
 		s.knoop.size = maat
 		s.knoop.position = rect.position
+		# a bubble that only speaks points its tail at what it talks about
+		if s.knoop is UiWolk:
+			(s.knoop as UiWolk).richt(_richtpunt(rect, s.vlak_nu, mik) - rect.position)
 		_laatste[s.id] = {
 			"id": s.id, "op": uit["op"], "laag": s.laag, "prio": s.prio,
 			"rect": rect, "vlak": s.vlak_nu, "krap": uit["krap"], "mik": mik,
@@ -461,6 +474,9 @@ func plaats() -> void:
 			# element had to stack somewhere else in the frame
 			"gestapeld": uit.get("gestapeld", false),
 			"dekking": _dekking(rect, s.vlak_nu),
+			# a door sign: "deur" (on the opening), "latei" (over the lintel)
+			# or "" (neither: the band grid took it — a finding for the tests)
+			"deurplek": uit.get("deurplek", ""),
 		}
 		_zet_vangvlak(s, rect)
 
@@ -501,6 +517,17 @@ func _blijf_staan(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2) -> Diction
 		return {}
 	_reserveer(r, kader)
 	return {"rect": r, "op": op, "krap": false, "gestapeld": bool(l.get("gestapeld", false))}
+
+## What a bubble talks about, as a point in the frame: the point of its thing
+## nearest to the bubble, or its aim point when it hangs on no thing.
+## `Vector2.INF` when that point lies under the bubble itself (no tail then).
+static func _richtpunt(r: Rect2, vlak: Rect2, mik: Vector2) -> Vector2:
+	var p := mik
+	if vlak.size.x > 0.0 and vlak.size.y > 0.0:
+		var c := r.get_center()
+		p = Vector2(clampf(c.x, vlak.position.x, vlak.end.x),
+			clampf(c.y, vlak.position.y, vlak.end.y))
+	return Vector2.INF if r.has_point(p) else p
 
 ## Off the glass: a hotspot that is not placed this pass shows nothing at all.
 func _verberg(s: Spot) -> void:
@@ -638,6 +665,140 @@ func _laag_van(s: Spot) -> int:
 func _diepte(s: Spot) -> float:
 	return s.d if not is_nan(s.d) else s.x + s.z
 
+## A door's sign (`hotel.gd` hangs one on every door, `klas: hotdeur`).
+static func _is_deurbord(s: Spot) -> bool:
+	return s.op == "aan" and s.klas.contains("hotdeur")
+
+## Where a door sign stands, in this order and nowhere else: centred on the
+## door opening at its half height, and — only when something is in the way
+## there — straight over it, just above its lintel.  That one fallback has a
+## second row a sign higher, still straight over the same door, for the phone
+## corridor, whose four doors stand closer together than two signs are wide.
+## The heights are fixed; sideways a sign may only be pushed by the frame edge
+## or slide past a neighbour, and never so far that it leaves the middle of its
+## door (`DEUR_RAND`).  Public for the tests, which hold every sign in every
+## room to exactly these heights.
+const DEURPLEK := ["deur", "latei", "latei"]
+const DEUR_KOSTEN := [0.0, 1000.0, 2000.0]  ## what each height costs the set
+const DEUR_GEEN := 1000000.0                 ## no place of the rule at all: the band grid
+const DEUR_RAND := 8.0   ## a sign keeps the middle of its door at least this far inside it
+
+static func deurbord_plekken(deur: Rect2, maat: Vector2) -> Array[Rect2]:
+	var x := deur.get_center().x - maat.x * 0.5
+	var latei := deur.position.y - GAT - maat.y
+	return [
+		Rect2(Vector2(x, deur.get_center().y - maat.y * 0.5), maat),
+		Rect2(Vector2(x, latei), maat),
+		Rect2(Vector2(x, latei - maat.y - GAT), maat),
+	]
+
+var _deur_keuze: Dictionary = {}   ## door sign id -> {rect, plek}, chosen per pass
+
+## The door signs of the room in view, chosen TOGETHER and before anything
+## else is placed (owner, 2026-09-24: the signs have to stand in one consistent
+## place, and the trolley, its bubble and the game's buttons give way to them).
+## Every sign takes the cheapest height of `deurbord_plekken` — on the opening,
+## else over the lintel — such that the set is free of the maths bar, of every
+## object box but its own door and of each other; of all sets the cheapest
+## wins.  One at a time, the first sign could take the one place its neighbour
+## needed: on a phone the corridor's four doors are closer together than two
+## signs are wide, and a greedy pass sent one of them onto the band grid.
+## A room has at most five doors, and the first all-on-the-door set that fits
+## ends the search, so it stays small.
+func _kies_deurborden(lijstje: Array[Spot], kader: Rect2) -> void:
+	_deur_keuze.clear()
+	var borden: Array[Spot] = []
+	for s in lijstje:
+		if s.zichtbaar and _is_deurbord(s) and s.vlak_nu.size.x > 0.0 and s.vlak_nu.size.y > 0.0:
+			borden.append(s)
+	if borden.is_empty():
+		return
+	# left to right: a sign that has to slide steps away from the one before it
+	borden.sort_custom(func(a: Spot, b: Spot) -> bool:
+		return a.vlak_nu.get_center().x < b.vlak_nu.get_center().x)
+	var maten: Array[Vector2] = []
+	for s in borden:
+		maten.append(_maat_van(s))
+	_mijd_balie_nu = false
+	var beste := {"kosten": INF, "keuze": []}
+	_zoek_deurborden(borden, maten, kader, 0, 0.0, [], beste)
+	# the search borrowed `_geplaatst` as its stack; it is empty again here
+	var keuze: Array = beste["keuze"]
+	for i in mini(borden.size(), keuze.size()):
+		var k: Dictionary = keuze[i]
+		if not k.is_empty():
+			_deur_keuze[borden[i].id] = k
+
+func _zoek_deurborden(borden: Array[Spot], maten: Array[Vector2], kader: Rect2, i: int,
+		kosten: float, pad: Array, beste: Dictionary) -> void:
+	if kosten >= float(beste["kosten"]):
+		return
+	if i >= borden.size():
+		beste["kosten"] = kosten
+		beste["keuze"] = pad.duplicate()
+		return
+	var deur := borden[i].vlak_nu
+	var plekken := deurbord_plekken(deur, maten[i])
+	for h in plekken.size():
+		var r := _deurbord_op(plekken[h], deur, kader)
+		if r.size.x <= 0.0:
+			continue
+		# a hair per unit of sliding, so the most centred set wins a tie
+		var k := kosten + float(DEUR_KOSTEN[h]) + absf(r.get_center().x - deur.get_center().x) * 0.01
+		_geplaatst.append(r)
+		pad.append({"rect": r, "plek": DEURPLEK[h]})
+		_zoek_deurborden(borden, maten, kader, i + 1, k, pad, beste)
+		pad.pop_back()
+		_geplaatst.pop_back()
+	pad.append({})
+	_zoek_deurborden(borden, maten, kader, i + 1, kosten + DEUR_GEEN, pad, beste)
+	pad.pop_back()
+
+## One height of a door sign made real: inside the frame (which may push it
+## sideways, never up or down), free of everything already chosen and of every
+## object box but its own door — sliding sideways past a neighbour if it has
+## to, as long as the middle of its door stays `DEUR_RAND` inside it.  Empty
+## when that height does not fit.
+func _deurbord_op(p: Rect2, deur: Rect2, kader: Rect2) -> Rect2:
+	var r := _klem(p, kader)
+	if absf(r.position.y - p.position.y) > 0.5:
+		return Rect2()
+	var cx := deur.get_center().x
+	var speel := maxf(0.0, r.size.x * 0.5 - DEUR_RAND)
+	return _schuif_vrij(r, kader, cx - speel, cx + speel,
+		func(q: Rect2) -> bool: return not _botst(q) and _vak_kosten(q, deur) <= 0.0)
+
+## The nearest place along its own row where `r` is free (`vrij`), with its
+## middle between `hart_min` and `hart_max` and inside the frame: `r` itself
+## when that is free, else `r` slid just past the edge of something that
+## shares its row.  Empty when no such place exists.
+func _schuif_vrij(r: Rect2, kader: Rect2, hart_min: float, hart_max: float,
+		vrij: Callable) -> Rect2:
+	var hart := r.get_center().x
+	if hart >= hart_min - 0.01 and hart <= hart_max + 0.01 and bool(vrij.call(r)):
+		return r
+	var randen: Array[Rect2] = []
+	randen.append_array(_geplaatst)
+	randen.append_array(_balk_muur)
+	randen.append_array(_vakken)
+	var stappen: Array[float] = []
+	for b in randen:
+		if b.end.y <= r.position.y or b.position.y >= r.end.y:
+			continue
+		stappen.append(b.end.x - r.position.x + 0.01)
+		stappen.append(b.position.x - r.end.x - 0.01)
+	stappen.sort_custom(func(a: float, b: float) -> bool: return absf(a) < absf(b))
+	for dx in stappen:
+		var q := Rect2(Vector2(r.position.x + dx, r.position.y), r.size)
+		if q.position.x < KRAP or q.end.x > kader.size.x - KRAP:
+			continue
+		var h := q.get_center().x
+		if h < hart_min or h > hart_max:
+			continue
+		if bool(vrij.call(q)):
+			return q
+	return Rect2()
+
 func _op_van(s: Spot) -> String:
 	if s.op == "voet":
 		return "voet"
@@ -710,50 +871,59 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 			if not paar.is_empty():
 				return paar
 		return _plaats_midden(mik, maat, kader, s.vlak_nu, s.kind == "kaart" or s.kind == "wolk")
+	if op == "aan" and _is_deurbord(s):
+		# A door carries its sign ON itself, in the middle of the opening
+		# (owner, 2026-09-23: "wekker zetten is bijvoorbeeld helemaal niet
+		# relevant aan waar de tekst geplaatst is ... Dit gebeurt vaak over het
+		# hele spel").  In front of the door is exactly where the furniture
+		# stands — the bench in the receptie, the chest in the corridor, the
+		# ball pit, the ironing board — and a sign on that read as ITS name.
+		# The opening itself is kept clear of furniture (test_rooms: no fixed
+		# piece hides more than 3 % of a door), so nothing but the door is ever
+		# under the sign.  The floor seen through the door stays visible.
+		#
+		# And ONLY there, or — when a thing with a button of its own stands in
+		# the opening (the trolley pushed up to the door) or a neighbouring
+		# door's sign already hangs there — straight over it, just above its
+		# lintel.  One place and one fallback, the same for every door in every
+		# room (owner, 2026-09-24: "Kamer 2 staat onder de deur maar kamer 1
+		# boven de deur. Dit is geen consistente plaats").  The foot of the door
+		# and the floor under it are gone as places: they read as the thing
+		# standing in front of the door.  The signs of a room are chosen as one
+		# set before anything else is placed (`_kies_deurborden`), so every
+		# other element gives way to them.
+		var keuze: Dictionary = _deur_keuze.get(s.id, {})
+		if not keuze.is_empty():
+			var r: Rect2 = keuze["rect"]
+			if r.size.is_equal_approx(maat) and not _botst(r):
+				_reserveer(r, kader)
+				return {"rect": r, "op": "aan", "krap": false,
+					"gestapeld": str(keuze["plek"]) != "deur", "deurplek": keuze["plek"]}
+		# No place of the rule (no room and no screen of the suite gets here):
+		# the band grid below keeps the invariants, and the empty `deurplek` in
+		# `debug()` says so.
+		op = "onder"
 	if op == "aan":
 		# AT its own thing (owner, 2026-09-14): the thing stays visible, the
 		# button sits right under it or right above it, whichever fits; a BIG
 		# thing (the notice board, GROOT button areas or more) may carry the
 		# button on itself, centred on the aim point.  Anything else placed and
-		# every other object box stay clear — otherwise the bands decide.
+		# every other object box stay clear — otherwise the bands decide.  A
+		# door sign has its own two places (above).
 		#
-		# A DOOR is a way out, not a thing to use: its sign stands on the floor
-		# straight in front of it, in every room, so a child finds every exit
-		# the same way (owner, 2026-09-23: the buttons stood "op plekken die niet
-		# consistent zijn").  Never ON the door as its first choice — a door
-		# drawn big near the camera passed the GROOT test meant for the notice
-		# board (gang → keuken) — but on the foot of its own door before ABOVE
-		# it: a sign on the door still reads as that door, one over its lintel
-		# read as the wall (keuken → wasserij, with the trolley's box right
-		# under the threshold).
-		var deur := s.klas.contains("hotdeur")
 		# The notice board carries its button by name, not by arithmetic: it
 		# is the thing that rule was written for, and it passed GROOT by a
 		# hair (13520 against 12960) until the world's letters grew and the
 		# 📋 button with them — then it moved above the board and pushed the
 		# first task card 191 units along the wall (owner, 2026-09-23).
-		var groot := not deur and (s.klas.contains("hotbord")
-			or vlak.size.x * vlak.size.y >= GROOT * maat.x * maat.y)
+		var groot := s.klas.contains("hotbord") \
+			or vlak.size.x * vlak.size.y >= GROOT * maat.x * maat.y
 		# Centred on the thing as it is DRAWN, not on its aim point: a bowl's
 		# plate stands well to the right of its slot point, and "Leeg" hung
 		# beside the bowl instead of under it (owner, 2026-09-23).
 		var x0 := (vlak.get_center().x if vlak.size.x > 0.0 else mik.x) - maat.x * 0.5
 		var kandidaten: Array[Rect2] = []
 		var op_eigen: Array[bool] = []     ## this candidate may stand on its own thing
-		if deur and vlak.size.y > 0.0:
-			# A door carries its sign ON itself, in the middle of the opening
-			# (owner, 2026-09-23: "wekker zetten is bijvoorbeeld helemaal niet
-			# relevant aan waar de tekst geplaatst is ... Dit gebeurt vaak over
-			# het hele spel").  In front of the door is exactly where the
-			# furniture stands — the bench in the receptie, the chest in the
-			# corridor, the ball pit, the ironing board — and a sign on that
-			# read as ITS name.  The opening itself is kept clear of furniture
-			# (test_rooms: no fixed piece hides more than 3 % of a door), so
-			# nothing but the door is ever under the sign.  The floor seen
-			# through the door stays visible under it.
-			var hart_x := vlak.get_center().x - maat.x * 0.5
-			kandidaten.append(Rect2(Vector2(hart_x, vlak.get_center().y - maat.y * 0.5), maat))
-			op_eigen.append(true)
 		if groot:
 			# The board carries its 📋 in its middle, not on its aim point at the
 			# top edge: there the button straddled the band right over the board,
@@ -761,20 +931,11 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 			var hart := vlak.get_center().y if s.klas.contains("hotbord") else mik.y
 			kandidaten.append(Rect2(Vector2(x0, hart - maat.y * 0.5), maat))
 			op_eigen.append(true)
-		if deur and vlak.size.y > 0.0:
-			# still on the door, at its foot, when the middle of a tall door
-			# has a picture of the corridor wall in it (the gang's clock)
-			var hart_x := vlak.get_center().x - maat.x * 0.5
-			kandidaten.append(Rect2(Vector2(hart_x, voet - GAT - maat.y), maat))
-			op_eigen.append(true)
 		kandidaten.append(Rect2(Vector2(x0, voet + GAT), maat))
 		op_eigen.append(false)
-		if deur:
-			kandidaten.append(Rect2(Vector2(x0, voet - GAT - maat.y), maat))
-			op_eigen.append(true)
 		kandidaten.append(Rect2(Vector2(x0, top - GAT - maat.y), maat))
 		op_eigen.append(false)
-		if vlak.size.y > 0.0 and not deur:
+		if vlak.size.y > 0.0:
 			# beside it, level with its middle: for a thing with something else
 			# right under it and right over it (the key board behind its plant)
 			var hart_y := vlak.get_center().y - maat.y * 0.5
@@ -797,10 +958,7 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 				continue
 			if not eigen_mag and _dekking(r, vlak) > 0.0:
 				continue
-			# ON its own door a sign is that door's sign, whatever stands next
-			# to the opening (the fence posts round the pool gate): only other
-			# buttons and their things keep it off
-			var kosten := 0.0 if (deur and eigen_mag) else _vreemd_kosten(r, vlak, deur)
+			var kosten := _vreemd_kosten(r, vlak)
 			if kosten < beste_kosten:
 				beste = r
 				beste_kosten = kosten
@@ -873,7 +1031,10 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 		var in_vlak := minf(maat.y, vlak.size.y * TAG_IN) if s.kind != "naam" else -2.0
 		var y := top - maat.y + in_vlak
 		var r := _klem(Rect2(Vector2(mik.x - maat.x * 0.5, y), maat), kader)
-		r = _wijk_omhoog(r, kader)
+		if s.kind == "naam" and vlak.size.x > 0.0:
+			r = _plaat_plek(r, kader, vlak)
+		else:
+			r = _wijk_omhoog(r, kader)
 		var krap_rand := _botst(r)
 		_reserveer(r, kader)
 		return {"rect": r, "op": op, "krap": krap_rand, "gestapeld": false}
@@ -921,6 +1082,36 @@ func _kies_plek(s: Spot, mik: Vector2, maat: Vector2, kader: Rect2, rijen: int, 
 			_reserveer(kand["rect"], kader)
 			return {"rect": kand["rect"], "op": _werd(op, rij, top, maat), "krap": false,
 				"gestapeld": true}
+	# pass 1c (2026-09-24): the door signs choose first, at their own heights
+	# and not on the grid, so a sign that straddles two bands takes both of
+	# them in the cell count although it covers only a part of each — on a
+	# 558 x 289 kitchen the voerkar's bubble found no block of free cells left.
+	# Before giving up, every band once more with the REAL rectangles: the
+	# element slides along the band to the nearest place that touches nothing
+	# placed and no object box.  Last, so every arrangement that already found
+	# a place keeps it.
+	var schuif_beste := Rect2()
+	var schuif_af := INF
+	var schuif_rij := -1
+	for k in volgorde:
+		var rij: int = k["rij"]
+		var y := _band_y(rij, maat, str(k["kant"]), top, voet)
+		var r0 := _klem(Rect2(Vector2(mik.x - maat.x * 0.5, y), maat), kader)
+		if absf(r0.position.y - y) > 0.5:
+			continue
+		var zij := _schuif_vrij(r0, kader, -INF, INF,
+			func(q: Rect2) -> bool: return not _botst(q) and _vak_kosten(q) <= 0.0)
+		if zij.size.x <= 0.0:
+			continue
+		var af := (zij.get_center() - doel).length()
+		if af < schuif_af:
+			schuif_beste = zij
+			schuif_af = af
+			schuif_rij = rij
+	if schuif_af < INF:
+		_reserveer(schuif_beste, kader)
+		return {"rect": schuif_beste, "op": _werd(op, schuif_rij, top, maat), "krap": false,
+			"gestapeld": true}
 	# pass 2: a free cell with the least object overlap
 	var beste_rij := -1
 	beste = Rect2()
@@ -1156,6 +1347,33 @@ func _wijk_omhoog(r: Rect2, kader: Rect2, eigen := Rect2(), mijd_balie := false)
 			return neer
 	return r
 
+## A guest's name plate that finds its place taken — since 2026-09-24 by a door
+## sign as well, which chooses first and hangs over the head of a guest who
+## stands in front of that door — steps the way `_wijk_omhoog` does, whole bands
+## up and down, but on every band it first slides sideways along it, as long as
+## it stays over its own guest.  A plate a few units beside its place is still
+## that guest's name; one a band higher, over the next guest, is not.
+func _plaat_plek(r: Rect2, kader: Rect2, gast: Rect2) -> Rect2:
+	var zij := _plaat_rij(r, kader, gast)
+	if zij.size.x > 0.0:
+		return zij
+	for stap in range(1, maxi(2, int(kader.size.y / RIJ)) + 1):
+		for dy in [-stap * RIJ, stap * RIJ]:
+			var q := Rect2(Vector2(r.position.x, r.position.y + dy), r.size)
+			if q.position.y < KRAP or q.end.y > kader.size.y - KRAP:
+				continue
+			zij = _plaat_rij(q, kader, gast)
+			if zij.size.x > 0.0:
+				return zij
+	return _wijk_omhoog(r, kader)
+
+## A plate on one row: where it is when that is free, else slid along the row.
+func _plaat_rij(q: Rect2, kader: Rect2, gast: Rect2) -> Rect2:
+	if not _botst(q):
+		return q
+	return _schuif_vrij(q, kader, gast.position.x, gast.end.x,
+		func(p: Rect2) -> bool: return not _botst(p))
+
 ## A fixed card may stand over the world, but never over the object it belongs
 ## to: the sum hangs ABOVE the bowl, the guest stays whole (HOTEL.md §9).
 func _bezet_voor(r: Rect2, eigen: Rect2, mijd_balie := false) -> bool:
@@ -1323,16 +1541,14 @@ const VREEMD_DEEL := 0.15
 ## How much of OTHER things this rectangle hides: the sum of the shares it
 ## covers of every thing that is not `eigen`, counting only a share of at least
 ## VREEMD_DEEL.  0 = it stands on nothing but its own thing and the floor.
-func _vreemd_kosten(r: Rect2, eigen: Rect2, deur := false) -> float:
+##
+## A door sign never asks: on its own door it is that door's sign, whatever
+## stands next to the opening (the fence posts round the pool gate, the rose
+## arch), and its one fallback over the lintel is the same for every door.
+func _vreemd_kosten(r: Rect2, eigen: Rect2) -> float:
 	var som := 0.0
 	for v in _dingen_vak:
 		if eigen.size.x > 0.0 and v.is_equal_approx(eigen):
-			continue
-		# for a door, a thing that lies mostly INSIDE its opening is the door:
-		# the pool gate and the rose arch are what the way out looks like.  Not
-		# for anything else — the last hopscotch stone lies inside the stall's
-		# box on screen and is not the stall.
-		if deur and eigen.size.x > 0.0 and _deel(v, eigen) >= 0.5:
 			continue
 		var snij := r.intersection(v)
 		if snij.size.x <= 0.0 or snij.size.y <= 0.0:
@@ -1341,13 +1557,6 @@ func _vreemd_kosten(r: Rect2, eigen: Rect2, deur := false) -> float:
 		if deel >= VREEMD_DEEL:
 			som += deel
 	return som
-
-## The share of `v` that lies inside `binnen`.
-static func _deel(v: Rect2, binnen: Rect2) -> float:
-	var snij := v.intersection(binnen)
-	if snij.size.x <= 0.0 or snij.size.y <= 0.0:
-		return 0.0
-	return (snij.size.x * snij.size.y) / maxf(1.0, v.size.x * v.size.y)
 
 ## How much of the world this rectangle would cover.  0 = it covers nothing.
 func _vak_kosten(r: Rect2, eigen := Rect2()) -> float:

@@ -53,11 +53,15 @@ func bouw(o: Dictionary, mt: Dictionary, smal: bool) -> void:
 		focus_mode = Control.FOCUS_ALL
 		mouse_filter = Control.MOUSE_FILTER_STOP
 	else:
-		var vlak := _vel_info(kleur)
+		# the Button itself draws nothing: `_draw()` draws the bubble with its
+		# tail as ONE shape, so the tail and the body share one outline
+		var vlak := _vel_info()
 		for staat in ["normal", "hover", "pressed", "hover_pressed", "disabled", "focus"]:
 			add_theme_stylebox_override(staat, vlak)
 		focus_mode = Control.FOCUS_NONE
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_vul = Color(kleur, UiThema.INFO_VUL_ALFA)
+		resized.connect(queue_redraw)
 
 	_doos = MarginContainer.new()
 	_doos.name = "Doos"
@@ -98,14 +102,19 @@ func bouw(o: Dictionary, mt: Dictionary, smal: bool) -> void:
 		kolom.add_child(balk)
 		zet_voortgang(float(o["voortgang"]))
 
-	icoon_label = _regel("Icoon", str(o.get("icoon", "")), mt["icoon_wolk"])
+	# A bubble that only speaks says it a size quieter than a button: its
+	# pictogram at the size of a button's, its words regular (a `Label`, not the
+	# bold of a `Button`) and `INFO_KLEINER` smaller.
+	icoon_label = _regel("Icoon", str(o.get("icoon", "")),
+		mt["icoon_wolk"] if actie else mt["icoon"])
 	rij.add_child(icoon_label)
 
 	getal_label = _regel("Getal", "" if o.get("getal", null) == null else str(o.get("getal")),
 		mt["getal"])
 	rij.add_child(getal_label)
 
-	zeg_label = _regel("Zeg", str(o.get("tekst", "")), mt["wereld"])
+	zeg_label = _regel("Zeg", str(o.get("tekst", "")),
+		mt["wereld"] if actie else UiThema.info_maat(mt["wereld"]))
 	zeg_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	zeg_label.text_overrun_behavior = TextServer.OVERRUN_NO_TRIMMING
 	rij.add_child(zeg_label)
@@ -193,14 +202,143 @@ func _regel(naam: String, tekst: String, maat: int) -> Label:
 	l.visible = not tekst.is_empty()
 	return l
 
-## A bubble that only speaks: flat, a little see-through, no edge and no
-## shadow, with the little tail corner bottom-left — nothing about it says
-## "press me", because there is nothing to press.
-func _vel_info(kleur: Color) -> StyleBoxFlat:
+## The Button's own box for a bubble that only speaks: nothing at all — no
+## face, no edge, no shadow, the same in every state.  The bubble is drawn by
+## `_draw()` instead: nothing about it says "press me", because there is
+## nothing to press.
+func _vel_info() -> StyleBoxFlat:
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(kleur, 0.9)
-	sb.corner_radius_top_left = 20
-	sb.corner_radius_top_right = 20
-	sb.corner_radius_bottom_right = 20
-	sb.corner_radius_bottom_left = 6
+	sb.draw_center = false
+	sb.bg_color = Color(0, 0, 0, 0)
 	return sb
+
+# ------------------------------------------------------------ het staartje
+
+## A speech bubble, not a key (owner, 2026-09-24: "Hints als 'tik op een deur'
+## ... lijken erg op bubbeltjes waar interactie voor is").  A bubble that only
+## speaks is ONE shape: a light, see-through body with small corners and a thin
+## soft outline, and a comic tail that points at what it talks about — the
+## trolley, the bowl, the guest.  `Hits` hands it that point after every
+## placement (`richt`); the tail is drawn outside the rectangle `Hits` placed,
+## so the bubble's size, and with it every placement, stays what it was.
+const STAART_VOET := 14.0   ## the width of the tail where it leaves the body
+const STAART_MIN := 7.0     ## its length, at least and ...
+const STAART_MAX := 16.0    ## ... at most — it points, it never reaches over the thing
+
+var _vul := Color(UiThema.WOLK_INFO, UiThema.INFO_VUL_ALFA)
+var _doel := Vector2.INF     ## what the tail points at, in this bubble's own units
+
+## Point the tail at `doel` (in this bubble's own coordinates); `Vector2.INF`
+## takes it away (the thing lies under the bubble, or there is none).
+func richt(doel: Vector2) -> void:
+	if actie:
+		return
+	var had := _doel != Vector2.INF
+	var heeft := doel != Vector2.INF
+	if had == heeft and (not heeft or _doel.distance_to(doel) <= 0.5):
+		return
+	_doel = doel
+	queue_redraw()
+
+## The tip of the tail in this bubble's own coordinates, `Vector2.INF` when it
+## has none (a bubble a tap acts on is a key and has no tail).
+func staart_punt() -> Vector2:
+	if actie:
+		return Vector2.INF
+	var st := _staart(Rect2(Vector2.ZERO, size), _ronding())
+	return Vector2.INF if st.is_empty() else st["punt"]
+
+func _draw() -> void:
+	if actie or size.x < 8.0 or size.y < 8.0:
+		return
+	var vorm := _vorm()
+	if vorm.size() < 3:
+		return
+	draw_colored_polygon(vorm, _vul)
+	var lijn := vorm.duplicate()
+	lijn.append(vorm[0])
+	draw_polyline(lijn, UiThema.INFO_LIJN, UiThema.INFO_LIJN_DIK, true)
+
+func _ronding() -> float:
+	return minf(float(UiThema.INFO_RONDING), minf(size.x, size.y) * 0.5 - 1.0)
+
+## The side of the body that faces the target, where on it the tail starts and
+## where it points to: {kant, a, b, punt}, or {} for no tail.  `a` and `b` are
+## the foot of the tail in the order the outline walks round (clockwise).
+func _staart(r: Rect2, straal: float) -> Dictionary:
+	if _doel == Vector2.INF or r.has_point(_doel):
+		return {}
+	var d := _doel
+	var voorbij := {
+		"onder": d.y - r.end.y, "boven": r.position.y - d.y,
+		"rechts": d.x - r.end.x, "links": r.position.x - d.x,
+	}
+	var kant := "onder"
+	for k in voorbij:
+		if float(voorbij[k]) > float(voorbij[kant]):
+			kant = k
+	var half := STAART_VOET * 0.5
+	var horizontaal := kant == "onder" or kant == "boven"
+	var lo := (r.position.x if horizontaal else r.position.y) + straal + half
+	var hi := (r.end.x if horizontaal else r.end.y) - straal - half
+	if lo > hi:
+		return {}
+	var voet := Vector2.ZERO
+	var a := Vector2.ZERO
+	var b := Vector2.ZERO
+	var normaal := Vector2.ZERO
+	match kant:
+		"onder":
+			voet = Vector2(clampf(d.x, lo, hi), r.end.y)
+			a = voet + Vector2(half, 0)
+			b = voet - Vector2(half, 0)
+			normaal = Vector2.DOWN
+		"boven":
+			voet = Vector2(clampf(d.x, lo, hi), r.position.y)
+			a = voet - Vector2(half, 0)
+			b = voet + Vector2(half, 0)
+			normaal = Vector2.UP
+		"rechts":
+			voet = Vector2(r.end.x, clampf(d.y, lo, hi))
+			a = voet - Vector2(0, half)
+			b = voet + Vector2(0, half)
+			normaal = Vector2.RIGHT
+		_:
+			voet = Vector2(r.position.x, clampf(d.y, lo, hi))
+			a = voet + Vector2(0, half)
+			b = voet - Vector2(0, half)
+			normaal = Vector2.LEFT
+	var naar := d - voet
+	var lang := clampf(naar.length(), STAART_MIN, STAART_MAX)
+	var richting := naar.normalized() if naar.length() > 0.01 else normaal
+	# never flatter than 45 degrees to its side, so the tip stays well outside
+	if richting.dot(normaal) < 0.7071:
+		richting = (normaal + (richting - normaal * richting.dot(normaal)).normalized()).normalized()
+	return {"kant": kant, "a": a, "b": b, "punt": voet + richting * lang}
+
+## The outline of body and tail, clockwise from the top-left corner.
+func _vorm() -> PackedVector2Array:
+	var r := Rect2(Vector2.ZERO, size)
+	var straal := _ronding()
+	var st := _staart(r, straal)
+	var kant := str(st.get("kant", ""))
+	var p := PackedVector2Array()
+	_hoek(p, Vector2(r.position.x + straal, r.position.y + straal), straal, PI, PI * 1.5)
+	if kant == "boven":
+		p.append_array(PackedVector2Array([st["a"], st["punt"], st["b"]]))
+	_hoek(p, Vector2(r.end.x - straal, r.position.y + straal), straal, PI * 1.5, TAU)
+	if kant == "rechts":
+		p.append_array(PackedVector2Array([st["a"], st["punt"], st["b"]]))
+	_hoek(p, Vector2(r.end.x - straal, r.end.y - straal), straal, 0.0, PI * 0.5)
+	if kant == "onder":
+		p.append_array(PackedVector2Array([st["a"], st["punt"], st["b"]]))
+	_hoek(p, Vector2(r.position.x + straal, r.end.y - straal), straal, PI * 0.5, PI)
+	if kant == "links":
+		p.append_array(PackedVector2Array([st["a"], st["punt"], st["b"]]))
+	return p
+
+func _hoek(p: PackedVector2Array, midden: Vector2, straal: float, van: float, tot: float) -> void:
+	const STAPPEN := 4
+	for i in STAPPEN + 1:
+		var hoek := lerpf(van, tot, float(i) / STAPPEN)
+		p.append(midden + Vector2(cos(hoek), sin(hoek)) * straal)
