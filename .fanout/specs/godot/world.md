@@ -135,20 +135,27 @@ when a room does not exist. Example: `pad('kamer1','zwembad')` =
 
 **The front door** (port, owner 2026-09-23: the guests "komen momenteel vanuit de gang binnen
 ipv ingang"). The receptie has one more opening that is NOT a door of this graph:
-`Kamer.ingang = {wand: 'z', at: 105, breed: 12}`, the hotel's way in from outside, on the
-back wall right of the desk — the one free stretch of wall in view (the desk ends at
-x = 102; the left wall carries the corridor door, the bench, the key board and the playroom
-door). `Rooms.ingang(kamer)` derives `{x: 111, z: 0, ix: 111, iz: 8, dx: 111, dz: 3, wand}`
-the way `deur()` does (`(dx, dz)` is the threshold, where a guest appears) and is `{}` for
-every other room. It is kept out of `deuren` and `deur_punten`, so no path (`pad`), no door
-button, no "komt eraan" bubble, no chip of the room bar and no cell of the map leads through
-it; outside is no room. Its opening is `deur_hoog()` tall like any door (26) and is not cut
-into the wall: the door is a wall model, `voordeur` (§1.3, art-sound-rules.md §8), drawn
-open (`params.open`) while `World.ingang_open(kamer)` — while a guest comes in (§2.5).
-Its step inside keeps free cells (< 14) and bought furniture (< 12) away like a door's, and
-`World.vlak_van_ingang(kamer)` is its screen box. `tests/test_rooms.gd` holds it to the door
-rules: not in the graph, nothing of the room's fixed decor or things hides more than 3 % of
-it, and the way in from it goes round the end of the desk (§3.3).
+`Kamer.ingang = {wand: 'voor', at: 62, breed: 20, hoog: 32, open: true}`, the hotel's way
+in from outside.  **Port (owner 2026-09-24: "zet de lobby deur waar het tapijt is maar alleen
+de uitlijn en laat hem open zodat je erdoorheen kan kijken en het tapijt zien ... En maak hem
+wat groter dan de andere deuren"):** it stands in the FRONT edge of the lobby (`wand: 'voor'`,
+z = d), the side the camera looks in through, in the middle of the pink rug (x 62..82 over
+the rug's 45..99), and it is only its outline — `voordeuromlijst` (§1.3, art-sound-rules.md
+§8): two white posts, a lintel and the threshold, no leaf, so you look through it at the rug
+as through every door into the next room.  20 wide and 32 tall (`hoog`, read by
+`deur_hoog()`) where a door in a wall is 12 × 26.  `open: true`: it never shuts, makes no
+door sound, and `World.ingang_open(kamer)` is always true.  (For one day, 2026-09-23, it was
+a closed door on the back wall right of the desk, `voordeur` @ 111,1 with a welcome mat.)
+`Rooms.ingang(kamer)` derives `{x: 72, z: 120, ix: 72, iz: 108, dx: 72, dz: 118, wand}`
+(`(dx, dz)` is the threshold, where a guest appears; the step inside is onto the rug) and is
+`{}` for every other room. It is kept out of `deuren` and `deur_punten`, so no path (`pad`),
+no door button, no "komt eraan" bubble, no chip of the room bar and no cell of the map leads
+through it; outside is no room. Its step inside keeps free cells (< 14) and bought furniture
+(< 12) away like a door's, and `World.vlak_van_ingang(kamer)` is its screen box — a box the
+buttons keep off (`Hits.plaats`); a card and its strip may float over it like over the rest
+of the world. `tests/test_rooms.gd` holds it to the door rules: not in the graph, nothing of
+the room's fixed decor or things hides more than 3 % of it, and the way in from it stays in
+front of the desk (§3.3).
 
 ### 1.3 Fixed decor per room
 
@@ -159,7 +166,7 @@ movable **dingen**: `balielamp` (receptie 15, 105, y 14) and `kar` (keuken 48, 6
 
 | room | decor (model @ x, z [, y]) |
 |---|---|
-| receptie | `balie` @ 40,60 · `balie` @ 75,60 · `baliez` @ 15,58 · `baliez` @ 15,93 · `bel` @ 33,60 y14 · `kassa` @ 66,60 y14 · `boek` @ 15,75 y14 · `lamp` @ 15,105 y14 (→ ding `balielamp`) · `prikbord` @ 1,64 y14 `rot 1` `ver` (since 2026-09-23 on the left wall over the bench in the waiting corner: behind the desk the visible wall had no room for the task cards, which now hang round the board instead of across the room) · `sleutelbordz` @ 1,84 `ver` · `plant` @ 105,18 · `plant` @ 108,81 · **port (2026-09-23):** the front door `voordeur` @ 111,1 `ver` (with `ingang: true`, so the room scene can draw it open) over the opening of §1.2 and the welcome mat `welkomsmat` @ 111,7 before it, with a depth bias `d: −10` so a guest on the threshold is drawn over the mat |
+| receptie | `balie` @ 40,60 · `balie` @ 75,60 · `baliez` @ 15,58 · `baliez` @ 15,93 · `bel` @ 33,60 y14 · `kassa` @ 66,60 y14 · `boek` @ 15,75 y14 · `lamp` @ 15,105 y14 (→ ding `balielamp`) · `prikbord` @ 1,64 y14 `rot 1` `ver` (since 2026-09-23 on the left wall over the bench in the waiting corner: behind the desk the visible wall had no room for the task cards, which now hang round the board instead of across the room) · `sleutelbordz` @ 1,84 `ver` · `plant` @ 105,18 · `plant` @ 108,81 · **port (2026-09-24):** the outline of the front door `voordeuromlijst` @ 72,119 in the front edge, in the middle of the pink rug, over the opening of §1.2 (open, 20 × 32; on 2026-09-23 it was the closed `voordeur` @ 111,1 on the back wall with `welkomsmat` @ 111,7) |
 | gang | `plant` @ 36,30 · `plant` @ 108,30 (along the FRONT edge since 2026-09-23: against the back wall they hid 37 % and 29 % of the bedroom doors) · `kist` @ 114,14 |
 | kamer1 | `plant` @ 107,8 (was 102,12: it hid the door's corner) · `mand` @ 93,99 |
 | kamer2 | `plant` @ 12,99 · `mand` @ 93,99 |
@@ -564,7 +571,7 @@ Practical speed: **20–35 voxels/s in a `loop 1.5` room**.
 | `World.loopNaar(id, x, z, o)` / `World.stappen(id, punten, o)` | **promise-based** movement |
 | `World.pose(id, naam, duur)` | set one pose; `true`/`false` |
 | **port** `World.kom_binnen(id, x, z, kamer = 'receptie')` | the guest arrives at the hotel: he appears on the threshold of the room's front door (`Rooms.ingang`, §1.2) and plays his own entrance to `(x, z)` (state `komt`, art-sound-rules.md §11.8), ending there in `wacht` as `ga(id, x, z, 'wacht')` would. Not awaitable. Reduced motion, or a room without a front door: he simply stands at `(x, z)`. Off screen the arrival is skipped to its end; any other order above supersedes it (a guest in mid-hop lands at once) |
-| **port** `World.komt_binnen(id)` / `World.ingang_open(kamer)` | is he still coming in? / does the front door stand open (from the start of an arrival until he is 22 voxels clear of the threshold, 3 s at most) |
+| **port** `World.komt_binnen(id)` / `World.ingang_open(kamer)` | is he still coming in? / does the front door stand open — always, for the lobby's open outline (`ingang.open`); a front door with a leaf stands open from the start of an arrival until he is 22 voxels clear of the threshold, 3 s at most |
 
 `na` values on arrival: `eet`, `sip`, `wacht`, `snuif`, `blij`, `slaap`, `deur`, anything
 else → `stil` for `round((10 + r()·40) · rustig)` ticks.

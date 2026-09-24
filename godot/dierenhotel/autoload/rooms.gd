@@ -172,6 +172,9 @@ func deur_hoog(r: Kamer, dr: Dictionary) -> int:
 		return 6
 	if bool(dr.get("poort", false)):
 		return POORT_HOOG
+	# a door that says how tall it is (the receptie's front door, 32)
+	if dr.has("hoog"):
+		return int(dr["hoog"])
 	var wand := r.wand
 	if not r.gevel.is_empty() and str(r.gevel.get("wand", "")) == str(dr.get("wand", "")):
 		wand = int(r.gevel.get("hoog", 0))
@@ -241,6 +244,11 @@ func bouw_af(r: Kamer) -> void:
 		if str(r.ingang["wand"]) == "z":
 			r.ingang_punt = {"x": im, "z": 0.0, "ix": im, "iz": 8.0, "dx": im, "dz": 3.0,
 				"wand": "z"}
+		elif str(r.ingang["wand"]) == "voor":
+			# the FRONT edge z = d, the side the camera looks in through: he
+			# appears on the threshold and his first step is onto the rug
+			r.ingang_punt = {"x": im, "z": float(r.d), "ix": im, "iz": float(r.d) - 12.0,
+				"dx": im, "dz": float(r.d) - 2.0, "wand": "voor"}
 		else:
 			r.ingang_punt = {"x": 0.0, "z": im, "ix": 8.0, "iz": im, "dx": 3.0, "dz": im,
 				"wand": "x"}
@@ -603,19 +611,21 @@ func _bouw_kamers() -> void:
 			# die hoek al grotendeels leeggemaakt (zie tmp/log voor de meting).
 			{"naar": "speelzaal", "wand": "x", "at": 108, "breed": 12}],
 		# The hotel's front door (owner, 2026-09-23: the guests "komen momenteel
-		# vanuit de gang binnen ipv ingang").  The one free stretch of wall in
-		# view: the back wall right of the desk, which ends at x = 102 — the
-		# left wall has the corridor door, the bench, the key board and the
-		# playroom door.  A guest who arrives steps in here and walks round the
-		# end of the desk to the counter; no door button, path or chip goes
-		# through it (`Kamer.ingang`, world.md §1.2).
-		"ingang": {"wand": "z", "at": 105, "breed": 12},
+		# vanuit de gang binnen ipv ingang").  It stands where the pink rug lies,
+		# in the FRONT edge of the lobby — the side the camera looks in through,
+		# which has no wall on screen — and it is only its outline, open, a size
+		# bigger than a door in a wall (owner, 2026-09-24: "zet de lobby deur
+		# waar het tapijt is maar alleen de uitlijn en laat hem open zodat je
+		# erdoorheen kan kijken en het tapijt zien ... En maak hem wat groter dan
+		# de andere deuren").  20 wide and 32 tall where every door in a wall is
+		# 12 x 26.  A guest who arrives steps in over the rug and walks straight
+		# up to the counter; no door button, path or chip goes through it
+		# (`Kamer.ingang`, world.md §1.2).  `open`: no leaf, nothing to shut.
+		"ingang": {"wand": "voor", "at": 62, "breed": 20, "hoog": 32, "open": true},
 		"decor": [
-			# the front door itself hangs on the wall over its opening, the welcome
-			# mat lies before it — with a depth bias, so a guest who stands on
-			# the threshold is drawn over the mat and not under it
-			{"n": "voordeur", "x": 111, "z": 1, "ver": true, "ingang": true},
-			{"n": "welkomsmat", "x": 111, "z": 7, "d": -10.0},
+			# the outline of the front door, on the front edge in the middle of
+			# the rug (`matten` x 45..99)
+			{"n": "voordeuromlijst", "x": 72, "z": 119},
 			{"n": "balie", "x": 48, "z": 20}, {"n": "balie", "x": 83, "z": 20},
 			{"n": "bel", "x": 36, "z": 20, "y": 14, "d": 12.5},   # sorts after the desk piece at (48, 20)
 			{"n": "kassa", "x": 60, "z": 20, "y": 14},

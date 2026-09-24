@@ -506,8 +506,13 @@ func vlak_van_ingang(kamer_id: String = "") -> Rect2:
 	var a := float(r.ingang.get("at", 0)) - 1.0
 	var b := a + float(r.ingang.get("breed", 12)) + 2.0
 	var h := float(Rooms.deur_hoog(r, r.ingang)) + 2.0
-	var langs_z := str(r.ingang.get("wand", "z")) == "z"
-	var randen: Array = [[a, 0.0], [b, 0.0]] if langs_z else [[0.0, a], [0.0, b]]
+	var wand := str(r.ingang.get("wand", "z"))
+	var randen: Array = [[0.0, a], [0.0, b]]
+	if wand == "z":
+		randen = [[a, 0.0], [b, 0.0]]
+	elif wand == "voor":
+		# the front edge z = d, where the lobby's front door stands at the rug
+		randen = [[a, float(r.d)], [b, float(r.d)]]
 	var vak := Rect2(mik_punt(float(randen[0][0]), float(randen[0][1]), 0.0), Vector2.ZERO)
 	for xz in randen:
 		vak = vak.expand(mik_punt(float(xz[0]), float(xz[1]), 0.0))
@@ -1891,10 +1896,18 @@ func kom_binnen(id: String, x: float, z: float, kamer_id := "receptie") -> bool:
 	d.face = -1 if str(ing.get("wand", "z")) == "z" else 1
 	d.staat = "komt"
 	# the door swings open without a sound — the desk bell has just rung; it
-	# falls shut with the door's own sound once he is in (the `deur` beat)
-	_ingang_dicht_op[kamer_id] = _tikken + DEUR_OPEN_MAX
+	# falls shut with the door's own sound once he is in (the `deur` beat).
+	# An open doorway (`ingang.open`, the lobby's outline) has nothing to swing.
+	if not _ingang_altijd_open(kamer_id):
+		_ingang_dicht_op[kamer_id] = _tikken + DEUR_OPEN_MAX
 	vuil()
 	return true
+
+## A front door that is only an open outline (the lobby's, 2026-09-24): it never
+## shuts and makes no door sound.
+func _ingang_altijd_open(kamer_id: String) -> bool:
+	var r := Rooms.get_kamer(kamer_id)
+	return r != null and bool((r.ingang as Dictionary).get("open", false))
 
 ## Is this guest still on his way in through the front door?
 func komt_binnen(id: String) -> bool:
@@ -1905,6 +1918,8 @@ func komt_binnen(id: String) -> bool:
 ## draws it open or shut from this.
 func ingang_open(kamer_id: String = "") -> bool:
 	var k := kamer_id if kamer_id != "" else _kamer_nu
+	if _ingang_altijd_open(k):
+		return true
 	return _tikken < int(_ingang_dicht_op.get(k, -1))
 
 ## One tick of the arrival: the beats that happen at once (a sound, particles,
@@ -1944,6 +1959,8 @@ func _komt_meteen(d: Dier, slag: Dictionary) -> void:
 			var kl: Color = slag.get("kl", ArtEffect.STER_KL[0])
 			_pluis(d, int(slag.get("n", 2)), kl, bool(slag.get("omhoog", true)))
 		"deur":
+			if _ingang_altijd_open(d.kamer):
+				return                      # an open doorway: nothing falls shut
 			if ingang_open(d.kamer):
 				Snd.deur()
 			_ingang_dicht_op[d.kamer] = _tikken

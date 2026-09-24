@@ -491,6 +491,10 @@ func _deur_dekking(r: Rooms.Kamer, dr: Dictionary, extra: Array = []) -> float:
 	if str(dr["wand"]) == "z":
 		hoeken = PackedVector2Array([_px(a, 0, 0, g), _px(b, 0, 0, g), _px(b, 0, h, g),
 			_px(a, 0, h, g)])
+	elif str(dr["wand"]) == "voor":
+		var dd := float(r.d)
+		hoeken = PackedVector2Array([_px(a, dd, 0, g), _px(b, dd, 0, g), _px(b, dd, h, g),
+			_px(a, dd, h, g)])
 	else:
 		hoeken = PackedVector2Array([_px(0, a, 0, g), _px(0, b, 0, g), _px(0, b, h, g),
 			_px(0, a, h, g)])
@@ -504,6 +508,9 @@ func _deur_dekking(r: Rooms.Kamer, dr: Dictionary, extra: Array = []) -> float:
 				gat.append(Vector2i(px, py))
 	var stukken: Array = []
 	for stuk in r.decor:
+		# the front door's own outline is the door, not something before it
+		if String(stuk["n"]) == "voordeuromlijst":
+			continue
 		if not stuk.get("ver", false) and not stuk.get("pol", false):
 			stukken.append([String(stuk["n"]), float(stuk["x"]), float(stuk["z"]),
 				float(stuk.get("y", 0.0)), stuk.get("params", {})])
@@ -544,17 +551,23 @@ func test_de_receptie_heeft_een_voordeur_buiten_de_deurgraaf() -> void:
 	waar(not ing.is_empty(), "de receptie heeft een voordeur")
 	if ing.is_empty():
 		return
-	gelijk(str(r.ingang.get("wand", "")), "z", "in de achterwand rechts")
+	# owner, 2026-09-24: "zet de lobby deur waar het tapijt is maar alleen de
+	# uitlijn en laat hem open ... En maak hem wat groter dan de andere deuren"
+	gelijk(str(r.ingang.get("wand", "")), "voor", "in de voorkant van de lobby, waar je in kijkt")
 	var a := float(r.ingang["at"])
 	var b := a + float(r.ingang["breed"])
-	gelijk(float(r.ingang["breed"]), 12.0, "zo breed als elke deur")
-	waar(a > float(r.balie["x1"]), "voorbij het eind van de balie (%.0f > %.0f)" % [a, float(r.balie["x1"])])
-	waar(b <= float(r.w) - 2.0, "binnen de wand, met zijn kozijn")
+	waar(float(r.ingang["breed"]) > 12.0, "breder dan elke deur in een muur (%.0f)" % float(r.ingang["breed"]))
+	waar(Rooms.deur_hoog(r, r.ingang) > Rooms.deur_hoog(r, r.deuren[0]),
+		"en hoger (%d)" % Rooms.deur_hoog(r, r.ingang))
+	gelijk((a + b) / 2.0, (float(r.matten["x0"]) + float(r.matten["x1"])) / 2.0,
+		"midden voor het roze tapijt")
+	waar(a >= 2.0 and b <= float(r.w) - 2.0, "binnen de voorkant, met zijn omlijsting")
+	waar(bool(r.ingang.get("open", false)), "open: alleen de omlijsting, geen deurblad")
 	gelijk(float(ing["x"]), (a + b) / 2.0, "het deurpunt in het midden van de opening")
-	gelijk(float(ing["z"]), 0.0, "in de wand")
+	gelijk(float(ing["z"]), float(r.d), "op de voorrand")
 	gelijk(float(ing["ix"]), (a + b) / 2.0, "de stap binnen")
-	gelijk(float(ing["iz"]), 8.0, "acht voxels de kamer in, als bij elke deur")
-	gelijk(float(ing["dz"]), 3.0, "de drempel, waar een gast verschijnt")
+	gelijk(float(ing["iz"]), float(r.d) - 12.0, "twaalf voxels de kamer in, het tapijt op")
+	gelijk(float(ing["dz"]), float(r.d) - 2.0, "de drempel, waar een gast verschijnt")
 	# it is not a door of the graph: the door pairs, points and paths stay as
 	# they were, and outside is no room
 	gelijk(r.deuren.size(), 2, "de receptie houdt twee deuren")
@@ -572,18 +585,15 @@ func test_de_receptie_heeft_een_voordeur_buiten_de_deurgraaf() -> void:
 	for id in Rooms.lijst():
 		if id != "receptie":
 			waar(Rooms.ingang(id).is_empty(), "%s heeft geen voordeur" % id)
-	# the door hangs on the wall over its opening, the mat lies before it
-	var deur := _stuk(r, "voordeur")
-	waar(not deur.is_empty() and bool(deur.get("ver", false)) and bool(deur.get("ingang", false)),
-		"de voordeur hangt aan de wand en weet dat zij de ingang is")
-	gelijk(float(deur.get("x", 0)), (a + b) / 2.0, "midden over de opening")
-	var mat := _stuk(r, "welkomsmat")
-	waar(not mat.is_empty(), "er ligt een welkomstmat")
-	gelijk(float(mat.get("x", 0)), (a + b) / 2.0, "voor de deur")
-	waar(float(mat.get("z", 0)) <= float(ing["iz"]), "vlak voor de deur")
-	# the whole door is in the strip of wall that is always in view
-	waar(Rooms.deur_hoog(r, r.ingang) + 2 <= int(World.WAND_ZICHT / Art.HG),
-		"de deur met haar kozijn blijft altijd in beeld, ook in een laag kader")
+	# only the outline stands there, on the front edge over the opening; the
+	# old door and its mat on the back wall are gone
+	var omlijst := _stuk(r, "voordeuromlijst")
+	waar(not omlijst.is_empty() and not bool(omlijst.get("ver", false)),
+		"de omlijsting staat op de voorrand, niet aan een achterwand")
+	gelijk(float(omlijst.get("x", 0)), (a + b) / 2.0, "midden over de opening")
+	waar(float(omlijst.get("z", 0)) >= float(r.d) - 2.0, "op de rand van de kamer")
+	waar(_stuk(r, "voordeur").is_empty(), "geen dichte deur meer in de achterwand")
+	waar(_stuk(r, "welkomsmat").is_empty(), "en geen matje: het tapijt ligt er al")
 	# no guest wanders onto the mat, no bought plant stands on it
 	for p in r.plekken:
 		waar(absf(p[0] - float(ing["ix"])) + absf(p[1] - float(ing["iz"])) >= 14.0,
@@ -604,8 +614,8 @@ func test_niets_staat_voor_de_voordeur() -> void:
 		% roundi(dekking * 100.0))
 
 ## No walk in the receptie crosses the counter, and neither does the way in from
-## the front door: to every spot at the desk it goes round the desk's end, each
-## leg a straight line in front of it (`WereldBinnenkomst.route`).
+## the front door: from the rug to every spot at the desk each leg is a straight
+## line in front of it (`WereldBinnenkomst.route`).
 func test_de_weg_van_de_voordeur_gaat_om_de_balie() -> void:
 	var r := Rooms.get_kamer("receptie")
 	var b: Dictionary = r.balie

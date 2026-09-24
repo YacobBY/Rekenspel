@@ -119,9 +119,9 @@ func test_elk_dier_komt_anders_binnen() -> void:
 	_na_afloop()
 
 ## He appears on the threshold of the front door — not at the corridor door —
-## and the door stands open until he is well inside: the child sees the sky
-## behind him.  It falls shut once, when he is clear of the doorway.
-func test_de_voordeur_staat_open_tot_hij_binnen_is() -> void:
+## at the front of the lobby, by the pink rug.  The door is only its outline
+## (owner, 2026-09-24): it stands open the whole time and nothing falls shut.
+func test_hij_komt_door_de_open_voordeur_bij_het_tapijt() -> void:
 	var was := Ui.rust_modus()
 	Ui.zet_rust_modus(false)
 	var ing := Rooms.ingang("receptie")
@@ -132,12 +132,11 @@ func test_de_voordeur_staat_open_tot_hij_binnen_is() -> void:
 		gelijk(start, Vector2(float(ing["dx"]), float(ing["dz"])), "%s: op de drempel van de voordeur" % kind)
 		waar(start.distance_to(Vector2(float(gang["ix"]), float(gang["iz"]))) > 60.0,
 			"%s: ver van de deur naar de gang" % kind)
-		waar(s["open0"], "%s: de voordeur gaat open" % kind)
-		var dicht := int(s["dicht_op"])
-		waar(dicht >= 6, "%s: en blijft even open (%d tikken)" % [kind, dicht])
-		waar(float(s["dicht_af"]) >= WereldBinnenkomst.DEUR_AF,
-			"%s: tot hij binnen is (%.0f voxels van de drempel)" % [kind, s["dicht_af"]])
-		waar(not World.ingang_open("receptie"), "%s: daarna is ze dicht" % kind)
+		waar(s["open0"], "%s: de voordeur staat open" % kind)
+		gelijk(int(s["dicht_op"]), -1, "%s: en gaat nooit dicht" % kind)
+		waar(World.ingang_open("receptie"), "%s: ook als hij binnen is niet" % kind)
+		var r := Rooms.get_kamer("receptie")
+		waar(start.y > float(r.matten["z1"]), "%s: hij stapt het tapijt op van de voorkant" % kind)
 	Ui.zet_rust_modus(was)
 	_na_afloop()
 
@@ -201,7 +200,7 @@ func test_de_bel_haalt_de_gast_door_de_voordeur() -> void:
 			gelijk(Vector2(d.x, d.z), Vector2(float(p["x"]), float(p["z"])), "hij staat aan de balie")
 			gelijk(d.staat, "wacht", "en wacht op het kind")
 			waar(t <= MAX_TIKKEN, "binnen vijf seconden (%d tikken)" % t)
-			waar(not World.ingang_open("receptie"), "de voordeur is weer dicht")
+			waar(World.ingang_open("receptie"), "de voordeur blijft open: alleen de omlijsting")
 			gelijk(State.s["checkin"]["gastId"], id, "de check-in is gewoon van hem")
 		World.weg(id)
 	State.s = bewaard
@@ -269,7 +268,7 @@ func test_een_ander_bevel_neemt_het_binnenkomen_over() -> void:
 			World._tik()
 			waar(d.staat != "komt", "%s: de binnenkomst komt niet terug" % kind)
 		gelijk(Vector2(d.x, d.z), Vector2(40, 90), "%s: hij liep waar hij heen moest" % kind)
-		waar(not World.ingang_open("receptie"), "%s: de voordeur viel vanzelf dicht" % kind)
+		waar(World.ingang_open("receptie"), "%s: de open voordeur blijft open" % kind)
 	Ui.zet_rust_modus(was)
 	_na_afloop()
 
@@ -285,7 +284,7 @@ func test_buiten_beeld_staat_hij_meteen_aan_de_balie() -> void:
 	var d = World.dier(T)
 	gelijk(Vector2(d.x, d.z), DOEL, "aan de balie")
 	gelijk(d.staat, "wacht", "wachtend")
-	waar(not World.ingang_open("receptie"), "de voordeur is dicht")
+	waar(World.ingang_open("receptie"), "de voordeur is een open omlijsting")
 	Ui.zet_rust_modus(was)
 	_na_afloop()
 
@@ -301,7 +300,7 @@ func test_rustmodus_zet_hem_meteen_aan_de_balie() -> void:
 	gelijk(Vector2(d.x, d.z), DOEL, "hij staat meteen aan de balie")
 	gelijk(d.staat, "wacht", "en wacht")
 	waar(not World.komt_binnen(T), "er is geen binnenkomst")
-	waar(not World.ingang_open("receptie"), "de voordeur gaat niet open")
+	waar(World.ingang_open("receptie"), "de omlijsting staat gewoon open")
 	# and the bell does the same
 	var bewaard: Dictionary = State.s.duplicate(true)
 	alleen_spellen([])
@@ -445,6 +444,12 @@ func _op_de_deur() -> Dictionary:
 	var uit := {"deel": 0.0, "id": "", "deur": deur}
 	var dbg := Hits.debug()
 	for id in dbg:
+		# a card and its answer strip may stand over the world (world.md §5.5);
+		# on a phone the question floats over the front of the lobby, and with
+		# it over the open doorway there (2026-09-24)
+		var sp := Hits.spot(id)
+		if sp != null and (sp.kind == "kaart" or sp.kind == "keuzes"):
+			continue
 		var snij: Rect2 = (dbg[id]["rect"] as Rect2).intersection(deur)
 		if snij.size.x <= 0.0 or snij.size.y <= 0.0:
 			continue

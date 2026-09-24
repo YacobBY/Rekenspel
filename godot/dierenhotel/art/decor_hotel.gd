@@ -42,7 +42,7 @@ const MAT_D := Color("#D98596")
 
 ## Every model name this file provides, in a fixed order.
 const NAMEN: Array[String] = ["klok", "bloemen", "bankje", "bankjez", "koffer",
-	"kapstok", "poster_poot", "poster_boom", "voordeur", "welkomsmat"]
+	"kapstok", "poster_poot", "poster_boom", "voordeur", "welkomsmat", "voordeuromlijst"]
 
 # ------------------------------------------------------------------ aan de wand
 
@@ -182,6 +182,21 @@ static func voordeur(p := {}) -> Array:
 	ArtVorm.bx(v, 3, 10, 2, 2, 2, 1, ArtDecor.GOUD)
 	return v
 
+## The receptie's front door as it stands in the FRONT edge of the lobby, at the
+## pink rug (owner, 2026-09-24: "alleen de uitlijn en laat hem open zodat je
+## erdoorheen kan kijken en het tapijt zien ... En maak hem wat groter dan de
+## andere deuren"): only its outline — two white posts, a lintel and the
+## threshold on the floor — and open, so you look through it at the rug and the
+## lobby as through every door into the next room.  20 wide and 32 tall inside
+## (a door in a wall is 12 x 26).  Along x, one deep, for the edge z = d.
+static func voordeuromlijst(_p := {}) -> Array:
+	var v: Array = []
+	ArtVorm.bx(v, -11, 0, 0, 1, 32, 1, KOZIJN)
+	ArtVorm.bx(v, 10, 0, 0, 1, 32, 1, KOZIJN)
+	ArtVorm.bx(v, -11, 32, 0, 22, 2, 1, KOZIJN)
+	ArtVorm.bx(v, -10, 0, 0, 20, 1, 1, DREMPEL)
+	return v
+
 # ---------------------------------------------------------------- op de vloer
 
 ## The welcome mat before the front door: pink with a darker border and a white
@@ -258,4 +273,5 @@ static func tabel() -> Dictionary:
 		"poster_boom": Callable(ArtDecorHotel, "poster_boom"),
 		"voordeur": Callable(ArtDecorHotel, "voordeur"),
 		"welkomsmat": Callable(ArtDecorHotel, "welkomsmat"),
+		"voordeuromlijst": Callable(ArtDecorHotel, "voordeuromlijst"),
 	}

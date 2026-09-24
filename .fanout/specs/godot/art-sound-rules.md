@@ -533,7 +533,8 @@ floor behind it (world.md §1.4), so it never reads as one more room.
 | model | where | shape |
 |---|---|---|
 | `voordeur` | receptie, on the wall z = 0 @ 111,1 `ver` over the opening x 105..117 | a white frame (`#FBF7EE`) three deep, 14 wide and 28 tall, round the 12 × 26 opening of every door; over the leaf a fanlight `#FFF1C4` with a white sunburst. `params.open` 0: a mint leaf `#86C9AE` (the hotel's own colour, its collar and its hat; panel `#6DB397`, edge `#A8DCC6`) with a big pane of sky `#D6EEF7`, a hedge `#BFE0B0` low in it, a glint and a pink paw on the glass, and a brass knob. `open` 1: the leaf has swung out of sight and the opening shows outside itself — sky `#CFE9F7` with a sun and a cloud, the hedge, the pavement (`#E8DAC4` / `#DDCDB5`, the garden's paving) and the threshold `#C9A27E` |
-| `welkomsmat` | receptie, before the front door @ 111,7, depth bias −10 | a pink mat `#EF9FAE` 12 × 7, one voxel thin, with a darker border `#D98596` and a white heart: the kitchen's coir mat has a paw, this one says welcome |
+| `voordeuromlijst` | receptie, in the front edge @ 72,119, the middle of the pink rug (2026-09-24) | the front door as only its outline, open: two white posts (`#FBF7EE`) 1 × 32 and a lintel 22 × 2 over them, one deep, round a 20 × 32 opening, and the threshold `#C9A27E` on the floor between the posts — you look through it at the rug and the lobby. Replaces `voordeur` and `welkomsmat` in the room (both models remain) |
+| `welkomsmat` | (not placed since 2026-09-24) receptie, before the old front door @ 111,7, depth bias −10 | a pink mat `#EF9FAE` 12 × 7, one voxel thin, with a darker border `#D98596` and a white heart: the kitchen's coir mat has a paw, this one says welcome |
 
 The door is drawn by the room scene like every wall piece; `scenes/kamer.gd` gives it
 `{open: 1}` while `World.ingang_open()` (§11.8).
