@@ -40,13 +40,13 @@ const LEGENDA := "📦 Elk blokje is 2 stuks"
 ## doeken?" and sees 🧺 on the pile and 🧺 on the crate reads two different
 ## things with the same picture.  The broom is the pile, nothing else.
 const BERG_ICOON := "🧹"
-## The opening sum and the one halfway through (N8).
-const VRAAG_BERG := "Hoeveel stuks liggen er?"
+## Group 5's opening sum (N8): the count on the pile is the given, the blocks
+## it makes are the answer.  Groups 3 and 4 opened with `Hoeveel stuks liggen
+## er?` and every group had `Hoeveel liggen er nog?` halfway, but the pile is a
+## heap of at most eight tufts: the only way to answer either was to read the
+## number on the pile, which was the answer itself.  Both are gone (owner,
+## 2026-09-24: "Haal die hints weg").
 const VRAAG_BLOK := "Hoeveel blokjes worden dat?"
-const VRAAG_NOG := "Hoeveel liggen er nog?"
-## Below this total the middle question has nothing to ask: half of it is one
-## or two taps and the child has not built up a pile to look at yet.
-const TUSSEN_MIN := 8
 
 ## Where things stand (games-b.md §4.4), as a fraction of the room.
 const BERG_F := Vector2(0.60, 0.60)      ## (60, 54) — in front of the row
@@ -171,8 +171,23 @@ func _herstel(bewaard, n: int, band: int, dag: int) -> Dictionary:
 		"k": int(b.get("k", 0)), "r": int(b.get("r", 0)), "T": int(b.get("T", 0)),
 		"per": maxi(1, int(b.get("per", 1))), "m": m, "doel": doel, "rij": rij,
 		"i": i, "vak": vak, "hand": int(b.get("hand", -1)),
-		"stap": str(b.get("stap", "vraag0")), "missers": maxi(0, int(b.get("missers", 0))),
-		"tussen": int(b.get("tussen", 0)), "ster": int(b.get("ster", 0))}
+		"stap": _stap_van(str(b.get("stap", "")), band),
+		"missers": maxi(0, int(b.get("missers", 0))), "ster": int(b.get("ster", 0))}
+
+## Only group 5 opens with a question; the others start sorting at once.
+static func _eerste_stap(band: int) -> String:
+	return "vraag0" if band == 5 else "sorteren"
+
+## A saved step that no longer exists goes back to the sorting: the opening
+## question of groups 3 and 4 and the one halfway (`vraagT`) of an old save.
+static func _stap_van(stap: String, band: int) -> String:
+	if stap == "vraag0":
+		return _eerste_stap(band)
+	if stap in ["sorteren", "vraag1", "vraag2"]:
+		return stap
+	if stap == "vraagT":
+		return "sorteren"
+	return _eerste_stap(band)
 
 func _nieuwe_stand(n: int, band: int, dag: int) -> Dictionary:
 	var q := Sommen.Was.recept(n, band, dag)
@@ -183,8 +198,8 @@ func _nieuwe_stand(n: int, band: int, dag: int) -> Dictionary:
 	return {"dag": int(q["dag"]), "N": int(q["N"]), "band": int(q["band"]),
 		"k": int(q["k"]), "r": int(q["r"]), "T": int(q["T"]), "per": int(q["per"]),
 		"m": m, "doel": _ints(q["blok"]), "rij": _ints(q["rij"]),
-		"i": 0, "vak": vak, "hand": -1, "stap": "vraag0", "missers": 0,
-		"tussen": 0, "ster": 0}
+		"i": 0, "vak": vak, "hand": -1, "stap": _eerste_stap(int(q["band"])),
+		"missers": 0, "ster": 0}
 
 static func _ints(bron) -> Array[int]:
 	var uit: Array[int] = []
@@ -218,9 +233,15 @@ func _over_berg() -> int:
 	var rij: Array = _s.get("rij", [])
 	return maxi(0, rij.size() - int(_s.get("i", 0)))
 
-## Pieces still on the pile — that is what the child reads on the pile.
+## Pieces still on the pile.
 func _stuks_over() -> int:
 	return _over_berg() * _per()
+
+## Does the pile say how many pieces lie on it?  Only in group 5, where that
+## count is the given of the opening sum.  In groups 3 and 4 no question needs
+## it, and in group 4 it is the answer to `Hoeveel stuks samen?` at the end.
+func _toont_aantal() -> bool:
+	return int(_s.get("band", 3)) == 5
 
 func _stuks(i: int) -> int:
 	return int(_vak()[i]) * _per()
@@ -249,8 +270,6 @@ func _laagste_idx() -> int:
 func _antwoord_nu() -> int:
 	if _stap_nu() == "vraag0":
 		return _vraag0_goed()
-	if _stap_nu() == "vraagT":
-		return _stuks_over()
 	if int(_s.get("band", 3)) == 3:
 		return _hoogste_idx()
 	if _stap_nu() == "vraag1":
@@ -261,11 +280,10 @@ func _antwoord_nu() -> int:
 		return _samen()
 	return _stuks(_hoogste_idx()) - _stuks(_laagste_idx())
 
-## The opening sum: the whole pile in pieces, or in blocks of two in group 5.
-## `Sommen.Was` guarantees an even `T` where `per == 2`, so this never rounds.
+## The opening sum of group 5: the whole pile in blocks of two.  `Sommen.Was`
+## guarantees an even `T` where `per == 2`, so this never rounds.
 func _vraag0_goed() -> int:
-	var t := int(_s.get("T", 0))
-	return int(t / 2) if int(_s.get("band", 3)) == 5 else t
+	return int(int(_s.get("T", 0)) / 2)
 
 # ------------------------------------------------------------- waar staat wat
 
@@ -307,7 +325,7 @@ func _teken() -> void:
 	var stap := _stap_nu()
 	if stap == "sorteren":
 		_teken_berg()
-	elif stap == "vraag0" or stap == "vraagT":
+	elif stap == "vraag0":
 		# The pile has to be SEEN for the question to be about it, but it may
 		# not be touched yet: the child answers first and sorts after.
 		_teken_berg(true)
@@ -380,12 +398,11 @@ func _teken_berg(stil := false) -> void:
 	ctx.hotspots.bron(DECOR_BERG, {
 		"id": HOT_BERG, "kamer": KAMER, "icoon": BERG_ICOON,
 		# `aantal: 0` is what makes a source undraggable (`UiBron._get_drag_data`),
-		# so during the two pile questions the child can look at the pile and
-		# read it, but not yet empty it.
+		# so during the opening sum the child can look at the pile and read it,
+		# but not yet empty it.
 		"aantal": 0 if stil else stuks, "hand": 0,
 		"hoog": 18.0, "prio": 11, "klas": "hotwolk",
-		"titel": ("berg met %d stuks was, kijk er goed naar" % stuks) if stil \
-			else ("berg met %d stuks was, tik om er %d te pakken" % [stuks, per]),
+		"titel": _berg_titel(stuks, per, stil),
 		# dragging picks up on the way: the drag starts on the pile, so the top
 		# piece is already in your hand when you arrive at the crate
 		"sleep": SLEEP, "data": {},
@@ -413,8 +430,11 @@ func _kleed_berg(stuks: int, per: int, stil := false) -> void:
 	var b := Ui.bron_van(HOT_BERG)
 	if b == null:
 		return
-	b.text = "%s %d" % [BERG_ICOON, stuks] if _berg_kort \
-		else "%s %d nog te sorteren" % [BERG_ICOON, stuks]
+	if _toont_aantal():
+		b.text = "%s %d" % [BERG_ICOON, stuks] if _berg_kort \
+			else "%s %d nog te sorteren" % [BERG_ICOON, stuks]
+	else:
+		b.text = BERG_ICOON if _berg_kort else "%s nog te sorteren" % BERG_ICOON
 	b.zet(0, 0)                      # the pills stay out: the count is in the sentence
 	var rij := b.get_node_or_null("Tellers")
 	if rij == null:
@@ -431,13 +451,21 @@ func _kleed_berg(stuks: int, per: int, stil := false) -> void:
 			UiThema.vulling(UiThema.vlak(UiThema.MUNT, 999, 2, UiThema.WIT), 6, 0))
 		rij.add_child(greep)
 	greep.text = "pak %d" % per
-	# During the two pile questions the pile cannot be emptied (`aantal` is 0),
+	# During the opening sum the pile cannot be emptied (`aantal` is 0),
 	# so a handle that says "pak 2" would be a button that lies.  It goes away
 	# with the drag, and the pile takes one pill-row less height with it.
 	greep.visible = not stil
 	# a Button never measures its children, so the pill row is added by hand
 	var pil_h := 0.0 if stil else greep.get_combined_minimum_size().y
 	b.custom_minimum_size = Vector2(UiThema.HOT, float(UiThema.HOT) + pil_h)
+
+## The pile's tooltip carries its count only where the pile itself shows it.
+func _berg_titel(stuks: int, per: int, stil: bool) -> String:
+	if stil:
+		return "berg met %d stuks was, kijk er goed naar" % stuks
+	if _toont_aantal():
+		return "berg met %d stuks was, tik om er %d te pakken" % [stuks, per]
+	return "berg met was, tik om er %d te pakken" % per
 
 func _hand_tekst() -> String:
 	var so := WasSoorten.soort(_hand())
@@ -555,31 +583,9 @@ func _leg_in(i: int) -> bool:
 		_mis_bij_krat(i)
 	if int(_s["i"]) >= rij.size() and _stap_nu() == "sorteren":
 		_klaar_met_sorteren()
-	elif soort == i and _tussensom_val():
-		_tussensom()
 	else:
 		_meld("sorteer")
 	return soort == i
-
-## Half of a pile that is big enough to be worth halving.  Once per turn: the
-## flag rides in the save, so a reload never asks the same question twice.
-func _tussensom_val() -> bool:
-	var t := int(_s.get("T", 0))
-	return t >= TUSSEN_MIN and int(_s.get("tussen", 0)) == 0 \
-		and _stuks_over() <= int(t / 2)
-
-## The middle question cuts through the sorting.  The pile stays where it is,
-## the card comes up over the crates, and a right answer hands the crates
-## back exactly where the child left off.
-func _tussensom() -> void:
-	_s["stap"] = "vraagT"
-	_s["tussen"] = 1
-	_s["missers"] = 0
-	_t0 = Time.get_ticks_msec()
-	State.bewaar()
-	_teken()
-	_vraag_kaart()
-	_meld("vraag")
 
 ## Sort the whole pile correctly — the test hook of the HTML (`doe('sorteer')`).
 func sorteer_alles() -> int:
@@ -676,28 +682,13 @@ func _vraag_kaart() -> Ui.Kaart:
 				"kies": func(_id, _k) -> void: ctx.sluit()}]})
 		_regel_indeling()
 		return _kaart
-	# The opening sum (N8).  The pile is asked before a single piece moves, so
-	# the child commits to a number and then watches that same number walk down
-	# the counter while sorting.  In group 5 the question is the conversion:
-	# the legend rides along on the card, because without it it is unanswerable.
+	# Group 5's opening sum (N8), before a single piece moves: the pile says
+	# how many pieces, the card asks how many blocks.  The legend rides along
+	# on the card, because without it the question is unanswerable.
 	if _stap_nu() == "vraag0":
-		var o0 := {"id": HOT_KAART, "kamer": KAMER, "hoog": KAART_HOOG,
-			"icoon": "📊", "goed": _vraag0_goed(),
-			"on_ok": func(n, k) -> void: _antwoord(n, k)}
-		if band == 5:
-			o0["regel"] = VRAAG_BLOK
-			o0["regel2"] = LEGENDA
-		else:
-			o0["regel"] = VRAAG_BERG
-		_kaart = ctx.ui.somkaart(obj, "", o0)
-		_regel_indeling()
-		return _kaart
-	# The same question halfway through, once there is a pile left worth asking
-	# about.  Answering it sends the child back to the crates.
-	if _stap_nu() == "vraagT":
-		_kaart = ctx.ui.somkaart(obj, "", {
-			"id": HOT_KAART, "kamer": KAMER, "hoog": KAART_HOOG, "icoon": "📊",
-			"regel": VRAAG_NOG, "goed": _stuks_over(),
+		_kaart = ctx.ui.somkaart(obj, "", {"id": HOT_KAART, "kamer": KAMER,
+			"hoog": KAART_HOOG, "icoon": "📊", "goed": _vraag0_goed(),
+			"regel": VRAAG_BLOK, "regel2": LEGENDA,
 			"on_ok": func(n, k) -> void: _antwoord(n, k)})
 		_regel_indeling()
 		return _kaart
@@ -736,8 +727,8 @@ func _vraag_kaart() -> Ui.Kaart:
 				str(WasSoorten.soort(l)["naam"])]
 		# The legend is asked for on every group-5 question and weighed from
 		# scratch each time; deciding it from the previous card's verdict left
-		# the tussensom's shorter card with a stale "no room" that then stuck
-		# to vraag 1.
+		# the opening sum's card with a stale "no room" that then stuck to
+		# vraag 1.
 		o["regel2"] = LEGENDA
 	_kaart = ctx.ui.somkaart(obj, som, o)
 	_regel_indeling()
@@ -792,7 +783,7 @@ func _antwoord(n, k) -> bool:
 func _volgende() -> void:
 	var stap := _stap_nu()
 	_s["missers"] = 0
-	if stap == "vraag0" or stap == "vraagT":
+	if stap == "vraag0":
 		_s["stap"] = "sorteren"
 	elif int(_s.get("band", 3)) != 3 and stap == "vraag1":
 		_s["stap"] = "vraag2"
@@ -876,10 +867,10 @@ func _regel_indeling() -> void:
 	# gets its words back
 	_legenda_wolk = true
 	_berg_kort = false
-	# During the two pile questions the card asks the question, so the pile
-	# does not have to say it too: the number stays, the words go.  That frees
-	# the band cells the second line of the card needs (games-b.md §4.6).
-	if _stap_nu() == "vraag0" or _stap_nu() == "vraagT":
+	# During the opening sum the card asks the question, so the pile does not
+	# have to say it too: the number stays, the words go.  That frees the band
+	# cells the second line of the card needs (games-b.md §4.6).
+	if _stap_nu() == "vraag0":
 		_berg_kort = true
 	_voet = int(uit["voet"])
 	_stap = int(uit["stap"])

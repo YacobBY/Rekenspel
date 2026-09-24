@@ -28,11 +28,11 @@ const KINDTEKST := [
 	"Elk blokje is 2 stuks",
 	"Welke stapel is het hoogst?", "kies een stapel",
 	"Hoeveel meer %s dan %s?", "Hoeveel stuks samen?", "Hoeveel %s zijn het?",
-	"Hoeveel stuks liggen er?", "Hoeveel blokjes worden dat?",
-	"Hoeveel liggen er nog?",
+	"Hoeveel blokjes worden dat?",
 	"Alles gesorteerd!", "klaar",
 	"blokje", "blokjes", "krat met %s: %d %s",
 	"berg met %d stuks was, tik om er %d te pakken",
+	"berg met was, tik om er %d te pakken",
 ]
 ## What the pile and the hand say, per kind — the game composes these from the
 ## table in `WasSoorten`, so the table is what is checked (§4.10).
@@ -123,9 +123,9 @@ func _tik(id: String) -> bool:
 	(s.knoop as BaseButton).emit_signal("pressed")
 	return true
 
-## One tap on the pile, one on a crate — exactly what a child does.  The
-## opening question and the one halfway through are answered on the way,
-## because a child answers them and then simply keeps sorting (N8).
+## One tap on the pile, one on a crate — exactly what a child does.  Group 5's
+## opening question is answered on the way, because a child answers it and then
+## simply keeps sorting (N8).
 func _sorteer_alles() -> int:
 	var veilig := 0
 	while veilig < 240:
@@ -134,7 +134,7 @@ func _sorteer_alles() -> int:
 		if st.is_empty():
 			break
 		var stap := str(st.get("stap", ""))
-		if stap == "vraag0" or stap == "vraagT":
+		if stap == "vraag0":
 			if not _antwoord_goed():
 				break
 			continue
@@ -223,9 +223,9 @@ func _antwoord_goed() -> bool:
 	var juist: int = s.juist()
 	var st := _stand()
 	var stap := str(st.get("stap", ""))
-	# The two pile questions are numbers in every band; only the crate
-	# question of group 3 is a choice of kinds.
-	if stap == "vraag0" or stap == "vraagT":
+	# The opening question is a number; only the crate question of group 3 is
+	# a choice of kinds.
+	if stap == "vraag0":
 		return _toets(juist)
 	if int(st.get("band", 3)) == 3:
 		return _kies(str(WasSoorten.soort(juist)["id"]))
@@ -306,23 +306,30 @@ func test_beurt_per_band() -> void:
 		var st := _stand()
 		var per := int(st["per"])
 		gelijk(per, 2 if band == 5 else 1, "per tik bij band %d" % band)
-		# the pile says how much is left, and it is not yours to touch yet
 		var bron := Ui.bron_van("ws_berg")
-		waar(bron != null, "de berg hangt er bij de opening (band %d)" % band)
-		if bron != null:
-			gelijk(bron.text, "🧹 %d" % int(st["T"]),
-				"tijdens de opening doet het cijfer op de berg het alleen (band %d)" % band)
-			gelijk(int(bron.aantal), 0, "en is nog niet sleepbaar (band %d)" % band)
-		gelijk(str(st["stap"]), "vraag0", "het spel begint met de opening (band %d)" % band)
-		waar(_tik("ws_berg"), "de berg staat er")
-		waar(int(_stand()["hand"]) < 0, "maar er komt niets in de hand (band %d)" % band)
-		# the opening question, answered, and the crates are the child's
-		waar(_antwoord_goed(), "opening beantwoord (band %d)" % band)
-		await _spoel(1.0)
-		gelijk(str(_stand()["stap"]), "sorteren",
-			"en dan pas mag er gesorteerd worden (band %d)" % band)
-		gelijk(Ui.bron_van("ws_berg").text, "🧹 %d nog te sorteren" % int(st["T"]),
-			"tijdens het sorteren heeft de berg zijn woorden terug (band %d)" % band)
+		waar(bron != null, "de berg hangt er bij de start (band %d)" % band)
+		if band == 5:
+			# group 5 opens with a sum about the pile: it says how many pieces,
+			# and it is not yours to touch yet
+			if bron != null:
+				gelijk(bron.text, "🧹 %d" % int(st["T"]),
+					"tijdens de opening doet het cijfer op de berg het alleen")
+				gelijk(int(bron.aantal), 0, "en is nog niet sleepbaar")
+			gelijk(str(st["stap"]), "vraag0", "groep 5 begint met de opening")
+			waar(_tik("ws_berg"), "de berg staat er")
+			waar(int(_stand()["hand"]) < 0, "maar er komt niets in de hand")
+			waar(_antwoord_goed(), "opening beantwoord")
+			await _spoel(1.0)
+			gelijk(str(_stand()["stap"]), "sorteren", "en dan pas mag er gesorteerd worden")
+			gelijk(Ui.bron_van("ws_berg").text, "🧹 %d nog te sorteren" % int(st["T"]),
+				"tijdens het sorteren heeft de berg zijn woorden terug")
+		else:
+			# groups 3 and 4 sort at once, and the pile never says how much
+			gelijk(str(st["stap"]), "sorteren", "band %d begint met sorteren" % band)
+			waar(Hits.spot("ws_vraag") == null, "zonder vraagkaart (band %d)" % band)
+			if bron != null:
+				gelijk(bron.text, "🧹 nog te sorteren",
+					"de berg noemt geen aantal (band %d)" % band)
 		# one piece in the hand, and the hand says so in words
 		waar(_tik("ws_berg"), "tik op de berg")
 		var hand := int(_stand()["hand"])
@@ -364,86 +371,100 @@ func test_beurt_per_band() -> void:
 		gelijk(Games.actief(), "", "het spel is gesloten (band %d)" % band)
 	_licht_af()
 
-## N8: the turn opens with a question about the pile, before a single piece
-## moves.  Four buttons under the card, and the pile may be looked at but not
-## emptied — `aantal: 0` is what makes a source undraggable.
-func test_het_spel_begint_met_een_vraag() -> void:
+## N8: group 5 opens with a question about the pile, before a single piece
+## moves — the pile says how many pieces, the card asks how many blocks.  Four
+## buttons under the card, and the pile may be looked at but not emptied
+## (`aantal: 0` is what makes a source undraggable).  Groups 3 and 4 sort at
+## once (owner, 2026-09-24: "Haal die hints weg"): their opening question could
+## only be answered by reading the number on the pile.
+func test_alleen_groep_5_begint_met_een_vraag() -> void:
 	_licht_op()
 	for band in BANDEN:
 		_wereld(band)
 		waar(Games.start(ID), "start band %d" % band)
 		var st := _stand()
-		gelijk(str(st["stap"]), "vraag0", "band %d begint met de opening" % band)
-		var goed := int(int(st["T"]) / 2) if band == 5 else int(st["T"])
-		gelijk(int(_spel().juist()), goed, "band %d vraagt om %d" % [band, goed])
-		var strook := Hits.spot("ws_vraag_keuzes")
-		waar(strook != null, "er hangt een keuzestrook onder de kaart (band %d)" % band)
-		if strook != null:
-			gelijk(strook.knoop.get_node("Rij").get_child_count(), 4,
-				"vier keuzes bij band %d" % band)
-			waar(strook.knoop.get_node_or_null("Rij/Kn%d" % goed) != null,
-				"en het goede getal staat ertussen (band %d)" % band)
 		var berg := Ui.bron_van("ws_berg")
-		waar(berg != null, "de berg is te zien bij de vraag (band %d)" % band)
+		waar(berg != null, "de berg is te zien (band %d)" % band)
+		if band != 5:
+			gelijk(str(st["stap"]), "sorteren", "band %d sorteert meteen" % band)
+			waar(Hits.spot("ws_vraag") == null, "geen vraag over de berg (band %d)" % band)
+			Games.stop()
+			continue
+		gelijk(str(st["stap"]), "vraag0", "band 5 begint met de opening")
+		var goed := int(int(st["T"]) / 2)
+		gelijk(int(_spel().juist()), goed, "band 5 vraagt om %d blokjes" % goed)
+		gelijk(_kaart_tekst("regel"), "📊 Hoeveel blokjes worden dat?", "de vraag zelf")
+		var strook := Hits.spot("ws_vraag_keuzes")
+		waar(strook != null, "er hangt een keuzestrook onder de kaart")
+		if strook != null:
+			gelijk(strook.knoop.get_node("Rij").get_child_count(), 4, "vier keuzes")
+			waar(strook.knoop.get_node_or_null("Rij/Kn%d" % goed) != null,
+				"en het goede getal staat ertussen")
 		if berg != null:
-			gelijk(int(berg.aantal), 0, "maar hij is niet sleepbaar (band %d)" % band)
-		waar(_tik("ws_berg"), "de berg staat er (band %d)" % band)
-		waar(int(_stand()["hand"]) < 0, "en er komt niets in de hand (band %d)" % band)
+			gelijk(int(berg.aantal), 0, "maar de berg is niet sleepbaar")
+		waar(_tik("ws_berg"), "de berg staat er")
+		waar(int(_stand()["hand"]) < 0, "en er komt niets in de hand")
 		Games.stop()
 	_licht_af()
 
-## N8: halfway through a pile that is worth halving, the same question comes
-## back.  A pile of three pieces is not worth halving, so group 3 with T = 3
-## never hears it.
-func test_de_tussensom_komt_halverwege() -> void:
+## The owner, 2026-09-24: "Haal die hints weg".  Halfway there used to be
+## `Hoeveel liggen er nog?`, answered by the number on the pile.  Now the
+## sorting runs through to the chart in every band, and in groups 3 and 4 the
+## pile never says how many pieces lie on it, not in its tooltip either: in
+## group 4 that count is the answer to `Hoeveel stuks samen?` at the end.
+func test_geen_tussensom_en_geen_aantal_op_de_berg() -> void:
 	_licht_op()
-	# band 4 with N = 5 gives T = 20: halverwege komt de vraag
+	for band in BANDEN:
+		_wereld(band)
+		waar(Games.start(ID), "start band %d" % band)
+		waar(_door_de_opening(), "de opening, als die er is (band %d)" % band)
+		var per := int(_stand()["per"])
+		var stappen: Array[String] = []
+		var veilig := 0
+		while veilig < 80:
+			veilig += 1
+			var st := _stand()
+			stappen.append(str(st["stap"]))
+			if str(st["stap"]) != "sorteren":
+				break
+			var rij: Array = st["rij"]
+			if int(st["i"]) >= rij.size():
+				break
+			var berg := Ui.bron_van("ws_berg")
+			if band != 5 and berg != null:
+				gelijk(berg.text, "🧹 nog te sorteren",
+					"band %d, stuk %d: geen aantal op de berg" % [band, int(st["i"])])
+				gelijk(berg.tooltip_text, "berg met was, tik om er %d te pakken" % per,
+					"band %d, stuk %d: en ook niet in de titel" % [band, int(st["i"])])
+			_tik("ws_berg")
+			_tik("ws_k%d" % int(rij[int(st["i"])]))
+		waar(not stappen.has("vraagT"), "band %d: geen tussensom" % band)
+		gelijk(str(_stand()["stap"]), "vraag1",
+			"band %d: de berg is leeg en de vraag over het diagram komt" % band)
+		Games.stop()
+	_licht_af()
+
+## A save from before 2026-09-24 can stand on a question that is gone: the
+## opening of groups 3 and 4, or the one halfway.  It picks up the sorting.
+func test_een_oude_opslag_sorteert_verder() -> void:
+	_licht_op()
 	_wereld(4)
 	waar(Games.start(ID), "band 4 start")
-	gelijk(int(_stand()["T"]), 20, "de opzet geeft T = 20")
-	waar(_door_de_opening(), "de opening is beantwoord")
-	var gesorteerd := 0
-	var veilig := 0
-	while veilig < 60:
-		veilig += 1
+	for _q in 2:
 		var st := _stand()
-		if str(st["stap"]) != "sorteren":
-			break
-		var rij: Array = st["rij"]
-		if int(st["i"]) >= rij.size():
-			break
 		_tik("ws_berg")
-		_tik("ws_k%d" % int(rij[int(st["i"])]))
-		gesorteerd += 1
-	gelijk(gesorteerd, 10, "de helft van de 20 stuks is weg")
-	gelijk(str(_stand()["stap"]), "vraagT", "en dan komt de tussensom")
-	gelijk(int(_stand()["tussen"]), 1, "de vlag staat, dus maar één keer")
-	gelijk(_kaart_tekst("regel"), "📊 Hoeveel liggen er nog?", "de vraag zelf")
-	gelijk(int(_spel().juist()), 10, "om precies de helft")
-	waar(_antwoord_goed(), "die is te beantwoorden")
-	await _spoel(1.0)
-	gelijk(str(_stand()["stap"]), "sorteren", "en dan wordt er weer gesorteerd")
+		_tik("ws_k%d" % int(st["rij"][int(st["i"])]))
 	Games.stop()
-	# band 3 with one guest gives T = 3: te klein om te halveren
-	_wereld(3, 1, 1)
-	waar(Games.start(ID), "band 3 met één gast start")
-	gelijk(int(_stand()["T"]), 3, "de opzet geeft T = 3")
-	waar(_door_de_opening(), "ook hier eerst de opening")
-	var veilig2 := 0
-	while veilig2 < 40:
-		veilig2 += 1
-		var st := _stand()
-		if str(st["stap"]) != "sorteren":
-			break
-		var rij: Array = st["rij"]
-		if int(st["i"]) >= rij.size():
-			break
-		_tik("ws_berg")
-		_tik("ws_k%d" % int(rij[int(st["i"])]))
-	waar(str(_stand()["stap"]) != "vraagT",
-		"bij T = 3 komt er geen tussensom (stap %s)" % str(_stand()["stap"]))
-	gelijk(int(_stand().get("tussen", 0)), 0, "en de vlag blijft uit")
-	Games.stop()
+	for oud in ["vraag0", "vraagT"]:
+		var bewaard: Dictionary = State.spel_data(ID).get("stand", {})
+		waar(not bewaard.is_empty(), "%s: er is een opgeslagen beurt" % oud)
+		bewaard["stap"] = oud
+		bewaard["tussen"] = 1
+		Games.start(ID)
+		gelijk(str(_stand()["stap"]), "sorteren", "%s: hij sorteert verder" % oud)
+		gelijk(int(_stand()["i"]), 2, "%s: waar hij was" % oud)
+		waar(Hits.spot("ws_vraag") == null, "%s: zonder vraagkaart" % oud)
+		Games.stop()
 	_licht_af()
 
 ## The wording of every question, per band, verbatim (games-b.md §4.8, §4.10).
@@ -579,11 +600,11 @@ func test_geen_hulp_na_een_fout() -> void:
 		Games.stop()
 	_licht_af()
 
-## The opening question about the pile, wrong three times: the same pause, and
-## no ghost number on the pile either.
+## The opening question about the pile (group 5), wrong three times: the same
+## pause, and no ghost number on the pile either.
 func test_geen_hulp_bij_de_openingsvraag() -> void:
 	_licht_op()
-	_wereld(4)
+	_wereld(5)
 	Games.start(ID)
 	gelijk(str(_stand().get("stap", "")), "vraag0", "de beurt opent met de vraag over de berg")
 	var voor := beeld(ID)
@@ -829,6 +850,9 @@ func test_kindtekst_staat_letterlijk_in_de_bron() -> void:
 	# the help ladder is gone (owner, 2026-09-24)
 	for weg in ["tel de blokjes", "kijk naar de hoogste stapel", "tel_mee", "_spook"]:
 		waar(not bron.contains(weg), 'de hulp "%s" staat niet meer in de bron' % weg)
+	# and so are the two questions the number on the pile answered by itself
+	for weg in ["Hoeveel stuks liggen er?", "Hoeveel liggen er nog?"]:
+		waar(not bron.contains('"%s"' % weg), 'de vraag "%s" is weg' % weg)
 	# and the font really carries every character of them
 	for zin in KINDTEKST + HAND_EEN + HAND_TWEE + GREEP \
 			+ ["🧦", "🧣", "🧺", "🧸", "🧹", "📊", "📦", "✅", "👍"]:
@@ -839,9 +863,7 @@ func test_kindtekst_staat_letterlijk_in_de_bron() -> void:
 ## characters), for every combination of kinds the generator can produce.
 func test_elke_kaartzin_past_in_f4() -> void:
 	var zinnen: Array[String] = ["Welke stapel is het hoogst?", "Hoeveel stuks samen?",
-		"Alles gesorteerd!", "📦 Elk blokje is 2 stuks",
-		"Hoeveel stuks liggen er?", "Hoeveel blokjes worden dat?",
-		"Hoeveel liggen er nog?"]
+		"Alles gesorteerd!", "📦 Elk blokje is 2 stuks", "Hoeveel blokjes worden dat?"]
 	for a in WasSoorten.LIJST:
 		zinnen.append("Hoeveel %s zijn het?" % str(a["naam"]))
 		for b in WasSoorten.LIJST:

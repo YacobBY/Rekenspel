@@ -423,35 +423,34 @@ func _fout_getal(goed: int) -> int:
 			return k
 	return goed + 1
 
-## N7: as soon as something lies on the counter the second line counts the rest
-## down.  Until then it is the instruction, and while a coin too many is sliding
-## back it is the instruction again — never a rest of zero or less.
-func test_de_restregel_telt_af() -> void:
+## The owner, 2026-09-24: "Haal die hints weg".  The card used to count the
+## rest down from the first coin on ("Nog €3 erbij"): the difference the child
+## has to work out himself.  Now the second line is the instruction, before the
+## first coin, after every coin and while a coin too many slides back.
+func test_de_tweede_regel_telt_niet_voor() -> void:
 	_op()
 	_wereld(1, 3)
 	Games.start(SPEL)
 	var o := Sommen.Kraam.opzet(1, 3, 2)
 	var doel := int(o["doel"])
-	waar(doel >= 4, "er valt genoeg af te tellen (€%d)" % doel)
+	waar(doel >= 4, "er ligt genoeg te leggen (€%d)" % doel)
 	gelijk(_kaart_tekst("Kolom/Regel2"), "Leg de munten op de toonbank",
 		"een lege toonbank vraagt om munten")
 	_tik("kr_m1")
 	_tik(BANK)
-	gelijk(_kaart_tekst("Kolom/Regel2"), "Nog %s erbij" % Sommen.Kraam.euro(doel - 1),
-		"na de eerste munt staat er hoeveel er nog bij moet")
-	_tik("kr_m2")
-	_tik(BANK)
-	gelijk(_kaart_tekst("Kolom/Regel2"), "Nog %s erbij" % Sommen.Kraam.euro(doel - 3),
-		"en hij telt verder af")
-	# one coin too many: it lies there for a moment, and the card says no
-	# "Nog €−1 erbij" in that half second
+	gelijk(_kaart_tekst("Kolom/Regel2"), "Leg de munten op de toonbank",
+		"na de eerste munt zegt de kaart niet hoeveel er nog bij moet")
 	_tik("kr_m2")
 	_tik(BANK)
 	gelijk(_kaart_tekst("Kolom/Regel2"), "Leg de munten op de toonbank",
-		"te veel telt niet af")
+		"en na de tweede ook niet")
+	_tik("kr_m2")
+	_tik(BANK)
+	gelijk(_kaart_tekst("Kolom/Regel2"), "Leg de munten op de toonbank",
+		"een munt te veel verandert de zin niet")
 	await _wacht(0.9)
-	gelijk(_kaart_tekst("Kolom/Regel2"), "Nog %s erbij" % Sommen.Kraam.euro(doel - 3),
-		"na het terugschuiven telt hij weer af")
+	gelijk(_kaart_tekst("Kolom/Regel2"), "Leg de munten op de toonbank",
+		"ook niet als hij teruggeschoven is")
 	_tik("kr_m1")
 	_tik(BANK)
 	gelijk(_stand().get("stap", ""), "af", "en bij het doel is de beurt af")
@@ -857,7 +856,7 @@ func test_hele_euros_onder_twintig() -> void:
 func test_kindtekst_letterlijk() -> void:
 	var bron := FileAccess.get_file_as_string("res://games/kraam/spel.gd")
 	waar(not bron.is_empty(), "spel.gd is te lezen")
-	for zin in ["nog geen gasten", "Leg de munten op de toonbank", "Nog %s erbij",
+	for zin in ["nog geen gasten", "Leg de munten op de toonbank",
 			"Hoeveel euro samen?", "Hoeveel krijgt hij terug?",
 			"Leg het wisselgeld neer", "Veel plezier ermee!", "klaar met tellen",
 			"in je hand", "tik een getal",
@@ -867,7 +866,7 @@ func test_kindtekst_letterlijk() -> void:
 			"%s krijgt %s terug", "%s wil een souvenir", "Souvenir", "Kraam"]:
 		waar(bron.contains('"%s"' % zin), "de tekst %s staat er letterlijk" % zin)
 	# and the words of the old help ladder are gone (owner, 2026-09-24)
-	for weg in ["zoveel is het", "dit moet er nog bij", "hotspook"]:
+	for weg in ["zoveel is het", "dit moet er nog bij", "hotspook", "Nog %s erbij"]:
 		waar(not bron.contains('"%s"' % weg), "geen %s meer in spel.gd" % weg)
 	# every sentence, with the longest name of the pool, inside the F4 budget
 	var naam := "Stampertje"
@@ -879,9 +878,6 @@ func test_kindtekst_letterlijk() -> void:
 			var k: Array = []
 			for id in o["keus"]:
 				k.append(_waar(o, str(id)))
-			# the rest line, with every amount this band can still be short of
-			for rest in range(1, int(o["doel"]) + 1):
-				zinnen.append("Nog %s erbij" % Sommen.Kraam.euro(rest))
 			if band <= 3:
 				zinnen.append("%s wil %s %s van %s" % [naam, k[0]["lid"], k[0]["naam"],
 					Sommen.Kraam.euro(int(k[0]["prijs"]))])

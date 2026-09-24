@@ -1763,6 +1763,18 @@ html-inhoud:
 titel: 'berg met <n> stuks was, tik om er <per> te pakken'
 ```
 
+**Port (eigenaar 2026-09-24: "Haal die hints weg"):** de berg is `🧹` en draagt
+zijn aantal alleen in groep 5, waar het het gegeven van de openingssom is
+(`📊 Hoeveel blokjes worden dat?` met `📦 Elk blokje is 2 stuks`, `goed = T / 2`,
+stap `vraag0`, de berg dan nog niet sleepbaar).  In groep 3 en 4 zegt hij alleen
+`🧹 nog te sorteren` (krap: `🧹`), titel `'berg met was, tik om er <per> te
+pakken'`: de berg is een hoop van hooguit acht plukjes, dus `Hoeveel stuks
+liggen er?` (de oude opening van groep 3/4) en `Hoeveel liggen er nog?` (de oude
+tussensom halverwege, elke groep) waren alleen met dat getal te beantwoorden —
+het getal wás het antwoord — en in groep 4 is het ook het antwoord op `Hoeveel
+stuks samen?`.  Beide vragen zijn weg; groep 3 en 4 sorteren meteen.  Een oude
+opslag op `vraag0` (groep 3/4) of `vraagT` sorteert verder.
+
 De **teller** hoort bij de berg en wat je in je handen hebt bij je handen: samen
 in één knop las een kind het als "🧦 26 twee sokken". Het handwolkje
 (`ws_hand`, klas `goed`) hangt **laag** bij de berg (`hoog 2`, `prio 9`), zodat
@@ -1839,7 +1851,8 @@ niet op de kaart zelf past (krap kader). Bij `stap === 'af'` staat hij er niet.
 | moment | tekst |
 |---|---|
 | icoontje / prikbord | `'Was sorteren'`, icoon `🧺` |
-| berg | `🧺` + aantal + `'nog te sorteren'` + `'pak 1'` of `'pak 2'` |
+| berg | groep 5: `🧹` + aantal + `'nog te sorteren'` + `'pak 2'`; groep 3/4: `🧹` + `'nog te sorteren'` + `'pak 1'`, zonder aantal (2026-09-24) |
+| opening (groep 5) | `'Hoeveel blokjes worden dat?'` met `'📦 Elk blokje is 2 stuks'` |
 | in je hand | `'een sok'` / `'een sjaal'` / `'een doek'` / `'een knuffel'`, of `'twee sokken'` / `'twee sjaals'` / `'twee doeken'` / `'twee knuffels'` |
 | krat (label) | `'sokken'` → `'sok'` → alleen 🧦 (naar gelang de ruimte) |
 | krat (titel) | `'krat met <meervoud>: <n> blokje'` / `'… blokjes'` |
@@ -2154,9 +2167,11 @@ je niets mee kunt. Icoon: `✅` (af), `👛` (band 5), anders `🎁`.
   niet: `legPog++`, `missers++`, `snd.zacht()` en de klant is even sip met
   `🔄 Nog een keer`. Nooit rood, nooit een kruis — en nooit een hint (eigenaar
   2026-09-24): geen `'+€<verschil>' 'erbij'`, geen hulpregel
-  `'€2 + €2 + €1'`, geen spookmunten. De tweede kaartregel `'Nog €<rest> erbij'`
-  (N7) telt wél af zodra er iets ligt: die staat er vanaf de eerste munt, bij
-  goed en fout gelijk, en is dus geen antwoord op een misser.
+  `'€2 + €2 + €1'`, geen spookmunten. De tweede kaartregel blijft de opdracht
+  (`'Leg de munten op de toonbank'` / `'Leg het wisselgeld neer'`): de regel
+  `'Nog €<rest> erbij'` (N7), die vanaf de eerste munt het verschil voorrekende,
+  is weg (eigenaar 2026-09-24: "Haal die hints weg") — hoeveel er nog bij moet
+  rekent het kind zelf uit de prijs en wat er op de toonbank ligt.
 
 ### 5.9 Het cijferpad (band 4 en 5)
 

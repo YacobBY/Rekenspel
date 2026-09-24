@@ -19,7 +19,10 @@ extends MiniGame
 ## `🔄 Nog een keer` beside him, and nothing else appears — no counting line,
 ## no ghost coins on the grass, no "+€3 erbij", no "€1 terug".  The coin that
 ## was one too many still slides back: the counter never holds more than the
-## price, that is the stall itself and not a hint.
+## price, that is the stall itself and not a hint.  And no hint BEFORE a miss
+## either: the card no longer counts the rest down while the coins go on (owner,
+## 2026-09-24: "Haal die hints weg") — how much is still missing is the sum the
+## child makes, from the price and what lies on the counter.
 ##
 ## WHAT THE GODOT PORT DOES DIFFERENTLY, and why (the owner's rule: "als Godot
 ## verbeteringen biedt implementeer die dan"):
@@ -96,7 +99,6 @@ const T_LABEL := "Kraam"
 const T_LEEG := "nog geen gasten"
 const T_TAAK := "Souvenir"
 const T_LEG_MUNTEN := "Leg de munten op de toonbank"
-const T_NOG := "Nog %s erbij"
 const T_SAMEN := "Hoeveel euro samen?"
 const T_TERUG_VRAAG := "Hoeveel krijgt hij terug?"
 const T_WISSEL_NEER := "Leg het wisselgeld neer"
@@ -521,33 +523,19 @@ func _zinnen() -> Array:
 	var band := int(O["band"])
 	if band <= 3:
 		return ["%s wil %s %s van %s" % [naam, str(k[0]["lid"]), str(k[0]["naam"]),
-			Sommen.Kraam.euro(int(k[0]["prijs"]))], _leg_regel(T_LEG_MUNTEN)]
+			Sommen.Kraam.euro(int(k[0]["prijs"]))], T_LEG_MUNTEN]
 	if band == 4:
 		if _stap() == "som":
 			return ["%s %s en %s %s" % [_hoofd(str(k[0]["naam"])),
 				Sommen.Kraam.euro(int(k[0]["prijs"])), str(k[1]["naam"]),
 				Sommen.Kraam.euro(int(k[1]["prijs"]))], T_SAMEN]
 		return ["Samen kost het %s" % Sommen.Kraam.euro(int(O["kosten"])),
-			_leg_regel(T_LEG_MUNTEN)]
+			T_LEG_MUNTEN]
 	if _stap() == "som":
 		return ["%s gaf %s, het kost %s" % [naam, Sommen.Kraam.euro(int(O["betaald"])),
 			Sommen.Kraam.euro(int(O["kosten"]))], T_TERUG_VRAAG]
 	return ["%s krijgt %s terug" % [naam, Sommen.Kraam.euro(int(O["wissel"]))],
-		_leg_regel(T_WISSEL_NEER)]
-
-## The second line while the coins are going down.  As long as the counter is
-## empty it says what to do; from the first coin on it counts the rest down, so
-## the card stops reading "€11 €0" with nothing to tell the child how far he
-## still has to go.  Too much (a coin on its way back) keeps the instruction:
-## the shopper's sulk says it was wrong, and nothing says by how much.
-func _leg_regel(standaard: String) -> String:
-	if _stap() != "leg" or O.is_empty():
-		return standaard
-	var ligt := _op_bank()
-	var rest := int(O["doel"]) - ligt
-	if ligt <= 0 or rest <= 0:
-		return standaard
-	return T_NOG % Sommen.Kraam.euro(rest)
+		T_WISSEL_NEER]
 
 ## The sum line: at the question the sum itself, at the paying the target
 ## amount.  The answer box beside it is filled by the card with what lies on the
