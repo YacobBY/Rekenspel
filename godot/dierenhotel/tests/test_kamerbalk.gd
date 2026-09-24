@@ -169,6 +169,19 @@ func _keur(scherm: Vector2, extra: bool) -> void:
 			waar(r.grow(0.5).encloses(l.get_global_rect()),
 				"%s: %s van %s staat in de chip (%s in %s)"
 					% [wat, naam, id, str(l.get_global_rect()), str(r)])
+	# the floor badges stand in the bar like the chips, and stay readable
+	for e in _balk.merken():
+		var m: Control = _balk.merken()[e]
+		var r := m.get_global_rect()
+		if not rol_x:
+			waar(r.position.x >= balk.position.x - 0.5 and r.end.x <= balk.end.x + 0.5,
+				"%s: etage %s staat in de balk (%s in %s)" % [wat, str(e), str(r), str(balk)])
+		if not rol_y:
+			waar(r.position.y >= balk.position.y - 0.5 and r.end.y <= balk.end.y + 0.5,
+				"%s: etage %s staat in de balk (%s in %s)" % [wat, str(e), str(r), str(balk)])
+		var t: Label = m.get_node_or_null("Teken")
+		waar(t != null and t.get_theme_font_size("font_size") >= UiThema.VLOER,
+			"%s: het teken van etage %s blijft leesbaar" % [wat, str(e)])
 
 ## R3: with the kas the hotel has eleven chips.  On the 1000 unit tablet row
 ## (1024 × 768) they need 1029 units at the normal padding, and a second row
@@ -224,6 +237,177 @@ func test_twaalf_chips_op_een_rij_op_de_tablet() -> void:
 	gelijk(_balk.rijen(), 1, "één rij op 1280")
 	ic = (_balk.chips()["winkels"] as Button).get_node("Rij/Icoon")
 	gelijk(ic.get_theme_font_size("font_size"), int(Ui.maten["icoon"]), "met de gewone plaatjes")
+	_af()
+
+# ---------------------------------------------------------------- de etages
+
+## The bar read from left to right (top to bottom in the rail): a chip is its
+## room id ("kaart" for the map), a floor badge is "#" and its sign.
+func _rij_van(balk: UiKamerbalk) -> Array[String]:
+	var uit: Array[String] = []
+	for c in balk._cellen():
+		var delen: Array[Node] = []
+		if c is Button:
+			delen.append(c)
+		else:
+			delen.append_array(c.get_children())
+		for k in delen:
+			if k is Button:
+				uit.append(str(k.name).substr(1))
+			elif k.name == "Merk":
+				var t: Label = k.get_node_or_null("Teken")
+				uit.append("#" + (t.text if t != null else "?"))
+	return uit
+
+func _heeft_knop(k: Node) -> bool:
+	if k is BaseButton:
+		return true
+	for kind in k.get_children():
+		if _heeft_knop(kind):
+			return true
+	return false
+
+## Owner, 2026-09-24: the hotel is a tower ("net als Habbo Hotel"), and the
+## room bar shows it.  The chips come per floor — the ground floor first, so
+## the receptie where the child starts stays the first chip, then up the tower,
+## then the cellar, the map last — and every floor after the first opens with a
+## small badge carrying the floor's sign as the lift writes it.  The badge is
+## no button and looks like none, takes no finger and no focus, and it is glued
+## to its floor's first chip: beside it in a row, above it in the rail — on
+## every screen, so a wrapped bar never leaves a badge alone at a row's end.
+func test_de_chips_staan_per_etage() -> void:
+	var volgorde := UiKamerbalk.etage_volgorde()
+	var alle := Rooms.etages()
+	gelijk(volgorde.size(), alle.size(), "elke etage staat er één keer in")
+	for e in alle:
+		waar(volgorde.has(e), "etage %d staat in de volgorde" % e)
+	gelijk(volgorde[0], 0, "de begane grond eerst")
+	for i in range(1, volgorde.size()):
+		var a: int = volgorde[i - 1]
+		var b: int = volgorde[i]
+		if b >= 0:
+			waar(a >= 0 and b > a, "omhoog door de toren (%d na %d)" % [b, a])
+		else:
+			waar(a >= 0 or b < a, "de kelder na de bovenste etage, en dieper (%d na %d)" % [b, a])
+	# the bar as it must read: the floors in that order, a badge before every
+	# floor after the first, the rooms of a floor in `Rooms.lijst()` order
+	var verwacht: Array[String] = []
+	var n_merken := 0
+	for e in volgorde:
+		var ids := Rooms.op_etage(e)
+		if ids.is_empty():
+			continue
+		if not verwacht.is_empty():
+			verwacht.append("#" + Rooms.etage_teken(e))
+			n_merken += 1
+		verwacht.append_array(ids)
+	verwacht.append("kaart")
+	waar(n_merken >= 1, "het hotel heeft meer dan één etage")
+	waar(verwacht.has("#K"), "de kelder schrijft zich K")
+	for i in SCHERMEN.size():
+		var scherm: Vector2 = SCHERMEN[i]
+		var wat := str(scherm)
+		_op(scherm, KADERS[i])
+		await _leg_uit(scherm, RAIL_HOOGTE if _rail(scherm) else 0.0)
+		var rij := _rij_van(_balk)
+		gelijk(rij, verwacht, "%s: de chips staan per etage" % wat)
+		gelijk(rij[0], "receptie", "%s: de receptie blijft de eerste chip" % wat)
+		gelijk(_balk.merken().size(), n_merken, "%s: een bordje per etage na de eerste" % wat)
+		for e in _balk.merken():
+			var m: Control = _balk.merken()[e]
+			var naam := "%s: etage %s" % [wat, Rooms.etage_teken(e)]
+			var t: Label = m.get_node_or_null("Teken")
+			waar(t != null and t.text == Rooms.etage_teken(e), "%s draagt zijn teken" % naam)
+			waar(not _heeft_knop(m), "%s is geen knop" % naam)
+			gelijk(m.focus_mode, Control.FOCUS_NONE, "%s krijgt geen focus" % naam)
+			for deel: Control in [m, m.get_node("Rond"), t]:
+				gelijk(deel.mouse_filter, Control.MOUSE_FILTER_IGNORE,
+					"%s: %s vangt geen vinger" % [naam, deel.name])
+			# quiet, not a key: see-through, a thin outline, no key edge, no shadow
+			var sb := (m.get_node("Rond") as Panel).get_theme_stylebox("panel") as StyleBoxFlat
+			waar(sb != null and sb.bg_color.a < 1.0 and sb.border_width_bottom <= 1
+				and sb.shadow_size == 0, "%s is een rustig rondje" % naam)
+			var rm := m.get_global_rect()
+			waar(absf(rm.size.x - rm.size.y) < 0.5 and rm.size.x < UiThema.HOT,
+				"%s is een klein rondje (%s)" % [naam, str(rm.size)])
+			# glued to its floor's first chip
+			var eerste: Button = _balk.chips()[Rooms.op_etage(e)[0]]
+			gelijk(m.get_parent(), eerste.get_parent(), "%s deelt de cel met zijn eerste chip" % naam)
+			var rc := eerste.get_global_rect()
+			if _rail(scherm):
+				waar(rm.end.y <= rc.position.y + 0.5 and absf(rm.get_center().x - rc.get_center().x) <= 1.0,
+					"%s staat boven zijn eerste chip (%s, %s)" % [naam, str(rm), str(rc)])
+			else:
+				waar(rm.end.x <= rc.position.x + 0.5 and rc.position.x - rm.end.x <= UiKamerbalk.GAT
+					and absf(rm.get_center().y - rc.get_center().y) <= 1.0,
+					"%s staat vlak voor zijn eerste chip (%s, %s)" % [naam, str(rm), str(rc)])
+		# the upright tablet wraps anyway: its second row opens with a floor
+		if scherm == SCHERMEN[1]:
+			gelijk(_balk.rijen(), 2, "%s: twee rijen, zoals altijd" % wat)
+			var tweede: Control = _balk._cellen()[_balk.kolommen()]
+			waar(tweede is BoxContainer, "%s: de tweede rij begint met een etage (%s)"
+				% [wat, tweede.name])
+		# a chip that shares a floor's cell is still found where it is in the
+		# grid (the scrolling row brings the current room into view by it)
+		for id in _balk.chips():
+			var b: Button = _balk.chips()[id]
+			var plek := _balk._in_raster(b)
+			var echt := b.get_global_position() - _balk._raster.get_global_position()
+			waar(plek.position.distance_to(echt) < 0.5,
+				"%s: chip %s staat in het raster op %s (%s)" % [wat, id, str(plek.position), str(echt)])
+		_af()
+
+## The badges cost the tablet row 72 units, and a waiting guest's counter
+## (`Wacht`) makes its chip 18 units wider.  When the shell lays the bar out
+## again with counters showing (a game starts, the game bar takes the room
+## bar's footprint) the row must stay ONE row, or the world frame loses a band
+## (test_terug_blijft_tijdens_de_som_van_een_spel): four counters still fit.
+func test_wachtende_gasten_duwen_de_rij_niet_om() -> void:
+	_op(SCHERMEN[0], KADERS[0])
+	await _leg_uit(SCHERMEN[0], 0.0)
+	gelijk(_balk.rijen(), 1, "één rij op de tablet")
+	var ids: Array = ["kamer1", "keuken", "zwembad", "wasserij"]
+	for n in ids.size():
+		var b: Button = _balk.chips()[ids[n]]
+		var tel: Label = b.get_node("Rij/Wacht")
+		tel.text = "1"
+		tel.visible = true
+		await _leg_uit(SCHERMEN[0], 0.0)
+		gelijk(_balk.rijen(), 1, "met %d wachtende gasten blijft het één rij" % (n + 1))
+		for id in _balk.chips():
+			var c: Button = _balk.chips()[id]
+			var rij: Control = c.get_node("Rij")
+			waar(rij.get_combined_minimum_size().x <= c.size.x - 2 * rij.offset_left + 0.5,
+				"%d wachtend: %s past in zijn chip (%s in %s, vulling %s)" % [n + 1, id,
+					str(rij.get_combined_minimum_size()), str(c.size), str(rij.offset_left)])
+			var nm: Label = c.get_node("Rij/Naam")
+			waar(nm.get_theme_font_size("font_size") >= UiThema.VLOER,
+				"%d wachtend: het woord van %s blijft leesbaar" % [n + 1, id])
+	_af()
+
+## The shell lays the bar out again whenever a game starts or ends.  Godot 4.7
+## reports a Label's old width the first time after its text size changed, so
+## the second layout of a tablet row used to put full-size words in chips cut
+## for the smaller step (every other layout, found 2026-09-24).  Every layout
+## of the same bar must give the same chips, each big enough for what it shows.
+func test_een_nieuwe_opmaak_geeft_dezelfde_chips() -> void:
+	_op(SCHERMEN[0], KADERS[0])
+	var eerst := {}
+	for ronde in 3:
+		await _leg_uit(SCHERMEN[0], 0.0)
+		gelijk(_balk.rijen(), 1, "opmaak %d: één rij" % ronde)
+		for id in _balk.chips():
+			var b: Button = _balk.chips()[id]
+			var rij: Control = b.get_node("Rij")
+			waar(rij.get_combined_minimum_size().x <= b.size.x - 2 * rij.offset_left + 0.5,
+				"opmaak %d: %s past in zijn chip (%s in %s)"
+					% [ronde, id, str(rij.get_combined_minimum_size()), str(b.size)])
+			var maat := [b.size, (b.get_node("Rij/Icoon") as Label).get_theme_font_size("font_size"),
+				(b.get_node("Rij/Naam") as Label).get_theme_font_size("font_size")]
+			if ronde == 0:
+				eerst[id] = maat
+			else:
+				gelijk(maat, eerst[id], "opmaak %d: %s is dezelfde chip" % [ronde, id])
 	_af()
 
 # ------------------------------------------------------------------- de rail
@@ -363,6 +547,10 @@ func test_tijdens_een_som_wijken_de_kamerknoppen() -> void:
 	var kader_voor := kader.size
 	var wereld_voor := World.kader_rect()
 	var balk_voor := balk.get_global_rect()
+	var merken_voor := {}
+	for e in balk.merken():
+		merken_voor[e] = (balk.merken()[e] as Control).get_global_rect()
+	waar(not merken_voor.is_empty(), "de balk heeft etagebordjes")
 	var deuren := _deurbordjes("receptie")
 	waar(deuren.size() >= 2, "de receptie heeft deurbordjes (%s)" % str(deuren))
 	waar(not Ui.som_in_beeld(), "nog geen som")
@@ -399,6 +587,15 @@ func test_tijdens_een_som_wijken_de_kamerknoppen() -> void:
 	gelijk(kader.size, kader_voor, "de wereld houdt haar kader")
 	gelijk(World.kader_rect(), wereld_voor, "World meet hetzelfde kader")
 	gelijk(balk.get_global_rect(), balk_voor, "de kamerbalk houdt zijn plek")
+	# the floor badges step aside with the chips (they fade with the bar) and
+	# keep their place too
+	for e in merken_voor:
+		var m: Control = balk.merken()[e]
+		gelijk(m.get_global_rect(), merken_voor[e], "etage %s houdt zijn plek" % str(e))
+		gelijk(m.mouse_filter, Control.MOUSE_FILTER_IGNORE, "etage %s vangt geen vinger" % str(e))
+		waar(balk.is_ancestor_of(m), "etage %s vervaagt met de balk" % str(e))
+		await _tik_op(vp, m.get_global_rect().get_center())
+		gelijk(World.kamer_nu(), "receptie", "een tik op etage %s doet niets" % str(e))
 	# a real tap on the hidden gang chip goes nowhere
 	var gang: Button = balk.chips()["gang"]
 	await _tik_op(vp, gang.get_global_rect().get_center())
@@ -429,6 +626,9 @@ func test_tijdens_een_som_wijken_de_kamerknoppen() -> void:
 		waar(_op_het_glas(d), "na de som: %s staat er weer" % d)
 	gelijk(kader.size, kader_voor, "de wereld houdt haar kader, ook na de som")
 	gelijk(balk.get_global_rect(), balk_voor, "de kamerbalk staat nog op zijn plek")
+	for e in merken_voor:
+		gelijk((balk.merken()[e] as Control).get_global_rect(), merken_voor[e],
+			"na de som: etage %s staat nog op zijn plek" % str(e))
 	# and a real tap on a chip works again
 	gang = balk.chips()["gang"]
 	await _tik_op(vp, gang.get_global_rect().get_center())
@@ -560,4 +760,57 @@ func test_de_rij_laat_zich_vegen() -> void:
 	chip.pressed.emit()
 	gelijk(gekozen, ["gang"] as Array[String], "een gewone tik gaat naar de kamer")
 	balk.queue_free()
+	await boom.process_frame
+
+## A swipe may start on a floor badge (2026-09-24): the badge takes no finger,
+## so the touch lands on the grid behind it and goes on to the ScrollContainer,
+## exactly like a touch between two chips — proven with a real press through
+## the viewport's own input path on the phone row (the drag itself needs a
+## touch screen, see above).  A tap on a badge goes to no room.
+func test_een_veeg_mag_op_een_etagebordje_beginnen() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var scherm: Vector2 = SCHERMEN[2]
+	var vp := SubViewport.new()
+	vp.size = Vector2i(scherm)
+	boom.root.add_child(vp)
+	_laag = Control.new()
+	_laag.size = scherm
+	vp.add_child(_laag)
+	Ui.registreer_lagen(_laag, _laag, _laag, _laag, _laag)
+	Ui.zet_scherm(scherm)
+	World.meet(Rect2(Vector2.ZERO, KADERS[2]))
+	_balk = UiKamerbalk.new()
+	_laag.add_child(_balk)
+	_balk.bouw(Ui.maten)
+	await _leg_uit(scherm, 0.0)
+	waar(_balk.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED,
+		"op de telefoon is de balk een rij die rolt")
+	var gehoord: Array[Vector2] = []
+	_balk.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+			gehoord.append((ev as InputEventMouseButton).position))
+	var gekozen: Array[String] = []
+	_balk.kamer_gekozen.connect(func(k: String) -> void: gekozen.append(k))
+	waar(not _balk.merken().is_empty(), "er staan etagebordjes in de rij")
+	for e in _balk.merken():
+		var m: Control = _balk.merken()[e]
+		# nothing between the badge and the row stops the finger
+		var k: Node = m
+		while k != _balk:
+			waar(not (k is Control) or (k as Control).mouse_filter != Control.MOUSE_FILTER_STOP,
+				"etage %s: %s houdt de vinger niet vast" % [Rooms.etage_teken(e), k.name])
+			k = k.get_parent()
+		_balk.ensure_control_visible(m)
+		await _beelden(2)
+		var r := m.get_global_rect()
+		waar(_balk.get_global_rect().grow(0.5).encloses(r),
+			"etage %s rolt in beeld (%s)" % [Rooms.etage_teken(e), str(r)])
+		var voor := gehoord.size()
+		await _tik_op(vp, r.get_center())
+		gelijk(gehoord.size(), voor + 1,
+			"etage %s: de druk komt aan bij de rij, die er een veeg van kan maken"
+				% Rooms.etage_teken(e))
+	gelijk(gekozen.size(), 0, "een tik op een etagebordje gaat nergens heen")
+	_af()
+	vp.queue_free()
 	await boom.process_frame
