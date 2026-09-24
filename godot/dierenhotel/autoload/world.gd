@@ -1268,6 +1268,49 @@ func feest(ids: Array) -> void:
 		d.punten = []
 	vuil()
 
+## Walk to (x, z) in `kamer_id` and eat there, facing the bowl at `bak` (x, z):
+## the voerkar's delivery (owner, 2026-09-24: "Bij het vullen van het eten lopen
+## de dieren niet naar de voerbakjes toe. De eet animatie gebeurt op het bed").
+## A sleeper gets out of bed first — `_breek` puts him back on the floor and
+## drops his bed target, so he never climbs back in on arrival; a guest who is
+## in another room walks there through the doors.  At the last point of the
+## walk (`per_stap`, then cleared) he turns to the bowl.  Reduced motion: he
+## stands there eating at once.
+func eet_bij(id: String, kamer_id: String, x: float, z: float, bak: Vector2) -> bool:
+	var d: Dier = _dieren.get(id)
+	if d == null or not Rooms.bestaat(kamer_id):
+		return false
+	# by id, not by the Dier itself: a callable on `d` that holds `d` would keep
+	# the animal alive forever
+	var kijk := func(_i: int, _p: Variant) -> void:
+		var wie: Dier = _dieren.get(id)
+		if wie == null or not wie.punten.is_empty() or not wie.route.is_empty():
+			return                      # a door on the way, not the bowl yet
+		if wie.na == "eet":
+			wie.face = 1 if ((bak.x - bak.y) - (wie.x - wie.z)) >= 0.0 else -1
+		wie.per_stap = Callable()
+	if rust():
+		_breek(d, false)
+		d.kamer = kamer_id
+		_zet_plek(d, Vector2(x, z))
+		d.hoogte = 0.0
+		d.lift = 0.0
+		d.bob = 0.0
+		d.v = 0.0
+		d.face = 1 if ((bak.x - bak.y) - (x - z)) >= 0.0 else -1
+		d.na = "eet"
+		_eind_staat(d)
+		d.pose = "hap1"
+		_model_bij(d)
+		vuil()
+		return true
+	if d.kamer == kamer_id:
+		ga(id, x, z, "eet")
+	elif reis(id, kamer_id, {"x": x, "z": z, "na": "eet"}).is_empty():
+		return false
+	d.per_stap = kijk
+	return true
+
 ## Walk to a free place and be happy there.
 func solo(id: String, _act: String = "") -> bool:
 	var d: Dier = _dieren.get(id)
