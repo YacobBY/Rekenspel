@@ -895,7 +895,10 @@ func somkaart(obj: Variant, som: String, o: Dictionary) -> Kaart:
 	kaart.door = o.get("door", "")
 	kaart.dier = _dier_van(obj, o)
 	kaart.geen_balk = not bool(o.get("balk", true))
-	kaart.getal_vraag = o.has("goed")
+	# `reken: true` — a maths question without a number answer or a sum line
+	# (the wekker: the child reads the clock and turns the hands), so the room
+	# shortcuts wait for it too (`is_som`)
+	kaart.getal_vraag = o.has("goed") or bool(o.get("reken", false))
 	var keuzes: Array = o.get("keuzes", [])
 	var vak := keuzes.is_empty()
 	if keuzes.is_empty() and o.has("goed"):

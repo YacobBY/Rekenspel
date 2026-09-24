@@ -260,6 +260,8 @@ func _speel_beurt(band_n: int, dag: int, kunnen: int, verwacht_band: int) -> voi
 		gelijk(str(s["stap"]), "zet", "daarna mag de klok gezet worden")
 	# de klok staat op de startstand en niets zegt die in woorden
 	_geen_tijdhint(s, "start band %d" % verwacht_band)
+	# klok zetten is rekenen: de kamerknoppen wachten tot de kaart af is
+	waar(Ui.is_som("wk_som"), "de wekkerkaart telt als som (de kamerbalk wacht)")
 	waar(not World.decor_plek("klok", "gang").is_empty(), "de klok hangt in de gang")
 	# draaien tot de wijzers op het doel staan: alleen met de knoppen die
 	# deze band heeft, hier alleen vooruit

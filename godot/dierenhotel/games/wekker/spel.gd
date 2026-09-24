@@ -681,6 +681,8 @@ func _teken_kaart(nieuw: bool) -> void:
 		_kaart = ctx.ui.somkaart(DECOR, som_balk(), {
 			"id": "wk_som", "kamer": KAMER, "hoog": 3.0, "icoon": T_ICOON,
 			"pad": false, "regel": zin[0], "regel2": zin[1],
+			# klok lezen is rekenen: de kamerknoppen wachten (Ui.is_som)
+			"reken": true,
 			"keuze_titel": T_STROOK_DUUR if duur else T_STROOK,
 			"keuzes": tijd_knoppen() if duur else knoppen(),
 		})
