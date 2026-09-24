@@ -296,7 +296,7 @@ static func kaart(stap: String, o: Dictionary, naam: String, s: Dictionary, gast
 			var basis := int(s["half"]) if int(s["half"]) > 0 else int(s["prijs"])
 			return [T_SOM_DOOS, "%s + %s =" % [euro(basis), euro(int(o["doosje"]))]]
 		"half":
-			return [T_HALF, "%s : 2 =" % euro(int(s["prijs"]))]
+			return [T_HALF, "%s / 2 =" % euro(int(s["prijs"]))]
 		"betaal":
 			return [T_BETAAL % euro(int(s["totaal"])), euro(int(s["totaal"]))]
 		"terug":

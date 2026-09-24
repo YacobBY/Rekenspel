@@ -434,7 +434,7 @@ func test_herladen_hervat_de_beurt() -> void:
 	await _wacht(0.3)
 	gelijk(str(_stand("luxe").get("waar", "")), str(st["waar"]), "hetzelfde ding")
 	gelijk(str(_stand("luxe").get("stap", "")), "half", "dezelfde stap")
-	waar(_kaart_tekst("Kolom/Rij/Som").contains(": 2"), "de halve-prijssom staat er weer")
+	waar(_kaart_tekst("Kolom/Rij/Som").contains("/ 2"), "de halve-prijssom staat er weer")
 	_af()
 
 ## The fitting room: a tap on a slot puts on the next thing of that slot the

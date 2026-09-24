@@ -186,7 +186,7 @@ bewust níet gebruikt: de winkels bouwen hun eigen strook.)
 | ingangen | "🎩 Hoeden" · "🧣 Sjaals" · "👟 Schoenen" · "💎 Luxe" · "🪞 Paskamer" |
 | kiezen | "Wat kiest %s?" |
 | schoenen | "Hoeveel kosten %d %s?" · som "4 × €3 =" |
-| luxe | "Hoeveel samen met het doosje?" · som "€35 + €4 =" · "Halve prijs! Hoeveel is dat?" · som "€48 : 2 =" |
+| luxe | "Hoeveel samen met het doosje?" · som "€35 + €4 =" · "Halve prijs! Hoeveel is dat?" · som "€48 / 2 =" |
 | betalen | "💶 Met welk geld betaal je €7?" |
 | wisselgeld | "%s betaalt €50. Hoeveel terug?" · som "€50 − €23 =" |
 | klaar | "✅ %s draagt nu %s %s!" · wolkje "<pictogram> mooi!" |
