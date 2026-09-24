@@ -41,7 +41,7 @@ func test_elke_kamer_is_compleet() -> void:
 		waar(not r.naam.strip_edges().is_empty(), id + " heeft een naam")
 		waar(not r.icoon.strip_edges().is_empty(), id + " heeft een pictogram")
 		waar(VLOEREN.has(r.vloer), "%s heeft een bekende vloer (%s)" % [id, r.vloer])
-		waar(UiPlattegrond.KAART.has(id), id + " heeft een vak op de plattegrond")
+		waar(UiPlattegrond.kaart().has(id), id + " heeft een vak op de plattegrond")
 		waar(r.deuren.size() >= 1, id + " heeft minstens één deur")
 		for dr in r.deuren:
 			var naar := String(dr["naar"])
@@ -819,7 +819,7 @@ func test_de_receptie_heeft_een_voordeur_buiten_de_deurgraaf() -> void:
 			or float(dr["at"]) >= b + 2.0,
 			"de voordeur valt niet samen met de deur naar %s" % dr["naar"])
 	gelijk(Rooms.lijst().size(), ORDE.size(), "buiten is geen kamer")
-	gelijk(UiPlattegrond.KAART.size(), ORDE.size(), "en heeft geen vak op de plattegrond")
+	gelijk(UiPlattegrond.kaart().size(), ORDE.size(), "en heeft geen vak op de plattegrond")
 	for van in ORDE:
 		for naar in ORDE:
 			for stap in Rooms.pad(van, naar):

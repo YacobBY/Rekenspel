@@ -1837,9 +1837,28 @@ the six-page story of 2026-09-23 (guests walking in, wishes, a spotlight on the 
   swipe: `[probe] kamerbalk veeg scroll=<x>,<y>` plus the chips' new rects; `tools/speel.js`
   plays it with `veeg chip:<naam> <dx>`.
 * **Map sheet**: header `🗺️ De plattegrond`, hint `Tik op een ruimte om er naartoe te gaan.`,
-  a 4 × 3 grid with cells at `KAART = {receptie [1,2], gang [2,2], kamer1 [2,1],
-  kamer2 [2,3], keuken [3,2], tuin [4,2], wasserij [3,3], zwembad [4,3]}` (column, row),
-  each showing icon, name and the waiting badge, and a `Sluiten` button.
+  one cell per room showing icon, name and the waiting badge, and a `Sluiten` button.
+  **Port (owner 2026-09-24: the hotel is a tower, "heel groot en hoog … net als Habbo
+  Hotel").** The map is a cross-section of the building (`ui/plattegrond.gd`): one row per
+  floor (`Kamer.etage`, `Rooms.etages()`), the top floor at the top and the cellar at the
+  bottom. The table is computed from `Rooms`, never written down (`UiPlattegrond.kaart()`:
+  `id → Vector2i(column, row)`), so a room added later gets a cell on its own floor. In a
+  row the room the lift stops in comes first (column 1); then each next cell is a room with
+  a door to the cell before it when there is one, else the nearest room left on the floor
+  (breadth-first over the floor's doors from the lift), a room without a door on its floor
+  last (`UiPlattegrond.rij_van(e)`). Today that reads, top-down: `3: gang kamer1 kamer2
+  keuken` · `2: speelzaal` · `1: winkels` · `0: receptie tuin zwembad kas` · `K: wasserij`.
+  A door between two cells side by side is drawn in their gap (a `poort` dashed): today
+  `gang|kamer1`, `receptie|tuin` and the gate `tuin|zwembad`; doors between rooms that are
+  not neighbours in their row are left out, and the lift is not a door. Left of the rows
+  runs the lift shaft: one line from the top floor to the cellar, on it a small round button
+  per floor with `Rooms.etage_teken(e)` (drawn, not a tap target: the row is where a finger
+  goes); the button of the floor in view is lit, and that floor's row wears a faint sunny
+  band; the room in view stays the sunny cell. Everything is placed by hand, no `Container`.
+  On a narrow sheet the gaps give way first (8 → 4), then the shaft (36 → 24), then the
+  cells (never under 56 wide: a 48 tap target plus air); with five floors a short screen
+  scrolls the sheet. The same sheet, titled `🛗 De lift`, is the lift's panel
+  (`scenes/main.gd::_toren`).
 * `Hotel.naarKamer(id)` = `World.naar(id)` + `state.kamerNu = id` + `Snd.deur()` +
   `render()`.
 * **Port (owner 2026-09-23): `👀 Volg`.**  The "komt eraan" bubble (a guest walking in
