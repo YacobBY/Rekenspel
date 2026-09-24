@@ -145,8 +145,8 @@ func test_de_plattegrond_is_een_plattegrond() -> void:
 		"en beide in de kolom van de gang")
 	# every door of the hotel between two neighbouring cells, once per pair
 	# (R2: de speelzaal-deur bij de receptie maakt er acht van; R3: de kas
-	# boven de tuin er negen)
-	gelijk(kaart.deurparen(), 9, "negen deuren tussen buren")
+	# boven de tuin er negen; 2026-09-24: de winkels onder de receptie tien)
+	gelijk(kaart.deurparen(), 10, "tien deuren tussen buren")
 	_af()
 
 ## The tap: `scenes/main.gd` closes the sheet and walks to the room, so the

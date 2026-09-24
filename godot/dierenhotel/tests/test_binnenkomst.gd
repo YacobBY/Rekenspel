@@ -343,8 +343,13 @@ func test_rustmodus_zet_hem_meteen_aan_de_balie() -> void:
 func test_de_houdingen_van_het_binnenkomen() -> void:
 	gelijk(ArtGasten.POSE.size(), 15, "de vijftien houdingen van de HTML blijven vijftien")
 	var basis := {"sluipA": "loopA", "sluipB": "loopB", "strek": "rust", "fladder": "rust",
-		"fladderA": "loopA", "fladderB": "loopB"}
-	gelijk(ArtGasten.POSE_EXTRA.size(), basis.size(), "zes houdingen voor het binnenkomen")
+		"fladderA": "loopA", "fladderB": "loopB",
+		# the review of 2026-09-24: drawn frames in place of rust and the walk
+		# (knipperen, de tussenstap, kwispelen) and the sad walk out of a shop
+		"knipper": "rust", "loopM": "loopA", "kwispelA": "rust", "kwispelB": "rust",
+		"sjokA": "loopA", "sjokB": "loopB"}
+	gelijk(ArtGasten.POSE_EXTRA.size(), basis.size(),
+		"zes houdingen voor het binnenkomen en zes van de nakijkronde")
 	for naam in ArtGasten.POSE_EXTRA:
 		waar(not ArtGasten.POSE.has(naam), "%s staat niet tussen de gouden houdingen" % naam)
 		waar(basis.has(naam), "%s is bekend" % naam)
@@ -352,8 +357,12 @@ func test_de_houdingen_van_het_binnenkomen() -> void:
 			var p = Art.dier(kind, naam, 2)
 			waar(p != null and p.w > 0 and p.h > 0, "%s bakt voor %s" % [naam, kind])
 	# each one is a frame of its own for the kind that uses it
-	for paar in [["poes", "sluipA"], ["poes", "sluipB"], ["poes", "strek"], ["gans", "fladder"],
-			["gans", "fladderA"], ["gans", "fladderB"]]:
+	var paren: Array = [["poes", "sluipA"], ["poes", "sluipB"], ["poes", "strek"], ["gans", "fladder"],
+			["gans", "fladderA"], ["gans", "fladderB"]]
+	for kind in ArtGasten.SOORTEN:
+		for naam in ["knipper", "loopM", "kwispelA", "kwispelB", "sjokA", "sjokB"]:
+			paren.append([kind, naam])
+	for paar in paren:
 		var kind: String = paar[0]
 		var naam: String = paar[1]
 		var eigen: Array = ArtGasten.bouw(kind, naam, "")

@@ -580,6 +580,171 @@ func test_accessoires_zitten_in_de_plaatsleutel() -> void:
 	gelijk(str(World.dier(T).acc), '["sjaaltje"]', "en er weer af")
 	_na_afloop()
 
+## The wardrobe (2026-09-24): one piece per slot — a new hat takes the old one
+## off, shoes replace shoes — and the list is written into the guest's own
+## record, so a reload puts it back on (a souvenir used to fall off there).
+func test_een_stuk_per_slot_en_de_opslag_weet_het() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	State.s["gasten"] = [{"id": T, "naam": "Proef", "kind": "poes", "accessoires": []}]
+	World.zet(T, "receptie", 30.0, 30.0, {"kind": "poes"})
+	World.accessoire(T, "pet")
+	World.accessoire(T, "sjaaltje")
+	gelijk(str(World.dier(T).acc), '["sjaaltje", "pet"]', "pet en sjaaltje, in de vaste volgorde")
+	World.accessoire(T, "kroon")
+	gelijk(str(World.dier(T).acc), '["sjaaltje", "kroon"]', "de kroon zet de pet af")
+	World.accessoire(T, "laarsjes")
+	World.accessoire(T, "gympjes")
+	World.accessoire(T, "zonnebril")
+	gelijk(str(World.dier(T).acc), '["sjaaltje", "kroon", "gympjes", "zonnebril"]',
+		"de gympjes vervangen de laarsjes, de bril komt erbij")
+	gelijk(World.dier(T).params["acc"], "sjaaltje,kroon,gympjes,zonnebril", "zo staat het in de sleutel")
+	gelijk(str(State.gast_van(T)["accessoires"]), str(World.dier(T).acc), "de opslag weet wat hij draagt")
+	waar(State.kast_van(T).has("kroon"), "wat hij draagt is van hem")
+	# a reload builds the animal from the record
+	World.weg(T)
+	World.zet(T, "receptie", 30.0, 30.0, {"kind": "poes", "acc": State.gast_van(T)["accessoires"]})
+	gelijk(str(World.dier(T).acc), '["sjaaltje", "kroon", "gympjes", "zonnebril"]',
+		"na herladen draagt hij het nog")
+	# every piece bakes on every species, in every pose the world uses
+	for kind in ArtGasten.SOORTEN:
+		for pose in ["rust", "loopA", "loopM", "sip", "zit", "lig", "sjokA", "knipper", "hap2"]:
+			var p = Art.dier(kind, pose, 2, ["kroon", "parels", "slofjes", "zonnebril", "bal"])
+			waar(p != null and p.w > 0, "%s %s in vol ornaat bakt" % [kind, pose])
+	State.s = bewaard
+	_na_afloop()
+
+## Small on the animal (owner, 2026-09-24: "Maak ze niet te groot op het dier
+## wanneer ze gedragen worden, het dier moet wel een beetje herkenbaar
+## blijven"): a hat never covers the eyes, it is at most four layers over the
+## head, and a piece adds only a handful of voxels to the animal.
+func test_kleding_blijft_klein_en_de_ogen_vrij() -> void:
+	for kind in ArtGasten.SOORTEN:
+		var p: Dictionary = ArtGasten.pose_van("rust")
+		var kaal: Array = ArtGasten.bouw(kind, "rust", "")
+		var top := -100
+		for q in kaal:
+			top = maxi(top, int(q["y"]))
+		var e: Array = ArtGasten._ogen_van(kind, p)
+		for naam in ArtGasten.KLEDING:
+			if naam == "bal":
+				continue
+			var aan: Array = ArtGasten.bouw(kind, "rust", str(naam))
+			var hoog := -100
+			for q in aan:
+				hoog = maxi(hoog, int(q["y"]))
+			waar(hoog - top <= 4, "%s met %s: hooguit vier lagen hoger (%d)" % [kind, naam, hoog - top])
+			waar(aan.size() - kaal.size() <= kaal.size() / 5,
+				"%s met %s: een klein ding (%d voxels erbij)" % [kind, naam, aan.size() - kaal.size()])
+			if ArtGasten.slot_van(str(naam)) != "hoofd":
+				continue
+			# the eyes keep their colour: no hat voxel sits on or in front of them
+			for q in aan:
+				var y := int(q["y"])
+				var z := int(q["z"])
+				var bij_oog: bool = y >= int(e[1]) and y < int(e[1]) + int(e[2]) \
+					and ((z >= int(e[4]) and z < int(e[4]) + int(e[3])) \
+						or (z > int(e[5]) - int(e[3]) and z <= int(e[5]))) \
+					and int(q["x"]) >= int(e[0])
+				if bij_oog:
+					waar(q["k"] != ArtGasten.HOED and q["k"] != ArtGasten.PET_KL
+						and q["k"] != ArtGasten.STRO and q["k"] != ArtGasten.GOUD
+						and q["k"] != ArtGasten.STRIK_KL,
+						"%s met %s: de ogen blijven vrij" % [kind, naam])
+
+## The review of 2026-09-24: a guest that stands still blinks, a guest who
+## waits for the child wags its tail, and a walk has a passing step between its
+## two stances — DRAWN frames only (`Dier.beeld`): the logical pose every game
+## reads stays `rust`, `loopA`, `loopB`, and the wandering of a day is the same
+## as before (nothing is drawn from the animal's generator).
+func test_knipperen_kwispelen_en_de_tussenstap() -> void:
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(false)
+	World.naar("receptie")
+	World.zet(T, "receptie", 40.0, 60.0, {"kind": "hond"})
+	World.blijf(T, "wacht")
+	var beelden := {}
+	for i in 600:
+		World._tik()
+		var d := World.dier(T)
+		if d.staat != "wacht":
+			World.blijf(T, "wacht")      # keep him waiting: a long look
+			continue
+		waar(d.pose in ["rust", "tril", "kijk"], "de logische pose blijft die van wachten (%s)" % d.pose)
+		if d.pose != "rust":
+			waar(str(d.params["pose"]) == d.pose, "een blik wordt niet overgetekend")
+		beelden[str(d.params["pose"])] = true
+	waar(beelden.has("knipper"), "hij knippert (%s)" % str(beelden.keys()))
+	waar(beelden.has("kwispelA") and beelden.has("kwispelB"), "hij kwispelt (%s)" % str(beelden.keys()))
+	waar(beelden.has("rust"), "en staat meestal gewoon")
+	# a walk: A, the passing step, B, the passing step
+	var uit := {}
+	_bestel(uit, T, [Vector2(100, 60)])
+	var stap := {}
+	for i in 60:
+		World._tik()
+		var d := World.dier(T)
+		if d.staat != "loop":
+			break
+		waar(d.pose == "loopA" or d.pose == "loopB", "de logische pose is loopA of loopB")
+		stap[str(d.params["pose"])] = true
+	waar(stap.has("loopM") and stap.has("loopA") and stap.has("loopB"),
+		"de loop heeft vier tellen (%s)" % str(stap.keys()))
+	# nothing of it in reduced motion
+	Ui.zet_rust_modus(true)
+	World.zet(T, "receptie", 40.0, 60.0, {"kind": "hond"})
+	World.blijf(T, "wacht")
+	for i in 120:
+		World._tik()
+		waar(str(World.dier(T).params["pose"]) == World.dier(T).pose, "rustmodus: geen extra beeld")
+	Ui.zet_rust_modus(rust_voor)
+	_na_afloop()
+
+## A glance is a glance (review of 2026-09-24): a waiting guest that pricks its
+## ears (`tril`) or looks round (`kijk`) goes back to its plain stance a moment
+## later, instead of staring like that for the whole wait of sixteen seconds.
+func test_een_blik_duurt_even() -> void:
+	World.naar("receptie")
+	World.zet(T, "receptie", 40.0, 60.0, {"kind": "poes"})
+	World.blijf(T, "wacht")
+	var langst := 0
+	var nu := 0
+	for i in 230:
+		World._tik()
+		var d := World.dier(T)
+		if d.pose == "tril" or d.pose == "kijk":
+			nu += 1
+			langst = maxi(langst, nu)
+		else:
+			nu = 0
+	waar(langst <= World.BLIK_TIKKEN + 1, "een blik duurt hooguit %d tikken (%d)" % [World.BLIK_TIKKEN, langst])
+	_na_afloop()
+
+## The sad walk out of a shop (owner, 2026-09-24: "het dier ... langzaam
+## wegloopt"): head down (`sjokA`/`sjokB`), and slower than a walk.
+func test_sjokken_is_langzaam_en_sip() -> void:
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(false)
+	World.naar("receptie")
+	World.zet(T, "receptie", 30.0, 60.0, {"kind": "konijn"})
+	var uit := {}
+	_bestel(uit, T, [Vector2(90, 60)])
+	var gewoon := _draai(uit)
+	World.zet(T, "receptie", 30.0, 60.0, {"kind": "konijn"})
+	var uit2 := {}
+	_bestel(uit2, T, [Vector2(90, 60)], {"pose": "sjok", "tempo": 0.4, "na": "sip"})
+	var poses := {}
+	var t := 0
+	while not uit2.has("klaar") and t < 600:
+		World._tik()
+		t += 1
+		poses[World.dier(T).pose] = true
+	waar(t > gewoon * 2, "sjokken duurt veel langer dan lopen (%d tegen %d tikken)" % [t, gewoon])
+	waar(poses.has("sjokA") and poses.has("sjokB"), "met de kop omlaag (%s)" % str(poses.keys()))
+	waar(not poses.has("loopA"), "en niet de gewone loop")
+	gelijk(World.dier(T).staat, "sip", "en daarna sip")
+	Ui.zet_rust_modus(rust_voor)
+	_na_afloop()
+
 # ------------------------------------------------------------------ decor
 
 ## world.md §1.7 — ownership, the room cap and the copy that comes back.
@@ -728,7 +893,13 @@ func test_lopen_gaat_om_het_bad_heen() -> void:
 	waar(not om.is_empty(), "van het verre dek naar de mat gaat om het water (%s)" % str(om))
 	gelijk(Rooms.om_het_water("zwembad", Vector2(132, 56), Vector2(12, 56)), [], "langs het dek is de lijn droog")
 	gelijk(Rooms.om_het_water("zwembad", Vector2(60, 28), Vector2(12, 56)), [], "uit het water is de rechte weg de kortste")
-	gelijk(Rooms.om_het_water("receptie", Vector2(10, 10), Vector2(90, 90)), [], "een kamer zonder bad kent geen omweg")
+	gelijk(Rooms.om_het_water("gang", Vector2(10, 10), Vector2(100, 30)), [], "een kamer zonder bad kent geen omweg")
+	# the lobby's desk is walked round the same way (2026-09-24: the shop door
+	# is behind the end of it), and a walk in front of it stays straight
+	waar(not Rooms.om_het_water("receptie", Vector2(60, 60), Vector2(112, 8)).is_empty(),
+		"naar de winkeldeur gaat om de balie")
+	gelijk(Rooms.om_het_water("receptie", Vector2(20, 60), Vector2(100, 90)), [],
+		"voor de balie langs blijft recht")
 	World.naar("zwembad")
 	World.zet("t_droog", "zwembad", 132.0, 56.0, {"kind": "hond"})
 	World.ga("t_droog", 9.0, 28.0, "wacht")

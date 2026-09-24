@@ -26,14 +26,83 @@ const KOM := {
 	"brok": Color("#BC8149"), "brok2": Color("#97663A"),
 }
 
-## Accessories, in the fixed order that makes a list into one cache key.
-const ACC_NAMEN := ["hoedje", "sjaaltje", "bal"]
+## Accessories, in the fixed order that makes a list into one cache key.  The
+## HTML's three come first and keep their places, so every key and every golden
+## plate they had stays exactly what it was; the wardrobe of the shops follows
+## (owner, 2026-09-24, see `KLEDING`).
+const ACC_NAMEN := ["hoedje", "sjaaltje", "bal",
+	"pet", "strohoed", "strik", "kroon",
+	"streepsjaal", "das", "parels",
+	"gympjes", "laarsjes", "sokjes", "slofjes",
+	"zonnebril"]
 const HOED := BAND
 const HOED_LINT := WIT
 const SJAAL := Color("#F6A957")      ## PAL.gans.e
 const SJAAL_FR := WIT
 const BAL_KL := Color("#F4C8D5")     ## PAL.poes.e
 const BAL_BAND := WIT
+
+## THE WARDROBE (owner, 2026-09-24: "meer aanpassingsmogelijkheden in de
+## minigames, zoals kleding of andere outfit-opties" — "Maak ze niet te groot
+## op het dier wanneer ze gedragen worden, het dier moet wel een beetje
+## herkenbaar blijven").  Every piece has a SLOT, and an animal wears at most
+## one piece per slot (`World.accessoire` takes the old one off).  Every piece
+## stays small on purpose:
+##   hoofd  at most three layers over the head, and never lower than the top
+##          of the eyes (`_kop_vrij`), so the face always stays in view;
+##   nek    at most one voxel off the skin;
+##   poten  only repaints the paws (the bottom layers), nothing is added;
+##   ogen   one voxel in front of the face, the eyes' own size;
+##   speel  the ball of the HTML, held against the chest.
+## `naam` and `lid` are what a card says ("de pet", "de gympjes"); `veel` marks
+## a pair of things — shoes are sold per shoe, one per paw (`poten_van`).
+const KLEDING := {
+	"hoedje": {"slot": "hoofd", "icoon": "🎩", "naam": "hoedje", "lid": "het"},
+	"sjaaltje": {"slot": "nek", "icoon": "🧣", "naam": "sjaaltje", "lid": "het"},
+	"bal": {"slot": "speel", "icoon": "⚽", "naam": "bal", "lid": "de"},
+	"pet": {"slot": "hoofd", "icoon": "🧢", "naam": "pet", "lid": "de"},
+	"strohoed": {"slot": "hoofd", "icoon": "👒", "naam": "strohoed", "lid": "de"},
+	"strik": {"slot": "hoofd", "icoon": "🎀", "naam": "strik", "lid": "de"},
+	"kroon": {"slot": "hoofd", "icoon": "👑", "naam": "kroon", "lid": "de"},
+	"streepsjaal": {"slot": "nek", "icoon": "🧣", "naam": "streepsjaal", "lid": "de"},
+	"das": {"slot": "nek", "icoon": "👔", "naam": "das", "lid": "de"},
+	"parels": {"slot": "nek", "icoon": "📿", "naam": "parelketting", "lid": "de"},
+	"gympjes": {"slot": "poten", "icoon": "👟", "naam": "gympjes", "lid": "de", "veel": true},
+	"laarsjes": {"slot": "poten", "icoon": "👢", "naam": "laarsjes", "lid": "de", "veel": true},
+	"sokjes": {"slot": "poten", "icoon": "🧦", "naam": "sokjes", "lid": "de", "veel": true},
+	"slofjes": {"slot": "poten", "icoon": "🥿", "naam": "gouden slofjes", "lid": "de", "veel": true},
+	"zonnebril": {"slot": "ogen", "icoon": "🕶️", "naam": "zonnebril", "lid": "de"},
+}
+const SLOTEN := ["hoofd", "nek", "poten", "ogen", "speel"]
+
+const PET_KL := Color("#6FA8DC")
+const PET_KLEP := Color("#5A92C8")
+const STRO := Color("#EFD08A")
+const STRO_LINT := Color("#E97B8E")
+const STRIK_KL := Color("#F28BB0")
+const STRIK_KNOOP := Color("#D9709A")
+const GOUD := Color("#F2C94C")
+const GOUD_D := Color("#D9A93A")
+const ROBIJN := Color("#E4574B")
+const STREEP_KL := Color("#7FB3E0")
+const DAS_KL := Color("#D96A6A")
+const DAS_KNOOP := Color("#B85454")
+const PAREL := Color("#FBF4E8")
+const PAREL_D := Color("#E6D8C6")
+const GYMP := Color("#E86A5E")
+const LAARS := Color("#F2C94C")
+const LAARS_RAND := Color("#E0B23A")
+const SOK := Color("#F4A6C0")
+const MONTUUR := Color("#4A3B45")
+const GLAS := Color("#5E5470")
+
+## How many paws a guest stands on — shoes are sold one per paw.
+static func poten_van(kind: String) -> int:
+	return 2 if kind == "gans" else 4
+
+## The slot a piece goes in ("" for a name the wardrobe does not know).
+static func slot_van(naam: String) -> String:
+	return str((KLEDING.get(naam, {}) as Dictionary).get("slot", ""))
 
 ## The fifteen poses (art-sound-rules.md §5).  All frame poses: real geometry,
 ## never a transform.
@@ -73,6 +142,24 @@ const POSE_EXTRA := {
 	"fladder":  {"hx": 0, "hy": 1, "oor": "perk", "staart": "r", "mond": 1, "oog": 0, "stap": 0, "zit": 0, "lig": 0, "vleugel": 2},
 	"fladderA": {"hx": 1, "hy": 0, "oor": "rust", "staart": "l", "mond": 0, "oog": 0, "stap": 1, "zit": 0, "lig": 0, "vleugel": 2},
 	"fladderB": {"hx": 1, "hy": 0, "oor": "rust", "staart": "r", "mond": 0, "oog": 0, "stap": 2, "zit": 0, "lig": 0, "vleugel": 1},
+	# The review of 2026-09-24 (owner: "Kun je alle animaties en personages
+	# nakijken en verbeteren?").  These are DRAWN frames only: `World` shows
+	# them in place of a plain `rust` or walking frame (`Dier.beeld`), while
+	# the logical pose every game and test reads stays `rust` / `loopA` /
+	# `loopB`.
+	#   knipper   a blink: the eyes shut for two ticks now and then;
+	#   loopM     the passing step between loopA and loopB, so a walk is a
+	#             four-beat cycle (A, M, B, M) instead of two stiff stances;
+	#   kwispelA/B  the tail swings left and right while a guest waits for you;
+	#   sjokA/B   the sad walk out of a shop (owner, 2026-09-24: "het dier
+	#             teleurgesteld de winkel uit ... en langzaam wegloopt"): head
+	#             low, ears down, tail low, the corners of the mouth down.
+	"knipper":  {"hx": 0, "hy": 0, "oor": "rust", "staart": "mid", "mond": 0, "oog": 3, "stap": 0, "zit": 0, "lig": 0},
+	"loopM":    {"hx": 1, "hy": 1, "oor": "rust", "staart": "mid", "mond": 0, "oog": 0, "stap": 0, "zit": 0, "lig": 0},
+	"kwispelA": {"hx": 0, "hy": 0, "oor": "perk", "staart": "l", "mond": 1, "oog": 0, "stap": 0, "zit": 0, "lig": 0},
+	"kwispelB": {"hx": 0, "hy": 1, "oor": "perk", "staart": "r", "mond": 1, "oog": 0, "stap": 0, "zit": 0, "lig": 0},
+	"sjokA":    {"hx": 1, "hy": -2, "oor": "hang", "staart": "laag", "mond": 2, "oog": 2, "stap": 1, "zit": 0, "lig": 0},
+	"sjokB":    {"hx": 1, "hy": -2, "oor": "hang", "staart": "laag", "mond": 2, "oog": 2, "stap": 2, "zit": 0, "lig": 0},
 }
 
 ## One pose by name: the HTML's fifteen first, then the arrival's; an unknown
@@ -389,11 +476,16 @@ static func ankers(kind: String, p: Dictionary) -> Dictionary:
 
 ## A flat brim sunk one layer into the head plus a rounded crown, three layers
 ## high: a cap, not a box.  Rabbit ears are higher than the crown and stick out.
-static func hoedje(v: Array, k: Array) -> void:
+##
+## `til` lifts it and `krimp` narrows brim and crown (the review of 2026-09-24):
+## on the goose's small head the HTML's cap sat over the eyes and was wider than
+## the head, so a goose in a hat was a hat on a beak.  0 and 0 is the HTML's
+## cap exactly (the golden plate `gast_hond_rust_g4_hoedje`).
+static func hoedje(v: Array, k: Array, til := 0, krimp := 0.0) -> void:
 	var cx: float = k[0]
-	var y := JsGetal.vloer(k[1])
-	var rx: float = k[2]
-	var rz: float = k[3]
+	var y := JsGetal.vloer(k[1]) + til
+	var rx: float = float(k[2]) - krimp
+	var rz: float = float(k[3]) - krimp
 	ArtVorm.ell(v, cx, y - 0.2, 7.5, rx + 0.7, 0.9, rz + 0.7, HOED, {"e": 3.0})
 	var n0 := v.size()
 	ArtVorm.ell(v, cx, y, 7.5, rx - 0.8, 3.2, rz - 0.8, HOED, {"e": 3.0, "ymin": y})
@@ -503,7 +595,26 @@ static func dak_van(v: Array) -> Dictionary:
 
 ## A thick collar around the neck plus a slip hanging over the chest toward the
 ## viewer, with a white fringe at the bottom.
-static func sjaaltje(v: Array, h: Array) -> void:
+##
+## `o` sizes and colours it; empty is the HTML's scarf exactly (the golden
+## plate `gast_hond_rust_g4_sjaaltje`):
+##   kl, fr      the cloth and the fringe (SJAAL, SJAAL_FR)
+##   streep      a second colour in diagonal stripes (none)
+##   band        half the width of the painted band along the neck (1.8)
+##   ring, ringdik  how far the collar stands off the neck, and its width (1.2, 2.2)
+##   slip, breed    how many layers the slip hangs down, and its width (7, 4)
+## `sjaal_maat(kind)` gives the smaller animals a smaller scarf (review of
+## 2026-09-24): on the goose the HTML's scarf coloured the whole neck from the
+## body up to the beak, and on the cat and the rabbit its slip covered the
+## chest.
+static func sjaaltje(v: Array, h: Array, o: Dictionary = {}) -> void:
+	var kl: Color = o.get("kl", SJAAL)
+	var fr: Color = o.get("fr", SJAAL_FR)
+	var band: float = o.get("band", 1.8)
+	var uit: float = o.get("ring", 1.2)
+	var ringdik: float = o.get("ringdik", 2.2)
+	var slip: int = o.get("slip", 7)
+	var breed: int = o.get("breed", 4)
 	var tm: float = h[6]
 	var dik: float = h[7]
 	var r: float = float(h[4]) + dik
@@ -518,26 +629,42 @@ static func sjaaltje(v: Array, h: Array) -> void:
 	for x in dak.keys():
 		if dak[x] > plafond:
 			dak[x] = plafond
-	ring_verf(v, x0, y0, x1, y1, 7.5, r + 1.8, rz + 1.8, SJAAL, tm, 1.8, plafond)
-	ring(v, x0, y0, x1, y1, 7.5, r + 1.2, rz + 1.2, SJAAL, tm, 2.2, dak)
+	ring_verf(v, x0, y0, x1, y1, 7.5, r + band, rz + band, kl, tm, band, plafond)
+	ring(v, x0, y0, x1, y1, 7.5, r + uit, rz + uit, kl, tm, ringdik, dak)
 	# First measure every place, then put them down: otherwise layer 2 measures
 	# the slip of layer 1.
 	var kaart := huid_kaart(v)
 	var lagen: Array = []
 	var basis := JsGetal.rond(x0)
-	for y in 7:
+	for y in slip:
 		var yy := sy - y
 		var xm := basis + 2
 		while xm > basis - 3:
 			if kaart.has(xm * 4096 + yy):
 				break
 			xm -= 1
-		for i in 4:
+		for i in breed:
 			var k := (xm - i) * 4096 + yy
 			if kaart.has(k):
-				lagen.append([xm - i, yy, int(kaart[k]) + 1, SJAAL_FR if y == 6 else SJAAL])
+				lagen.append([xm - i, yy, int(kaart[k]) + 1, fr if y == slip - 1 else kl])
 	for l in lagen:
 		ArtVorm.bx(v, l[0], l[1], l[2], 1, 1, 2, l[3])
+	if o.has("streep"):
+		# diagonal stripes over everything the scarf painted or added — the
+		# animal's own colours never equal the cloth, so only the scarf changes
+		var streep: Color = o["streep"]
+		for p in v:
+			if p["k"] == kl and (int(p["x"]) + int(p["y"])) % 3 == 0:
+				p["k"] = streep
+
+## The scarf's size per species (see `sjaaltje`); the dog keeps the HTML's.
+static func sjaal_maat(kind: String) -> Dictionary:
+	match kind:
+		"gans":
+			return {"band": 0.9, "ring": 0.5, "ringdik": 1.0, "slip": 3, "breed": 2}
+		"poes", "konijn":
+			return {"band": 1.4, "ring": 0.9, "ringdik": 1.6, "slip": 4, "breed": 3}
+	return {}
 
 ## A ball with a white equator against the chest, fixed to the SKIN of the
 ## already-posed model, so it stays a round ball even lying in bed.
@@ -561,6 +688,189 @@ static func bal(v: Array, h: Array) -> void:
 	for i in range(n0, v.size()):
 		if v[i]["y"] == cy:
 			v[i]["k"] = BAL_BAND
+
+# ----------------------------------------------------------- de garderobe
+
+## The lowest layer a hat may use: the one over the top of the eyes (the rows
+## `ogen()` paints in each model), so a hat never covers the face.
+static func _kop_vrij(kind: String, p: Dictionary) -> int:
+	var hy: int = p["hy"]
+	match kind:
+		"poes":
+			return 19 + hy
+		"konijn":
+			return 20 + hy
+		"gans":
+			var ghy: int = JsGetal.rond(float(p["hy"]) * 2.2) if int(p["hy"]) < 0 else int(p["hy"])
+			return 21 + ghy + 5
+	return 20 + hy
+
+## Where the eyes of this species sit in this pose — the numbers of its
+## `ogen()` call: [x, y, rows, width, z of the left eye, z of the right eye].
+static func _ogen_van(kind: String, p: Dictionary) -> Array:
+	var hx: int = p["hx"]
+	var hy: int = p["hy"]
+	match kind:
+		"poes":
+			return [24 + hx, 17 + hy, 2, 2, 4, 11]
+		"konijn":
+			return [24 + hx, 18 + hy, 2, 2, 4, 11]
+		"gans":
+			var ghx := JsGetal.rond(float(p["hx"]) * 2.5)
+			var ghy: int = JsGetal.rond(float(p["hy"]) * 2.2) if int(p["hy"]) < 0 else int(p["hy"])
+			return [20 + ghx, 21 + ghy + 4, 1, 1, 5, 10]
+	return [25 + hx, 18 + hy, 2, 2, 4, 11]
+
+## A cap: a low dome on the head, a flat peak over the face and a button on
+## top.  Three layers, and the peak stays over the eyes, not on them.
+static func pet(v: Array, k: Array, y0: int) -> void:
+	var cx := float(k[0]) - 0.4
+	var rx := maxf(1.6, float(k[2]) - 0.7)
+	var rz := maxf(1.8, float(k[3]) - 0.8)
+	ArtVorm.ell(v, cx, y0, 7.5, rx, 2.4, rz, PET_KL, {"e": 2.6, "ymin": y0})
+	ArtVorm.ell(v, cx + rx + 0.6, y0, 7.5, 1.9, 0.5, maxf(1.2, rz - 1.0), PET_KLEP, {"e": 2.4})
+	ArtVorm.bx(v, JsGetal.rond(cx), y0 + 3, 7, 1, 1, 2, WIT)
+
+## A straw hat: a brim one layer thick, a little wider than the head, and a
+## low crown with a pink ribbon round it.
+static func strohoed(v: Array, k: Array, y0: int) -> void:
+	var cx: float = k[0]
+	var rx: float = k[2]
+	var rz: float = k[3]
+	ArtVorm.ell(v, cx, y0, 7.5, rx * 1.18, 0.5, rz * 1.12, STRO, {"e": 2.6})
+	var n0 := v.size()
+	ArtVorm.ell(v, cx, y0 + 1, 7.5, maxf(1.4, rx - 1.4), 1.9, maxf(1.6, rz - 1.4), STRO,
+		{"e": 3.0, "ymin": y0 + 1})
+	for i in range(n0, v.size()):
+		if int(v[i]["y"]) == y0 + 1:
+			v[i]["k"] = STRO_LINT
+
+## A bow on top of the head: a knot in the middle and a loop to each side that
+## rises outward.  In front of the cat's and the rabbit's ears, not in them.
+static func strik(v: Array, k: Array, y0: int) -> void:
+	var x := JsGetal.rond(float(k[0]))
+	var lus := 2 if float(k[3]) < 4.0 else 3
+	ArtVorm.bx(v, x, y0, 7, 2, 2, 2, STRIK_KNOOP)
+	for i in lus:
+		var h := 2 if i == 0 else 3
+		ArtVorm.bx(v, x, y0, 6 - i, 2, h, 1, STRIK_KL)
+		ArtVorm.bx(v, x, y0, 9 + i, 2, h, 1, STRIK_KL)
+
+## A little crown: a gold ring on the head with every other cell a point, and
+## a ruby at the front.  Smaller than the head, so the ears stay out of it.
+static func kroon(v: Array, k: Array, y0: int) -> void:
+	var cx: float = k[0]
+	var r := maxf(1.5, minf(float(k[2]), float(k[3])) - 1.5)
+	var voor := Vector2i(-(1 << 20), 0)
+	for x in range(JsGetal.vloer(cx - r - 1.0), JsGetal.plafond(cx + r + 1.0) + 1):
+		for z in range(JsGetal.vloer(7.5 - r - 1.0), JsGetal.plafond(7.5 + r + 1.0) + 1):
+			var d := Vector2(float(x) - cx, float(z) - 7.5).length()
+			if d > r + 0.5 or d < r - 0.8:
+				continue
+			v.append({"x": x, "y": y0, "z": z, "k": GOUD_D})
+			v.append({"x": x, "y": y0 + 1, "z": z, "k": GOUD})
+			if (x + z) % 2 == 0:
+				v.append({"x": x, "y": y0 + 2, "z": z, "k": GOUD})
+			if x > voor.x or (x == voor.x and absf(float(z) - 7.5) < absf(float(voor.y) - 7.5)):
+				voor = Vector2i(x, z)
+	if voor.x > -(1 << 20):
+		v.append({"x": voor.x, "y": y0 + 1, "z": voor.y, "k": ROBIJN})
+
+## A tie: a knot at the throat and a blade down the chest, one voxel in front
+## of the skin all the way, so it follows the animal's own shape.  Only skin
+## under the neck's front edge counts — the chin and the muzzle stick out
+## further and the tie must not float in front of them.
+static func das(v: Array, h: Array) -> void:
+	var grens := float(h[0]) + float(h[4]) + 1.5
+	var voor := {}
+	for p in v:
+		if float(p["x"]) > grens:
+			continue
+		var key := int(p["y"]) * 64 + int(p["z"])
+		if not voor.has(key) or int(p["x"]) > int(voor[key]):
+			voor[key] = int(p["x"])
+	# under the head: the throat itself hides behind the chin from where the
+	# camera looks, so the knot sits on the chest just below it
+	var top := JsGetal.rond(float(h[1])) - 2
+	for i in 5:
+		var y := top - i
+		for z in [7, 8]:
+			var key: int = y * 64 + int(z)
+			if voor.has(key):
+				v.append({"x": int(voor[key]) + 1, "y": y, "z": z,
+					"k": DAS_KNOOP if i == 0 or i == 4 else DAS_KL})
+
+## A string of pearls round the neck where it leaves the body — where the
+## dog wears its collar, the one stretch of neck the head and the ears do not
+## hide — a thin ring just off the skin, pearls alternating with gold beads,
+## so it shows on the white goose as well as on the sand-coloured dog.
+static func parels(v: Array, h: Array) -> void:
+	var dak := dak_van(v)
+	var n0 := v.size()
+	ring(v, h[0], h[1], h[2], h[3], 7.5, float(h[4]) + float(h[7]) * 0.8,
+		float(h[5]) + float(h[7]) * 0.8, PAREL, 0.12, 0.7, dak)
+	for i in range(n0, v.size()):
+		if (int(v[i]["x"]) + int(v[i]["y"]) + int(v[i]["z"])) % 2 == 1:
+			v[i]["k"] = GOUD
+
+## Shoes only repaint the paws — nothing is added, so the animal keeps its
+## shape.  Measured from the bottom of every column, so a lifted paw in the
+## walk wears its shoe too; columns that do not reach the floor (the body,
+## the tail) are never touched.
+static func schoenen(v: Array, naam: String, kind: String) -> void:
+	var hoog := 1 if naam == "gympjes" or naam == "slofjes" else 3
+	if kind == "konijn":
+		hoog = 1                     # its hind feet sit under the haunch
+	var bodem := {}
+	for p in v:
+		var key := int(p["x"]) * 4096 + int(p["z"])
+		if not bodem.has(key) or int(p["y"]) < int(bodem[key]):
+			bodem[key] = int(p["y"])
+	for p in v:
+		var b := int(bodem[int(p["x"]) * 4096 + int(p["z"])])
+		var y := int(p["y"]) - b
+		if b > 1 or y > hoog or int(p["y"]) > 4:
+			continue
+		match naam:
+			"gympjes":
+				p["k"] = WIT if y == 0 and kind != "gans" else GYMP
+			"slofjes":
+				p["k"] = GOUD_D if y == 0 else GOUD
+			"laarsjes":
+				p["k"] = LAARS_RAND if y == hoog else LAARS
+			_:
+				p["k"] = SOK if y % 2 == 0 else WIT
+
+## Sunglasses: a dark lens over each eye, a rim over and beside it, and a
+## bridge over the nose — one voxel in front of the face, the eyes' own size.
+static func zonnebril(v: Array, kind: String, p: Dictionary) -> void:
+	var e := _ogen_van(kind, p)
+	var ex: int = e[0]
+	var ey: int = e[1]
+	var eh: int = e[2]
+	var ew: int = e[3]
+	var z1: int = e[4]
+	var z2: int = e[5]
+	var voor := {}
+	for q in v:
+		var y := int(q["y"])
+		if int(q["x"]) < ex - 1 or y < ey or y > ey + eh:
+			continue
+		var key := y * 64 + int(q["z"])
+		if not voor.has(key) or int(q["x"]) > int(voor[key]):
+			voor[key] = int(q["x"])
+	var cellen: Array = []
+	for zs in [[z1, z1 + ew - 1], [z2 - ew + 1, z2]]:
+		for y in range(ey, ey + eh + 1):
+			for z in range(int(zs[0]) - 1, int(zs[1]) + 2):
+				var rand: bool = y == ey + eh or z == int(zs[0]) - 1 or z == int(zs[1]) + 1
+				cellen.append([y, z, MONTUUR if rand else GLAS])
+	for z in range(z1 + ew + 1, z2 - ew):
+		cellen.append([ey + eh, z, MONTUUR])
+	for c in cellen:
+		var key: int = int(c[0]) * 64 + int(c[1])
+		if voor.has(key):
+			v.append({"x": int(voor[key]) + 1, "y": c[0], "z": c[1], "k": c[2]})
 
 ## The fixed order turns a list into one cache key; unknown names drop out.
 static func acc_sleutel(lijst) -> String:
@@ -594,10 +904,40 @@ static func bouw(kind: String, pose: String, sleutel: String) -> Array:
 			return zitten(v)
 		return bukken(v, buk) if buk > 0.0 else v
 	var a := ankers(kind, p)
+	# the neck first, then paws and eyes, and the hat last: it sits over all
+	# of it.  With only the HTML's pieces this is the HTML's order exactly.
+	var maat := sjaal_maat(kind)
 	if acc.has("sjaaltje"):
-		sjaaltje(v, a["hals"])
+		sjaaltje(v, a["hals"], maat)
+	if acc.has("streepsjaal"):
+		var o := maat.duplicate()
+		o["kl"] = STREEP_KL
+		o["fr"] = WIT
+		o["streep"] = WIT
+		sjaaltje(v, a["hals"], o)
+	if acc.has("parels"):
+		parels(v, a["hals"])
+	if acc.has("das"):
+		das(v, a["hals"])
+	for naam in ["gympjes", "laarsjes", "sokjes", "slofjes"]:
+		if acc.has(naam):
+			schoenen(v, naam, kind)
+	if acc.has("zonnebril"):
+		zonnebril(v, kind, p)
 	if acc.has("hoedje"):
-		hoedje(v, a["kop"])
+		if kind == "gans":
+			hoedje(v, a["kop"], 1, 0.6)
+		else:
+			hoedje(v, a["kop"])
+	var hoed_y := maxi(_kop_vrij(kind, p), JsGetal.vloer(float(a["kop"][1])) - 1)
+	if acc.has("pet"):
+		pet(v, a["kop"], hoed_y)
+	if acc.has("strohoed"):
+		strohoed(v, a["kop"], hoed_y)
+	if acc.has("strik"):
+		strik(v, a["kop"], hoed_y + 1)
+	if acc.has("kroon"):
+		kroon(v, a["kop"], hoed_y + 1)
 	# Hat and scarf sit on the animal and sink with the pose; the ball goes on
 	# AFTER, against the skin of the already-squashed model.
 	if p["lig"]:

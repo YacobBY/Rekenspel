@@ -329,12 +329,27 @@ func _cel_vrij(r: Kamer, x: int, z: int) -> bool:
 ## Returns the intermediate points only; empty when the line is dry already.
 const WATER_RAND := 5.0
 
+##
+## The desk of the receptie is walked round the same way (2026-09-24): the door
+## to the shops is in the back wall right of it, and the straight line from the
+## floor to that door cut across the end of the counter.  Every other walk in
+## the lobby stays in front of the desk (`vrij_z0`), so for those nothing
+## changes: the line never touches it.
+const BALIE_RAND := 2.0
+
 func om_het_water(kamer_id: String, van: Vector2, naar: Vector2) -> Array:
 	var r := get_kamer(kamer_id)
-	if r == null or r.bad.is_empty():
+	if r == null or (r.bad.is_empty() and r.balie.is_empty()):
 		return []
-	var water := Rect2(float(r.bad["x0"]), float(r.bad["z0"]),
-		float(r.bad["x1"]) - float(r.bad["x0"]), float(r.bad["z1"]) - float(r.bad["z0"]))
+	var water := Rect2()
+	if not r.bad.is_empty():
+		water = Rect2(float(r.bad["x0"]), float(r.bad["z0"]),
+			float(r.bad["x1"]) - float(r.bad["x0"]), float(r.bad["z1"]) - float(r.bad["z0"]))
+	else:
+		var b := r.balie
+		water = Rect2(float(b["x0"]) - BALIE_RAND, float(b["z0"]) - BALIE_RAND,
+			float(b["x1"]) - float(b["x0"]) + 2.0 * BALIE_RAND,
+			float(b["z1"]) - float(b["z0"]) + 2.0 * BALIE_RAND)
 	if water.has_point(van) or water.has_point(naar) or not _snijdt(water, van, naar):
 		return []
 	var m := WATER_RAND
@@ -609,7 +624,11 @@ func _bouw_kamers() -> void:
 		"deuren": [{"naar": "gang", "wand": "x", "at": 24, "breed": 12},
 			# R2: de speelzaal komt bij de plant in de verre hoek; de plant had
 			# die hoek al grotendeels leeggemaakt (zie tmp/log voor de meting).
-			{"naar": "speelzaal", "wand": "x", "at": 108, "breed": 12}],
+			{"naar": "speelzaal", "wand": "x", "at": 108, "breed": 12},
+			# De Winkelstraat (owner, 2026-09-24): in the back wall right of
+			# the desk, where the paw poster hung.  A walk to it goes round the
+			# end of the desk (`om_het_water` keeps every walk off the desk).
+			{"naar": "winkels", "wand": "z", "at": 106, "breed": 12}],
 		# The hotel's front door (owner, 2026-09-23: the guests "komen momenteel
 		# vanuit de gang binnen ipv ingang").  It stands where the pink rug lies,
 		# in the FRONT edge of the lobby — the side the camera looks in through,
@@ -644,7 +663,11 @@ func _bouw_kamers() -> void:
 			# its board and onto the bench.
 			{"n": "prikbord", "x": 12, "z": 1, "ver": true},
 			{"n": "klok", "x": 70, "z": 1, "y": 36, "ver": true},
-			{"n": "poster_poot", "x": 112, "z": 1, "y": 32, "ver": true},
+			# the paw poster made room for the shop door; over that door hangs
+			# the shop sign with its shopping bag (every door shows where it
+			# goes, owner 2026-09-23)
+			{"n": "poster_poot", "x": 88, "z": 1, "y": 36, "ver": true},
+			{"n": "winkelbord", "x": 112, "z": 1, "y": 29, "ver": true},
 			{"n": "sleutelbordz", "x": 1, "z": 84, "ver": true},
 			# the waiting corner along the left wall, between the door (z 24..36)
 			# and the key board (z 84): the bench runs z 48..67, the case z 70..73
@@ -909,6 +932,37 @@ func _bouw_kamers() -> void:
 			{"n": "zaadkist", "x": 118, "z": 20},
 			{"n": "pompoenen", "x": 114, "z": 100},
 			{"n": "kruiwagen", "x": 22, "z": 104}]})
+	# De Winkelstraat 🛍 (owner, 2026-09-24: "Maak een level in een winkel level
+	# in het hotel met kraampjes en een luxe winkel waarin veel gerekend moet
+	# worden ... Maak verschillende winkels met verschillende items zoals hoeden
+	# sjalen, schoenen etc.").  A covered shopping arcade beside the lobby: a
+	# tiled floor with a warm runner as the street, three market stalls with
+	# striped awnings along the back wall — hats (pink), scarves (mint), shoes
+	# (blue) — the luxury shop with its gold front and a glass display counter
+	# along the left wall, and the fitting room's big mirror by the front.
+	# Every shop is a game (`games/hoeden`, `sjaals`, `schoenen`, `luxe`,
+	# `paskamer`), and `mijd` keeps the floor where their customers stand free
+	# of wandering guests and bought furniture.
+	_kamer({"id": "winkels", "naam": "Winkels", "icoon": "🛍️", "w": 132, "d": 112,
+		"wand": 54, "vloer": "tegel", "loop": 1.5,
+		"matten": [{"x0": 0, "x1": 132, "z0": 28, "z1": 42,
+			"kl": [Color("#E9C2B4"), Color("#E2B5A6")]}],
+		"kijk": Vector2(96, 34),
+		"mijd": [{"x0": 8, "x1": 100, "z0": 22, "z1": 36},
+			{"x0": 20, "x1": 40, "z0": 50, "z1": 74},
+			{"x0": 8, "x1": 26, "z0": 84, "z1": 102}],
+		"deuren": [{"naar": "receptie", "wand": "z", "at": 114, "breed": 12}],
+		"decor": [
+			{"n": "hoedenkraam", "x": 22, "z": 12},
+			{"n": "sjaalkraam", "x": 54, "z": 12},
+			{"n": "schoenenkraam", "x": 86, "z": 12},
+			{"n": "luxepuiz", "x": 1, "z": 62, "ver": true},
+			{"n": "vitrinez", "x": 16, "z": 62},
+			{"n": "spiegelz", "x": 1, "z": 94, "ver": true},
+			{"n": "lantaarn", "x": 8, "z": 30},
+			{"n": "tassen", "x": 108, "z": 16},
+			{"n": "plant", "x": 124, "z": 58},
+			{"n": "bloembak", "x": 90, "z": 104}]})
 	_bouw_tuin(_kamers["tuin"])
 	_bouw_zwembad(_kamers["zwembad"])
 	for id in _volgorde:

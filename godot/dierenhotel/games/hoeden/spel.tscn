@@ -1,0 +1,7 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://spel/minigame.tscn" id="1_mg"]
+[ext_resource type="Script" path="res://games/hoeden/spel.gd" id="2_wk"]
+
+[node name="Hoeden" instance=ExtResource("1_mg")]
+script = ExtResource("2_wk")

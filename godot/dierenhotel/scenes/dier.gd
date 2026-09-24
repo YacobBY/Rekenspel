@@ -62,7 +62,7 @@ func _water(d) -> void:
 	var top := int(round(-beeld.position.y))
 	if top <= 0 or top >= beeld.texture.get_height():
 		return
-	var p = Art.water_plaat(d.kind, d.pose, g, top, d.acc)
+	var p = Art.water_plaat(d.kind, str(d.params.get("pose", d.pose)), g, top, d.acc)
 	if p != null:
 		beeld.texture = p.tex
 

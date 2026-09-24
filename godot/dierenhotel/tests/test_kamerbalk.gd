@@ -200,6 +200,32 @@ func test_elf_chips_op_een_rij_op_de_tablet() -> void:
 	gelijk(rij.offset_left, float(UiKamerbalk.VULLING), "met de gewone vulling")
 	_af()
 
+## Twelve chips with the shopping arcade (2026-09-24): on the 1000 unit tablet
+## the row takes a step smaller pictures (and words, never under the floor)
+## before it wraps — a second row would take a band of height from the world
+## frame.  Where there is room, the full sizes stay.
+func test_twaalf_chips_op_een_rij_op_de_tablet() -> void:
+	_op(SCHERMEN[0], KADERS[0])
+	await _leg_uit(SCHERMEN[0], 0.0)
+	gelijk(_balk.chips().size(), 12, "elf kamers en de kaart")
+	gelijk(_balk.rijen(), 1, "één rij op de tablet")
+	var ic: Label = (_balk.chips()["winkels"] as Button).get_node("Rij/Icoon")
+	var nm: Label = (_balk.chips()["winkels"] as Button).get_node("Rij/Naam")
+	waar(ic.get_theme_font_size("font_size") < int(Ui.maten["icoon"]), "een stap kleinere plaatjes")
+	waar(nm.get_theme_font_size("font_size") >= UiThema.VLOER, "het woord nooit onder de vloer")
+	for id in _balk.chips():
+		var b: Button = _balk.chips()[id]
+		var w: Label = b.get_node("Rij/Naam")
+		waar(w.get_minimum_size().x <= b.custom_minimum_size.x, "%s: het woord past in de chip" % id)
+	_af()
+	# a wide screen keeps the full sizes
+	_op(Vector2(1280, 800), Vector2(1170, 669))
+	await _leg_uit(Vector2(1280, 800), 0.0)
+	gelijk(_balk.rijen(), 1, "één rij op 1280")
+	ic = (_balk.chips()["winkels"] as Button).get_node("Rij/Icoon")
+	gelijk(ic.get_theme_font_size("font_size"), int(Ui.maten["icoon"]), "met de gewone plaatjes")
+	_af()
+
 # ------------------------------------------------------------------- de rail
 
 ## The rail costs the world width, never height: it must fit in the height the

@@ -10,7 +10,7 @@ extends Proef
 ## mulberry32 bit for bit (architecture.md §13, Q-X1-2).
 
 const ORDE := ["receptie", "gang", "kamer1", "kamer2", "keuken", "tuin",
-	"zwembad", "wasserij", "speelzaal", "kas"]
+	"zwembad", "wasserij", "speelzaal", "kas", "winkels"]
 
 ## The five floors `ArtVloer.kleur()` knows how to draw (`art/vloer.gd:18`);
 ## any other word gives a room the plank floor by accident.
@@ -74,6 +74,9 @@ func test_maten_en_vloeren() -> void:
 		# R3: de kas, zo groot als de receptie-doos (twee spellen en negen
 		# meubels, en toch ≥ 8 loopplekken)
 		"kas": [128, 112, 40, "tegel", 1.25],
+		# 2026-09-24: de winkelstraat naast de receptie, drie kraampjes en de
+		# luxe winkel
+		"winkels": [132, 112, 54, "tegel", 1.5],
 	}
 	for id in verwacht:
 		var r := Rooms.get_kamer(id)
@@ -97,6 +100,7 @@ func test_kamerkaders() -> void:
 		"wasserij": [-190, 210, -116, 200],
 		"speelzaal": [-210, 238, -124, 224],
 		"kas": [-234, 266, -92, 250],
+		"winkels": [-234, 274, -120, 254],
 	}
 	for id in verwacht:
 		var box := Rooms.kader(Rooms.get_kamer(id))
@@ -130,6 +134,9 @@ func test_deurpunten() -> void:
 		# hing, en de tuindeur van de kas midden in haar achterwand
 		["tuin", "kas", 0, 68, 8, 68],
 		["kas", "tuin", 58, 0, 58, 8],
+		# 2026-09-24: de winkelstraat, in de achterwand rechts van de balie
+		["receptie", "winkels", 112, 0, 112, 8],
+		["winkels", "receptie", 120, 0, 120, 8],
 	]
 	for rij in verwacht:
 		var dp := Rooms.deur(rij[0], rij[1])
@@ -346,9 +353,24 @@ func test_niemand_loopt_door_de_balie() -> void:
 		if op_balie.has(stuk["n"]):
 			waar(_in_vak(b, Vector2(stuk["x"], stuk["z"])),
 				"%s staat op de balie" % stuk["n"])
-	# and there are exactly two doors out of the receptie now (R2: the playroom
-	# in the far corner), so exactly two door buttons
-	gelijk(r.deuren.size(), 2, "de receptie heeft twee deuren")
+	# and there are exactly three doors out of the receptie now (R2: the
+	# playroom in the far corner; 2026-09-24: the shops right of the desk), so
+	# exactly three door buttons
+	gelijk(r.deuren.size(), 3, "de receptie heeft drie deuren")
+	# The shop door is BEHIND the end of the desk, so the straight line to it
+	# would cut the counter: every walk to it goes round (`om_het_water`), and
+	# no leg of that walk touches the desk.
+	var winkel := Rooms.deur("receptie", "winkels")
+	var binnen := Vector2(winkel["ix"], winkel["iz"])
+	waar(not _in_vak(b, binnen), "de stap binnen bij de winkeldeur staat naast de balie")
+	for p in doelen:
+		var van: Vector2 = p
+		var legs: Array = Rooms.om_het_water("receptie", van, binnen)
+		legs.append(binnen)
+		for q in legs:
+			waar(not _kruist(b, van, q), "de loop van (%.0f, %.0f) naar de winkels gaat om de balie"
+				% [p.x, p.y])
+			van = q
 
 func _in_vak(b: Dictionary, p: Vector2) -> bool:
 	return p.x >= b["x0"] and p.x <= b["x1"] and p.y >= b["z0"] and p.y <= b["z1"]
@@ -570,8 +592,8 @@ func test_de_receptie_heeft_een_voordeur_buiten_de_deurgraaf() -> void:
 	gelijk(float(ing["dz"]), float(r.d) - 2.0, "de drempel, waar een gast verschijnt")
 	# it is not a door of the graph: the door pairs, points and paths stay as
 	# they were, and outside is no room
-	gelijk(r.deuren.size(), 2, "de receptie houdt twee deuren")
-	gelijk(r.deur_punten.size(), 2, "en twee deurpunten, dus twee deurknoppen")
+	gelijk(r.deuren.size(), 3, "de receptie houdt drie deuren")
+	gelijk(r.deur_punten.size(), 3, "en drie deurpunten, dus drie deurknoppen")
 	for dr in r.deuren:
 		waar(str(dr["wand"]) != "z" or float(dr["at"]) + float(dr["breed"]) <= a - 2.0
 			or float(dr["at"]) >= b + 2.0,
@@ -718,9 +740,10 @@ func test_de_kas_is_een_glazen_kas_achter_het_hotel() -> void:
 		var mz := (float(m["z0"]) + float(m["z1"])) / 2.0
 		waar(not Rooms.vrij_vak("kas", mx, mz), "geen gekocht meubel op een spel (%s)" % str(m))
 	waar(kas.zones.has("rijen"), "de moesbakken houden hun zone (R3)")
-	# every other room: no `mijd`, so nothing moved there
+	# every other room but the shops (their customers' spots, 2026-09-24): no
+	# `mijd`, so nothing moved there
 	for id in Rooms.lijst():
-		if id != "kas":
+		if id != "kas" and id != "winkels":
 			gelijk(Rooms.get_kamer(id).mijd.size(), 0, "%s houdt al zijn vloer" % id)
 
 ## A gate's rectangle is the gate in the fence line, not the door line behind

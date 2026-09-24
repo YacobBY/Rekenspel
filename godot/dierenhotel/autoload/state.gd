@@ -275,6 +275,8 @@ func _gast_vorm_klopt(g) -> bool:
 	if g.has("accessoires") and g["accessoires"] != null \
 			and typeof(g["accessoires"]) != TYPE_ARRAY:
 		return false
+	if g.has("kast") and g["kast"] != null and typeof(g["kast"]) != TYPE_ARRAY:
+		return false
 	return true
 
 func _checkin_vorm_klopt(v) -> bool:
@@ -396,6 +398,10 @@ func _repareer_gast(d: Dictionary, g: Dictionary, in_hotel: bool) -> void:
 		g["behoefte"] = "eten" if (in_hotel and not str(g["kamer"]).is_empty()) else "kamer"
 	if not g.has("accessoires") or typeof(g["accessoires"]) != TYPE_ARRAY:
 		g["accessoires"] = []
+	# the wardrobe (2026-09-24) is optional: a save without it simply has an
+	# empty one, and `kast_van` counts what he wears as his own anyway
+	if g.has("kast") and typeof(g["kast"]) != TYPE_ARRAY:
+		g["kast"] = []
 	if not g.has("scoops"):
 		g["scoops"] = 1
 	if not g.has("dagIn"):
@@ -679,6 +685,36 @@ func gast_in_bed(kamer: String, slot: String) -> Dictionary:
 	return {}
 
 ## The guest record itself, so a caller can change it in place.
+## The wardrobe of a guest (owner, 2026-09-24: "meer aanpassingsmogelijkheden
+## ... zoals kleding"): every piece it ever bought in the shops, worn or not,
+## in the fixed order of `ArtGasten.ACC_NAMEN`.  What he wears is always his
+## own, so a save from before the shops (a souvenir from the stall) counts.
+func kast_van(id: String) -> Array:
+	var g := gast_van(id)
+	var uit: Array = []
+	if g.is_empty():
+		return uit
+	var eigen: Array = []
+	for lijst in [g.get("kast", []), g.get("accessoires", [])]:
+		if typeof(lijst) == TYPE_ARRAY:
+			eigen.append_array(lijst)
+	for naam in ArtGasten.ACC_NAMEN:
+		if eigen.has(naam):
+			uit.append(naam)
+	return uit
+
+## Put a bought piece in the guest's wardrobe (it is not worn by this alone).
+func in_kast(id: String, naam: String) -> void:
+	var g := gast_van(id)
+	if g.is_empty() or not ArtGasten.KLEDING.has(naam):
+		return
+	var kast = g.get("kast", [])
+	if typeof(kast) != TYPE_ARRAY:
+		kast = []
+	if not (kast as Array).has(naam):
+		(kast as Array).append(naam)
+	g["kast"] = kast
+
 func gast_van(id: String) -> Dictionary:
 	for g in s["gasten"]:
 		if str(g.get("id", "")) == id:

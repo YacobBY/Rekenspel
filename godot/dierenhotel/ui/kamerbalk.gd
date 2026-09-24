@@ -217,7 +217,23 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = fal
 		if _rij_breedte(krap, krap.size()) <= breedte:
 			breedtes = krap
 		else:
-			breedtes = _chip_breedtes(VULLING)
+			# With the shopping arcade the hotel has twelve chips (2026-09-24),
+			# and the tight padding alone no longer fits a 1000 unit tablet.
+			# Before the row wraps — which costs the world frame a whole band —
+			# the picture and then the word take a step down, the way the rail
+			# does (`_meet_rail`); the word never goes under the 12 px floor and
+			# is never cut.  A row that fits with the full sizes keeps them.
+			var gepast := false
+			for trap in _rij_trappen():
+				_zet_letters(int(trap[0]), int(trap[1]))
+				krap = _chip_breedtes(VULLING_KRAP)
+				if _rij_breedte(krap, krap.size()) <= breedte:
+					breedtes = krap
+					gepast = true
+					break
+			if not gepast:
+				_zet_letters(int(_maten["icoon"]), maxi(UiThema.VLOER, int(_maten["klein"])))
+				breedtes = _chip_breedtes(VULLING)
 	if _strook:
 		# one row, as wide as it needs to be: the ScrollContainer takes the
 		# overflow instead of the world frame taking three rows of chips
@@ -258,6 +274,26 @@ func _chip_breedtes(vulling: int) -> Array[float]:
 			maxf(UiThema.HOT, nodig.y + 4.0))
 		uit.append(b.custom_minimum_size.x)
 	return uit
+
+## The smaller steps a ROW takes before it wraps: [picture, word].
+func _rij_trappen() -> Array:
+	var ic := int(_maten["icoon"])
+	var kl := maxi(UiThema.VLOER, int(_maten["klein"]))
+	return [
+		[maxi(16, int(round(ic * 0.85))), kl],
+		[maxi(16, int(round(ic * 0.8))), maxi(UiThema.VLOER, kl - 1)],
+		[maxi(16, int(round(ic * 0.75))), UiThema.VLOER],
+	]
+
+## Picture and word size of every chip in a row (not the rail).
+func _zet_letters(icoon_maat: int, naam_maat: int) -> void:
+	for b in _chips.values():
+		var ic: Label = b.get_node_or_null("Rij/Icoon")
+		if ic != null:
+			ic.add_theme_font_size_override("font_size", icoon_maat)
+		var nm: Label = b.get_node_or_null("Rij/Naam")
+		if nm != null:
+			nm.add_theme_font_size_override("font_size", maxi(UiThema.VLOER, naam_maat))
 
 func _zet_vulling(vulling: int) -> void:
 	for b in _chips.values():

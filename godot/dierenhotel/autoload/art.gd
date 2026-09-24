@@ -36,7 +36,11 @@ const KOEL := Vector3(116, 100, 116)
 
 ## Silhouette treatment (art-sound-rules.md §1.6).
 const OMLIJN_KLEUR := Color(112.0 / 255.0, 90.0 / 255.0, 76.0 / 255.0, 0.26)
-const PLAAT_MAX := 110  ## LRU size of the plate cache
+## LRU size of the plate cache.  110 in the HTML; 160 since the review of
+## 2026-09-24: a guest in view now draws a blink, a wag and a passing step on
+## top of its poses, and eight dressed guests in one room would otherwise push
+## each other's frames out and rebake them every few ticks.
+const PLAAT_MAX := 160
 const VLAK_MAX := 90    ## LRU size of the culled-face cache (art.js poseCache)
 const STEMPEL_MAX := 800  ## soft cap on the (shape, scale, shade) stamp cache
 

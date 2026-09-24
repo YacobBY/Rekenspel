@@ -39,6 +39,7 @@ function hulp() {
   --band 3|4|5        aantal gasten/kunnen dat die band oplevert (standaard 3)
   --gasten N          eigen gastenaantal (overschrijft --band; max 7)
   --dag N             dagnummer in de opslag (standaard 1)
+  --kleding           kleed elke gast aan uit de winkelstraat (een vaste set per gast)
   --uit MAP           uitvoermap (standaard $DH_LOG_DIR/kiek of /tmp/dierenhotel-log/kiek)
   --viewport BxH[@dpr][:naam]   standaard 1024x768@2:ipad-land
   --url URL           bestaande server gebruiken in plaats van build/web zelf te serveren
@@ -48,7 +49,7 @@ function hulp() {
 // ---------------------------------------------------------------- argumenten
 const argv = process.argv.slice(2);
 const opt = {
-  kamer: 'receptie', tik: null, chip: null, wacht: 2500, band: 3, gasten: null, dag: 1,
+  kamer: 'receptie', tik: null, chip: null, wacht: 2500, band: 3, gasten: null, dag: 1, kleding: false,
   uit: path.join(process.env.DH_LOG_DIR || '/tmp/dierenhotel-log', 'kiek'),
   viewport: '1024x768@2:ipad-land', url: null,
   playwright: process.env.PLAYWRIGHT_PAD || null,
@@ -64,6 +65,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--band') opt.band = parseInt(v(), 10);
   else if (a === '--gasten') opt.gasten = parseInt(v(), 10);
   else if (a === '--dag') opt.dag = parseInt(v(), 10);
+  else if (a === '--kleding') opt.kleding = true;
   else if (a === '--uit') opt.uit = v();
   else if (a === '--viewport') opt.viewport = v();
   else if (a === '--url') opt.url = v();
@@ -95,6 +97,12 @@ const POOL = [
   ['stamp', 'Stampertje', 'konijn', 'konijn', 1],
 ];
 const BEDDEN = [['kamer1', 'bed1'], ['kamer1', 'bed2'], ['kamer2', 'bed1'], ['kamer2', 'bed2']];
+// `--kleding`: what each guest wears (ArtGasten.KLEDING, one piece per slot)
+const KLEDING = [
+  ['pet', 'sjaaltje', 'gympjes'], ['strohoed', 'parels'], ['strik', 'sokjes'],
+  ['kroon', 'zonnebril', 'laarsjes'], ['hoedje', 'das'], ['streepsjaal', 'slofjes'],
+  ['pet', 'zonnebril', 'bal'],
+];
 
 function maakOpslag() {
   const n = Math.min(7, opt.gasten != null ? opt.gasten : (opt.band === 3 ? 1 : (opt.band === 4 ? 4 : 7)));
@@ -108,7 +116,9 @@ function maakOpslag() {
       kamer: bed[0], bed: bed[1], waar: bed[0],
       nachten: 100, geslapen: 0, prijs: 1, betaald: 0, dagIn: 1,
       behoefte: i === 0 ? (opt.kamer === 'zwembad' ? 'zwemmen' : 'eten') : 'eten',
-      blij: false, gegeten: false, accessoires: [],
+      blij: false, gegeten: false,
+      accessoires: opt.kleding ? KLEDING[i % KLEDING.length] : [],
+      kast: opt.kleding ? KLEDING[i % KLEDING.length] : [],
     });
   }
   const s = {

@@ -367,6 +367,31 @@ func test_gast_wordt_gerepareerd() -> void:
 	gelijk(g["behoefte"], "eten", "met kamer -> eten")
 	gelijk(g["accessoires"], [], "accessoires leeg")
 
+## The wardrobe (2026-09-24): what a guest bought is his, worn or not, and it
+## survives a save; a save from before the shops simply has an empty one, and
+## what the guest wears counts as his own anyway (a souvenir from the stall).
+func test_de_kast_van_een_gast() -> void:
+	_voor()
+	State.s["gasten"] = [{"id": "kast", "kamer": "kamer1", "accessoires": ["hoedje"]}]
+	State.bewaar()
+	State.s = State.standaard()
+	waar(State.lees(), "lees() zonder kast")
+	gelijk(State.kast_van("kast"), ["hoedje"], "wat hij draagt is van hem")
+	State.in_kast("kast", "pet")
+	State.in_kast("kast", "pet")
+	State.in_kast("kast", "bestaat-niet")
+	gelijk(State.kast_van("kast"), ["hoedje", "pet"], "een pet erbij, één keer, en niets onbekends")
+	State.bewaar()
+	State.s = State.standaard()
+	waar(State.lees(), "lees() met kast")
+	gelijk(State.kast_van("kast"), ["hoedje", "pet"], "de kast overleeft een herlaad")
+	gelijk(State.kast_van("niemand"), [], "een onbekende gast heeft niets")
+	# a wardrobe that is not a list makes the file unreadable, like accessoires
+	State.s["gasten"] = [{"id": "kapot", "kast": "pet"}]
+	State.bewaar()
+	State.s = State.standaard()
+	waar(not State.lees(), "een kast die geen lijst is: het bestand telt niet")
+
 # ------------------------------------------------------------------ brieven
 
 func test_brief_van_de_familie() -> void:

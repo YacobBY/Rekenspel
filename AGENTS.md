@@ -107,8 +107,9 @@ written down and moved past is worth more than a session that waits.
 A tablet maths game for Dutch children of 6–9 (groep 3–5): a voxel **animal
 hotel** in which every number lives in the world (biscuits in a bag, beds in a
 room, coins on a counter, hands on a clock). No quiz screens, no punishment, no
-reading required. Ten minigames, the rooms as data (`Rooms.lijst()`, eight of
-them today), a day cycle with guests, wishes, check-in and a bill at checkout.
+reading required. Seventeen minigames (§6), the rooms as data (`Rooms.lijst()`,
+eleven of them today), a day cycle with guests, wishes, check-in and a bill at
+checkout, and a wardrobe: what an animal buys in the shops it wears.
 Exported to the web (GitHub Pages, PWA).
 
 The design contract the code must keep serving (details: `ANALYSIS.md` §1,
@@ -125,6 +126,11 @@ The design contract the code must keep serving (details: `ANALYSIS.md` §1,
    2026-09-24: "Nee geef geen hulp na fouten"): the animal of the turn is
    disappointed (`Ui.misser`: `sip` + `🔄 Nog een keer`, the strip locked for a
    moment) and the same question stays — no help line, ghost, hint or helper.
+   **In the shops** (`games/_winkel`, owner 2026-09-24) a wrong amount costs
+   more time instead: the animal is sent out of the shop, sulks, walks out
+   slowly (`sjok`), the game closes, and the child taps the shop again to get
+   the SAME question back — against quick guessing. Still no help, no star or
+   coin taken away.
 4. **No reading required.** Every card sentence ≤ 8 words AND ≤ 40 characters,
    pictogram AND word on every button, answers are one tap on a strip of at
    most four choices. There is **no keypad** (removed 2026-09-14).
@@ -141,20 +147,24 @@ godot/dierenhotel/        THE GAME (Godot 4.7.2, GDScript). Everything you edit 
   core/jsgetal.gd         JavaScript integer semantics, reproduced exactly
   spel/minigame.gd        MiniGame base class — the contract of every game (see §5)
   spel/ctx.gd             SpelCtx — the one object a game receives
-  games/<id>/spel.gd      the ten games (+ spel.tscn, test_<id>.gd, sometimes modellen.gd)
+  games/<id>/spel.gd      the games (+ spel.tscn, test_<id>.gd, sometimes modellen.gd)
   games/_voorbeeld/       reference game: copy its shape; it is a `stub` (never shown)
+  games/_winkel/          the shared shop game (`WinkelSpel`), its maths (beurt.gd) and its
+                          tests; no spel.tscn, so the scan skips it (games-d.md)
   ui/                     kaart, keuzestrook, afleiders, wolk, hud, kamerbalk, blad, thema, teksten …
   hotel/prikbord.gd       task board (≤ 3 cards);  hotel/rekening.gd  the checkout bill
   scenes/main.gd          the shell (boots the world, owns the `[probe] …` lines)
   scenes/kamer.gd dier.gd vloer.gd wereldobject.gd   the room in view
-  art/                    voxel models (decor, gasten, vorm, vloer, effect)
+  art/                    voxel models (decor, gasten + the wardrobe, vorm, vloer, effect)
+  tools/bak_dieren.gd     contact sheet of the guests (poses × outfit) as one PNG, headless
   tests/                  runner + shell tests; tests/gouden/ = golden images + sound oracle
   tools/test.sh           the suite (run via ../../tools/test.sh)
   build/web/              export output (gitignored)
 tools/                    import.sh test.sh export.sh serve.sh probe.js  (the CI commands, §3)
 .github/workflows/        test.yml (import+suite+export on push), pages.yml (deploy)
 .fanout/specs/godot/      BINDING DESIGN: architecture.md, world.md, games-a.md, games-b.md,
-                          art-sound-rules.md, toolchain.md (≈ 9 000 lines; grep, do not read whole)
+                          games-c.md (kas), games-d.md (winkelstraat, kleding, the animation
+                          review), art-sound-rules.md, toolchain.md (grep, do not read whole)
 .fanout/tickets/godot/    the tickets the port was built from
 (demos/ removed 2026-09-16 at the owner's request; the HTML/JS original and the
  two older prototypes are in git history at 7945251 — `git show 7945251:demos/dierenhotel/state.js`)
@@ -240,8 +250,16 @@ ones a game or a feature normally needs.
 
 Rooms (`Rooms.lijst()`): `receptie` (desk top-right, door top-left), `gang`,
 `kamer1`, `kamer2`, `keuken`, `tuin` (outdoor, zones `hinkel` and `kraam`),
-`zwembad` (outdoor since 2026-09-14; `bad` rect = the lane), `wasserij`.
-Guests: four kinds, fifteen poses (`art/gasten.gd`); ids like `gast1`.
+`zwembad` (outdoor since 2026-09-14; `bad` rect = the lane), `wasserij`,
+`speelzaal`, `kas` (glass house behind the garden), `winkels` (the shopping
+arcade beside the lobby, door right of the desk — walks go round the desk,
+`Rooms.om_het_water`).
+Guests: four kinds, fifteen HTML poses (golden plates, never change them) plus
+drawn extras in `POSE_EXTRA` (arrival, blink `knipper`, passing step `loopM`,
+wag `kwispelA/B`, sad walk `sjokA/B`); `Dier.beeld` is the drawn frame, `Dier.pose`
+the logical one every test reads.  Wardrobe: `ArtGasten.KLEDING` (slots hoofd,
+nek, poten, ogen, speel; one piece per slot via `World.accessoire`, which also
+writes `g.accessoires`), owned pieces `State.kast_van(id)` / `State.in_kast`.
 
 ## 5. The minigame contract (`spel/minigame.gd`, architecture.md §5–6)
 
@@ -284,7 +302,7 @@ strip of four numbers and `on_ok(n, kaart)` fires on the tap. `kaart.zet(str)`,
 
 Sounds: `ctx.snd.plop(i)`, `ja()`, `hoera()` … Particles: `World.spetter`.
 
-## 6. The ten games
+## 6. The games
 
 | id | naam | room | teaches | spec |
 |---|---|---|---|---|
@@ -298,6 +316,11 @@ Sounds: `ctx.snd.plop(i)`, `ja()`, `hoera()` … Particles: `World.spetter`.
 | `hinkel` | Hinkelpad | tuin (zone hinkel) | number line of stepping stones 0…E | games-b §3 |
 | `was` | Wasmandtoren | wasserij | sorting/tallying into crates, bar chart | games-b §4 |
 | `kraam` | Souvenirkraam | tuin (zone kraam) | money, paying and change | games-b §5 |
+| `oogst` | Aardbeien plukken | kas | place value, complements to 10 and 100 | games-c §2 |
+| `weeg` | Groenten wegen | kas | weighing in kg with a balance | games-c §3 |
+| `hoeden` `sjaals` `schoenen` | Hoeden-, Sjaal-, Schoenenkraam | winkels | choose a piece, pay exactly with real coins/notes; shoes: paws × price; groep 5: change | games-d §4 |
+| `luxe` | Luxe winkel | winkels | sum with a gift box, half price, change from €50/€100 | games-d §4 |
+| `paskamer` | Paskamer | winkels | dressing up from the wardrobe (no sum, no star) | games-d §5 |
 
 Each has `test_<id>.gd` next to it (200–1000 lines, run headless with shells
 at four viewports). Owner's rules for zwembad are verbatim in games-b §1.

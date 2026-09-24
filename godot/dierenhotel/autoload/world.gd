@@ -143,6 +143,12 @@ class Dier extends RefCounted:
 	var komt_t := 0
 	var komt_van := Vector2.ZERO
 	var komt_doel := Vector2.INF
+	## The frame DRAWN in place of `pose` this tick, "" = the pose itself: a
+	## blink, a tail wag while waiting, the passing step of the walk (review of
+	## 2026-09-24, `_beeld_van`).  `pose` stays the logical pose every game and
+	## test reads; only the plate changes.
+	var beeld := ""
+	var blik := 0                  ## ticks a glance (`tril`/`kijk`) has lasted
 	var rnd: Sommen.Prng
 	var opdracht: Object = null    ## Opdracht, resolved true/false
 
@@ -923,7 +929,8 @@ func zet_dag(dag: int) -> void:
 
 func _model_bij(d: Dier) -> void:
 	d.model = gast_model(d.kind)
-	d.params = {"pose": d.pose, "acc": ArtGasten.acc_sleutel(d.acc)}
+	d.params = {"pose": d.pose if d.beeld.is_empty() else d.beeld,
+		"acc": ArtGasten.acc_sleutel(d.acc)}
 
 func dier(id: String) -> Dier:
 	return _dieren.get(id)
@@ -972,18 +979,30 @@ func sync(gasten: Array) -> void:
 	vuil()
 
 ## An accessory change is idempotent and always REPLACES the list.
+##
+## One piece per slot (the wardrobe, owner 2026-09-24): putting on a hat takes
+## the hat he wore off (`ArtGasten.KLEDING`).  The HTML's three pieces are in
+## three different slots, so for them nothing changed.  The list is written
+## back into the guest's record as well: `sync` reads it from there, so a
+## souvenir from the stall used to fall off at the next reload.
 func accessoire(id: String, naam: String, aan: bool = true) -> Array:
 	var d: Dier = _dieren.get(id)
 	if d == null:
 		return []
+	var slot := ArtGasten.slot_van(naam)
 	var uit: Array = []
 	for a in ArtGasten.ACC_NAMEN:
 		var heeft: bool = d.acc.has(a)
 		if a == naam:
 			heeft = aan
+		elif aan and not slot.is_empty() and ArtGasten.slot_van(a) == slot:
+			heeft = false
 		if heeft:
 			uit.append(a)
 	d.acc = uit
+	var g: Dictionary = State.gast_van(id)
+	if not g.is_empty():
+		g["accessoires"] = uit.duplicate()
 	_model_bij(d)
 	vuil()
 	return uit.duplicate()
@@ -1010,7 +1029,8 @@ func stappen(id: String, punten: Array, o: Dictionary = {}) -> bool:
 	var lijst := _punten_van(punten)
 	if lijst.is_empty():
 		return true
-	if str(o.get("pose", "")).is_empty() and not (o.get("per_stap", o.get("perStap", Callable())) as Callable).is_valid():
+	if str(o.get("pose", "")) in ["", "sjok"] \
+			and not (o.get("per_stap", o.get("perStap", Callable())) as Callable).is_valid():
 		# a walk: every leg goes round the water (a walk that counts its own
 		# points keeps them, or the count would be off)
 		var droog: Array = []
@@ -1343,6 +1363,7 @@ func _breek(d: Dier, gehaald: bool) -> void:
 		d.zij = 0.0
 	d.komt = []
 	d.komt_doel = Vector2.INF
+	d.beeld = ""
 	d.slaap_doel = ""
 	d.slaap_kamer = ""
 	d.bed_sprong = false
@@ -1590,20 +1611,65 @@ func _fijn_tik(d: Dier) -> void:
 		_:
 			_ademen(d)
 			_aftellen(d)
+	d.beeld = _beeld_van(d)
 	_model_bij(d)
 	vuil()
+
+## The frame drawn in place of the logical pose (review of 2026-09-24, see
+## `Dier.beeld`).  Pure clockwork on the tick counter and the animal's own
+## phase: it draws nothing from the animal's generator, so the wandering of a
+## day stays exactly what it was.  Nothing in reduced motion.
+##   * a walk is four beats — loopA, the passing step, loopB, the passing step
+##     — where it used to snap between two stances;
+##   * a guest standing still blinks every 3 to 5 seconds, two ticks long;
+##   * a guest WAITING for the child (at a counter, at a game) wags his tail
+##     for a second every six: fast for the dog, slower for the others.
+func _beeld_van(d: Dier) -> String:
+	if rust():
+		return ""
+	match d.staat:
+		"loop":
+			if d.beweeg_pose.is_empty() and (d.pose == "loopA" or d.pose == "loopB") \
+					and int(d.gang * 2.0) % 2 == 1:
+				return "loopM"
+		"stil", "wacht":
+			if d.pose != "rust":
+				return ""
+			var periode := 48 + (d.nr * 13) % 30
+			if (_tikken + int(d.fase * 10.0)) % periode < 2:
+				return "knipper"
+			if d.staat == "wacht":
+				var kw := (_tikken + int(d.fase * 17.0)) % 90
+				if kw < 18:
+					var snel := 2 if d.kind == "hond" else 4
+					return "kwispelA" if (kw / snel) % 2 == 0 else "kwispelB"
+	return ""
 
 func _aftellen(d: Dier) -> void:
 	d.tikken -= 1
 	if d.tikken <= 0:
 		_kies(d)
 
-## `stil`/`wacht` just breathe, with a random blink.
+## `stil`/`wacht` just breathe, with a random glance.
+##
+## A glance lasts `BLIK_TIKKEN` (review of 2026-09-24): it used to hold until
+## the state ended, and a guest WAITING at a counter (240 ticks) could stand
+## with its ears pricked or its head turned for sixteen seconds.  Only the
+## pose returns; the draw from the animal's generator below is untouched, so
+## the day's wandering stays exactly the same.
+const BLIK_TIKKEN := 9
+
 func _ademen(d: Dier) -> void:
 	d.bob = sin(_tikken * 0.085 + d.fase) * 0.8 - 0.4
 	d.zij = 0.0
-	if d.pose != "tril" and d.pose != "kijk":
+	if d.pose == "tril" or d.pose == "kijk":
+		d.blik += 1
+		if d.blik > BLIK_TIKKEN:
+			d.pose = "rust"
+			d.blik = 0
+	else:
 		d.pose = "rust"
+		d.blik = 0
 	if d.rnd.volgende() < 0.035:
 		d.pose = "tril" if d.rnd.volgende() < 0.5 else "kijk"
 		d.tikken = maxi(d.tikken, 1 + int(d.rnd.volgende() * 4.0))
@@ -1734,6 +1800,15 @@ func _loop_beeld(d: Dier) -> void:
 		d.bob = 0.0
 		if not rust() and _tikken % 5 == 0:
 			_pluis(d, 1, ArtEffect.PLONS_KL[_tikken % 3], true)
+		return
+	if d.beweeg_pose == "sjok":
+		# the sad walk out of a shop (owner, 2026-09-24: "het dier langzaam
+		# wegloopt"): head low, ears down, and hardly a bounce in the step
+		d.pose = "sjokA" if int(d.gang) % 2 == 0 else "sjokB"
+		d.hoogte = 0.0
+		d.lift = 0.0
+		d.bob = -absf(sin(d.gang * PI)) * d.bob_hoog * 0.35
+		d.zij = sin(d.gang * PI) * 1.0 if d.kind == "gans" else 0.0
 		return
 	d.pose = "loopA" if int(d.gang) % 2 == 0 else "loopB"
 	d.hoogte = 0.0                  # whoever walks, walks on the floor
