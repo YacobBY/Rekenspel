@@ -25,8 +25,8 @@ extends MiniGame
 ##  3. He walks there and the camera walks along (`Hotel.volg`, allowed because
 ##     the game awaits him: `Games.verwacht`).
 ##       * Right: he hops into the free bed.  The check-in ends in
-##         `Hotel.wijs_bed` (bed, star, board, `vrij`), "💤 welterusten", and the
-##         game closes itself.
+##         `Hotel.wijs_bed` (bed, star, board, `vrij`), "💤 <naam> doet een
+##         dutje", and the game closes itself.
 ##       * Too few: "🛏 geen bed", he is sad, walks back to his place at the desk
 ##         — the camera along — and the SAME question comes again.
 ##       * Too many: "🛏 te veel bedden", he is sad, the beds made for him go
@@ -55,7 +55,7 @@ const ERBIJ := "%s komt erbij. Hoeveel bedden?"   ## "Stampertje komt erbij. Hoe
 const KEUZE_TITEL := "hoeveel bedden?"
 const GEEN_BED := "geen bed"                      ## 🛏 geen bed
 const TE_VEEL := "te veel bedden"                 ## 🛏 te veel bedden
-const WELTERUSTEN := "welterusten"                ## 💤 welterusten
+const DUTJE := "%s doet een dutje"                ## "💤 Stampertje doet een dutje"   4 / 25
 
 const TIK := 0.1                 ## how often a walk is looked at
 const HERSTUUR := 1.0            ## s standing still off his place: sent there again
@@ -284,7 +284,7 @@ func _goed() -> void:
 	if World.rust():
 		# no walk: `wijs_bed` put him in his bed at once; the camera goes to him
 		Hotel.naar_kamer(_kamer)
-		_welterusten()
+		_dutje()
 		if not await na(NAGENIET_RUST):
 			return
 		ctx.sluit()
@@ -302,15 +302,18 @@ func _goed() -> void:
 			World.slaap(_gast, _kamer, slot)      # stuck somewhere: into bed
 			t = 0.0
 	Games.verwacht(_gast, Games.beurt(), false)
-	_welterusten()
+	_dutje()
 	print("[probe] spel=klaar id=bedden gast=", _gast, " sterren=", State.s["sterren"])
 	if not await na(NAGENIET):
 		return
 	ctx.sluit()
 
-func _welterusten() -> void:
+## "💤 Boef doet een dutje" over him in his bed (owner 2026-09-24, in place of
+## the old good-night bubble).
+func _dutje() -> void:
+	var naam := str(Hotel.gast_bij_id(_gast).get("naam", ""))
 	ctx.ui.wolk({"id": "bd_slaap", "kamer": _kamer, "volg": _volg_gast(54.0),
-		"hoog": 54.0, "icoon": "💤", "tekst": WELTERUSTEN, "klas": "goed", "prio": 12})
+		"hoog": 54.0, "icoon": "💤", "tekst": DUTJE % naam, "klas": "goed", "prio": 12})
 
 ## Every free bed of the room out of sight but `eigen` (a new bed nobody has
 ## yet stays too: that is his).

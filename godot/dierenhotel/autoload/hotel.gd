@@ -891,8 +891,8 @@ func _checkin_vol() -> void:
 ## The end of the check-in: a bed, a star for taking part, and the round flips
 ## from `ochtend` to `vrij`.  The beds game calls it the moment the child gave
 ## the room the right number of beds, with `o.loop`: the guest WALKS to his bed
-## while the camera walks along, and the game says "welterusten" once he lies
-## in it.  Without `o.loop` the camera goes to the room at once.
+## while the camera walks along, and the game says "<naam> doet een dutje" once
+## he lies in it.  Without `o.loop` the camera goes to the room at once.
 func wijs_bed(kamer_id: String, slot_id: String, o: Dictionary = {}) -> bool:
 	var v = State.s["checkin"]
 	if v == null or int(v["stap"]) < 3:
@@ -933,7 +933,7 @@ func wijs_bed(kamer_id: String, slot_id: String, o: Dictionary = {}) -> bool:
 	if scherm_klaar() and not loop:
 		Ui.wolk({"id": "ci_af", "door": "wolk", "kamer": kamer_id,
 			"volg": _volg_dier(str(g["id"])), "hoog": 54, "icoon": "💤",
-			"tekst": "welterusten", "klas": "goed", "prio": 12})
+			"tekst": "%s doet een dutje" % g["naam"], "klas": "goed", "prio": 12})
 		Econ.na(3.6, _wolk_weg.bind("ci_af"))
 	return true
 

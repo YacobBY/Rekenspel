@@ -485,7 +485,7 @@ receptie).
   (`voeg_bed` op de verste plek, `Snd.plop`).  De check-in eindigt meteen in
   `Hotel.wijs_bed(kamer, bed, {loop: true})`: bed, `Snd.tover`, één ster
   (`checkin`), taakje `bed`, ochtend → vrij, opslaan; hij loopt naar zijn bed en
-  springt erin, de camera erachteraan.  Ligt hij: `💤 welterusten` (klas `goed`)
+  springt erin, de camera erachteraan.  Ligt hij: `💤 <naam> doet een dutje` (klas `goed`)
   boven hem, `State.tel(missers == 0, ms)`, en na **3,2 s** sluit het spel zich.
   Het spel geeft zelf geen tweede ster.
 * **Te weinig** (minder dan `n + 1`): er is geen bed voor hem.  Hij loopt het midden van
@@ -509,7 +509,7 @@ mee voor de eerste-poging-regel van `State.tel`.
 ### 3.5 Rustmodus
 
 Niemand loopt.  Goed: `wijs_bed` legt hem meteen in zijn bed en de camera gaat naar de
-kamer (`💤 welterusten`, na 2,6 s dicht).  Fout: aan de balie `sip` en het wolkje
+kamer (`💤 <naam> doet een dutje`, na 2,6 s dicht).  Fout: aan de balie `sip` en het wolkje
 `🛏 geen bed` / `🛏 te veel bedden`, en na 2,2 s dezelfde vraag.
 
 ### 3.6 Stoppen, herladen
@@ -540,7 +540,7 @@ kamer (`💤 welterusten`, na 2,6 s dicht).  Fout: aan de balie `sip` en het wol
 | strook | `🛏 <getal>` × 4, titel `hoeveel bedden?` |
 | te weinig | wolkje `🛏 geen bed` |
 | te veel | wolkje `🛏 te veel bedden` |
-| goed | wolkje `💤 welterusten` |
+| goed | wolkje `💤 <naam> doet een dutje` (eigenaar 2026-09-24, was `welterusten`) |
 
 Proeflijnen: `[probe] spel=start id=bedden kamer=<k> gast=<id> slapers=<n>`,
 `[probe] bedden keus=<g> goed=<n+1> uitkomst=goed|weinig|veel`,

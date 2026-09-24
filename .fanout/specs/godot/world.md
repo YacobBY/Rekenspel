@@ -894,10 +894,10 @@ question.  While the game runs, `paint_checkin` paints nothing (the game owns th
 `nieuweGast` into `gasten`, recompute the band, `World.slaap`, `behoefte = 'eten'`, clear
 the check-in, `Snd.tover()`, **one star** (`Econ.sterren(1, 'checkin')`), tick off the `bed`
 task, flip `ochtend → vrij`, save.  The beds game passes `{loop: true}`: he WALKS to his
-bed, the camera walks along, and the game shows `💤 welterusten` (class `goed`) once he lies
-in it.  Without `loop` (the fallback): travel to that room and the bubble `💤 welterusten`
-for 3600 ms, as the HTML did.  An occupied bed → toast `💤 Hier slaapt iemand`, nothing
-else happens.
+bed, the camera walks along, and the game shows `💤 <naam> doet een dutje` (class `goed`)
+once he lies in it.  Without `loop` (the fallback): travel to that room and the bubble
+`💤 <naam> doet een dutje` for 3600 ms, as the HTML did (the HTML said `welterusten`).  An
+occupied bed → toast `💤 Hier slaapt iemand`, nothing else happens.
 
 ### 3.4 Feeding and playing (hotel-resolved wishes)
 
@@ -1941,7 +1941,8 @@ duidelijk ... die niet veel langer is"):** `Elke dag eten de gasten <n> schep|sc
 had `De gasten eten … per dag` · `<naam> eet <n> erbij. Samen?` · `Elke dag …, … lang` ·
 `📦 In huis: …` · `is er genoeg eten?`) · `te weinig` `precies` `blijft over` ·
 **port (owner 2026-09-24):** `Welke kamer voor <naam>?` · `Kamer 1` / `Kamer 2` (short
-`1` / `2`) · choice title `kies een kamer` · `welterusten` · the beds game's own words
+`1` / `2`) · choice title `kies een kamer` · `<naam> doet een dutje` (owner 2026-09-24,
+was `welterusten`) · the beds game's own words
 (games-a.md §3.7) · after a slip the house miss bubble `🔄 Nog een keer` (`UiTekst`) ·
 toasts: `👆 Tik eerst een getal` · `Precies! 🎉` · `Goed gerekend! 🎉` · `💤 Hier slaapt iemand`.
 Gone with the room choice and the no-help rule: `Kies een bed` · `Alles bezet` ·

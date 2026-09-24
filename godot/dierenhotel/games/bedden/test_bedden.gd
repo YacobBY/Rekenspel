@@ -396,9 +396,9 @@ func test_goed_hij_slaapt_en_de_check_in_is_klaar() -> void:
 	waar(await _loop(func() -> bool: return World.slaapt(gid), kamers), "hij slaapt")
 	gelijk(kamers, ["receptie", "gang", "kamer1"], "door elke deur mee")
 	gelijk(World.kamer_nu(), "kamer1", "de camera staat bij zijn bed")
-	waar(await _wacht(func() -> bool: return Hits.spot("bd_slaap") != null, 2.0),
-		"💤 welterusten")
-	gelijk(_wolk_tekst("bd_slaap"), "💤 welterusten", "de woorden")
+	var dutje := "💤 %s doet een dutje" % str(g.get("naam", ""))
+	waar(await _wacht(func() -> bool: return Hits.spot("bd_slaap") != null, 2.0), dutje)
+	gelijk(_wolk_tekst("bd_slaap"), dutje, "de woorden")
 	waar(await _wacht(func() -> bool: return Games.actief().is_empty(), 6.0),
 		"het spel sluit zichzelf")
 	gelijk(World.kamer_nu(), "kamer1", "en de camera blijft bij hem")
@@ -634,9 +634,9 @@ func test_teksten_in_het_budget_op_stampertje() -> void:
 			waar(Ui.keur_regel("bd", zin), "'%s' past (%d tekens)" % [zin, zin.length()])
 	for zin in ["In kamer 2 slapen al 5 dieren", "In kamer 1 slaapt nog niemand",
 			"In kamer 1 slaapt al 1 dier", "Welke kamer voor Stampertje?",
-			"Stampertje komt erbij. Hoeveel bedden?"]:
+			"Stampertje komt erbij. Hoeveel bedden?", "Stampertje doet een dutje"]:
 		waar(Ui.keur_regel("bd", zin), "'%s' past in het budget" % zin)
-	for zin in ["🛏 geen bed", "🛏 te veel bedden", "💤 welterusten", "🛏 Kamer 1",
+	for zin in ["🛏 geen bed", "🛏 te veel bedden", "💤 Stampertje doet een dutje", "🛏 Kamer 1",
 			"Verdeel bedden over de kamers", "🔄 Nog een keer"]:
 		gelijk(str(Ui.mist_tekens(zin)), "[]", "elke glyph van '%s' is er" % zin)
 	await _af()
@@ -652,7 +652,8 @@ func test_bron_draagt_de_letterlijke_teksten() -> void:
 	for zin in ['"Verdeel bedden over de kamers"', '"%s slaapt nog niemand"',
 			'"%s slaapt al 1 dier"', '"%s slapen al %d dieren"',
 			'"%s komt erbij. Hoeveel bedden?"', '"geen bed"', '"te veel bedden"',
-			'"welterusten"', '"hoeveel bedden?"']:
+			'"%s doet een dutje"', '"hoeveel bedden?"']:
 		waar(bron.contains(zin), "de bron draagt %s" % zin)
-	for oud in ["Bedden op rij", "Zet de bedden op rij", "Wolkje", "tel mee", "Hoeveel bedden heb je nodig?"]:
+	for oud in ["Bedden op rij", "Zet de bedden op rij", "Wolkje", "tel mee", "Hoeveel bedden heb je nodig?",
+			"welterusten"]:
 		waar(not bron.contains('"%s"' % oud), "de oude tekst %s is weg" % oud)
