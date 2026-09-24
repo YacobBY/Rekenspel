@@ -545,6 +545,8 @@ func _weggestuurd() -> void:
 		ctx.sluit.call_deferred()
 		return
 	World.pose(id, "sip", SIP_TIKKEN)
+	# its own sad little "aww", in the place of the `zacht()` above (Snd §de dieren)
+	ctx.snd.dier_sip(id)
 	ctx.ui.wolk({"id": "wk_weg", "kamer": KAMER, "volg": _volg_dier(id), "hoog": 46.0,
 		"icoon": Beurt.ICOON_WEG, "tekst": Beurt.T_WEG, "prio": 12})
 	_meld()

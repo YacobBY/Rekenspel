@@ -363,7 +363,17 @@ func test_verkeerd_geld_stuurt_het_dier_de_winkel_uit() -> void:
 	var gast := str(_stand("hoeden")["gast"])
 	var fout_k := _fout_keuze("hoeden")
 	waar(not fout_k.is_empty(), "er staat een verkeerd bedrag op de strook")
+	# listen: the animal says it with its own sad little sound, once
+	var was_wakker: bool = Snd._wakker
+	Snd._wakker = true
+	var gehoord_voor := Snd.gehoord().size()
 	_kies(fout_k)
+	var nu_gehoord := Snd.gehoord().slice(gehoord_voor)
+	Snd._wakker = was_wakker
+	var eigen := "%s_sip" % Snd.soort_van(gast)
+	waar(nu_gehoord.has(eigen), "het dier zegt het met zijn eigen sip geluidje (%s)" % str(nu_gehoord))
+	waar(not nu_gehoord.has("zacht") or nu_gehoord.has("stil:zacht"),
+		"geen tweede, zacht geluid ernaast (%s)" % str(nu_gehoord))
 	# at once: nothing left to tap, the animal sulks with its bubble
 	waar(_knoop(KAART) == null and _knoop(STROOK) == null, "de kaart en de strook zijn meteen weg")
 	gelijk(int(_stand("hoeden").get("weg", 0)), 1, "het dier moet de winkel uit")
