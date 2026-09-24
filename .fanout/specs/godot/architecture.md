@@ -1472,6 +1472,43 @@ is tee'd into an `AnalyserNode`. Peak leaving the engine **before** the first to
 `0.000000`. **After** one tap: `0.065132`, one context in state `running`, zero console
 errors. That measures the samples, not a log line.
 
+**Every animal says it itself** (owner, 2026-09-24: "Kan je ook een passend droevig
+teleurgesteld geluidje en een enthousiast bij success geluidje bij elk dier maken?").
+Eight voices on top of the eighteen, two per guest kind — `<kind>_sip` and
+`<kind>_blij` for `hond`, `poes`, `konijn`, `gans` (recipes and levels: X4 §15.5). They
+are not in the HTML table: `Snd.namen()` stays the eighteen and their oracle is
+untouched; `Snd.dier_namen()` lists the eight, `DIER_LENGTE` holds their buffer lengths,
+and `_bouw()` hands those names to `_bouw_dier()`. Oscillators only (a third generator,
+`_stem`: a two-glide pitch contour, a few normalised harmonics whose balance can move
+over the note, optional vibrato, a purr of the loudness and a click-free sin²/cos²
+envelope), cached per name, bit-identical per call.
+
+* **API.** `Snd.dier_sip(wie)` and `Snd.dier_blij(wie, wacht := 0.0)`, where `wie` is a
+  kind or a guest id (`Snd.soort_van`). An unknown animal gets the neutral pair every
+  game already plays: `zacht` when sad, `ja` when happy — and never twice at once. One
+  voice per mood per `DIER_MS` = 400 ms. Muted or before the first touch: silence, and
+  a `wacht` looks at the mute again when it runs out.
+* **Sad = `Ui.misser`.** The animal of the turn goes `sip` there; when the child can
+  see it (its room is the room in view, it is not asleep), it also says so. Its "aww"
+  **replaces** the neutral `Snd.zacht()` of the same moment, in either order within
+  `SLIK_MS` = 150 ms: a `zacht` that started just before is stopped, a `zacht` that comes
+  just after stays quiet. So the strip path (`misser` first, then the game's `on_ok` with
+  its own `zacht`) and the explicit path (`ctx.snd.zacht()` then `ctx.ui.misser`) both
+  sound as one animal, and a miss without a visible animal (the laundry, the furniture
+  book, a sleeper in another room) keeps its plain `zacht`. The shop's "sent out" moment
+  (`WinkelSpel._weggestuurd`, games-d §4) calls `ctx.snd.dier_sip(id)` beside its own
+  `sip` pose, with the same effect on its `zacht`.
+* **Happy = every `Snd.ja()`.** "Dat klopt!" is what every game and the desk already play
+  on a right answer, so there is no hook in any game: `Snd` emits `gespeeld(naam)` for
+  every sound that starts, `Ui` listens for `ja`, finds the animal of the turn
+  (`Ui.dier_van_de_beurt()`: `Games.speler()` while a game runs, else the newest open card
+  that names a `dier` — the check-in) and, when it is in view, plays its `_blij`
+  `BLIJ_NA` = 0.20 s later: after the two notes of `ja`, never on top of them.
+  `hoera` / `tover` at the end of a turn are left alone; a card that is only redrawn
+  ticked (`kaart.klaar()` on a reload) makes no sound, because no `ja` plays.
+* `Snd.gehoord()` (the last 32 starts, `stil:<naam>` for one cut short) and
+  `Snd.laatste` are the spy the tests read; `tests/test_snd_dieren.gd` holds the rules.
+
 ---
 
 ## 9. Save format

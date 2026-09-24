@@ -62,6 +62,7 @@ func _ready() -> void:
 		var uit = JavaScriptBridge.eval("matchMedia('(prefers-reduced-motion: reduce)').matches", true)
 		_rust = bool(uit) if uit != null else false
 	World.kader_veranderd.connect(_op_kader_veranderd)
+	Snd.gespeeld.connect(_op_geluid)
 
 ## Registered by `scenes/main.tscn` at boot.
 ##
@@ -968,6 +969,9 @@ func misser(kaart: Kaart, dier: String, door := "") -> void:
 	var wie = World.dier(dier) if not dier.is_empty() else null
 	if wie != null and str(wie.kamer) == kaart.kamer:
 		World.pose(dier, "sip", SIP_TIKKEN)
+		# ... and it says so, with its own soft "aww" in the place of the
+		# game's neutral `Snd.zacht()` (owner 2026-09-24, see "het dier zegt het")
+		_dier_zegt(dier, false)
 		o["volg"] = _volg_dier(dier)
 		o["hoog"] = 46.0
 		wolk(o)
@@ -1047,6 +1051,41 @@ func _dier_van(obj: Variant, o: Dictionary) -> String:
 		return gezegd
 	var s := str(obj)
 	return s if World.dier(s) != null else ""
+
+# ------------------------------------------------------ het dier zegt het
+
+## Every guest kind has a sad and a happy little voice (`Snd.dier_sip` /
+## `Snd.dier_blij`, owner 2026-09-24).  The sad one sounds in `misser`, with
+## the `sip` pose.  The happy one needs no hook in any game: a right answer is
+## `Snd.ja()` everywhere ("dat klopt!" — every game, and the desk), so when a
+## `ja` starts, the animal of the turn answers it `Snd.BLIJ_NA` seconds later:
+## after the two notes, never on top of them.  Only an animal the child can
+## see makes a sound; one in another room, or asleep, stays quiet.
+func _op_geluid(naam: String) -> void:
+	if naam == "ja":
+		_dier_zegt(dier_van_de_beurt(), true)
+
+## Whose turn it is: the running game's own animal (`Games.speler()`, the one
+## on the game bar), or with no game running the animal of the newest open
+## card that names one (the check-in at the desk).  "" when there is none.
+func dier_van_de_beurt() -> String:
+	if not Games.actief().is_empty():
+		return Games.speler()
+	var ids := _kaarten.keys()
+	for i in range(ids.size() - 1, -1, -1):
+		var k = _kaarten[ids[i]]
+		if k != null and not str(k.dier).is_empty():
+			return str(k.dier)
+	return ""
+
+func _dier_zegt(dier: String, blij: bool) -> void:
+	var d = World.dier(dier) if not dier.is_empty() else null
+	if d == null or str(d.kamer) != World.kamer_nu() or World.slaapt(dier):
+		return
+	if blij:
+		Snd.dier_blij(str(d.kind), Snd.BLIJ_NA)
+	else:
+		Snd.dier_sip(str(d.kind))
 
 ## The mandatory sentence, checked.  Returns true when it fits the budget.
 func keur_regel(id: String, zin: String) -> bool:

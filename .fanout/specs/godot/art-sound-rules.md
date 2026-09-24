@@ -1119,6 +1119,41 @@ Godot notes: an exponential ramp to 0.0001 is `ease-out`; Godot's
 `top = 0.30 → −10.5 dB`. Autoplay policy on the web export needs the same unlock: no
 audio before the first real input event.
 
+### 15.5 The animal voices (Godot addition, owner 2026-09-24)
+
+Not in `snd.js`: a sad and a happy little voice per guest kind, asked for by the owner
+("een passend droevig teleurgesteld geluidje en een enthousiast bij success geluidje bij
+elk dier"). Where they play and how they give way to `zacht` / follow `ja`:
+architecture.md §8. The generator is
+`stem(f, piek, naar, duur, top, wacht, {boven, boven_naar, knik, aan, los, tril, tril_hz, rol, verval})`:
+pitch glides exponentially `f → piek` over the first `knik` of the note and
+`piek → naar` over the rest (`piek` 0: one glide `f → naar`); the harmonic weights
+`boven` move linearly to `boven_naar` and are normalised by their sum, so `top` is a
+ceiling as for `noot`; `tril` is a vibrato (fraction of the pitch at `tril_hz`), `rol` a
+loudness purr (`0.6 + 0.4·cos`), `verval` an exponential fade over the note; the
+envelope is sin² over `aan` seconds and cos² over the last `los` of the note, so it
+starts and ends at exactly zero (no click, asserted).
+
+| name | meaning | synthesis (`stem`, ×`MEESTER`) | peak | loudest 50 ms | audible |
+|---|---|---|---|---|---|
+| `hond_sip` | a soft whimper: "hn — iieuw" | `760→840→690, 0.13 s, 0.17` + `900→980→520, 0.38 s, 0.21, @0.15`, vibrato 3 % at 9 Hz, the vowel darkens | −31.6 dBFS | −35.4 | 500 ms |
+| `hond_blij` | two bright yips, the second higher: "wuf-wuf!" | `520→860→600, 0.09 s, 0.30` + `600→1000→700, 0.10 s, 0.30, @0.14`, four harmonics | −28.8 | −33.8 | 234 ms |
+| `poes_sip` | a small "miauw" that goes down | `640→780→440, 0.52 s, 0.25`, bright "mi" into a round "auw", vibrato 1.2 % at 6 Hz | −30.9 | −35.5 | 492 ms |
+| `poes_blij` | a purring trill that climbs, and a chirp: "mrrrp!" | `430→660, 0.22 s, 0.21, rol 30 Hz` + `720→1120→960, 0.12 s, 0.24, @0.21` | −30.2 | −34.1 | 322 ms |
+| `konijn_sip` | a small low squeak and a soft thump of a hind paw | `700→760→520, 0.16 s, 0.20` + thump `230→85, 0.09 s, 0.30, @0.22` | −28.3 | −33.1 | 301 ms |
+| `konijn_blij` | a happy hop: two high squeaks, each landing on a thump | `1100→1400→1250` @0 and `1250→1600→1450` @0.17 (0.06 s, 0.20) + thumps `240→90` @0.07, `250→95` @0.24 (0.07 s, 0.28) | −28.9 | −34.7 | 301 ms |
+| `gans_sip` | one low honk that sinks | `330→350→230, 0.44 s, 0.28`, five harmonics that round off, vibrato 2 % at 5 Hz | −30.2 | −35.6 | 412 ms |
+| `gans_blij` | two honks that go up: "hoenk-HOENK!" | `360→450, 0.15 s, 0.30` + `430→560, 0.18 s, 0.32, @0.17` | −28.8 | −33.9 | 342 ms |
+
+For comparison, the loudest 50 ms of `ja` is −35.4 dBFS (peak −23.8), of `zacht` −36.3
+(−26.6), of `hoera` −30.7 (−21.6). The rules the tests hold them to
+(`tests/test_snd_dieren.gd`): at most 0.6 s audible in a buffer of at most 0.7 s; every
+peak under the one of `ja` and under −24 dBFS; never a moment as loud as `hoera`; a sad
+voice no more than 3.5 dB above `zacht` (the thump of the rabbit is low, so it measures
+louder than it sounds) and ending lower than it began; first and last sample silent, no
+sample-to-sample step above 0.03; bit-identical on every render. A thump is a quick fall
+from ~240 Hz, not a sub-bass: a tablet speaker does not play 60 Hz.
+
 
 ---
 
