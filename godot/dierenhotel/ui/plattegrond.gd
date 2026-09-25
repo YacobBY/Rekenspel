@@ -5,14 +5,14 @@ extends Control
 ## Owner, 2026-09-24: the hotel has to feel big and tall, like Habbo Hotel, so
 ## the map is a cross-section of the building — one row per floor
 ## (`Kamer.etage`), the top floor at the top and the cellar at the bottom.  In
-## every row the room the lift stops in comes first; the floor's other rooms
+## every row the room the stairs reach comes first; the floor's other rooms
 ## follow in the order their doors join them, so a door between two cells side
 ## by side is drawn in the gap between them (a gate dashed).  Down the left runs
-## the lift shaft: a line through one small round floor button per row
+## the stairwell: a line through one small round floor button per row
 ## (`Rooms.etage_teken`), lit on the floor the child is on, and that floor's
 ## whole row wears a faint sunny band.  Every cell wears its own floor colour
 ## and the room you are in is the sunny one, so the plan reads as a building
-## and not as a menu.  The same sheet is the lift's panel
+## and not as a menu.  The same sheet is the stairs' panel
 ## (`scenes/main.gd::_toren`).
 ##
 ## The table is COMPUTED from `Rooms` (`kaart()`), never written down: a room
@@ -40,7 +40,7 @@ const CEL_HOOG := 0.6     ## a floor of a tower is wide and low
 const CEL_HOOG_MIN := 56
 const LUCHT := 4.0        ## between a cell's edge and its text
 const LUCHT_KRAP := 2.0   ## ... in a cell under CEL_WENS, where "Zwembad" needs it all
-const SCHACHT := 36       ## the lift shaft column on the left, its air included
+const SCHACHT := 36       ## the stairwell column on the left, its air included
 const SCHACHT_KRAP := 24  ## ... on a phone
 const SCHACHT_DIK := 4.0  ## the shaft line
 const KNOP_R_MAX := 14.0  ## radius of a floor button in the shaft
@@ -64,7 +64,7 @@ var _bezig := false
 # ------------------------------------------------------------------ de toren
 
 ## `kamer id -> Vector2i(kolom, rij)`, one-based: row 1 is the top floor
-## (`Rooms.etages()`), column 1 the room the lift stops in on that floor.
+## (`Rooms.etages()`), column 1 the room the stairs reach on that floor.
 ## Computed from `Rooms` every time, so every room of `lijst()` has a cell.
 static func kaart() -> Dictionary:
 	var uit: Dictionary = {}
@@ -88,18 +88,18 @@ static func kolommen() -> int:
 static func rijen() -> int:
 	return maxi(1, Rooms.etages().size())
 
-## The rooms of floor `e` from left to right.  The lift's room first; every next
+## The rooms of floor `e` from left to right.  The stairs' room first; every next
 ## cell is then a room with a door to the cell before it when there is one, so
 ## rooms joined by a door stand side by side wherever one row allows it (the
 ## door is drawn in their gap); otherwise the nearest room left on the floor —
-## breadth-first over the floor's own doors from the lift — and a room without
+## breadth-first over the floor's own doors from the stairs — and a room without
 ## a door on its floor last, in `lijst()` order.
 static func rij_van(e: int) -> Array[String]:
 	var alle := Rooms.op_etage(e)
 	var rij: Array[String] = []
 	if alle.is_empty():
 		return rij
-	var begin := Rooms.lift_kamer(e)
+	var begin := Rooms.trap_kamer(e)
 	if begin.is_empty():
 		begin = alle[0]
 	var dichtbij: Array[String] = [begin]
@@ -249,7 +249,7 @@ func _wacht(id: String) -> int:
 ## Every door between two cells that share an edge, once per pair.  A door the
 ## tower cannot show (two rooms of one floor that are not side by side, like
 ## the gang's doors to kamer 2 and the kitchen) is left out rather than drawn
-## across the map; the lift is no door and is the shaft instead.
+## across the map; the stairs are no door and are the stairwell instead.
 func _zoek_deuren() -> void:
 	var gezien: Dictionary = {}
 	for id in _cellen:
@@ -305,7 +305,7 @@ func _leg_uit() -> void:
 		return
 	_bezig = true
 	var breedte := _beschikbaar()
-	# On a narrow sheet this gives way in turn: first the gaps, then the lift
+	# On a narrow sheet this gives way in turn: first the gaps, then the stairwell
 	# shaft, and only then the cells — never under 56 (a 48 tap target plus
 	# air).  The 326 unit phone frame ends at a 24 shaft, 4 gaps and four cells
 	# of 59, which is 274: the whole sheet.
@@ -435,7 +435,7 @@ func _zet_cel(c: Dictionary) -> void:
 # ------------------------------------------------------------------ tekenen
 
 ## Under the cells, back to front: the sunny band of the floor the child is on,
-## the lift shaft with its floor buttons, and the doors in the gaps.
+## the stairwell with its floor buttons, and the doors in the gaps.
 func _draw() -> void:
 	if _cellen.is_empty():
 		return
@@ -453,10 +453,11 @@ func _teken_band() -> void:
 	var band := Rect2(0.0, y, _breedte(), _cel.y + _gat)
 	draw_style_box(UiThema.vlak(Color(UiThema.ZON, BAND_ALFA), 10), band)
 
-## The shaft: one line from the top floor down to the cellar, and on it a small
-## round button per floor with the floor's sign (`Rooms.etage_teken`) — like the
-## panel in a lift.  The button of the floor the child is on is lit.  They are
-## drawn, not tapped: the whole row of a floor is where a finger goes.
+## The stairwell: one line from the top floor down to the cellar, and on it a
+## small round button per floor with the floor's sign (`Rooms.etage_teken`) —
+## like the floor signs on a tall building's landings.  The button of the floor
+## the child is on is lit.  They are drawn, not tapped: the whole row of a floor
+## is where a finger goes.
 func _teken_schacht() -> void:
 	if _etages.is_empty():
 		return
@@ -468,7 +469,7 @@ func _teken_schacht() -> void:
 	var f := get_theme_font("font", "Label")
 	var maat := maxi(UiThema.VLOER, int(_maten.get("klein", UiThema.VLOER)))
 	for i in _etages.size():
-		var vak := lift_knop(_etages[i])
+		var vak := etage_knop(_etages[i])
 		var c := vak.get_center()
 		var r := vak.size.x * 0.5
 		var hier := i + 1 == nu
@@ -534,9 +535,9 @@ func knop_van(id: String) -> Button:
 func plek_van(id: String) -> Vector2i:
 	return _cellen[id]["plek"] if _cellen.has(id) else Vector2i.ZERO
 
-## The floor button of floor `e` in the shaft, as the square around its circle
+## The floor button of floor `e` in the stairwell, as the square around its circle
 ## in this control's own units; an empty rectangle for a floor not on the map.
-func lift_knop(e: int) -> Rect2:
+func etage_knop(e: int) -> Rect2:
 	var i := _etages.find(e)
 	if i < 0:
 		return Rect2()

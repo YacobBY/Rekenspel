@@ -271,7 +271,7 @@ func _heeft_knop(k: Node) -> bool:
 ## room bar shows it.  The chips come per floor — the ground floor first, so
 ## the receptie where the child starts stays the first chip, then up the tower,
 ## then the cellar, the map last — and every floor after the first opens with a
-## small badge carrying the floor's sign as the lift writes it.  The badge is
+## small badge carrying the floor's sign as the tower writes it.  The badge is
 ## no button and looks like none, takes no finger and no focus, and it is glued
 ## to its floor's first chip: beside it in a row, above it in the rail — on
 ## every screen, so a wrapped bar never leaves a badge alone at a row's end.

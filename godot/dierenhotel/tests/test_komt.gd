@@ -293,9 +293,9 @@ func test_volg_tijdens_een_spel_het_dier_waarop_het_wacht() -> void:
 		"wat van het spel is blijft bij het water, niet in kamer 1")
 	var d := World.dier("k_boef")
 	var kamers := _volg_tot_het_eind(d)
-	# down in the lift and out through the lobby's back door (the tower,
+	# down the stairs and out through the lobby's back door (the tower,
 	# 2026-09-24): the camera rides along
-	gelijk(kamers, ["kamer1", "gang", "receptie", "tuin", "zwembad"], "door elke deur en de lift mee")
+	gelijk(kamers, ["kamer1", "gang", "receptie", "tuin", "zwembad"], "door elke deur en de trap mee")
 	gelijk(World.kamer_nu(), "zwembad", "de camera eindigt bij het spel")
 	gelijk(Hotel.volgt(), "", "daar stopt het volgen vanzelf")
 	gelijk(Ui.plaat_teken("k_boef"), "", "de ogen gaan van zijn bordje")

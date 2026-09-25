@@ -33,11 +33,11 @@ const DICHT_KLEIN := 900    ## short side under this -> density lower bound 2
 const REIS_S := 0.300       ## camera slide between two rooms
 const REIS_ZIJ := 0.40      ## it starts 40 % of the frame width sideways
 const REIS_ALFA := 0.35     ## ... and at this alpha
-## A ride in the lift to another floor (`Kamer.etage`): the new floor comes in
+## Up or down the stairs to another floor (`Kamer.etage`): the new floor comes in
 ## from above (going up) or from below, a little slower than a walk through a
 ## door, so the child sees the hotel is a tower.
-const LIFT_S := 0.55
-const LIFT_OP := 0.55      ## it starts 55 % of the frame height up or down
+const TRAP_S := 0.55
+const TRAP_OP := 0.55      ## it starts 55 % of the frame height up or down
 
 const MATRAS := 7           ## the top of a mattress, in voxels
 const ZWEM_DIEP := ArtEffect.ZWEM_DIEP   ## a swimmer sinks this many voxels
@@ -504,24 +504,25 @@ func vlak_van_deur(kamer_id: String, naar: String) -> Rect2:
 		for p in hoeken:
 			vak = vak.expand(p)
 		return vak
-	# a ride in the lift: its one opening, whichever floor it goes to
-	if Rooms.via_lift(kamer_id, naar):
-		return vlak_van_lift(kamer_id)
+	# up or down the stairs: their one opening, whichever floor they go to
+	if Rooms.via_trap(kamer_id, naar):
+		return vlak_van_trap(kamer_id)
 	return Rect2()
 
-## The screen rectangle of the lift in a room (`Kamer.lift`): its opening,
-## measured exactly as a door's (`vlak_van_deur`), so its sign hangs where the
-## door that stood there hung — the floor lights over the lintel are left out
-## on purpose: counted in, the sign rose a band and on a phone took the place
-## over the head of a guest in front of the lobby's lift.  `Rect2()` without one.
-func vlak_van_lift(kamer_id: String = "") -> Rect2:
+## The screen rectangle of the stairs in a room (`Kamer.trap`): their opening,
+## measured exactly as a door's (`vlak_van_deur`), so their sign hangs where the
+## door that stood there hung — only the opening, never more over the lintel:
+## when the lift's floor lights were counted in, the sign rose a band and on a
+## phone took the place over the head of a guest in front of it.  `Rect2()`
+## without stairs.
+func vlak_van_trap(kamer_id: String = "") -> Rect2:
 	var r := Rooms.get_kamer(kamer_id if kamer_id != "" else _kamer_nu)
-	if r == null or r.lift.is_empty():
+	if r == null or r.trap.is_empty():
 		return Rect2()
-	var a := float(r.lift.get("at", 0))
-	var b := a + float(r.lift.get("breed", 12))
-	var h := float(Rooms.deur_hoog(r, r.lift))
-	var randen: Array = [[a, 0.0], [b, 0.0]] if str(r.lift.get("wand", "z")) == "z" \
+	var a := float(r.trap.get("at", 0))
+	var b := a + float(r.trap.get("breed", 12))
+	var h := float(Rooms.deur_hoog(r, r.trap))
+	var randen: Array = [[a, 0.0], [b, 0.0]] if str(r.trap.get("wand", "z")) == "z" \
 		else [[0.0, a], [0.0, b]]
 	var vak := Rect2(mik_punt(float(randen[0][0]), float(randen[0][1]), 0.0), Vector2.ZERO)
 	for xz in randen:
@@ -653,11 +654,11 @@ func naar(kamer_id: String) -> void:
 		_reis = 1.0
 		_cam = _cam_doel
 	elif op != 0 and Rooms.bestaat(oud):
-		# another floor: the lift ride — the new floor slides in from above
+		# another floor, by the stairs — the new floor slides in from above
 		# when you go up, from below when you go down
 		_reis = 0.0
-		_reis_duur = LIFT_S
-		_reis_zij = Vector2(0.0, (-LIFT_OP if op > 0 else LIFT_OP) * float(_viewport.size.y))
+		_reis_duur = TRAP_S
+		_reis_zij = Vector2(0.0, (-TRAP_OP if op > 0 else TRAP_OP) * float(_viewport.size.y))
 		_cam = _cam_doel + _reis_zij
 	else:
 		_reis = 0.0

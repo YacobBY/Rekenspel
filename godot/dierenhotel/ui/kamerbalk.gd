@@ -24,7 +24,7 @@ extends ScrollContainer
 ## it: the chips come per floor — the ground floor first, so the receptie where
 ## the child starts stays the first chip, then up the tower (1, 2, 3), then the
 ## cellar — and every floor after the first opens with a small round badge with
-## the floor's sign, the way the lift's buttons write it (`Rooms.etage_teken`).
+## the floor's sign, the way the tower's floor buttons write it (`Rooms.etage_teken`).
 ## The first group needs none: it is the floor the child starts on, and on the
 ## 1000 unit tablet row every badge costs 18 units of a row that has none to
 ## spare (`_rij_trappen`).  The badge only SAYS something: flat, see-through, a

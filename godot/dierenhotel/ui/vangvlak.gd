@@ -12,10 +12,42 @@ extends Control
 var drop := ""              ## the name a dragged item must carry
 var data: Dictionary = {}
 var val: Callable           ## fn(lading: Dictionary) — the game's drop handler
+## The hotspot's button, when a tap on the object presses it (`tik_vlak`, the
+## hotel's bowls and doors; owner, 2026-09-25: "er staat 'Tik op het bakje'
+## maar wanneer ik op het bakje tik gebeurt er niks. Ik moet op de speech
+## bubbel eronder drukken").  `null`: only drops land here.
+var knop: BaseButton = null
 var _warm := false
+var _druk_op := Vector2.INF
+
+## A press that travels further than this before it is let go is no tap.
+const TIK_AF := 12.0
 
 func _init() -> void:
 	mouse_filter = Control.MOUSE_FILTER_PASS
+
+## A tap on the object is a tap on its button: the same signal, so the same
+## click, the same `[probe] tik` and the same handler — the hotel's own or the
+## one a game borrowed it with.  Of the catch areas under the finger the
+## smallest wins (`Hits.tik_onder`), as for a drop.
+func _gui_input(ev: InputEvent) -> void:
+	var mb := ev as InputEventMouseButton
+	if knop == null or mb == null or mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if mb.pressed:
+		_druk_op = mb.position
+		return
+	var van := _druk_op
+	_druk_op = Vector2.INF
+	if van == Vector2.INF or mb.position.distance_to(van) > TIK_AF:
+		return
+	if get_viewport() != null and get_viewport().gui_is_dragging():
+		return
+	var doel := Hits.tik_onder(get_global_transform() * mb.position)
+	if doel == null or doel.knop == null or not is_instance_valid(doel.knop) or doel.knop.disabled:
+		return
+	accept_event()
+	doel.knop.emit_signal("pressed")
 
 func _can_drop_data(_at: Vector2, lading: Variant) -> bool:
 	if drop.is_empty() or typeof(lading) != TYPE_DICTIONARY:

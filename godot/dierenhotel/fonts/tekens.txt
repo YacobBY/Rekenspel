@@ -51,4 +51,3 @@ FE0F               # variation selector-16: 🛎️ ☀️ 🛏️ carry it
 1F45F 1F462 1F97F 1F576 1F48E 1FA9E   # 👟 👢 🥿 🕶 💎 🪞
 1F61E                # 😞 het dier dat de winkel uit moet
 23EA                 # ⏪ wekker: "uur eraf" (2026-09-24)
-1F6D7                # 🛗 de lift tussen de verdiepingen (2026-09-24)

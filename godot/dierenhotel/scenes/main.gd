@@ -81,7 +81,7 @@ func _ready() -> void:
 	Hotel.hud_veranderd.connect(_ververs_chroom)
 	Hotel.dag_veranderd.connect(func(_d: int) -> void: _meld_stand("dag"))
 	Hotel.bord_veranderd.connect(_ververs_chroom)
-	Hotel.lift_gevraagd.connect(_lift)
+	Hotel.trap_gevraagd.connect(_trap)
 	Rooms.kamers_veranderd.connect(_nieuwe_kamers)
 	World.kamer_veranderd.connect(func(_k: String) -> void: kamerbalk.ververs())
 	# V5 (PLAN.md): a bowl level can change right in the middle of the world
@@ -329,20 +329,21 @@ func _brievenmuur() -> void:
 func _plattegrond() -> void:
 	_toren(UiTekst.KAART_TITEL, UiTekst.KAART_HINT)
 
-## The lift's panel (owner, 2026-09-24: the hotel is a tower): the same tower
-## as the map, under the lift's own title — a floor is a row, and a tap on a
+## The stairs' panel (owner, 2026-09-24: the hotel is a tower; stairs instead of
+## a lift since 2026-09-25): the same tower as the map, under the stairs' own
+## title and pictogram — a floor is a row, and a tap on a
 ## room rides there (`World.naar` slides the new floor in from above or below).
-func _lift(_kamer: String) -> void:
-	print("[probe] lift open kamer=", _kamer)
-	_toren(UiTekst.LIFT_BLAD, UiTekst.LIFT_HINT)
+func _trap(_kamer: String) -> void:
+	print("[probe] trap open kamer=", _kamer)
+	_toren(UiTekst.TRAP_BLAD, UiTekst.TRAP_HINT, UiTrapIcoon.beeld())
 
-func _toren(titel: String, hint: String) -> void:
+func _toren(titel: String, hint: String, beeld: Texture2D = null) -> void:
 	var kaart := UiPlattegrond.new()
 	kaart.bouw(Ui.maten)
 	kaart.kamer_gekozen.connect(func(id: String) -> void:
 		Ui.blad_dicht()
 		Hotel.naar_kamer(id))
-	Ui.blad_open({"titel": titel, "hint": hint,
+	Ui.blad_open({"titel": titel, "hint": hint, "beeld": beeld,
 		"inhoud": [kaart], "knoppen": [{"id": "sluit", "tekst": UiTekst.SLUITEN}]})
 
 # --------------------------------------------------------------- de maten

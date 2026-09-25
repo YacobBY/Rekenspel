@@ -96,24 +96,37 @@ const GLAS_VAK := 12.0                    ## voxels between two glazing bars
 const GLAS_VOET := 6.0                    ## the knee wall is this high
 const GLAS_GROEN_TOT := 14.0              ## the green fades out this far above it
 const GLAS_KOP := 22.0                    ## the transom
-# The lift (`Kamer.lift`, owner 2026-09-24: the hotel is a tower): a steel
-# frame round an open cabin, the two sliding doors pushed aside, a row of floor
-# lights over it — one per floor, the one you are on lit — and the call plate
-# beside it.
-const LIFT_KOOI := Color("#E3E7EC")       ## the cabin's back wall ...
-const LIFT_KOOI_LICHT := Color("#FFF5DA") ## ... warm under its ceiling light
-const LIFT_VLOER := Color("#8F98A2")
-const LIFT_STAAL := Color("#A9B2BC")
-const LIFT_STAAL_D := Color("#8A949F")
-const LIFT_DEUR := Color("#C6CED6")
-const LIFT_DEUR_D := Color("#A3ADB8")
-const LIFT_PANEEL := Color("#3F4751")
-const LIFT_LAMP := Color("#FFC94A")
-const LIFT_LAMP_UIT := Color("#6E7883")
-const LIFT_DIEP := 10.0                   ## voxels deep, the cabin
-const LIFT_DEURBREED := 2.0               ## what shows of each pushed-aside door
-const LIFT_LAMPEN_OP := 2.2               ## the light panel starts this far over the lintel
-const LIFT_LAMPEN_HOOG := 5.0             ## ... and is this tall
+# The stairs (`Kamer.trap`, owner 2026-09-24: the hotel is a tower; a lift
+# until 2026-09-25: "Ik wil graag de lift vervangen voor een trap").  A door
+# frame in the wall, and through it the stairwell with a wooden flight seen from
+# the side — the saw-tooth of the steps, light treads, a banister on posts, like
+# the pictogram on its button (`UiTrapIcoon`).  Where there is a floor above,
+# the flight climbs from the foot of the doorway towards the back corner of the
+# room, getting lighter towards upstairs; on the top floor it goes down from a
+# landing into the dark instead.  Everything is clipped to the opening.
+const TRAP_TREE := Color("#EDC38F")       ## the top of a step
+const TRAP_ZIJ := Color("#C98B5B")        ## the side of the flight, the saw-tooth
+const TRAP_STOOTBORD := Color("#A87044")  ## the front of a step
+const TRAP_LEUNING := Color("#6E4426")    ## the banister and its posts
+const TRAP_MUUR := Color("#E8D8C2")       ## the stairwell's own wall, behind the flight
+const TRAP_MUUR_AF := Color("#E3CDB0")    ## ... a shade darker over a flight going down
+const TRAP_LICHT := Color("#FFF3DC")      ## upstairs: the light the flight climbs into
+const TRAP_DIEP := Color("#4E3E33")       ## downstairs: the dark it goes into
+## The flight up: this far behind the wall's face, this deep, a step this long
+## and this high, this many of them.
+const TRAP_OP_VOOR := 4.0
+const TRAP_OP_BREED := 9.0
+const TRAP_OP_STAP := 2.6
+const TRAP_OP_HOOG := 3.4
+const TRAP_OP_TREDEN := 7
+## The flight down, from a landing: set further back, so it shows over the sill.
+const TRAP_AF_VOOR := 11.0
+const TRAP_AF_BREED := 9.0
+const TRAP_AF_STAP := 2.6
+const TRAP_AF_HOOG := 3.0
+const TRAP_AF_TREDEN := 8
+const TRAP_PAAL := 8.0                    ## the banister stands this high over a step
+const TRAP_DIEPTE := -80.0                ## how far down the dark of a flight going down runs
 
 var _mesh: ArrayMesh = null
 var _kamer := ""
@@ -240,7 +253,7 @@ func _wanden(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 	_vlak(v, k, i, [_proj(0, 0), _proj(0, r.d), _proj(SCHADUW_BREED, r.d),
 		_proj(SCHADUW_BREED, 0)], WAND_SCHADUW)
 	_deuren(r, v, k, i)
-	_lift(r, v, k, i)
+	_trap(r, v, k, i)
 
 ## The kas: both back walls in glass (see GLAS_*), then the shadow strips and the
 ## doors exactly as a plaster room has them.
@@ -388,15 +401,14 @@ func _deurblad(z0: float, z1: float, hoog: float, v: PackedVector2Array,
 	_vlak(v, k, i, [_proj(dik, z1 - 2.4, 12.0), _proj(dik, z1 - 1.2, 12.0),
 		_proj(dik, z1 - 1.2, 13.2), _proj(dik, z1 - 2.4, 13.2)], DEURKNOP)
 
-## The lift in its wall (`Kamer.lift`): the open cabin, the steel frame, the
-## doors pushed aside, the floor lights over it and the call plate beside it.
-## It is as tall as a door (`Rooms.deur_hoog`), so the door sign rule and
-## `World.vlak_van_lift` measure the same box.
-func _lift(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
+## The stairs in their wall (`Kamer.trap`): the stairwell seen through a door
+## frame (see TRAP_*).  The opening is as tall as a door (`Rooms.deur_hoog`), so
+## the door sign rule and `World.vlak_van_trap` measure the same box.
+func _trap(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 		i: PackedInt32Array) -> void:
-	if r.lift.is_empty():
+	if r.trap.is_empty():
 		return
-	var dr: Dictionary = r.lift
+	var dr: Dictionary = r.trap
 	var langs_z := str(dr.get("wand", "z")) == "z"
 	var hoog := float(Rooms.deur_hoog(r, dr))
 	var a := float(dr["at"])
@@ -404,66 +416,169 @@ func _lift(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 	# a point in the wall: `t` along it, `diep` behind it, `y` up
 	var pw := func(t: float, diep: float, y: float) -> Vector2:
 		return _proj(t, -diep, y) if langs_z else _proj(-diep, t, y)
-	# the cabin's back wall fills the opening, warm under its light
-	var onder := LIFT_KOOI
-	var boven := LIFT_KOOI_LICHT
-	_vlak_kl(v, k, i, [pw.call(a, 0.0, 0.0), pw.call(b, 0.0, 0.0), pw.call(b, 0.0, hoog),
-		pw.call(a, 0.0, hoog)], [onder, onder, boven, boven])
-	# ... and its floor, as far as the opening shows it
-	var vloer: Array = [Vector2(a - hoog, -LIFT_DIEP), Vector2(b, -LIFT_DIEP), Vector2(b, 0),
-		Vector2(a - hoog, 0)] if langs_z else [Vector2(-LIFT_DIEP, a - hoog),
-		Vector2(0, a - hoog), Vector2(0, b), Vector2(-LIFT_DIEP, b)]
-	var zicht := doorkijk_zicht({"at": a, "breed": b - a, "wand": dr["wand"]}, hoog)
-	_veelhoek(v, k, i, _knip(vloer, zicht), LIFT_VLOER)
-	# the jamb that faces the viewer, in steel
+	var vak := _scherm_vlakken([pw.call(a, 0.0, 0.0), pw.call(b, 0.0, 0.0),
+		pw.call(b, 0.0, hoog), pw.call(a, 0.0, hoog)])
+	var boven := false
+	for ander in Rooms.trap_kamers():
+		boven = boven or Rooms.etage(ander) > r.etage
+	if boven:
+		_trap_op(pw, vak, a, b, v, k, i)
+	else:
+		_trap_af(pw, vak, a, b, v, k, i)
+	# the threshold inside the wall, the lintel's shadow, the jamb that faces
+	# the viewer and the wooden frame, as every door in a wall has them
+	_scherm_vlak(v, k, i, [pw.call(a, 0.0, 0.0), pw.call(b, 0.0, 0.0),
+		pw.call(b, WAND_DIK, 0.0), pw.call(a, WAND_DIK, 0.0)], vak, DREMPEL)
+	var band := minf(LATEI_BAND, hoog)
+	var schaduw := Color(BINNEN_SCHADUW, LATEI_SCHADUW)
+	var weg := Color(BINNEN_SCHADUW, 0.0)
+	_vlak_kl(v, k, i, [pw.call(a, 0.0, hoog), pw.call(b, 0.0, hoog), pw.call(b, 0.0, hoog - band),
+		pw.call(a, 0.0, hoog - band)], [schaduw, schaduw, weg, weg])
+	var negge := (W_R if langs_z else W_L).darkened(0.12)
 	_vlak(v, k, i, [pw.call(a, 0.0, 0.0), pw.call(a, WAND_DIK, 0.0), pw.call(a, WAND_DIK, hoog),
-		pw.call(a, 0.0, hoog)], LIFT_STAAL_D)
-	# the two sliding doors, pushed aside to the edges of the opening
-	for kant: Array in [[a, a + LIFT_DEURBREED], [b - LIFT_DEURBREED, b]]:
-		var d0: float = kant[0]
-		var d1: float = kant[1]
-		_vlak(v, k, i, [pw.call(d0, 0.3, 0.0), pw.call(d1, 0.3, 0.0), pw.call(d1, 0.3, hoog),
-			pw.call(d0, 0.3, hoog)], LIFT_DEUR)
-		var naad := d1 - 0.4 if d0 == a else d0
-		_vlak(v, k, i, [pw.call(naad, 0.2, 0.0), pw.call(naad + 0.4, 0.2, 0.0),
-			pw.call(naad + 0.4, 0.2, hoog), pw.call(naad, 0.2, hoog)], LIFT_DEUR_D)
-	# the steel frame: two posts and the lintel
-	var top := hoog + 1.6
-	_vlak(v, k, i, [pw.call(a - 1.4, 0.0, 0.0), pw.call(a, 0.0, 0.0), pw.call(a, 0.0, top),
-		pw.call(a - 1.4, 0.0, top)], LIFT_STAAL)
-	_vlak(v, k, i, [pw.call(b, 0.0, 0.0), pw.call(b + 1.4, 0.0, 0.0), pw.call(b + 1.4, 0.0, top),
-		pw.call(b, 0.0, top)], LIFT_STAAL)
-	_vlak(v, k, i, [pw.call(a - 1.4, 0.0, hoog), pw.call(b + 1.4, 0.0, hoog),
-		pw.call(b + 1.4, 0.0, top), pw.call(a - 1.4, 0.0, top)], LIFT_STAAL)
-	# the floor lights: one per floor, the ground floor on the left of the
-	# row as the child looks at it, this floor lit
-	var etages := Rooms.etages()
-	etages.reverse()
-	var y0 := hoog + LIFT_LAMPEN_OP
-	var y1 := y0 + LIFT_LAMPEN_HOOG
-	_vlak(v, k, i, [pw.call(a - 1.0, 0.0, y0), pw.call(b + 1.0, 0.0, y0),
-		pw.call(b + 1.0, 0.0, y1), pw.call(a - 1.0, 0.0, y1)], LIFT_PANEEL)
-	var n := etages.size()
-	var stap := (b - a) / float(maxi(1, n))
+		pw.call(a, 0.0, hoog)], negge)
+	_vlak(v, k, i, [pw.call(a - 1.0, 0.0, 0.0), pw.call(a, 0.0, 0.0), pw.call(a, 0.0, hoog + 1.4),
+		pw.call(a - 1.0, 0.0, hoog + 1.4)], HOUT_D)
+	_vlak(v, k, i, [pw.call(b, 0.0, 0.0), pw.call(b + 1.0, 0.0, 0.0), pw.call(b + 1.0, 0.0, hoog + 1.4),
+		pw.call(b, 0.0, hoog + 1.4)], HOUT_D)
+	_vlak(v, k, i, [pw.call(a - 1.0, 0.0, hoog), pw.call(b + 1.0, 0.0, hoog),
+		pw.call(b + 1.0, 0.0, hoog + 1.4), pw.call(a - 1.0, 0.0, hoog + 1.4)], HOUT)
+
+## The flight up, clipped to `vak`: it starts at the foot of the doorway's far
+## side and climbs along the wall towards the back corner (`t` down), set a
+## little behind the wall, so the child sees it from the side — per step the
+## front of the step, its tread and the column under it — and a banister on a
+## post per step.  The viewer stands on the side of the lower steps, so the
+## highest step is drawn first and every lower one over it.  The wall behind
+## the flight is the stairwell's own, and each step is a little nearer the
+## light upstairs.
+func _trap_op(pw: Callable, vak: Array, a: float, b: float, v: PackedVector2Array,
+		k: PackedColorArray, i: PackedInt32Array) -> void:
+	_scherm_vlak(v, k, i, [pw.call(a - 60.0, 0.0, -40.0), pw.call(b + 60.0, 0.0, -40.0),
+		pw.call(b + 60.0, 0.0, 80.0), pw.call(a - 60.0, 0.0, 80.0)], vak, TRAP_MUUR)
+	var u0 := TRAP_OP_VOOR
+	var u1 := u0 + TRAP_OP_BREED
+	# a point behind the wall shows `diep` further along it: this puts the foot
+	# of the flight just inside the far jamb
+	var voet := b + 1.5 - u0
+	var n := TRAP_OP_TREDEN
+	for j in range(n - 1, -1, -1):
+		var tl := voet - TRAP_OP_STAP * float(j + 1)
+		var tr := voet - TRAP_OP_STAP * float(j)
+		var y0 := TRAP_OP_HOOG * float(j)
+		var y1 := y0 + TRAP_OP_HOOG
+		var licht := 0.4 * float(j) / float(n)
+		_scherm_vlak(v, k, i, [pw.call(tr, u0, y0), pw.call(tr, u1, y0), pw.call(tr, u1, y1),
+			pw.call(tr, u0, y1)], vak, TRAP_STOOTBORD.lerp(TRAP_LICHT, licht))
+		_scherm_vlak(v, k, i, [pw.call(tl, u0, y1), pw.call(tr, u0, y1), pw.call(tr, u1, y1),
+			pw.call(tl, u1, y1)], vak, TRAP_TREE.lerp(TRAP_LICHT, licht))
+		_scherm_vlak(v, k, i, [pw.call(tl, u0, 0.0), pw.call(tr, u0, 0.0), pw.call(tr, u0, y1),
+			pw.call(tl, u0, y1)], vak, TRAP_ZIJ.lerp(TRAP_LICHT, licht * 0.5))
+	_trap_leuning(pw, vak, voet, -TRAP_OP_STAP, TRAP_OP_HOOG, n, u0, v, k, i)
+
+## The flight down, clipped to `vak`: the stairwell's floor is a landing on the
+## near side of the doorway, and from it the flight goes down along the wall,
+## away from the back corner, into the dark — each step darker, its tread and
+## the side under it, with the banister going down with it.  The flight is set
+## further back than the one going up, so its first steps show over the sill.
+## The viewer stands on the side of the lower steps: drawn from the top down.
+func _trap_af(pw: Callable, vak: Array, a: float, b: float, v: PackedVector2Array,
+		k: PackedColorArray, i: PackedInt32Array) -> void:
+	_scherm_vlak(v, k, i, [pw.call(a - 60.0, 0.0, -40.0), pw.call(b + 60.0, 0.0, -40.0),
+		pw.call(b + 60.0, 0.0, 80.0), pw.call(a - 60.0, 0.0, 80.0)], vak, TRAP_MUUR_AF)
+	var u0 := TRAP_AF_VOOR
+	var u1 := u0 + TRAP_AF_BREED
+	var kop := a + 2.0 - u0
+	# the dark the flight goes down into, and the wall behind it
+	_scherm_vlak(v, k, i, [pw.call(kop, u0, TRAP_DIEPTE), pw.call(b + 60.0, u0, TRAP_DIEPTE),
+		pw.call(b + 60.0, u1, TRAP_DIEPTE), pw.call(kop, u1, TRAP_DIEPTE)], vak, TRAP_DIEP)
+	_scherm_vlak(v, k, i, [pw.call(kop, u1, TRAP_DIEPTE), pw.call(b + 60.0, u1, TRAP_DIEPTE),
+		pw.call(b + 60.0, u1, 0.0), pw.call(kop, u1, 0.0)], vak, TRAP_MUUR_AF.lerp(TRAP_DIEP, 0.6))
+	var n := TRAP_AF_TREDEN
 	for j in n:
-		# the x wall runs from right to left on screen: count from its far end
-		var t0 := a + stap * (float(j) + 0.25) if langs_z else b - stap * (float(j) + 0.75)
-		var t1 := t0 + stap * 0.5
-		var aan: bool = etages[j] == r.etage
-		_vlak(v, k, i, [pw.call(t0, -0.1, y0 + 1.2), pw.call(t1, -0.1, y0 + 1.2),
-			pw.call(t1, -0.1, y1 - 1.2), pw.call(t0, -0.1, y1 - 1.2)],
-			LIFT_LAMP if aan else LIFT_LAMP_UIT)
-	# the call plate beside the frame, on the side the room opens to, with
-	# its up and down button
-	var c0 := b + 2.6 if langs_z else a - 5.0
-	var c1 := c0 + 2.4
-	_vlak(v, k, i, [pw.call(c0, 0.0, 10.0), pw.call(c1, 0.0, 10.0), pw.call(c1, 0.0, 16.0),
-		pw.call(c0, 0.0, 16.0)], LIFT_STAAL_D)
-	var cm := (c0 + c1) * 0.5
-	_vlak(v, k, i, [pw.call(cm - 0.7, -0.1, 13.4), pw.call(cm + 0.7, -0.1, 13.4),
-		pw.call(cm, -0.1, 14.9), pw.call(cm, -0.1, 14.9)], LIFT_LAMP)
-	_vlak(v, k, i, [pw.call(cm, -0.1, 11.1), pw.call(cm, -0.1, 11.1),
-		pw.call(cm + 0.7, -0.1, 12.6), pw.call(cm - 0.7, -0.1, 12.6)], LIFT_LAMP_UIT)
+		var tl := kop + TRAP_AF_STAP * float(j)
+		var tr := tl + TRAP_AF_STAP
+		var y := -TRAP_AF_HOOG * float(j + 1)
+		var donker := minf(1.0, 0.15 + 0.85 * float(j + 1) / float(n))
+		_scherm_vlak(v, k, i, [pw.call(tl, u0, y), pw.call(tr, u0, y), pw.call(tr, u1, y),
+			pw.call(tl, u1, y)], vak, TRAP_TREE.lerp(TRAP_DIEP, donker))
+		_scherm_vlak(v, k, i, [pw.call(tl, u0, TRAP_DIEPTE), pw.call(tr, u0, TRAP_DIEPTE),
+			pw.call(tr, u0, y), pw.call(tl, u0, y)], vak, TRAP_ZIJ.lerp(TRAP_DIEP, donker))
+	_trap_leuning(pw, vak, kop, TRAP_AF_STAP, -TRAP_AF_HOOG, n, u0, v, k, i)
+	# the landing: the stairwell's floor from the wall to its back, beside the flight
+	_scherm_vlak(v, k, i, [pw.call(a - 60.0, WAND_DIK, 0.0), pw.call(kop, WAND_DIK, 0.0),
+		pw.call(kop, u1, 0.0), pw.call(a - 60.0, u1, 0.0)], vak, TRAP_TREE)
+
+## The banister of a flight that starts at `voet` and moves `stap` along the wall
+## and `hoog` up per step (both may be negative): a post on the middle of every
+## tread and the rail over their tops, on the near edge of the flight.
+func _trap_leuning(pw: Callable, vak: Array, voet: float, stap: float, hoog: float, n: int,
+		u0: float, v: PackedVector2Array, k: PackedColorArray, i: PackedInt32Array) -> void:
+	var u := u0 + 0.9
+	for j in n:
+		var t := voet + stap * (float(j) + 0.5)
+		var y := hoog * float(j + 1)
+		_scherm_vlak(v, k, i, [pw.call(t - 0.35, u, y), pw.call(t + 0.35, u, y),
+			pw.call(t + 0.35, u, y + TRAP_PAAL), pw.call(t - 0.35, u, y + TRAP_PAAL)], vak, TRAP_LEUNING)
+	# going down the rail starts a little before the first post, over the landing
+	var aan := -3.0 * signf(stap) if hoog < 0.0 else 0.0
+	var t0 := voet + stap * 0.5 + aan
+	var y0 := hoog + TRAP_PAAL + (aan / stap) * hoog
+	var t1 := voet + stap * (float(n) - 0.5)
+	var y1 := hoog * float(n) + TRAP_PAAL
+	_scherm_vlak(v, k, i, [pw.call(t0, u, y0 - 0.6), pw.call(t1, u, y1 - 0.6), pw.call(t1, u, y1 + 0.6),
+		pw.call(t0, u, y0 + 0.6)], vak, TRAP_LEUNING)
+
+## The half-planes n · p <= c that hold a convex polygon of SCREEN points, for
+## `_knip` — the opening of the stairs as it is drawn.
+static func _scherm_vlakken(p: Array) -> Array:
+	var midden := Vector2.ZERO
+	for q in p:
+		midden += q
+	midden /= float(p.size())
+	var uit: Array = []
+	for j in p.size():
+		var s: Vector2 = p[j]
+		var e: Vector2 = p[(j + 1) % p.size()]
+		var n := Vector2(e.y - s.y, s.x - e.x)
+		if n.dot(midden - s) > 0.0:
+			n = -n
+		uit.append(Vector3(n.x, n.y, n.dot(s)))
+	return uit
+
+## A convex polygon of SCREEN points, clipped to `vlakken`, in one colour.
+func _scherm_vlak(v: PackedVector2Array, k: PackedColorArray, i: PackedInt32Array,
+		p: Array, vlakken: Array, kl: Color) -> void:
+	_scherm_vlak_kl(v, k, i, p, vlakken, [kl, kl, kl, kl])
+
+## ... and with a colour per corner of a quad, interpolated over what is left.
+func _scherm_vlak_kl(v: PackedVector2Array, k: PackedColorArray, i: PackedInt32Array,
+		p: Array, vlakken: Array, kl: Array) -> void:
+	var stuk := _knip(p, vlakken)
+	if stuk.size() < 3:
+		return
+	var n := v.size()
+	for q in stuk:
+		v.append(q)
+		k.append(_kleur_in(p, kl, q))
+	for j in range(1, stuk.size() - 1):
+		i.append_array([n, n + j, n + j + 1])
+
+## The colour at `q` inside the quad `p` whose corners carry `kl`: the quads here
+## are parallelograms, so `q` = p0 + s·(p1 − p0) + t·(p3 − p0) is solved exactly.
+static func _kleur_in(p: Array, kl: Array, q: Vector2) -> Color:
+	var o: Vector2 = p[0]
+	var ex: Vector2 = p[1] - o
+	var ey: Vector2 = p[3] - o
+	var det := ex.x * ey.y - ex.y * ey.x
+	if absf(det) < 0.000001:
+		return kl[0]
+	var d := q - o
+	var s := clampf((d.x * ey.y - d.y * ey.x) / det, 0.0, 1.0)
+	var t := clampf((ex.x * d.y - ex.y * d.x) / det, 0.0, 1.0)
+	var onder := (kl[0] as Color).lerp(kl[1], s)
+	var boven := (kl[3] as Color).lerp(kl[2], s)
+	return onder.lerp(boven, t)
 
 ## What a door lets you see: the floor of the room behind it, in that room's own
 ## 4x4 tiles (`Rooms.vloer_kleur`), clipped to exactly the floor the opening

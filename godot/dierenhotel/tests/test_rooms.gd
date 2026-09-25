@@ -42,8 +42,8 @@ func test_elke_kamer_is_compleet() -> void:
 		waar(not r.icoon.strip_edges().is_empty(), id + " heeft een pictogram")
 		waar(VLOEREN.has(r.vloer), "%s heeft een bekende vloer (%s)" % [id, r.vloer])
 		waar(UiPlattegrond.kaart().has(id), id + " heeft een vak op de plattegrond")
-		waar(r.deuren.size() >= 1 or not r.lift.is_empty(),
-			id + " heeft minstens één deur of de lift")
+		waar(r.deuren.size() >= 1 or not r.trap.is_empty(),
+			id + " heeft minstens één deur of de trap")
 		for dr in r.deuren:
 			var naar := String(dr["naar"])
 			waar(Rooms.bestaat(naar), "%s: de deur naar %s gaat ergens heen" % [id, naar])
@@ -111,9 +111,9 @@ func test_kamerkaders() -> void:
 ## The full door table of world.md §1.2, both the point and the inside step.
 func test_deurpunten() -> void:
 	var verwacht := [
-		# 2026-09-24, the tower: the lift in the lobby stands where the door to
+		# 2026-09-24, the tower: the stairs in the lobby stand where the door to
 		# the gang was (the left wall — owner decision, §13 Q-X1-13), and in
-		# every other lift room where its door down to the lobby was, so these
+		# every other stairs room where its door down to the lobby was, so these
 		# points did not move; a ride to any floor starts there
 		["receptie", "gang", 0, 30, 8, 30],
 		["receptie", "speelzaal", 0, 30, 8, 30],
@@ -132,7 +132,7 @@ func test_deurpunten() -> void:
 		["tuin", "receptie", 0, 40, 8, 40],
 		["tuin", "zwembad", 44, 0, 44, 8],
 		["zwembad", "tuin", 0, 66, 8, 66],
-		# the laundry in the cellar: the lift where its kitchen door was
+		# the laundry in the cellar: the stairs where its kitchen door was
 		["wasserij", "receptie", 68, 0, 68, 8],
 		["speelzaal", "receptie", 63, 0, 63, 8],
 		# R3: de glazen deur van de kas in de achtergevel, waar het keukenraam
@@ -156,15 +156,15 @@ func test_deurpunten() -> void:
 	# back wall and a door in the hotel's facade in the garden
 	waar(not Rooms.deur("receptie", "tuin")["poort"], "de receptie heeft een echte tuindeur")
 	waar(not Rooms.deur("tuin", "receptie")["poort"], "de tuin gaat door een deur de receptie in")
-	waar(not Rooms.via_lift("receptie", "tuin"), "naar de tuin loop je, zonder lift")
-	waar(Rooms.via_lift("receptie", "winkels"), "naar de winkels neem je de lift")
-	waar(Rooms.via_lift("wasserij", "gang"), "de lift gaat van de kelder naar boven")
+	waar(not Rooms.via_trap("receptie", "tuin"), "naar de tuin loop je, zonder trap")
+	waar(Rooms.via_trap("receptie", "winkels"), "naar de winkels neem je de trap")
+	waar(Rooms.via_trap("wasserij", "gang"), "de trap gaat van de kelder naar boven")
 	waar(Rooms.deur("keuken", "tuin").is_empty(), "de keuken heeft geen tuindeur meer")
 
 ## `pad()` is a BFS that includes the start room.
 func test_pad_door_de_deuren() -> void:
 	_pad_is(Rooms.pad("gang", "kamer1"), ["gang", "kamer1"], "buur")
-	# the tower: down in the lift to the lobby, out through its back door
+	# the tower: down the stairs to the lobby, out through its back door
 	_pad_is(Rooms.pad("kamer1", "zwembad"),
 		["kamer1", "gang", "receptie", "tuin", "zwembad"], "vijf kamers")
 	# one ride, however many floors apart
@@ -368,9 +368,9 @@ func test_niemand_loopt_door_de_balie() -> void:
 				"%s staat op de balie" % stuk["n"])
 	# and there is exactly one door out of the receptie now, to the garden
 	# (2026-09-24, the tower: every other room is a floor up or down), plus
-	# the lift
+	# the stairs
 	gelijk(r.deuren.size(), 1, "de receptie heeft één deur")
-	waar(not r.lift.is_empty(), "en de lift")
+	waar(not r.trap.is_empty(), "en de trap")
 	# The garden door is BEHIND the end of the desk, so the straight line to it
 	# would cut the counter: every walk to it goes round (`om_het_water`), and
 	# no leg of that walk touches the desk.
@@ -823,9 +823,9 @@ func test_de_receptie_heeft_een_voordeur_buiten_de_deurgraaf() -> void:
 	# it is not a door of the graph: the door pairs, points and paths stay as
 	# they were, and outside is no room
 	gelijk(r.deuren.size(), 1, "de receptie houdt één deur")
-	# one to the garden and one per other floor the lift goes to — one door
-	# button and one lift button
-	gelijk(r.deur_punten.size(), 1 + Rooms.lift_kamers().size() - 1,
+	# one to the garden and one per other floor the stairs go to — one door
+	# button and one stairs button
+	gelijk(r.deur_punten.size(), 1 + Rooms.trap_kamers().size() - 1,
 		"en een deurpunt voor de tuin en elke andere verdieping")
 	for dr in r.deuren:
 		waar(str(dr["wand"]) != "z" or float(dr["at"]) + float(dr["breed"]) <= a - 2.0
@@ -998,7 +998,7 @@ func _stuk(r: Rooms.Kamer, naam: String) -> Dictionary:
 ## de bedoeling dat het hotel heel groot en hoog aanvoelt net als Habbo Hotel.
 ## Op de begane grond zijn enkel de buiten dingen als het zwembad en de tuin").
 ## The ground floor holds the lobby — the one way in from the street — and the
-## outdoors; the shops are a floor of their own; ONE lift joins every floor.
+## outdoors; the shops are a floor of their own; ONE stairwell joins every floor.
 func test_het_hotel_is_een_toren() -> void:
 	var etages := Rooms.etages()
 	waar(etages.size() >= 4, "minstens vier verdiepingen (%s)" % str(etages))
@@ -1014,25 +1014,25 @@ func test_het_hotel_is_een_toren() -> void:
 	waar(Rooms.etage("winkels") != 0, "de winkels liggen op een andere verdieping")
 	waar(Rooms.op_etage(Rooms.etage("winkels")).size() == 1,
 		"de winkels hebben een verdieping voor zich alleen")
-	# one lift room per floor, and a door never leaves its floor
+	# one stairs room per floor, and a door never leaves its floor
 	for e in etages:
-		var lift := Rooms.lift_kamer(e)
-		waar(not lift.is_empty(), "de lift stopt op verdieping %d" % e)
+		var trap := Rooms.trap_kamer(e)
+		waar(not trap.is_empty(), "de trap komt op verdieping %d" % e)
 		for id in Rooms.op_etage(e):
 			var r := Rooms.get_kamer(id)
 			for dr in r.deuren:
 				gelijk(Rooms.etage(str(dr["naar"])), e,
 					"de deur %s -> %s blijft op de verdieping" % [id, dr["naar"]])
-			# every room of a floor is reached from its lift room on foot
-			var pad := Rooms.pad(lift, id)
+			# every room of a floor is reached from its stairs room on foot
+			var pad := Rooms.pad(trap, id)
 			for stap in pad:
-				gelijk(Rooms.etage(stap), e, "%s -> %s loopt over de verdieping" % [lift, id])
-	gelijk(Rooms.lift_kamers().size(), etages.size(), "de lift stopt één keer per verdieping")
+				gelijk(Rooms.etage(stap), e, "%s -> %s loopt over de verdieping" % [trap, id])
+	gelijk(Rooms.trap_kamers().size(), etages.size(), "de trap komt één keer per verdieping")
 	# a ride is one step, whatever the distance
-	for van in Rooms.lift_kamers():
-		for naar in Rooms.lift_kamers():
+	for van in Rooms.trap_kamers():
+		for naar in Rooms.trap_kamers():
 			if van != naar:
-				gelijk(Rooms.pad(van, naar).size(), 2, "%s -> %s is één liftrit" % [van, naar])
-				waar(Rooms.via_lift(van, naar), "%s -> %s gaat met de lift" % [van, naar])
-	gelijk(Rooms.etage_teken(-1), "K", "de kelder heet K in de lift")
+				gelijk(Rooms.pad(van, naar).size(), 2, "%s -> %s is één keer de trap" % [van, naar])
+				waar(Rooms.via_trap(van, naar), "%s -> %s gaat met de trap" % [van, naar])
+	gelijk(Rooms.etage_teken(-1), "K", "de kelder heet K in de toren")
 	gelijk(Rooms.etage_teken(2), "2", "een verdieping heet naar haar nummer")

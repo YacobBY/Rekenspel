@@ -278,7 +278,7 @@ func test_platte_en_hoge_dingen_houden_niemand_tegen() -> void:
 # ------------------------------------------------------------------ echt lopen
 
 ## A real journey on the think tick: from a bed in kamer 2 through the corridor,
-## down in the lift, through the lobby — round the desk — into the garden, and
+## down the stairs, through the lobby — round the desk — into the garden, and
 ## in every room he passes he never stands in anything, also between two ticks.
 ## He arrives where he was sent.
 func test_reis_door_vier_kamers_loopt_nergens_doorheen() -> void:
@@ -290,7 +290,7 @@ func test_reis_door_vier_kamers_loopt_nergens_doorheen() -> void:
 	var d := World.zet(T, "kamer2", float(bed["sx"]), float(bed["sz"]), {"kind": "hond"})
 	var doel := Vector2(112.0, 96.0)
 	var route := World.reis(T, "tuin", {"x": doel.x, "z": doel.y, "na": "wacht"})
-	gelijk(route, ["kamer2", "gang", "receptie", "tuin"], "twee deuren en de lift")
+	gelijk(route, ["kamer2", "gang", "receptie", "tuin"], "twee deuren en de trap")
 	var afdrukken := {}
 	for k in route:
 		afdrukken[k] = _voetafdrukken(k)

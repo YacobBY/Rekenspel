@@ -64,14 +64,16 @@ const KAART_TITEL := "🗺️ De plattegrond"
 const KAART_HINT := "Tik op een ruimte om er naartoe te gaan."
 const SLUITEN := "Sluiten"
 
-# ------------------------------------------------------------------ de lift
-## The lift between the floors (owner, 2026-09-24: the hotel is a tower).  Its
-## button on the opening, the words a screen reader says, and the panel it
-## opens — the same tower as the map (`ui/plattegrond.gd`).
-const LIFT := "Lift"
-const LIFT_TITEL := "Neem de lift"
-const LIFT_BLAD := "🛗 De lift"
-const LIFT_HINT := "Waar wil je heen?"
+# ------------------------------------------------------------------ de trap
+## The stairs between the floors (owner, 2026-09-24: the hotel is a tower; a
+## lift until 2026-09-25: "Ik wil graag de lift vervangen voor een trap").  Its
+## button on the stairwell, the words a screen reader says, and the panel it
+## opens — the same tower as the map (`ui/plattegrond.gd`).  No emoji: the
+## pictogram is drawn (`UiTrapIcoon`), on the button and before the title.
+const TRAP := "Trap"
+const TRAP_TITEL := "Neem de trap"
+const TRAP_BLAD := "De trap"
+const TRAP_HINT := "Waar wil je heen?"
 
 # ------------------------------------------------------------ §7.7 prikbord
 ## The board is a sheet (owner, 2026-09-23); its cards are the hotel's own

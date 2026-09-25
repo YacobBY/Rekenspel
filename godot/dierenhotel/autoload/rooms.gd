@@ -1,5 +1,5 @@
 extends Node
-## Rooms — the rooms, their floors, decor, slots, doors, the lift and furniture.
+## Rooms — the rooms, their floors, decor, slots, doors, the stairs and furniture.
 ## Autoload #2.  Port of `demos/dierenhotel/rooms.js` (world.md §1).
 ##
 ## Everything a room knows is data: size, wall height, floor kind, walking
@@ -91,14 +91,15 @@ class Kamer extends RefCounted:
 	## dingen als het zwembad en de tuin").  0 is the ground floor — the lobby
 	## and everything outdoors — the floors above count up, the cellar is −1.
 	var etage := 0
-	## The lift, {wand, at, breed} like a door in a wall.  Every room with a
-	## lift is ONE step from every other room with a lift: `bouw_af` gives each
-	## of them an entry in `deur_punten`, all on this one opening and marked
-	## `lift`, so `pad`, `World.reis` and every "keep the door free" rule treat
-	## a ride like a walk through a door.  It is not in `deuren`: the wall
-	## drawing (`scenes/vloer.gd`), the map and the door buttons each draw it
-	## once, as a lift, instead of once per floor.
-	var lift: Dictionary = {}
+	## The stairs, {wand, at, breed} like a door in a wall (a lift until
+	## 2026-09-25, owner: "Ik wil graag de lift vervangen voor een trap").
+	## Every room with stairs is ONE step from every other room with stairs:
+	## `bouw_af` gives each of them an entry in `deur_punten`, all on this one
+	## opening and marked `trap`, so `pad`, `World.reis` and every "keep the
+	## door free" rule treat a climb like a walk through a door.  It is not in
+	## `deuren`: the wall drawing (`scenes/vloer.gd`), the map and the door
+	## buttons each draw it once, as stairs, instead of once per floor.
+	var trap: Dictionary = {}
 	## The hotel's front door, {wand, at, breed} like a door (the receptie only,
 	## owner 2026-09-23: guests "komen momenteel vanuit de gang binnen ipv
 	## ingang").  It is NOT a door of the graph: no path (`pad`), no door button,
@@ -203,7 +204,7 @@ func deur_hoog(r: Kamer, dr: Dictionary) -> int:
 	return maxi(6, mini(wand - 6, 26))
 
 ## The rooms one step from this one: through its doors first, then — when it
-## has a lift — every other floor the lift stops at, from the top down.
+## has stairs — every other floor the stairs reach, from the top down.
 func buren(kamer_id: String) -> Array[String]:
 	var uit: Array[String] = []
 	var r := get_kamer(kamer_id)
@@ -212,8 +213,8 @@ func buren(kamer_id: String) -> Array[String]:
 	for dr in r.deuren:
 		if not uit.has(str(dr["naar"])):
 			uit.append(str(dr["naar"]))
-	if not r.lift.is_empty():
-		for ander in lift_kamers():
+	if not r.trap.is_empty():
+		for ander in trap_kamers():
 			if ander != kamer_id and not uit.has(ander):
 				uit.append(ander)
 	return uit
@@ -222,8 +223,8 @@ func buren(kamer_id: String) -> Array[String]:
 ##
 ## The hotel is a tower (owner, 2026-09-24, see `Kamer.etage`): the lobby and
 ## the outdoors on the ground floor, the shops, the playroom and the guest
-## rooms each a floor higher, the laundry in the cellar.  One lift connects
-## them; the camera rides it up or down (`World.naar`).
+## rooms each a floor higher, the laundry in the cellar.  One flight of stairs
+## connects them; the camera goes up or down with you (`World.naar`).
 
 ## The floor a room is on (0 for a room that does not exist).
 func etage(kamer_id: String) -> int:
@@ -249,38 +250,38 @@ func op_etage(e: int) -> Array[String]:
 			uit.append(id)
 	return uit
 
-## Every room the lift stops in, from the top floor down.
-func lift_kamers() -> Array[String]:
+## Every room the stairs reach, from the top floor down.
+func trap_kamers() -> Array[String]:
 	var uit: Array[String] = []
 	for e in etages():
 		for id in op_etage(e):
-			if not (_kamers[id] as Kamer).lift.is_empty():
+			if not (_kamers[id] as Kamer).trap.is_empty():
 				uit.append(id)
 	return uit
 
-## The room the lift stops in on floor `e`, "" when it does not stop there.
-func lift_kamer(e: int) -> String:
+## The room the stairs reach on floor `e`, "" when they do not reach it.
+func trap_kamer(e: int) -> String:
 	for id in op_etage(e):
-		if not (_kamers[id] as Kamer).lift.is_empty():
+		if not (_kamers[id] as Kamer).trap.is_empty():
 			return id
 	return ""
 
-## Does the step from `van` to its neighbour `naar` go by lift?
-func via_lift(van: String, naar: String) -> bool:
+## Does the step from `van` to its neighbour `naar` go by the stairs?
+func via_trap(van: String, naar: String) -> bool:
 	var r := get_kamer(van)
-	return r != null and bool((r.deur_punten.get(naar, {}) as Dictionary).get("lift", false))
+	return r != null and bool((r.deur_punten.get(naar, {}) as Dictionary).get("trap", false))
 
-## The lift's point in a room, like a door's (`{x, z, ix, iz, wand, lift}`);
-## `{}` for a room the lift does not stop in.
-func lift_punt(kamer_id: String) -> Dictionary:
+## The stairs' point in a room, like a door's (`{x, z, ix, iz, wand, trap}`);
+## `{}` for a room the stairs do not reach.
+func trap_punt(kamer_id: String) -> Dictionary:
 	var r := get_kamer(kamer_id)
-	if r == null or r.lift.is_empty():
+	if r == null or r.trap.is_empty():
 		return {}
-	var lp := _deurpunt(r.lift)
-	lp["lift"] = true
+	var lp := _deurpunt(r.trap)
+	lp["trap"] = true
 	return lp
 
-## How a floor is written on the lift's buttons: its number, the cellar "K".
+## How a floor is written on the tower's floor buttons: its number, the cellar "K".
 static func etage_teken(e: int) -> String:
 	return "K" if e < 0 else str(e)
 
@@ -332,11 +333,11 @@ func bouw_af(r: Kamer) -> void:
 	r.deur_punten = {}
 	for dr in r.deuren:
 		r.deur_punten[dr["naar"]] = _deurpunt(dr)
-	# the lift: one opening, an entry for every other floor it stops at
-	if not r.lift.is_empty():
-		var lp := _deurpunt(r.lift)
-		lp["lift"] = true
-		for ander in lift_kamers():
+	# the stairs: one opening, an entry for every other floor they reach
+	if not r.trap.is_empty():
+		var lp := _deurpunt(r.trap)
+		lp["trap"] = true
+		for ander in trap_kamers():
 			if ander != r.id and not r.deur_punten.has(ander):
 				r.deur_punten[ander] = lp.duplicate()
 	# the front door is derived like a door, but kept apart from `deur_punten`:
@@ -938,13 +939,13 @@ func _bouw_kamers() -> void:
 		# The ground floor (owner, 2026-09-24: "Op de begane grond zijn enkel
 		# de buiten dingen als het zwembad en de tuin"): the lobby is the one
 		# room indoors down here, the hall between the front door, the garden
-		# and the lift.  The lift stands where the door to the gang was; the
+		# and the stairs.  The stairs stand where the door to the gang was; the
 		# back door to the garden where the shop door was, in the back wall
 		# right of the desk (a walk to it goes round the end of the desk,
 		# `om_het_water`).  The playroom door by the far plant is gone: the
 		# playroom is a floor of its own.
 		"etage": 0,
-		"lift": {"wand": "x", "at": 24, "breed": 12},
+		"trap": {"wand": "x", "at": 24, "breed": 12},
 		"deuren": [{"naar": "tuin", "wand": "z", "at": 106, "breed": 12}],
 		# The hotel's front door (owner, 2026-09-23: the guests "komen momenteel
 		# vanuit de gang binnen ipv ingang").  It stands where the pink rug lies,
@@ -988,10 +989,10 @@ func _bouw_kamers() -> void:
 			{"n": "bankjez", "x": 6, "z": 58}, {"n": "koffer", "x": 6, "z": 72},
 			{"n": "plant", "x": 16, "z": 96}, {"n": "plant", "x": 104, "z": 96}]})
 	# The top floor: the corridor of the guest rooms, with the kitchen at its
-	# end.  The lift stands where the door down to the lobby was.
+	# end.  The stairs stand where the door down to the lobby was.
 	_kamer({"id": "gang", "naam": "Gang", "icoon": "🚪", "w": 120, "d": 36,
 		"wand": 56, "vloer": "loper", "loop": 1.0, "etage": 3,
-		"lift": {"wand": "x", "at": 10, "breed": 12},
+		"trap": {"wand": "x", "at": 10, "breed": 12},
 		"deuren": [
 			{"naar": "kamer1", "wand": "z", "at": 24, "breed": 12},
 			{"naar": "kamer2", "wand": "z", "at": 60, "breed": 12},
@@ -1212,10 +1213,10 @@ func _bouw_kamers() -> void:
 	# laundry and the kitchen both have tiles, and the kitchen's door into the
 	# laundry should show a different room, not more kitchen (`kijk`).
 	# 2026-09-24, the tower: the laundry is in the CELLAR (−1), the one floor
-	# below the lobby; the lift stands where its door to the kitchen was.
+	# below the lobby; the stairs stand where its door to the kitchen was.
 	_kamer({"id": "wasserij", "naam": "Wasserij", "icoon": "🧺", "w": 100, "d": 90,
 		"wand": 52, "vloer": "tegel", "loop": 1.25, "etage": -1,
-		"lift": {"wand": "z", "at": 62, "breed": 12},
+		"trap": {"wand": "z", "at": 62, "breed": 12},
 		"matten": {"x0": 40, "x1": 80, "z0": 36, "z1": 68,
 			"kl": [Color("#C9E7EC"), Color("#BCDFE6")]},
 		"kijk": Vector2(60, 52),
@@ -1230,11 +1231,11 @@ func _bouw_kamers() -> void:
 	# kussenhoek in de voorhoeken, de muziekdoos (toekomstige ingang van
 	# `spiegel`) bij de verre muur en de wimpel hoog boven de dansvloer.  De
 	# deur ligt aan de receptiezijde bij de plant in de verre hoek.
-	# 2026-09-24, the tower: the playroom is the second floor; the lift stands
+	# 2026-09-24, the tower: the playroom is the second floor; the stairs stand
 	# where its door to the lobby was.
 	_kamer({"id": "speelzaal", "naam": "Speelzaal", "icoon": "🧸",
 		"w": 114, "d": 100, "wand": 56, "vloer": "hout", "loop": 1.5, "etage": 2,
-		"lift": {"wand": "z", "at": 57, "breed": 12},
+		"trap": {"wand": "z", "at": 57, "breed": 12},
 		"matten": {"x0": 20, "x1": 94, "z0": 18, "z1": 82,
 			"kl": [Color("#BFE3F2"), Color("#AEDAEC")]},
 		"zones": {"dans": {"x0": 40, "x1": 74, "z0": 56, "z1": 80}},
@@ -1309,10 +1310,10 @@ func _bouw_kamers() -> void:
 	# door — no wander place is left from which a stroll would cross a stall,
 	# the counter or the plant (`games/kraam/test_kraam.gd`).
 	# 2026-09-24 (owner: "Ik wil de winkels op een andere etage"): the arcade
-	# is the FIRST floor, the lift stands where its door to the lobby was.
+	# is the FIRST floor, the stairs stand where its door to the lobby was.
 	_kamer({"id": "winkels", "naam": "Winkels", "icoon": "🛍️", "w": 132, "d": 112,
 		"wand": 54, "vloer": "tegel", "loop": 1.5, "etage": 1,
-		"lift": {"wand": "x", "at": 24, "breed": 12},
+		"trap": {"wand": "x", "at": 24, "breed": 12},
 		"matten": [{"x0": 0, "x1": 132, "z0": 28, "z1": 42,
 			"kl": [Color("#E9C2B4"), Color("#E2B5A6")]}],
 		"kijk": Vector2(96, 34),
@@ -1367,7 +1368,7 @@ func _kamer(o: Dictionary) -> void:
 	r.zones = o.get("zones", {})
 	r.deuren = o.get("deuren", [])
 	r.etage = int(o.get("etage", 0))
-	r.lift = o.get("lift", {})
+	r.trap = o.get("trap", {})
 	r.ingang = o.get("ingang", {})
 	r.decor = o.get("decor", []).duplicate(true)
 	if o.has("vast_kader"):

@@ -2,7 +2,7 @@ class_name UiBlad
 extends Control
 ## A modal sheet (world.md §6.7, art-sound-rules.md §16.8).
 ##
-## `Ui.blad_open({titel, hint, inhoud, knoppen, sluitbaar})`.  Only the start
+## `Ui.blad_open({titel, beeld, hint, inhoud, knoppen, sluitbaar})`.  Only the start
 ## screen, the map, the till, the letter wall and the day cycle use it: HOTEL.md
 ## §9 forbids a calculation panel beside the world, so no sum ever appears here.
 ##
@@ -95,7 +95,31 @@ func bouw(o: Dictionary, mt: Dictionary, kader: Vector2) -> void:
 		k.text = titel
 		k.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		k.add_theme_font_size_override("font_size", mt["h1"])
-		_kolom.add_child(k)
+		var beeld = o.get("beeld", null)
+		if beeld is Texture2D:
+			# a drawn pictogram before the title, where no emoji exists (the
+			# stairs' panel, `UiTrapIcoon`), as big as an emoji of the title
+			var rij := HBoxContainer.new()
+			rij.name = "TitelRij"
+			rij.add_theme_constant_override("separation", int(round(float(mt["h1"]) * 0.3)))
+			var plaatje := TextureRect.new()
+			plaatje.name = "Beeld"
+			plaatje.texture = beeld
+			plaatje.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			plaatje.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			plaatje.custom_minimum_size = Vector2.ONE * round(float(mt["h1"]) * 1.2)
+			plaatje.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			plaatje.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			k.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			# a wrapping Label in a row reports one word per line as its
+			# height and the sheet grew by it (the Label trap, AGENTS.md §8):
+			# a title with a picture is short, it stays on one line
+			k.autowrap_mode = TextServer.AUTOWRAP_OFF
+			rij.add_child(plaatje)
+			rij.add_child(k)
+			_kolom.add_child(rij)
+		else:
+			_kolom.add_child(k)
 	var hint := str(o.get("hint", ""))
 	if not hint.is_empty():
 		var h := Label.new()

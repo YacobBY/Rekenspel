@@ -23,8 +23,8 @@ signal dag_veranderd(dag: int)
 signal checkin_veranderd()
 signal avond_veranderd()
 signal brief_gereed(brief: Dictionary)
-## The child tapped the lift in `kamer`: the shell opens its panel of floors.
-signal lift_gevraagd(kamer: String)
+## The child tapped the stairs in `kamer`: the shell opens its panel of floors.
+signal trap_gevraagd(kamer: String)
 
 ## The short word that goes next to the pictogram (world.md §3.2).  An icon
 ## without a word is unreadable for a six-year-old, so an unknown need falls
@@ -213,14 +213,18 @@ func render() -> void:
 		toon_bord()
 	bord_veranderd.emit()
 
+## Go to a room up or down the stairs or through the doors: the ride on the
+## camera is `World.naar`'s; the sound tells which — footsteps climb or go
+## down the stairs, a door creaks.
 func naar_kamer(id: String) -> void:
 	if not Rooms.bestaat(id):
 		return
-	var andere_etage := Rooms.etage(id) != Rooms.etage(World.kamer_nu())
+	var van := Rooms.etage(World.kamer_nu())
+	var andere_etage := Rooms.etage(id) != van
 	World.naar(id)
 	State.s["kamerNu"] = id
 	if andere_etage:
-		Snd.lift()
+		Snd.trap(Rooms.etage(id) > van)
 	else:
 		Snd.deur()
 	render()
@@ -1434,7 +1438,7 @@ func hotspots() -> void:
 		return
 	for dp in _deur_punten(r):
 		var doel = Rooms.get_kamer(str(dp.get("naar", "")))
-		if doel == null or bool(dp.get("lift", false)):
+		if doel == null or bool(dp.get("trap", false)):
 			continue
 		var w := wacht_in(str(dp["naar"]))
 		var naar := str(dp["naar"])
@@ -1451,9 +1455,12 @@ func hotspots() -> void:
 			"titel": "Ga naar %s" % doel.naam,
 			"badge": str(w) if w > 0 else "", "klas": "hotdeur", "prio": 11, "op": "aan",
 			"kind": "drop", "drop": "deur", "data": {"naar": naar, "kamer": nu},
+			# a tap on the opening itself goes through too, not only one on
+			# the sign (owner, 2026-09-25, about the bowl: `Hits.tik_onder`)
+			"tik_vlak": true,
 			"volg": _volg_deur(nu, naar),
 			"aan": func(_s): naar_kamer(naar)})
-	_lift_knop(nu)
+	_trap_knop(nu)
 	# While a game runs the hotel's own buttons are off the glass anyway
 	# (`Hits` hides them) — and a game may BORROW one (`ctx.hotspots.pak`, the
 	# voerkar takes the bowls), so then they are all made as they always were.
@@ -1550,6 +1557,10 @@ func hotspots() -> void:
 			"badge": "!" if niveau == 0 and hier > 0 else "",
 			"titel": "Er ligt eten in het bakje" if niveau > 0 else "Het bakje is nog leeg",
 			"kind": "drop", "drop": "bak", "data": {"kamer": nu, "slot": sid},
+			# the bowl itself is the button, not only "🍽 Leeg" under it (owner,
+			# 2026-09-25: "er staat 'Tik op het bakje' maar wanneer ik op het
+			# bakje tik gebeurt er niks")
+			"tik_vlak": true,
 			"klas": "hotbak vol" if niveau > 0 else "hotbak", "prio": 7, "op": "aan",
 			"puls": _puls_van("bak_%s_%s" % [nu, sid]),
 			"aan": func(_s): tik_bak(nu, sid)})
@@ -1732,37 +1743,36 @@ func _volg_balieplek(id: String) -> Callable:
 		return {"x": p["x"], "z": p["z"], "y": float(_ci_hoog()), "kamer": "receptie",
 			"vlak": vak}
 
-## The same for a door: its rectangle moves with the camera, so it is measured
-## every pass instead of once at creation.
-## The lift (owner, 2026-09-24: "Het is de bedoeling dat het hotel heel groot
-## en hoog aanvoelt net als Habbo Hotel"): ONE button on its opening, however
-## many floors it goes to.  A tap opens the lift's panel (`lift_gevraagd`; the
-## shell shows the tower, `ui/plattegrond.gd`), and it is a door sign like every
-## door's (`klas: hotdeur`), so it hangs where they hang and steps aside during
-## a sum as they do.  Its badge counts the wishes waiting on the other floors.
-const LIFT_ICOON := "🛗"
-
-func _lift_knop(nu: String) -> void:
-	var lp := Rooms.lift_punt(nu)
+## The stairs (owner, 2026-09-24: "Het is de bedoeling dat het hotel heel groot
+## en hoog aanvoelt net als Habbo Hotel"; a lift until 2026-09-25: "Ik wil
+## graag de lift vervangen voor een trap"): ONE button on the stairwell's
+## opening, however many floors it goes to.  A tap opens the panel of floors
+## (`trap_gevraagd`; the shell shows the tower, `ui/plattegrond.gd`), and it is
+## a door sign like every door's (`klas: hotdeur`), so it hangs where they hang
+## and steps aside during a sum as they do.  Its badge counts the wishes waiting
+## on the other floors.  There is no stairs emoji (🪜 is a ladder), so its
+## pictogram is drawn: `UiTrapIcoon`.
+func _trap_knop(nu: String) -> void:
+	var lp := Rooms.trap_punt(nu)
 	if lp.is_empty():
 		return
 	var w := 0
 	for id in Rooms.lijst():
 		if Rooms.etage(id) != Rooms.etage(nu):
 			w += wacht_in(id)
-	Hits.maak({"id": "lift_%s" % nu, "door": EIGENAAR, "kamer": nu,
+	Hits.maak({"id": "trap_%s" % nu, "door": EIGENAAR, "kamer": nu,
 		"x": lp.get("x", 0), "z": lp.get("z", 0), "y": 9,
-		"icoon": LIFT_ICOON, "label": UiTekst.LIFT, "titel": UiTekst.LIFT_TITEL,
-		"badge": str(w) if w > 0 else "", "klas": "hotdeur hotlift", "prio": 11,
-		"op": "aan", "volg": _volg_lift(nu),
-		"aan": func(_s): lift_gevraagd.emit(nu)})
+		"beeld": UiTrapIcoon.beeld(), "label": UiTekst.TRAP, "titel": UiTekst.TRAP_TITEL,
+		"badge": str(w) if w > 0 else "", "klas": "hotdeur hottrap", "prio": 11,
+		"op": "aan", "volg": _volg_trap(nu),
+		"aan": func(_s): trap_gevraagd.emit(nu)})
 
-func _volg_lift(kamer_id: String) -> Callable:
+func _volg_trap(kamer_id: String) -> Callable:
 	return func() -> Dictionary:
-		return {"vlak": World.vlak_van_lift(kamer_id)}
+		return {"vlak": World.vlak_van_trap(kamer_id)}
 
-## Go to a room by lift or through the doors: the ride on the camera is
-## `World.naar`'s; the sound tells which — a lift chimes, a door creaks.
+## The same for a door: its rectangle moves with the camera, so it is measured
+## every pass instead of once at creation.
 func _volg_deur(kamer_id: String, naar: String) -> Callable:
 	return func() -> Dictionary:
 		return {"vlak": World.vlak_van_deur(kamer_id, naar)}

@@ -98,6 +98,7 @@ class Spot extends RefCounted:
 	var drop: String = ""             ## the name a dragged item must carry
 	var data: Dictionary = {}
 	var val: Callable                 ## the game's drop handler
+	var tik_vlak := false             ## a tap on the object presses the button too
 	var geleend_door: String = ""     ## a game borrowed this hotel button
 	var eigen_aan: Callable           ## and this is what it did before
 	var laag := Laag.HOTEL
@@ -138,6 +139,7 @@ func maak(o: Dictionary) -> String:
 	s.drop = o.get("drop", "")
 	s.data = o.get("data", {})
 	s.val = o.get("val", Callable())
+	s.tik_vlak = bool(o.get("tik_vlak", false))
 	s.knoop = Ui.maak_knop(s.kind, o)
 	# Always connected, also when the hotspot has no handler yet: that is what
 	# lets a game BORROW one of the hotel's buttons (`ctx.hotspots.pak`).
@@ -154,6 +156,7 @@ func maak(o: Dictionary) -> String:
 		s.vangvlak.drop = s.drop
 		s.vangvlak.data = s.data
 		s.vangvlak.val = s.val
+		s.vangvlak.knop = s.knoop as BaseButton if s.tik_vlak else null
 		Ui.vanglaag.add_child(s.vangvlak)
 	_spots[id] = s
 	_volgorde.append(id)
@@ -240,6 +243,32 @@ func vang_onder(punt: Vector2, lading: Variant) -> UiVangvlak:
 	_koel_vangvlakken(beste)
 	return beste
 
+## The catch area a TAP at a screen point is for, or `null`: of the ones that
+## press their button (`tik_vlak`, the hotel's bowls and doors) and stand on the
+## glass, the smallest under the point — the same rule as a drop, so a bowl in
+## a doorway is the bowl.  The button itself sits in the layer above and takes
+## its own taps; this is the rest of the object (owner, 2026-09-25: "er staat
+## 'Tik op het bakje' maar wanneer ik op het bakje tik gebeurt er niks").
+func tik_onder(punt: Vector2) -> UiVangvlak:
+	var beste: UiVangvlak = null
+	var kleinste := INF
+	for id in _volgorde:
+		var s: Spot = _spots[id]
+		var v := s.vangvlak
+		if v == null or not is_instance_valid(v) or not v.is_inside_tree():
+			continue
+		if not s.tik_vlak or not s.zichtbaar or not v.is_visible_in_tree():
+			continue
+		if not is_instance_valid(s.knoop) or not s.knoop.is_visible_in_tree():
+			continue
+		if not v.get_global_rect().has_point(punt):
+			continue
+		var opp := v.size.x * v.size.y
+		if opp < kleinste:
+			kleinste = opp
+			beste = v
+	return beste
+
 ## Is a drag running right now?  When it is not, no target may glow.
 func sleept() -> bool:
 	if Ui.knoplaag == null or not is_instance_valid(Ui.knoplaag) or not Ui.knoplaag.is_inside_tree():
@@ -287,6 +316,7 @@ func zet_drop(id: String, drop: String, val: Callable, data: Dictionary = {}) ->
 	s.vangvlak.drop = s.drop
 	s.vangvlak.data = s.data
 	s.vangvlak.val = s.val
+	s.vangvlak.knop = s.knoop as BaseButton if s.tik_vlak else null
 	var rect := Rect2()
 	if _laatste.has(id):
 		rect = _laatste[id]["rect"]
@@ -818,7 +848,7 @@ func _sorteer_laag(s: Spot) -> float:
 	return float(s.laag)
 
 ## Does this spot hang on something that does not walk?  The hotel's own
-## buttons — a door or the lift, the bell, the board, a game's entry, a bowl —
+## buttons — a door or the stairs, the bell, the board, a game's entry, a bowl —
 ## hang on furniture and walls; they choose their place against what stands
 ## still, so a guest walking past them moves none of them.  A wish bubble
 ## hangs ON a guest and walks with him; a game's buttons keep the old rule.

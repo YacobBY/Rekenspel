@@ -7,6 +7,9 @@ extends Button
 ## the floor lives here, not in a stylesheet a game could escape.
 
 var badge_label: Label = null
+## A drawn pictogram is this many times the font size wide (an emoji is about
+## 1.2 em including its own margin).
+const BEELD_MAAT := 1.25
 var _icoon := ""
 var _label := ""
 ## `puls`: the button asks to be pressed — the bell in the morning, the thing a
@@ -68,6 +71,13 @@ func bouw(o: Dictionary, mt: Dictionary, tap: int) -> void:
 	custom_minimum_size = Vector2(tap, tap)
 	clip_text = false
 	add_theme_font_size_override("font_size", mt["wereld"])
+	# A drawn pictogram where no emoji exists (the stairs, `UiTrapIcoon`): as
+	# wide as an emoji of this size, left of the word with an emoji's space.
+	var beeld = o.get("beeld", null)
+	if beeld is Texture2D:
+		icon = beeld
+		expand_icon = false
+		add_theme_constant_override("icon_max_width", int(round(float(mt["wereld"]) * BEELD_MAAT)))
 	focus_mode = Control.FOCUS_ALL
 	zet_badge(o.get("badge", null))
 	puls = float(o.get("puls", 0.0))

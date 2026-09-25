@@ -36,8 +36,10 @@ const LENGTE := {
 	"deur": 0.20, "kar": 0.30, "munt": 0.20, "ster": 0.40, "plons": 0.30,
 	"au": 0.30, "klok": 0.60, "hup": 0.12,
 	"ding": 1.70,
-	"lift": 1.30,
+	"trap_op": 0.62, "trap_af": 0.62,
 }
+## Seconds between two footfalls on the stairs (`trap`).
+const TRAP_STAP := 0.14
 ## The four that use `papier()`: fresh noise per call, never cached (§15.4).
 const RUIS := ["brief", "deur", "kar", "plons"]
 
@@ -430,11 +432,14 @@ func bel() -> void:
 func ding() -> void:
 	_speel("ding", _bouw.bind("ding"))
 
-## DING-DONG — de lift komt aan op een andere verdieping (eigenaar, 2026-09-24:
-## het hotel is een toren).  Twee aangeslagen tonen omlaag, als de gong van een
-## echte lift; niet uit de tabel van de HTML, net als `ding`.
-func lift() -> void:
-	_speel("lift", _bouw.bind("lift"))
+## TIK-TIK-TIK-TIK — voetstappen op de trap naar een andere verdieping
+## (eigenaar, 2026-09-25: "Ik wil graag de lift vervangen voor een trap").  Vier
+## houten treden, elke stap een doffe tik met een klikje erop: naar boven klimt
+## de toon, naar beneden zakt hij.  Niet uit de tabel van de HTML, net als
+## `ding`, en zonder ruis, dus elke keer hetzelfde.
+func trap(op: bool) -> void:
+	var naam := "trap_op" if op else "trap_af"
+	_speel(naam, _bouw.bind(naam))
 
 ## een deur die opengaat en weer dichtvalt
 func deur() -> void:
@@ -524,15 +529,15 @@ func _bouw(naam: String, hand := 0) -> PackedFloat32Array:
 			_slag(b, 3639.1, 0.50, 0.13, 0.0)
 			_slag(b, 7119.9, 0.16, 0.05, 0.0)
 			_slag(b, 2637.0, 0.05, 0.06, 0.0)
-		"lift":
-			# ding (E6) ... dong (C6): two soft struck tones, the second a
-			# third lower, each with its shimmer and a little overtone
-			_slag(b, 1318.5, 0.70, 0.30, 0.0)
-			_slag(b, 1321.5, 0.60, 0.10, 0.0)
-			_slag(b, 3639.1, 0.20, 0.05, 0.0)
-			_slag(b, 1046.5, 0.90, 0.30, 0.36)
-			_slag(b, 1049.0, 0.80, 0.10, 0.36)
-			_slag(b, 2888.3, 0.25, 0.05, 0.36)
+		"trap_op", "trap_af":
+			# four footfalls on wooden treads, TRAP_STAP apart: a dull thump
+			# that drops a fifth and a short click of the heel on the nosing;
+			# each step a whole tone higher going up, lower going down
+			for i in 4:
+				var toon := pow(2.0, (float(i) if naam == "trap_op" else float(3 - i)) / 6.0)
+				var t := TRAP_STAP * float(i)
+				_noot(b, 190.0 * toon, 125.0 * toon, 0.08, "sine", 0.34, t)
+				_noot(b, 880.0 * toon, 620.0 * toon, 0.025, "triangle", 0.09, t)
 		"deur":
 			_noot(b, 250, 190, 0.11, "sine", 0.26, 0.0)
 			_papier(b, 0.09, 520, 0.22, 0.06)

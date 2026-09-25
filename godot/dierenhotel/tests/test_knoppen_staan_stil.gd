@@ -5,13 +5,13 @@ extends Proef
 ##
 ## `Hits.plaats()` lays every button out again each frame.  A guest who walks
 ## through the room is not a reason for any of them to move: a door sign, the
-## lift, the board, the bell and a game's entry hang on things that do not
+## stairs, the board, the bell and a game's entry hang on things that do not
 ## move, so their places are the same in every frame the guest walks — on the
 ## real shell, at the screens the owner uses.
 
 const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740)]
 ## the buttons of the lobby that hang on things standing still
-const VAST := ["lift_receptie", "deur_receptie_tuin", "prikbord", "spel_meubels", "spel_sleutels"]
+const VAST := ["trap_receptie", "deur_receptie_tuin", "prikbord", "spel_meubels", "spel_sleutels"]
 
 func _boom() -> SceneTree:
 	return Engine.get_main_loop() as SceneTree
@@ -95,12 +95,12 @@ func test_een_gast_die_binnenloopt_verschuift_geen_knop() -> void:
 	Ui.zet_rust_modus(rust)
 	State.s = bewaard
 
-## Guests walking about the lobby with no sum on screen — past the lift, past
+## Guests walking about the lobby with no sum on screen — past the stairs, past
 ## the board, round the desk and back — move no sign and no button: they
 ## walk UNDER them.
 func test_gasten_die_voorbijlopen_verschuiven_geen_knop() -> void:
 	var sprongen: Dictionary = await _loop_rond([
-		# Boef from the rug past the lift to the bench and back to the rug
+		# Boef from the rug past the stairs to the bench and back to the rug
 		["t_stil1", "hond", "Boef", Vector2(72, 96), [Vector2(10, 32), Vector2(30, 70), Vector2(80, 100)]],
 		# Mispel from the bench round the desk past the garden door and back
 		["t_stil2", "poes", "Mispel", Vector2(30, 60), [Vector2(104, 40), Vector2(90, 100), Vector2(20, 64)]],
@@ -112,7 +112,7 @@ func test_gasten_die_voorbijlopen_verschuiven_geen_knop() -> void:
 ## aside once, stays aside while he waits — blinking, wagging and turning as he
 ## does — and goes back once when he walks on.  Never more than those two.
 func test_een_gast_die_blijft_staan_duwt_een_knop_een_keer() -> void:
-	# Boef walks to the lift and waits in front of it, then walks back to the rug
+	# Boef walks to the stairs and waits in front of them, then walks back to the rug
 	var sprongen: Dictionary = await _loop_rond([
 		["t_stil1", "hond", "Boef", Vector2(72, 96), [Vector2(8, 30)]],
 	], 100, [Vector2(72, 96)])

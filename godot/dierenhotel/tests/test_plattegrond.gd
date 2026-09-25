@@ -110,16 +110,16 @@ func test_cellen_passen_op_het_blad() -> void:
 			waar(kolom.size.y <= rol.size.y + 0.5,
 				"op het grote scherm past het hele blad met de toren zonder rollen (%s in %s)"
 					% [str(kolom.size), str(rol.size)])
-		# the lift shaft stays a narrow column: every floor button left of the
+		# the stairwell stays a narrow column: every floor button left of the
 		# first room column, inside the tower
 		var eerste := INF
-		for id in Rooms.lift_kamers():
+		for id in Rooms.trap_kamers():
 			eerste = minf(eerste, kaart.knop_van(id).position.x)
 		for e in Rooms.etages():
-			var lk := kaart.lift_knop(e)
-			waar(lk.size.x >= 20.0, "etage %s heeft een liftknop bij %s (%s)" % [e, str(kader), str(lk)])
+			var lk := kaart.etage_knop(e)
+			waar(lk.size.x >= 20.0, "etage %s heeft een etageknop bij %s (%s)" % [e, str(kader), str(lk)])
 			waar(lk.position.x >= 0.0 and lk.end.x <= eerste,
-				"de liftknop van etage %s staat in de schacht bij %s (%s, kolom 1 op %.1f)"
+				"de etageknop van etage %s staat in het trappenhuis bij %s (%s, kolom 1 op %.1f)"
 					% [e, str(kader), str(lk), eerste])
 		for id in Rooms.lijst():
 			var knop: Button = kaart.get_node_or_null("P" + id)
@@ -146,14 +146,14 @@ func test_cellen_passen_op_het_blad() -> void:
 		_af()
 
 ## The map is a tower (owner, 2026-09-24): every floor is one row, a higher
-## floor is higher on the sheet, the lift's rooms stand in the first room
+## floor is higher on the sheet, the stairs' rooms stand in the first room
 ## column one above the other, and every floor button sits in the shaft on the
 ## middle of its own row.
 func test_de_plattegrond_is_een_toren() -> void:
 	var uit: Array = await _open(Vector2(1000, 648))
 	var kaart: UiPlattegrond = uit[1]
 	var vorige := -INF
-	var lift_x := NAN
+	var trap_x := NAN
 	for e in Rooms.etages():
 		var ids := Rooms.op_etage(e)
 		waar(not ids.is_empty(), "etage %s heeft kamers" % e)
@@ -169,19 +169,19 @@ func test_de_plattegrond_is_een_toren() -> void:
 		waar(y0 > vorige + 0.5, "etage %s staat onder de etage erboven (%.1f > %.1f)"
 			% [e, y0, vorige])
 		vorige = y0
-		var lift := Rooms.lift_kamer(e)
-		if not lift.is_empty():
-			gelijk(kaart.plek_van(lift).x, 1, "de lift van etage %s staat vooraan (%s)" % [e, lift])
-			var lx := kaart.knop_van(lift).position.x
-			if is_nan(lift_x):
-				lift_x = lx
-			waar(absf(lx - lift_x) <= 0.5, "%s staat in de liftkolom (%.1f vs %.1f)"
-				% [lift, lx, lift_x])
-			var cel := kaart.knop_van(lift).get_rect()
-			var knop := kaart.lift_knop(e)
+		var trap := Rooms.trap_kamer(e)
+		if not trap.is_empty():
+			gelijk(kaart.plek_van(trap).x, 1, "de trap van etage %s staat vooraan (%s)" % [e, trap])
+			var lx := kaart.knop_van(trap).position.x
+			if is_nan(trap_x):
+				trap_x = lx
+			waar(absf(lx - trap_x) <= 0.5, "%s staat in de trapkolom (%.1f vs %.1f)"
+				% [trap, lx, trap_x])
+			var cel := kaart.knop_van(trap).get_rect()
+			var knop := kaart.etage_knop(e)
 			waar(absf(knop.get_center().y - cel.get_center().y) <= 0.5,
-				"de liftknop van etage %s staat midden op zijn rij" % e)
-			waar(knop.end.x <= cel.position.x, "en links van %s, in de schacht" % lift)
+				"de etageknop van etage %s staat midden op zijn rij" % e)
+			waar(knop.end.x <= cel.position.x, "en links van %s, in het trappenhuis" % trap)
 	# the building reads top-down: the guest rooms up high, the lobby on the
 	# ground, the laundry in the cellar
 	var gang := (kaart.get_node("Pgang") as Control).get_global_rect()
@@ -190,14 +190,14 @@ func test_de_plattegrond_is_een_toren() -> void:
 	waar(gang.end.y <= receptie.position.y, "de gang ligt boven de receptie")
 	waar(wasserij.position.y >= receptie.end.y, "de wasserij ligt onder de receptie")
 	gelijk(UiPlattegrond.rij_van(3), ["gang", "kamer1", "kamer2", "keuken"] as Array[String],
-		"de bovenste etage: de gang bij de lift, dan de kamers erlangs")
+		"de bovenste etage: de gang bij de trap, dan de kamers erlangs")
 	gelijk(UiPlattegrond.rij_van(0), ["receptie", "tuin", "zwembad", "kas"] as Array[String],
 		"de begane grond: receptie, tuin, en door de tuin naar buiten")
 	# every door between two cells side by side, once per pair: on the top floor
 	# gang|kamer1 (kamer 2 and the kitchen also open onto the gang but cannot
 	# stand beside it in one row), on the ground floor receptie|tuin and the
 	# gate tuin|zwembad (the tuin's door to the kas is not a neighbour); the
-	# floors of one room have none, and the lift is the shaft, not a door
+	# floors of one room have none, and the stairs are the stairwell, not a door
 	gelijk(kaart.deursleutels(), ["gang|kamer1", "receptie|tuin", "tuin|zwembad"] as Array[String],
 		"de deuren die de toren tekent")
 	gelijk(kaart.deurparen(), 3, "drie deuren tussen buren")

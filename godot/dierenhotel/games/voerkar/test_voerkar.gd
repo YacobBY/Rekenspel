@@ -1674,6 +1674,107 @@ func test_een_trillende_tik_op_de_kar_blijft_een_tik() -> void:
 	gelijk(str(World.ding("kar").get("kamer", "")), "keuken", "de kar ging nergens heen")
 	await _ruim_op(vp)
 
+## Een tik op het GETEKENDE bakje, naast zijn knopje (eigenaar, 2026-09-25:
+## "er staat 'Tik op het bakje' maar wanneer ik op het bakje tik gebeurt er
+## niks. Ik moet op de speech bubbel eronder drukken").  Door de echte
+## invoerlaag, op een plek van het bakje waar geen enkele knop staat: dat vraagt
+## de som, net als het knopje.  De kar gaat er eerst heen met tikken op de
+## deuropeningen naast hun bordjes — ook die zijn nu zelf de knop.
+func test_een_tik_op_het_bakje_zelf_vraagt_de_som() -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	_onthoud()
+	var vp := SubViewport.new()
+	vp.size = Vector2i(1024, 768)
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	vp.gui_embed_subwindows = true
+	boom.root.add_child(vp)
+	var shell = load("res://scenes/main.tscn").instantiate()
+	shell.set_meta("geen_start", true)
+	vp.add_child(shell)
+	for _f in 4:
+		await boom.process_frame
+	_gasten(2, 2)
+	Hotel.start()
+	World.naar("keuken")
+	for _f in 3:
+		await boom.process_frame
+	Games.start(SPEL)
+	for _f in 4:
+		await boom.process_frame
+	var spel := _spel()
+	var open: Array = spel.open_kamers() if spel != null else []
+	if spel == null or open.is_empty():
+		fout("het spel draait niet of er is geen kamer open")
+		await _ruim_op(vp)
+		return
+	var q: Dictionary = open[0]
+	var kamer := str(q["kamer"])
+	var pad: Array = World.pad("keuken", kamer)
+	for i in range(1, pad.size()):
+		var deur := "deur_%s_%s" % [str(pad[i - 1]), str(pad[i])]
+		for _f in 20:              # the camera's slide is over, the sign stands
+			await boom.process_frame
+		var p := _naast_de_knop(deur)
+		waar(p.is_finite(), "%s: de deuropening steekt naast het bordje uit" % deur)
+		if not p.is_finite():
+			await _ruim_op(vp)
+			return
+		await _tik_op(vp, p)
+		gelijk(World.kamer_nu(), str(pad[i]), "een tik op de opening van %s duwt de kar erdoor" % deur)
+	for _f in 20:
+		await boom.process_frame
+	var bak := _bak_id(q)
+	waar(_zichtbaar(bak), "het bakje in %s is een knop" % kamer)
+	gelijk(_tekst("vk_zeg"), "👉 Tik op het bakje", "en het wolkje zegt het")
+	var p := _naast_de_knop(bak)
+	waar(p.is_finite(), "het bakje steekt naast zijn knopje uit")
+	if p.is_finite():
+		await _tik_op(vp, p)
+		waar(_som_kaart() != null, "een tik op het bakje zelf vraagt de som")
+		waar(not spel.K["geleverd"].has(kamer), "en vult het nog niet")
+	await _ruim_op(vp)
+
+## Een punt op het voorwerp van deze knop (zijn `vlak`) waar geen enkele knop,
+## kaart of wolkje op het glas staat — daar raakt een vinger alleen het
+## voorwerp.  `Vector2.INF` als het voorwerp helemaal onder knoppen ligt.
+func _naast_de_knop(id: String) -> Vector2:
+	var vlak: Rect2 = Hits.debug().get(id, {}).get("vlak", Rect2())
+	if vlak.size.x <= 0.0 or Ui.knoplaag == null:
+		return Vector2.INF
+	vlak.position += Ui.knoplaag.get_global_rect().position
+	var bezet: Array[Rect2] = []
+	for ander in Hits.lijst():
+		var s := Hits.spot(ander)
+		if s != null and is_instance_valid(s.knoop) and s.knoop.is_visible_in_tree():
+			bezet.append((s.knoop as Control).get_global_rect().grow(2.0))
+	for iy in range(1, 8):
+		for ix in range(1, 8):
+			var p := vlak.position + vlak.size * Vector2(float(ix) / 8.0, float(iy) / 8.0)
+			var vrij := true
+			for r in bezet:
+				if r.has_point(p):
+					vrij = false
+					break
+			if vrij:
+				return p
+	return Vector2.INF
+
+## Eén tik door de echte invoerlaag: indrukken en op dezelfde plek loslaten.
+func _tik_op(vp: SubViewport, p: Vector2) -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	_beweeg(vp, p, p, false)
+	await boom.process_frame
+	for neer in [true, false]:
+		var mb := InputEventMouseButton.new()
+		mb.button_index = MOUSE_BUTTON_LEFT
+		mb.pressed = neer
+		mb.position = p
+		mb.global_position = p
+		vp.push_input(mb)
+		await boom.process_frame
+	for _f in 3:
+		await boom.process_frame
+
 ## Eén sleep door de echte invoerlaag: indrukken, in stapjes bewegen, loslaten.
 func _sleep(vp: SubViewport, van: Vector2, naar: Vector2) -> void:
 	var boom := Engine.get_main_loop() as SceneTree

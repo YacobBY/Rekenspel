@@ -113,29 +113,36 @@ zijn enkel de buiten dingen als het zwembad en de tuin").** Every room has a flo
 `Kamer.etage`: 0 is the ground floor — the lobby, the one room indoors there, and the
 outdoors (tuin, zwembad, kas) — 1 the shops (`winkels`), 2 the playroom (`speelzaal`), 3 the
 guest floor (gang, kamer1, kamer2 and the keuken that feeds them) and −1 the cellar with the
-laundry (`wasserij`, "K" on the lift, `Rooms.etage_teken`). A door never leaves its floor.
-ONE lift joins the floors: `Kamer.lift = {wand, at, breed}` like a door, in exactly one room
+laundry (`wasserij`, "K" in the tower, `Rooms.etage_teken`). A door never leaves its floor.
+ONE stairwell joins the floors (a lift until 2026-09-25, owner: "Ik wil graag de lift
+vervangen voor een trap"): `Kamer.trap = {wand, at, breed}` like a door, in exactly one room
 per floor (receptie x/24, winkels x/24, speelzaal z/57, gang x/10, wasserij z/62 — where
-each room's door down to the lobby used to be, so their door points did not move). The lift
-is not in `deuren`: `bouw_af()` gives every lift room an entry in `deur_punten` for every
-OTHER lift room, all on its one opening and marked `lift: true`, so `pad`, `World.reis`,
-the free cells and the furniture rules treat a ride like a walk through one door, while the
-wall drawing (`scenes/vloer.gd` `_lift`: an open steel cabin, the sliding doors pushed aside,
-one floor light per floor with this floor's lit, a call plate), the map and the door buttons
-draw it once. `Rooms.buren(kamer)` (doors first, then the lift), `etage(kamer)`, `etages()`
-(top down), `op_etage(e)`, `lift_kamers()`, `lift_kamer(e)`, `via_lift(van, naar)` and
-`lift_punt(kamer)` read it. The lift's one button (`Hotel`, id `lift_<kamer>`, 🛗 "Lift", a
-door sign by `klas: hotdeur`) opens the tower sheet (§6.3); `World.naar` between two floors
-is a lift ride — the new floor slides in from above going up, from below going down
-(`LIFT_S` 0.55 s, `LIFT_OP` 55 % of the frame height) — and `Hotel.naar_kamer` chimes
-`Snd.lift()` instead of the door sound. From the garden the facade rises three floors of
+each room's door down to the lobby used to be, so their door points did not move). The
+stairs are not in `deuren`: `bouw_af()` gives every stairs room an entry in `deur_punten`
+for every OTHER stairs room, all on its one opening and marked `trap: true`, so `pad`,
+`World.reis`, the free cells and the furniture rules treat a climb like a walk through one
+door, while the wall drawing, the map and the door buttons draw it once. The wall drawing
+(`scenes/vloer.gd` `_trap`) is a door frame with the stairwell behind it: where there is a
+floor above, a wooden flight seen from the side climbs from the foot of the far jamb towards
+the back corner of the room — per step its front, tread and the column under it (the
+saw-tooth), a banister on a post per step, lighter towards upstairs; on the top floor the
+flight goes down from a landing into the dark instead. Both run straight along the wall,
+behind it, and are clipped to the opening. `Rooms.buren(kamer)` (doors first, then the
+stairs), `etage(kamer)`, `etages()` (top down), `op_etage(e)`, `trap_kamers()`,
+`trap_kamer(e)`, `via_trap(van, naar)` and `trap_punt(kamer)` read it. The stairs' one
+button (`Hotel`, id `trap_<kamer>`, "Trap" with a drawn pictogram — there is no stairs
+emoji, 🪜 is a ladder — `UiTrapIcoon.beeld()` as the button's `beeld`, a door sign by
+`klas: hotdeur`) opens the tower sheet (§6.3); `World.naar` between two floors slides the
+new floor in from above going up, from below going down (`TRAP_S` 0.55 s, `TRAP_OP` 55 %
+of the frame height) — and `Hotel.naar_kamer` plays `Snd.trap(op)`, four wooden footfalls
+climbing or going down, instead of the door sound. From the garden the facade rises three floors of
 windows over the lobby's back door (`gevel.etages`).
 
 | from | to | wand | at | breed | door point (x, z) | inside (ix, iz) |
 |---|---|---|---|---|---|---|
-| receptie | *lift* | x | 24 | 12 | (0, 30) | (8, 30) — to gang, speelzaal, winkels, wasserij |
+| receptie | *trap* | x | 24 | 12 | (0, 30) | (8, 30) — to gang, speelzaal, winkels, wasserij |
 | receptie | tuin | z | 106 | 12 | (112, 0) | (112, 8) — the back door, right of the desk |
-| gang | *lift* | x | 10 | 12 | (0, 16) | (8, 16) |
+| gang | *trap* | x | 10 | 12 | (0, 16) | (8, 16) |
 | gang | kamer1 | z | 24 | 12 | (30, 0) | (30, 8) |
 | gang | kamer2 | z | 60 | 12 | (66, 0) | (66, 8) |
 | gang | keuken | z | 96 | 12 | (102, 0) | (102, 8) |
@@ -145,9 +152,9 @@ windows over the lobby's back door (`gevel.etages`).
 | tuin | receptie | x | 34 | 12 | (0, 40) | (8, 40) — a door in the hotel's back wall (`gevel`) |
 | tuin | zwembad | z | 38 | 12 | (44, 0) | (44, 8) — `poort` |
 | zwembad | tuin | x | 60 | 12 | (0, 66) | (8, 66) — `poort` |
-| wasserij | *lift* | z | 62 | 12 | (68, 0) | (68, 8) |
-| speelzaal | *lift* | z | 57 | 12 | (63, 0) | (63, 8) |
-| winkels | *lift* | x | 24 | 12 | (0, 30) | (8, 30) |
+| wasserij | *trap* | z | 62 | 12 | (68, 0) | (68, 8) |
+| speelzaal | *trap* | z | 57 | 12 | (63, 0) | (63, 8) |
+| winkels | *trap* | x | 24 | 12 | (0, 30) | (8, 30) |
 | tuin | kas | x | 62 | 12 | (0, 68) | (8, 68) — the kas's glass door in the hotel's back wall, where the kitchen window hung (R3) |
 | kas | tuin | z | 52 | 12 | (58, 0) | (58, 8) |
 
@@ -157,7 +164,7 @@ lobby had doors to the gang, the playroom, x/108, and the shops, z/106.)
 `Rooms.pad(van, naar)` is a breadth-first search over this graph; it returns the full path
 *including* the start room (`['gang','kamer1']`), `[van]` when `van === naar`, and `[]`
 when a room does not exist. Example: `pad('kamer1','zwembad')` =
-`['kamer1','gang','receptie','tuin','zwembad']` — down in the lift, out the back door.
+`['kamer1','gang','receptie','tuin','zwembad']` — down the stairs, out the back door.
 
 **The front door** (port, owner 2026-09-23: the guests "komen momenteel vanuit de gang binnen
 ipv ingang"). The receptie has one more opening that is NOT a door of this graph:
@@ -1879,21 +1886,21 @@ the six-page story of 2026-09-23 (guests walking in, wishes, a spotlight on the 
   floor (`Kamer.etage`, `Rooms.etages()`), the top floor at the top and the cellar at the
   bottom. The table is computed from `Rooms`, never written down (`UiPlattegrond.kaart()`:
   `id → Vector2i(column, row)`), so a room added later gets a cell on its own floor. In a
-  row the room the lift stops in comes first (column 1); then each next cell is a room with
+  row the room the stairs reach comes first (column 1); then each next cell is a room with
   a door to the cell before it when there is one, else the nearest room left on the floor
-  (breadth-first over the floor's doors from the lift), a room without a door on its floor
+  (breadth-first over the floor's doors from the stairs), a room without a door on its floor
   last (`UiPlattegrond.rij_van(e)`). Today that reads, top-down: `3: gang kamer1 kamer2
   keuken` · `2: speelzaal` · `1: winkels` · `0: receptie tuin zwembad kas` · `K: wasserij`.
   A door between two cells side by side is drawn in their gap (a `poort` dashed): today
   `gang|kamer1`, `receptie|tuin` and the gate `tuin|zwembad`; doors between rooms that are
-  not neighbours in their row are left out, and the lift is not a door. Left of the rows
-  runs the lift shaft: one line from the top floor to the cellar, on it a small round button
+  not neighbours in their row are left out, and the stairs are not a door. Left of the rows
+  runs the stairwell: one line from the top floor to the cellar, on it a small round button
   per floor with `Rooms.etage_teken(e)` (drawn, not a tap target: the row is where a finger
   goes); the button of the floor in view is lit, and that floor's row wears a faint sunny
   band; the room in view stays the sunny cell. Everything is placed by hand, no `Container`.
   On a narrow sheet the gaps give way first (8 → 4), then the shaft (36 → 24), then the
   cells (never under 56 wide: a 48 tap target plus air); with five floors a short screen
-  scrolls the sheet. The same sheet, titled `🛗 De lift`, is the lift's panel
+  scrolls the sheet. The same sheet, titled `De trap` after the drawn stairs pictogram (`UiBlad` `beeld`), is the stairs' panel
   (`scenes/main.gd::_toren`).
 * `Hotel.naarKamer(id)` = `World.naar(id)` + `state.kamerNu = id` + `Snd.deur()` +
   `render()`.

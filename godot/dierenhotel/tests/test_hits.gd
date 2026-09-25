@@ -1327,8 +1327,8 @@ func test_deurbordjes_in_de_gang_met_de_voerkar() -> void:
 		var dbg := Hits.debug()
 		waar(not dbg.has("vk_zeg"), "%s: geen los wolkje naast de kar" % str(maat))
 		var tel := _keur_deurbordjes("%s gang, kar vast" % str(maat), h["kader"])
-		# three: kamer 1, kamer 2 and the kitchen — the lift's sign steps aside
-		# while the game runs, the trolley does not ride the lift (2026-09-24)
+		# three: kamer 1, kamer 2 and the kitchen — the stairs' sign steps aside
+		# while the game runs, the trolley does not take the stairs (2026-09-24)
 		gelijk(int(tel["deur"]) + int(tel["latei"]), 3, "%s: drie deurbordjes in de gang" % str(maat))
 		if maat == Vector2i(1024, 768) and dbg.has("karhot") and dbg.has("deur_gang_kamer1"):
 			# the owner's picture: the trolley stands in the Kamer 1 opening, so
