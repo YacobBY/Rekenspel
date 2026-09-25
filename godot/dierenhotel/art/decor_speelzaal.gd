@@ -13,20 +13,48 @@ const HOUT_D := ArtDecor.HOUT_D
 const DOOS := Color("#E8C48A")
 const DOOS_D := Color("#C89A5E")
 const TOUCH := Color("#F2A65A")
+const TOUCH_D := Color("#D98A3E")
 
 const NAMEN: Array[String] = ["klimrek", "ballenbak", "blokkentoren", "kussenhoek",
 	"muziekdoos", "wimpel"]
 
-## Klimrek: twee stijgers met metalen sporten, plus een glijplank eraan.
+## Klimrek: een torentje op vier palen met een vloertje erop, een leuning
+## rond de achterkant, een ladder met metalen sporten TUSSEN twee palen aan de
+## rechterkant en een glijbaan die schuin naar voren omlaag loopt (eigenaar,
+## 2026-09-25: "De speelzaal lijkt momenteel kapot" — de sporten staken dwars
+## door de palen en de glijplank lag plat op de vloer).
+const TOREN := 8            ## halve breedte van het torentje
+const VLONDER := 14         ## hoogte van het vloertje
+const PAAL := 26            ## hoogte van de palen
+const GLIJ := 20            ## zo ver loopt de glijbaan naar voren
+const GLIJ_BREED := 8
 static func klimrek(_p := {}) -> Array:
 	var v: Array = []
-	for sx in [-14, 14]:
-		ArtVorm.bx(v, sx - 1, 0, -3, 3, 30, 3, HOUT_D)              # stijger
-		for ry in range(4, 28, 5):
-			ArtVorm.bx(v, sx - 1, ry, -4, 3, 2, 9, METAAL)          # sport
-	ArtVorm.bx(v, -15, 29, -3, 31, 2, 3, HOUT)                      # bovenligger
-	ArtVorm.bx(v, -11, 6, 5, 9, 2, 14, TOUCH)                        # glijplank
-	ArtVorm.bx(v, -11, 4, 17, 9, 2, 2, TOUCH)                        # uitloop
+	var t := TOREN
+	for px in [-t, t - 2]:
+		for pz in [-t, t - 2]:
+			ArtVorm.bx(v, px, 0, pz, 2, PAAL, 2, HOUT_D)                 # paal
+	ArtVorm.bx(v, -t, VLONDER, -t, 2 * t, 2, 2 * t, HOUT)                 # vloertje
+	# de leuning langs de twee achterkanten, op de palen
+	ArtVorm.bx(v, -t, PAAL - 2, -t, 2 * t, 2, 2, HOUT)
+	ArtVorm.bx(v, -t, PAAL - 2, -t, 2, 2, 2 * t, HOUT)
+	for i in 3:
+		ArtVorm.bx(v, -t + 4 + 4 * i, VLONDER + 2, -t, 1, PAAL - VLONDER - 4, 1, HOUT_D)
+		ArtVorm.bx(v, -t, VLONDER + 2, -t + 4 + 4 * i, 1, PAAL - VLONDER - 4, 1, HOUT_D)
+	# de ladder aan de rechterkant: dunne sporten van paal tot paal
+	for ry in range(3, VLONDER, 4):
+		ArtVorm.bx(v, t - 1, ry, -t + 2, 1, 1, 2 * t - 4, METAAL)
+	# de glijbaan: van de voorrand van het vloertje schuin omlaag naar voren,
+	# een goot tussen twee hoge randen — de randen dekken de trapjes van de
+	# voxels af, zodat hij als één gladde baan leest — en een uitloop
+	var x0 := -GLIJ_BREED / 2 - 1
+	for k in GLIJ:
+		var y := VLONDER - int(round(float(k) * float(VLONDER - 1) / float(GLIJ - 1)))
+		ArtVorm.bx(v, x0, y - 1, t + k, GLIJ_BREED, 2, 1, TOUCH)
+		ArtVorm.bx(v, x0 - 1, y - 1, t + k, 1, 5, 1, TOUCH_D)
+		ArtVorm.bx(v, x0 + GLIJ_BREED, y - 1, t + k, 1, 5, 1, TOUCH_D)
+	ArtVorm.bx(v, x0 - 1, 0, t + GLIJ, GLIJ_BREED + 2, 2, 4, TOUCH_D)
+	ArtVorm.bx(v, x0, 1, t + GLIJ, GLIJ_BREED, 1, 4, TOUCH)
 	return v
 
 ## Ballenbak: ondiepe bak vol ballen in vier kleuren.
@@ -79,14 +107,32 @@ static func muziekdoos(_p := {}) -> Array:
 	ArtVorm.ell(v, 0, 22, 0, 2.4, 2.4, 2.4, Color("#FFE0C2"), {"e": 2.4})  # kop
 	return v
 
-## Wimpel: een touw met vierkante vlaggetjes (hangt hoog, rakt de vloer niet).
+## Wimpel: een slinger vlaggetjes aan de muur (eigenaar, 2026-09-25: "De
+## speelzaal lijkt momenteel kapot" — hij hing als een los latje midden in de
+## zaal, dwars door het klimrek).  Een touw dat in het midden doorhangt, met
+## driehoekige vlaggetjes eronder, in vijf kleuren.  Hij hangt hoog: niets
+## ervan komt lager dan een gast (`WereldLooppad.KOP`), dus hij houdt niemand
+## tegen, ook niet zonder `ver`.
+const SLINGER := 38         ## lengte langs de muur
+const SLINGER_HOOG := 44    ## hoogte van het touw aan de uiteinden
+const DOORHANG := 4         ## zoveel zakt het in het midden
 static func wimpel(_p := {}) -> Array:
 	var v: Array = []
-	ArtVorm.bx(v, -24, 34, 0, 48, 1, 1, HOUT_D)                      # touw
+	var half := SLINGER / 2
+	var hang := func(x: float) -> int:
+		var t := x / float(half)
+		return SLINGER_HOOG - int(round(float(DOORHANG) * (1.0 - t * t)))
+	for x in range(-half, half):
+		ArtVorm.bx(v, x, hang.call(float(x)), 0, 1, 1, 1, HOUT_D)             # touw
 	var kl := [Color("#E4572E"), Color("#35A7FF"), Color("#FFC93C"), Color("#7BC950"), Color("#B57EDC")]
-	for i in range(5):
-		var x := -20 + i * 10
-		ArtVorm.bx(v, x - 3, 28, 0, 6, 6, 1, kl[i])                  # vlaggetje
+	var n := 6
+	for i in n:
+		var mx := -half + 3 + i * (SLINGER - 6) / (n - 1)
+		var top: int = hang.call(float(mx)) - 1
+		# a pennant: a triangle pointing down, 5 wide at the rope
+		for rij in 5:
+			var breed := 5 - 2 * (rij / 2)
+			ArtVorm.bx(v, mx - breed / 2, top - rij, 0, breed, 1, 1, kl[i % kl.size()])
 	return v
 
 static func tabel() -> Dictionary:

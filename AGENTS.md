@@ -109,7 +109,7 @@ written down and moved past is worth more than a session that waits.
 A tablet maths game for Dutch children of 6–9 (groep 3–5): a voxel **animal
 hotel** in which every number lives in the world (biscuits in a bag, beds in a
 room, coins on a counter, hands on a clock). No quiz screens, no punishment, no
-reading required. Seventeen minigames (§6), the rooms as data (`Rooms.lijst()`,
+reading required. Eighteen minigames (§6), the rooms as data (`Rooms.lijst()`,
 eleven of them today), a day cycle with guests, wishes, check-in and a bill at
 checkout, and a wardrobe: what an animal buys in the shops it wears.
 Exported to the web (GitHub Pages, PWA).
@@ -343,6 +343,7 @@ Sounds: `ctx.snd.plop(i)`, `ja()`, `hoera()` … Particles: `World.spetter`.
 | `hoeden` `sjaals` `schoenen` | Hoeden-, Sjaal-, Schoenenkraam | winkels | choose a piece, pay exactly with real coins/notes; shoes: paws × price; groep 5: change | games-d §4 |
 | `luxe` | Luxe winkel | winkels | sum with a gift box, half price, change from €50/€100 | games-d §4 |
 | `paskamer` | Paskamer | winkels | dressing up from the wardrobe (no sum, no star) | games-d §5 |
+| `spiegel` | Spiegelmaskers | speelzaal (on the easel, `SpiegelBord` shows the mask large) | mirror symmetry: a sum per band (groep 3 `5 − 2`, groep 4 doubling `4 + 4`, groep 5 two fold lines `3 × 4`), then per dot "which of three coloured marks is the mirror image?" | PLAN.md §3.7.2 (M3/M4) |
 
 Each has `test_<id>.gd` next to it (200–1000 lines, run headless with shells
 at four viewports). Owner's rules for zwembad are verbatim in games-b §1.

@@ -1227,10 +1227,12 @@ func _bouw_kamers() -> void:
 			{"n": "droogrekz", "x": 6, "z": 80},
 			{"n": "tobbe", "x": 80, "z": 74}, {"n": "wasmand", "x": 94, "z": 66}]})
 	# R2: de speelzaal.  Een houten zaal met een lichtblauwe speelmatted in het
-	# midden, het klimrek en de ballenbak bij de achterwand, de toren en de
-	# kussenhoek in de voorhoeken, de muziekdoos (toekomstige ingang van
-	# `spiegel`) bij de verre muur en de wimpel hoog boven de dansvloer.  De
-	# deur ligt aan de receptiezijde bij de plant in de verre hoek.
+	# midden, het klimrek (een torentje met een ladder en een glijbaan) en de
+	# ballenbak bij de achterwand, de toren en de kussenhoek in de voorhoeken,
+	# de muziekdoos (toekomstige ingang van `spiegel`) bij de verre muur en een
+	# slinger vlaggetjes aan de achterwand boven de ballenbak (eigenaar,
+	# 2026-09-25: "De speelzaal lijkt momenteel kapot" — hij hing als een los
+	# latje midden in de zaal).
 	# 2026-09-24, the tower: the playroom is the second floor; the stairs stand
 	# where its door to the lobby was.
 	_kamer({"id": "speelzaal", "naam": "Speelzaal", "icoon": "🧸",
@@ -1239,13 +1241,17 @@ func _bouw_kamers() -> void:
 		"matten": {"x0": 20, "x1": 94, "z0": 18, "z1": 82,
 			"kl": [Color("#BFE3F2"), Color("#AEDAEC")]},
 		"zones": {"dans": {"x0": 40, "x1": 74, "z0": 56, "z1": 80}},
+		# the easel of `spiegel` (Spiegelmaskers, 2026-09-25) and the spot of
+		# the guest who makes the mask: no wander place, no bought furniture
+		"mijd": [{"x0": 10, "x1": 32, "z0": 46, "z1": 86},
+			{"x0": 74, "x1": 86, "z0": 38, "z1": 50}],
 		"decor": [
 			{"n": "klimrek", "x": 16, "z": 14},
 			{"n": "ballenbak", "x": 96, "z": 14},
 			{"n": "blokkentoren", "x": 12, "z": 86},
 			{"n": "kussenhoek", "x": 100, "z": 86},
 			{"n": "muziekdoos", "x": 57, "z": 90},
-			{"n": "wimpel", "x": 30, "z": 50}]})
+			{"n": "wimpel", "x": 94, "z": 1, "ver": true}]})
 	# R3: de Kas 🪴, the glass house behind the hotel (PLAN.md §3.5; the garden
 	# was rebuilt on 2026-09-23, so its door is in the facade, not in a side
 	# fence).  Glass walls on a brick knee wall, a tiled floor with a terracotta
