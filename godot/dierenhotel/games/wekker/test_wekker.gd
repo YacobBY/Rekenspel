@@ -989,13 +989,19 @@ func test_kindtekst_letterlijk_en_binnen_het_budget() -> void:
 ## Pictogram ÉN woord op elke keuzeknop, nooit een kaal pictogram (F4).
 func test_elke_keuzeknop_draagt_een_woord() -> void:
 	# band, gasten, dag, kunnen → de knoppen van die band; hooguit vier (§9)
-	for rij in [[3, 2, 1, 3, ["uur", "uur_af", "klaar"]],
-			[4, 5, 2, 3, ["uur", "uur_af", "kwartier", "klaar"]],
-			[5, 8, 2, 5, ["uur", "uur_af", "vijf", "klaar"]]]:
+	# in DEZE volgorde: terug eerst, dan vooruit (eigenaar, 2026-09-24: "Draai
+	# 'uur erbij' en 'uur eraf' om")
+	for rij in [[3, 2, 1, 3, ["uur_af", "uur", "klaar"]],
+			[4, 5, 2, 3, ["uur_af", "uur", "kwartier", "klaar"]],
+			[5, 8, 2, 5, ["uur_af", "uur", "vijf", "klaar"]]]:
 		_op()
 		_gasten(int(rij[1]), int(rij[2]), int(rij[3]))
 		waar(Games.start(ID), "het spel start (band %d)" % int(rij[0]))
 		gelijk(int(_spel().stand()["band"]), int(rij[0]), "band %d" % int(rij[0]))
+		var volgorde: Array = []
+		for k in _spel().knoppen():
+			volgorde.append(str(k["id"]))
+		gelijk(volgorde, rij[4], "band %d: de knoppen in deze volgorde" % int(rij[0]))
 		var st := Hits.spot("wk_som_keuzes")
 		var rij_knoop: Node = st.knoop.get_node_or_null("Rij") if st != null else null
 		gelijk(rij_knoop.get_child_count() if rij_knoop != null else -1,

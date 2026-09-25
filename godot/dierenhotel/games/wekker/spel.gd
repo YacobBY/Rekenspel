@@ -647,11 +647,13 @@ func som_balk() -> String:
 ## de knop waar het kind op eindigt los van de andere staan.)
 func knoppen() -> Array:
 	var band := int(_s.get("band", 3))
+	# terug eerst, dan vooruit (eigenaar, 2026-09-24: "Draai 'uur erbij' en
+	# 'uur eraf' om") — zoals een tijdlijn van links naar rechts loopt
 	var l: Array = [
-		{"id": "uur", "icoon": "🕐", "tekst": T_UUR, "kort": T_UUR_K,
-			"kies": func(_k: String) -> void: draai(60)},
 		{"id": "uur_af", "icoon": ICO_UUR_AF, "tekst": T_UUR_AF, "kort": T_UUR_AF_K,
 			"kies": func(_k: String) -> void: draai(-60)},
+		{"id": "uur", "icoon": "🕐", "tekst": T_UUR, "kort": T_UUR_K,
+			"kies": func(_k: String) -> void: draai(60)},
 	]
 	if band == 4:
 		l.append({"id": "kwartier", "icoon": "🕒", "tekst": T_KWARTIER,

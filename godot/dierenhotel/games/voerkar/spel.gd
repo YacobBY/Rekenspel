@@ -31,7 +31,10 @@ extends MiniGame
 ##   * het bakje is alleen een knop waar vullen nu kan: de kar staat in die
 ##     kamer en daar wacht nog iemand op zijn koekjes (vast of niet vast).
 ## Eén wolkje tegelijk, altijd `vk_zeg` bij de kar: de volgende stap in één
-## zin.  Wat iets doet is een knop, wat alleen vertelt is een wolkje.
+## zin.  Wat iets doet is een knop, wat alleen vertelt is een wolkje.  Heb je
+## de kar vast, dan zegt de kar het zelf: `🛒 Je duwt de kar` en daaronder
+## `👉 Tik op een deur`, in één bubbeltje met het koekjespilletje (eigenaar,
+## 2026-09-24: "Verwerk deze twee teksten in een bubbeltje").
 ##
 ## DE SOM BIJ HET BAKJE (eigenaar, 2026-09-24: "De koekjes kar naar de kamer
 ## duwen heeft nu geen rekenwerk meer op het einde").  Een tik op het bakje (of
@@ -47,8 +50,11 @@ extends MiniGame
 ## ETEN BIJ HET BAKJE (eigenaar, 2026-09-24: "Bij het vullen van het eten lopen
 ## de dieren niet naar de voerbakjes toe.  De eet animatie gebeurt op het bed").
 ## Na het goede antwoord staat elke gast van die kamer op, loopt naar een eigen
-## vrij plekje naast het bakje (`eet_plekken`: vrije vloer, niet op elkaar,
+## vrij plekje bij het bakje (`eet_plekken`: vrije vloer, niet op elkaar,
 ## niet onder de kar) en eet daar (`World.eet_bij`).  Daarna zijn ze wakker.
+## Met de snuit IN het bakje (eigenaar, 2026-09-24: "wanneer de hond van het
+## voerbakje eet dan eet hij er net naast/achter in plaats van dat zijn mond
+## erboven gaan"): zie `ETEN_SNUIT`.
 
 # --------------------------------------------------------------- vaste maten
 
@@ -135,8 +141,37 @@ const WIJS_META := "vk_wijs"
 ## De somkaart bij het bakje; haar strook heet `vk_som_keuzes`.
 const KAART_BAK := "vk_som"
 
-## Waar de gasten bij het bakje gaan eten: plekjes rond het bakje, in voxels
-## vanaf het bakje, de mooiste eerst — schuin erachter en ernaast, zodat het
+## Waar de gasten met hun snuit IN het bakje eten.  Het bakje is getekend voor
+## een dier dat er schuin achter staat (art-sound-rules.md §7): in het raster van
+## de modellen ligt het midden van het bakje op x = 29,5 (`ArtGasten.KOM_CX`) en
+## reikt de neus van elk dier in `hap` tot x 28..31 (hond 31, poes en konijn 29,
+## gans 28) — vanaf het anker op x 13 is dat 16,5 voxels.  Een dier dat 16,5
+## voor het midden staat en ernaar kijkt, hapt dus midden in het bakje: van −x
+## (gezicht 1, naar rechts) of van −z (gezicht −1, gespiegeld naar links).  Twee
+## naast elkaar aan één kant staan 3 voxels uit het midden (een lijf is 6 breed)
+## en houden hun neus binnen de rand (straal ±5,5).  De achterste helft van het
+## bakje sorteert 20 voxels terug (`scenes/kamer.gd` KOM_ACHTER), dus al deze
+## eters staan ervoor en hun kop zakt tussen achter- en voorwand.
+## De sets in volgorde van voorkeur, per aantal eters; wie geen snuitplek krijgt
+## (een volle kamer, een plek die niet vrij is) eet ernaast (`ETEN_PLEK`).
+const ETEN_VOOR := 16.5
+const ETEN_ZIJ := 3.0
+const ETEN_SNUIT := [
+	[Vector2(-ETEN_VOOR, -ETEN_ZIJ), Vector2(-ETEN_VOOR, ETEN_ZIJ),
+		Vector2(-ETEN_ZIJ, -ETEN_VOOR), Vector2(ETEN_ZIJ, -ETEN_VOOR)],
+	[Vector2(-ETEN_VOOR, -ETEN_ZIJ), Vector2(-ETEN_VOOR, ETEN_ZIJ), Vector2(0, -ETEN_VOOR)],
+	[Vector2(-ETEN_VOOR, 0), Vector2(-ETEN_ZIJ, -ETEN_VOOR), Vector2(ETEN_ZIJ, -ETEN_VOOR)],
+	[Vector2(-ETEN_VOOR, 0), Vector2(0, -ETEN_VOOR)],
+	[Vector2(-ETEN_VOOR, -ETEN_ZIJ), Vector2(-ETEN_VOOR, ETEN_ZIJ)],
+	[Vector2(-ETEN_ZIJ, -ETEN_VOOR), Vector2(ETEN_ZIJ, -ETEN_VOOR)],
+	[Vector2(-ETEN_VOOR, 0)],
+	[Vector2(0, -ETEN_VOOR)],
+]
+## Twee eters met hun snuit in het bakje staan minstens zo ver uit elkaar: zij
+## aan zij aan één kant (6), of elk aan een eigen kant.
+const ETEN_SNUIT_AF := 5.9
+## Waar de gasten bij het bakje gaan eten als er geen snuitplek meer is:
+## plekjes rond het bakje, in voxels vanaf het bakje, de mooiste eerst — schuin erachter en ernaast, zodat het
 ## bakje in beeld blijft (een dier ervóór dekt het af).  Elk plekje ligt 15..17
 ## voxels van het bakje: `Rooms.vrij_vak` houdt 15 (manhattan) rond een slot
 ## vrij, en zo staat het dier er toch vlak naast.  Daarna een ring op
@@ -552,6 +587,7 @@ func _zeg() -> void:
 		# de dieren smullen, of de som van het bakje staat open: die kaart IS
 		# de volgende stap, er komt geen tweede zin naast
 		ctx.ui.wolk_weg(ZEG)
+		_kar_zegt("")
 		return
 	var icoon := ICO_WIJS
 	var tekst := ""
@@ -561,7 +597,11 @@ func _zeg() -> void:
 		tekst = T_TIK_BAK
 		bak = _bak_hier()
 	elif _mee:
-		tekst = T_TIK_DEUR
+		# vast: de kar zegt het zelf, onder "Je duwt de kar" — één bubbeltje
+		# in plaats van een stand en een wolkje erboven (eigenaar, 2026-09-24)
+		ctx.ui.wolk_weg(ZEG)
+		_kar_zegt("%s %s" % [ICO_WIJS, T_TIK_DEUR])
+		return
 	elif _ooit_mee:
 		tekst = T_TIK_KAR
 	else:
@@ -578,8 +618,23 @@ func _zeg() -> void:
 		o["z"] = float(bak.get("z", _kar_z()))
 		o["hoog"] = 26.0
 		o["volg"] = _volg_bak(float(o["x"]), float(o["z"]), 26.0)
+	_kar_zegt("")
 	ctx.ui.wolk(o)
 	_zeg_maat()
+
+## De tekst van de kar: wat hij is of doet (`🛒 Pak de kar` / `🛒 Je duwt de
+## kar`), en met de kar vast eronder de volgende stap (`zin`), zodat stand en
+## opdracht één bubbeltje zijn.  `zin` leeg: alleen de eerste regel.
+func _kar_zegt(zin: String) -> void:
+	var b := Ui.bron_van("karhot")
+	if b == null:
+		return
+	var tekst := "%s %s" % [ICO_KAR, T_DUW_KAR if _mee else T_PAK_KAR]
+	if not zin.is_empty():
+		tekst += "\n" + zin
+	if b.text != tekst:
+		b.text = tekst
+		ctx.wereld.vuil()
 
 ## Op een liggend telefoonkader (740 x 360: 5 banden van 52, negen kolommen
 ## van 56) is een wolk van 55 hoog twee banden breed en ligt er geen vrij blok
@@ -686,6 +741,7 @@ func _kar_hotspot(open_n: int) -> void:
 	})
 	var b := Ui.bron_van("karhot")
 	if b != null:
+		# de eerste regel; `_zeg` zet er met de kar vast de volgende stap onder
 		b.text = "%s %s" % [ICO_KAR, T_DUW_KAR if _mee else T_PAK_KAR]
 		# de letters van de wereld, zoals de deurbordjes (op een telefoon `klein`)
 		var letters := int(Ui.maten.get("wereld", Ui.maten.get("klein", 13)))
@@ -741,7 +797,8 @@ func _kar_invoer(ev: InputEvent, b: Control) -> void:
 func _sleep_spook(b: Control) -> Control:
 	var spook := Control.new()
 	var l := Label.new()
-	l.text = str(b.get("text"))
+	# alleen wat de kar IS: de opdracht eronder gaat niet met de vinger mee
+	l.text = str(b.get("text")).get_slice("\n", 0)
 	l.add_theme_font_size_override("font_size", b.get_theme_font_size("font_size"))
 	spook.add_child(l)
 	var m := l.get_combined_minimum_size()
@@ -875,10 +932,35 @@ func _kar_plek(kamer_id: String) -> Vector2:
 		return Vector2(12.0, 12.0)
 	var doel := Vector2(r.w * 0.5, r.d * 0.5)
 	for slot in ctx.wereld.slots(kamer_id, "bak"):
-		doel = Vector2(float(slot.get("sx", slot.get("x", doel.x))) - 14.0,
-			float(slot.get("sz", slot.get("z", doel.y))) + 10.0)
-		break
-	return Vector2(clampf(doel.x, 8.0, r.w - 8.0), clampf(doel.y, 8.0, r.d - 8.0))
+		var sx := float(slot.get("sx", slot.get("x", doel.x)))
+		var sz := float(slot.get("sz", slot.get("z", doel.y)))
+		var mid := Vector2(float(slot.get("x", sx)), float(slot.get("z", sz)))
+		# De kar staat schuin voor het bakje — maar niet waar de gasten zo met
+		# hun snuit in het bakje gaan eten (`ETEN_SNUIT`, 2026-09-24): op de
+		# oude plek stond hij op de plekjes aan de −x-kant, en daar aten ze dan
+		# naast het bakje.  De eerste plek die dat vrij laat en zelf vrije vloer
+		# is; anders de oude.
+		var kandidaten: Array = [Vector2(sx - 14.0, sz + 10.0), Vector2(sx - 18.0, sz + 20.0),
+			Vector2(sx - 14.0, sz + 28.0), Vector2(sx - 30.0, sz + 10.0)]
+		for k in kandidaten:
+			var p := _binnen(r, k)
+			if Rooms.vrij_vak(kamer_id, p.x, p.y) and _kar_laat_eten(p, mid):
+				return p
+		return _binnen(r, kandidaten[0])
+	return _binnen(r, doel)
+
+func _binnen(r: Rooms.Kamer, p: Vector2) -> Vector2:
+	return Vector2(clampf(p.x, 8.0, r.w - 8.0), clampf(p.y, 8.0, r.d - 8.0))
+
+## Laat een kar op `p` elke snuitplek rond het bakje op `mid` vrij?
+func _kar_laat_eten(p: Vector2, mid: Vector2) -> bool:
+	var voet := KAR_VOET.grow(KAR_RAND)
+	voet.position += p
+	for set in ETEN_SNUIT:
+		for off in set:
+			if voet.has_point(mid + (off as Vector2)):
+				return false
+	return true
 
 # --------------------------------------------------- de som bij het bakje
 
@@ -1028,16 +1110,34 @@ func _sip_bij_bak(kamer_id: String, dier: String) -> void:
 # ------------------------------------------------- eten bij het bakje
 
 ## De plekjes waar `n` gasten bij het bakje eten: vrije vloer
-## (`Rooms.vrij_vak`), niet onder de kar, en minstens `ETEN_AF` uit elkaar.
-## Eerst de ring vlak naast het bakje, dan een tweede ring; is een kamer echt
-## vol, dan de staplek van het bakje zelf, een stapje uit elkaar — nooit te
-## weinig plekjes.
+## (`Rooms.vrij_vak`) en niet onder de kar.  Eerst de snuitplekken
+## (`ETEN_SNUIT`: de neus in het bakje, zij aan zij `ETEN_SNUIT_AF` uit
+## elkaar), dan voor wie overblijft de ring naast het bakje (minstens `ETEN_AF`
+## uit elkaar en niet tussen een eter en het bakje), een tweede ring; is een
+## kamer echt vol, dan de staplek van het bakje zelf, een stapje uit elkaar —
+## nooit te weinig plekjes.
 func eet_plekken(kamer_id: String, slot_id: String, n: int) -> Array:
 	var uit: Array = []
 	var bak: Dictionary = ctx.wereld.slot(kamer_id, slot_id)
 	if bak.is_empty() or n <= 0:
 		return uit
 	var mid := Vector2(float(bak.get("x", 0.0)), float(bak.get("z", 0.0)))
+	# eerst de snuitplekken: de grootste set die helemaal vrij is en niet meer
+	# eters vraagt dan er zijn
+	for set in ETEN_SNUIT:
+		if (set as Array).size() > n:
+			continue
+		var vrij := true
+		for off in set:
+			var p: Vector2 = mid + (off as Vector2)
+			if not Rooms.vrij_vak(kamer_id, p.x, p.y) or _onder_kar(kamer_id, p):
+				vrij = false
+				break
+		if vrij:
+			for off in set:
+				uit.append(mid + (off as Vector2))
+			break
+	var snuit := uit.size()
 	for off in _eet_kandidaten():
 		if uit.size() >= n:
 			return uit
@@ -1049,6 +1149,10 @@ func eet_plekken(kamer_id: String, slot_id: String, n: int) -> Array:
 			if (q as Vector2).distance_to(p) < ETEN_AF:
 				ver = false
 				break
+		# en niet in de weg van wie met zijn snuit in het bakje staat: niet
+		# tussen hem en het bakje
+		if ver and snuit > 0 and p.distance_to(mid) < ETEN_VOOR + 1.0:
+			ver = false
 		if ver:
 			uit.append(p)
 	var staan := Vector2(float(bak.get("sx", mid.x - 13.0)), float(bak.get("sz", mid.y)))

@@ -1320,10 +1320,12 @@ func test_deurbordjes_in_de_gang_met_de_voerkar() -> void:
 		var kar := Hits.spot("karhot")
 		waar(kar != null and kar.knoop.visible, "%s: de kar is een knop" % str(maat))
 		if kar != null:
-			gelijk(str((kar.knoop as Button).text), "🛒 Je duwt de kar",
+			# held, the cart says the next step itself: one bubble (owner,
+			# 2026-09-24: "Verwerk deze twee teksten in een bubbeltje")
+			gelijk(str((kar.knoop as Button).text), "🛒 Je duwt de kar\n👉 Tik op een deur",
 				"%s: en je hebt hem vast" % str(maat))
 		var dbg := Hits.debug()
-		waar(dbg.has("vk_zeg"), "%s: het wolkje bij de kar hangt er" % str(maat))
+		waar(not dbg.has("vk_zeg"), "%s: geen los wolkje naast de kar" % str(maat))
 		var tel := _keur_deurbordjes("%s gang, kar vast" % str(maat), h["kader"])
 		# three: kamer 1, kamer 2 and the kitchen — the lift's sign steps aside
 		# while the game runs, the trolley does not ride the lift (2026-09-24)

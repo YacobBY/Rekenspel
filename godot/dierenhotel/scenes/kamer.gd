@@ -15,7 +15,11 @@ extends Node2D
 ## guest eating from it is drawn in between.
 
 const Proefwereld := preload("res://wereld/proefwereld.gd")
-const KOM_ACHTER := -16.0      ## depth bias: the bowl's back half
+## depth bias: the bowl's back half.  −20, not −16 (2026-09-24): a guest who
+## eats with his snout IN the bowl stands 16,5 voxels before its middle, and a
+## second one beside him up to 19,5 (games/voerkar `ETEN_SNUIT`) — at −16 the
+## back half sorted after them and hid their heads behind the rim.
+const KOM_ACHTER := -20.0
 const KOM_VOOR := 0.2
 
 @onready var vloer: Node2D = $Vloer

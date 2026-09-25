@@ -1068,9 +1068,12 @@ daarmee hoefde het kind de klok niet te lezen: het tikte tot de woorden klopten.
 
 | band | knoppen (id, icoon, tekst lang → kort) | stap |
 |---|---|---|
-| 3 | `uur` 🕐 `'uur erbij'` → `'uur'`; `uur_af` ⏪ `'uur eraf'` → `'eraf'`; `klaar` ✅ `'Klaar'` | +60 / −60 min |
-| 4 | `uur`, `uur_af`, `kwartier` 🕒 `'kwartier erbij'` → `'kwartier'`, `klaar` | +15 min |
-| 5 | `uur`, `uur_af`, `vijf` 🕧 `'5 minuten erbij'` → `'5 min'`, `klaar` | +5 min |
+| 3 | `uur_af` ⏪ `'uur eraf'` → `'eraf'`; `uur` 🕐 `'uur erbij'` → `'uur'`; `klaar` ✅ `'Klaar'` | −60 / +60 min |
+| 4 | `uur_af`, `uur`, `kwartier` 🕒 `'kwartier erbij'` → `'kwartier'`, `klaar` | +15 min |
+| 5 | `uur_af`, `uur`, `vijf` 🕧 `'5 minuten erbij'` → `'5 min'`, `klaar` | +5 min |
+
+(Port, owner 2026-09-24: "Draai 'uur erbij' en 'uur eraf' om" — back first, then forward,
+as a time line reads from left to right.)
 
 Hooguit vier knoppen (HOTEL.md §9): band 5 heeft sinds 2026-09-24 **geen kwartierknop**
 meer — een kwartier is drie keer vijf minuten, en per vijf minuten rond tellen is wat

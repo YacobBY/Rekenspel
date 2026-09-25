@@ -16,6 +16,8 @@ extends Proef
 ## hangt nooit meer dan één wolkje bij de kar.
 
 const SPEL := "voerkar"
+## de diepte van de achterste helft van het bakje (eten met de neus erin)
+const KAMER_SCENE := preload("res://scenes/kamer.gd")
 const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024),
 	Vector2i(360, 740), Vector2i(740, 360)]
 
@@ -508,7 +510,9 @@ func _hele_beurt(band: int, n: int, dag: int) -> void:
 	var pot_voor := int(State.s["snoeppot"])
 	_tik("karhot")
 	waar(spel.mee(), "band %d: de kar is vast" % band)
-	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "band %d: en de knop zegt het" % band)
+	# vast: de kar zegt het zelf, stand én volgende stap in één bubbeltje
+	# (eigenaar, 2026-09-24: "Verwerk deze twee teksten in een bubbeltje")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar\n👉 Tik op een deur", "band %d: en de knop zegt het" % band)
 	var ronden := 0
 	var mis_gedaan := false
 	while not spel.open_kamers().is_empty() and ronden < 16:
@@ -522,7 +526,9 @@ func _hele_beurt(band: int, n: int, dag: int) -> void:
 			if _zichtbaar("vk_smul"):
 				waar(not _zichtbaar("vk_zeg"), "band %d: tijdens het smullen geen tweede wolkje" % band)
 			else:
-				gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "band %d: %s zegt de volgende stap" % [band, nu])
+				gelijk(_tekst("karhot"), "🛒 Je duwt de kar\n👉 Tik op een deur",
+					"band %d: in %s zegt de kar de volgende stap" % [band, nu])
+				waar(not _zichtbaar("vk_zeg"), "band %d: geen wolkje ernaast" % band)
 			var wijs: Array = spel.wijs_deuren()
 			waar(not wijs.is_empty(), "band %d: in %s wijst een deur de weg" % [band, nu])
 			if wijs.is_empty():
@@ -641,7 +647,9 @@ func test_een_tik_op_de_kar_pakt_hem() -> void:
 		waar(not _wijst(deur), "%s wijst nog niet" % deur)
 	_tik("karhot")
 	waar(spel.mee(), "na een tik heb je de kar vast")
-	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "de knop zegt het")
+	# stand en volgende stap in één bubbeltje (eigenaar, 2026-09-24: "Verwerk
+	# deze twee teksten in een bubbeltje")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar\n👉 Tik op een deur", "de knop zegt het")
 	b = Ui.bron_van("karhot")
 	waar(b != null and b.button_pressed, "en staat ingedrukt")
 	if b != null:
@@ -651,13 +659,13 @@ func test_een_tik_op_de_kar_pakt_hem() -> void:
 		waar(stil != null and stil.border_width_bottom < UiThema.KNOP_LIP and stil.shadow_size == 0,
 			"'Je duwt de kar' staat er stil bij, zonder drukrand")
 		waar(b.get_theme_font("font") != Ui.thema.get_font("font", "Hotknop"), "in gewone letters")
-		gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "de bindende tekst blijft")
+		gelijk(_tekst("karhot").get_slice("\n", 0), "🛒 Je duwt de kar", "de bindende tekst blijft")
 		gelijk(b.hand, 1, "met de ☝ van 'in je hand'")
 		gelijk(b.aantal, int(spel.K["op_kar"]), "het pilletje telt de koekjes op de kar")
 	gelijk(spel.wijs_deuren(), ["gang"], "beide kamers liggen achter de gang")
 	gelijk(_tekst("deur_keuken_gang"), "👉 🚪 Gang", "die deur wijst de weg")
-	gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "het wolkje zegt de volgende stap")
-	gelijk(str(_wolkjes()), '["vk_zeg"]', "één wolkje")
+	gelijk(_tekst("karhot").get_slice("\n", 1), "👉 Tik op een deur", "de kar zegt de volgende stap")
+	gelijk(str(_wolkjes()), '[]', "geen wolkje ernaast: het bubbeltje van de kar is het ene")
 	_af()
 
 ## Tik op een deur: kar én camera gaan erdoor en de kar blijft vast, ook in de
@@ -677,14 +685,14 @@ func test_een_tik_op_een_deur_neemt_kar_en_camera_mee() -> void:
 	gelijk(World.kamer_nu(), "gang", "de camera ging mee")
 	gelijk(str(World.ding("kar").get("kamer", "")), "gang", "en de kar ook")
 	waar(spel.mee(), "de kar is nog vast")
-	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "en de knop zegt het nog")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar\n👉 Tik op een deur", "en de knop zegt het nog")
 	waar(_zichtbaar("karhot"), "de kar is ook in de gang een knop")
 	for kamer in ["kamer1", "kamer2"]:
 		waar(_wijst("deur_gang_%s" % kamer), "de deur naar %s wijst (%s)" % [kamer,
 			_tekst("deur_gang_%s" % kamer)])
 	waar(not _wijst("deur_gang_keuken"), "terug naar de keuken wijst niet")
 	waar(not _wijst("deur_gang_receptie"), "de receptie ook niet")
-	gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "het wolkje zegt het weer")
+	waar(not _zichtbaar("vk_zeg"), "geen los wolkje: de kar zegt het zelf")
 	_tik("deur_gang_kamer1")
 	gelijk(World.kamer_nu(), "kamer1", "door naar kamer1")
 	gelijk(str(World.ding("kar").get("kamer", "")), "kamer1", "met de kar")
@@ -709,8 +717,8 @@ func test_een_tik_op_een_deur_neemt_kar_en_camera_mee() -> void:
 	waar(spel.mee(), "de kar is nog vast")
 	waar(_wijst("deur_kamer1_gang"), "en de deur naar de gang wijst naar kamer2")
 	await _wacht(float(spel.SMUL_MS) + 0.3)
-	gelijk(str(_wolkjes()), '["vk_zeg"]', "na het smullen hangt het wolkje van de kar er weer")
-	gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "met de volgende stap")
+	gelijk(str(_wolkjes()), '[]', "na het smullen geen los wolkje: de kar zegt het weer")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar\n👉 Tik op een deur", "met de volgende stap")
 	_af()
 
 ## Tik op de kar die je vast hebt: je zet hem neer.  De knop zegt weer
@@ -766,7 +774,7 @@ func test_een_deur_zonder_vaste_kar_neemt_hem_mee() -> void:
 	gelijk(World.kamer_nu(), "gang", "de camera gaat door de deur")
 	gelijk(str(World.ding("kar").get("kamer", "")), "gang", "en de kar gaat mee")
 	waar(spel.mee(), "en is nu vast")
-	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "de knop zegt het")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar\n👉 Tik op een deur", "de knop zegt het")
 	waar(_wijst("deur_gang_kamer1"), "en de deuren wijzen de weg")
 	_af()
 
@@ -882,7 +890,7 @@ func test_geen_els_en_de_ronde_straft_niet() -> void:
 	var g: Array = spel.deelnemers()
 	gelijk(spel._zinnen(g.size())[1], spel.T_IEDER, "de kaart houdt haar gewone tweede zin")
 	_tik("karhot")
-	gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "de volgende tik zegt de volgende stap")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar\n👉 Tik op een deur", "de volgende tik zegt de volgende stap")
 	_af()
 
 ## S5, open punt 2026-09-20: de voerkar geeft het dier van de beurt door met
@@ -1094,6 +1102,7 @@ func test_de_gasten_eten_bij_het_bakje() -> void:
 		var bak := _bak_punt(kamer)
 		var kar := World.ding("kar")
 		var plekken: Array = []
+		var snuit := 0
 		for g in hier:
 			var d = World.dier(str(g["id"]))
 			var bed := Rooms.slot(kamer, str(g["bed"]))
@@ -1117,9 +1126,24 @@ func test_de_gasten_eten_bij_het_bakje() -> void:
 			gelijk(int(d.face), kijk, "%s kijkt naar het bakje" % g["naam"])
 			gelijk(str(d.slaap_doel), "", "%s klimt straks niet terug in bed" % g["naam"])
 			for ander in plekken:
-				waar((ander as Vector2).distance_to(p) >= float(spel.ETEN_AF),
+				waar((ander as Vector2).distance_to(p) >= float(spel.ETEN_SNUIT_AF),
 					"%s staat niet op een ander" % g["naam"])
 			plekken.append(p)
+			# de neus in het bakje (eigenaar, 2026-09-24: "wanneer de hond van
+			# het voerbakje eet dan eet hij er net naast/achter"): een eter kijkt
+			# naar +x (gezicht 1) of gespiegeld naar +z, en zijn neus reikt
+			# `ETEN_VOOR` voor zijn anker; en hij sorteert vóór de achterste helft
+			# van het bakje, zodat zijn kop niet achter de rand verdwijnt
+			var neus := p + (Vector2(spel.ETEN_VOOR, 0.0) if int(d.face) == 1 \
+				else Vector2(0.0, spel.ETEN_VOOR))
+			if neus.distance_to(bak) <= 4.5:
+				snuit += 1
+				waar((p.x + p.y) - (bak.x + bak.y) > float(KAMER_SCENE.KOM_ACHTER),
+					"%s staat voor de achterkant van het bakje" % g["naam"])
+		# twee eters aan een bakje: beide met de neus erin; drie of vier: de
+		# eerste drie (vier waar de vloer het toelaat), de rest wacht ernaast
+		waar(snuit >= mini(hier.size(), 3),
+			"%s: %d van de %d eters hebben hun neus in het bakje" % [kamer, snuit, hier.size()])
 		# het smulwolkje hangt aan de eerste gast en loopt met hem mee
 		waar(_zichtbaar("vk_smul"), "het smulwolkje hangt er")
 	Ui.zet_rust_modus(false)
@@ -1171,7 +1195,11 @@ func test_de_gasten_lopen_naar_het_bakje() -> void:
 		gelijk(str(d.staat), "eet", "%s eet (na %.1f s)" % [g["naam"], t])
 		gelijk(str(d.kamer), "kamer1", "%s eet in zijn eigen kamer" % g["naam"])
 		var p := Vector2(d.x, d.z)
-		waar(p.distance_to(bak) < 20.0, "%s eet naast het bakje" % g["naam"])
+		waar(p.distance_to(bak) < 20.0, "%s eet bij het bakje" % g["naam"])
+		var neus := p + (Vector2(spel.ETEN_VOOR, 0.0) if int(d.face) == 1 \
+			else Vector2(0.0, spel.ETEN_VOOR))
+		waar(neus.distance_to(bak) <= 4.5, "%s eet met zijn neus in het bakje (%.1f)"
+			% [g["naam"], neus.distance_to(bak)])
 		gelijk(int(d.face), 1 if ((bak.x - bak.y) - (p.x - p.y)) >= 0.0 else -1,
 			"%s kijkt naar het bakje" % g["naam"])
 		waar(not d.per_stap.is_valid(), "%s: het omdraaien hangt niet meer aan zijn volgende wandeling" % g["naam"])
@@ -1471,7 +1499,7 @@ func test_dekking_nul_in_vier_kaders() -> void:
 		_tik("karhot")
 		for _f in 2:
 			await boom.process_frame
-		gelijk(_tekst("vk_zeg"), "👉 Tik op een deur", "%s: weer vast" % str(maat))
+		gelijk(_tekst("karhot"), "🛒 Je duwt de kar\n👉 Tik op een deur", "%s: weer vast" % str(maat))
 		_keur_dekking(kader, "%s kamer1, gevoerd, vast" % str(maat))
 		Games.stop()
 		Hits.wis_alles()
@@ -1517,8 +1545,11 @@ func _keur_dekking(kader: Control, wat: String) -> void:
 			var snij := r.intersection(v)
 			gelijk(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y), 0.0,
 				"%s: %s dekt het voorwerp van %s af" % [wat, id, ander])
-	# the cart and its one bubble (buurvrouw Els made it three until 2026-09-24)
-	waar(eigen >= 2, "%s: %d knoppen van de voerkar in beeld" % [wat, eigen])
+	# the cart, and its one bubble unless the cart carries the next step itself
+	# (held: "Je duwt de kar / Tik op een deur", 2026-09-24); buurvrouw Els
+	# made it three until 2026-09-24
+	waar(eigen >= (1 if Hits.spot("vk_zeg") == null else 2),
+		"%s: %d knoppen van de voerkar in beeld" % [wat, eigen])
 
 # ---------------------------------------------------------------- slepen
 
@@ -1576,7 +1607,7 @@ func test_slepen_de_kar_door_de_deur() -> void:
 	gelijk(World.kamer_nu(), str(pad[1]), "en de camera ging mee")
 	# wie de kar door een deur sleept, duwt hem: hij is daarna vast
 	waar(spel.mee(), "na de sleep is de kar vast")
-	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "en de knop zegt het")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar\n👉 Tik op een deur", "en de knop zegt het")
 	await _ruim_op(vp)
 
 ## Firefox meet `movementX` van een vinger vanaf de laatste plek van de muis: na
@@ -1639,7 +1670,7 @@ func test_een_trillende_tik_op_de_kar_blijft_een_tik() -> void:
 	for _f in 3:
 		await boom.process_frame
 	waar(spel.mee(), "de tik pakte de kar")
-	gelijk(_tekst("karhot"), "🛒 Je duwt de kar", "en de knop zegt het")
+	gelijk(_tekst("karhot"), "🛒 Je duwt de kar\n👉 Tik op een deur", "en de knop zegt het")
 	gelijk(str(World.ding("kar").get("kamer", "")), "keuken", "de kar ging nergens heen")
 	await _ruim_op(vp)
 
