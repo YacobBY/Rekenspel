@@ -1541,7 +1541,12 @@ allemaal klikbaar lijken"*). Wat iets doet is een knop (`ctx.hotspots.bron` /
   * niet vast: `🛒 Pak de kar`;
   * **vast** ("in je hand"): `🛒 Je duwt de kar`, de knop is een schakelaar die
     ingedrukt staat (de thema-kleur `pressed`) en draagt de ☝ van de bron
-    (`hand: 1`);
+    (`hand: 1`). **Port (eigenaar 2026-09-24: "Verwerk deze twee teksten in een
+    bubbeltje"):** is de volgende stap een deur, dan zegt de kar die zelf, als
+    tweede regel in hetzelfde stille bubbeltje: `🛒 Je duwt de kar` /
+    `👉 Tik op een deur`; het losse wolkje `vk_zeg` hangt er dan niet (`_zeg` →
+    `_kar_zegt`). Bij een hongerig bakje blijft `👉 Tik op het bakje` een wolkje
+    bij het bakje;
   * het pilletje telt de koekjes op de kar (`aantal = op_kar`); de uitleg
     (`titel`) is `de voerkar: nog <n> kamer(s)`.
   Letters: `Ui.maten.wereld` (zoals de deurbordjes).
@@ -1598,10 +1603,20 @@ allemaal klikbaar lijken"*). Wat iets doet is een knop (`ctx.hotspots.bron` /
   bed"*): elke gast van die kamer staat op (uit bed: `_breek` zet hem op de
   vloer en laat zijn bed los), loopt naar een eigen plekje naast het bakje en
   eet daar met zijn gezicht naar het bakje (`World.eet_bij`, eindstaat `eet`);
-  wie in een andere kamer was loopt door de deuren. De plekjes (`eet_plekken`):
-  een vaste lijst op 15..17 voxels van het bakje, schuin erachter en ernaast
-  eerst (een dier vóór het bakje dekt het af), dan een ring op 18,5, dan 1,6
-  keer de eerste lijst; alleen vrije vloer (`Rooms.vrij_vak`), niet op de voet
+  wie in een andere kamer was loopt door de deuren. **Met de snuit IN het
+  bakje** (eigenaar 2026-09-24: *"wanneer de hond van het voerbakje eet dan eet
+  hij er net naast/achter in plaats van dat zijn mond erboven gaan"*): in het
+  modelraster ligt het midden van het bakje op x 29,5 en reikt de neus in `hap`
+  tot x 28..31 (hond 31, poes/konijn 29, gans 28), dus een eter staat 16,5
+  voxels vóór het midden en kijkt ernaar: van −x (gezicht 1) of van −z
+  (gezicht −1, gespiegeld); twee aan één kant staan zij aan zij 3 uit het midden
+  (`ETEN_SNUIT`, de grootste set die vrij is). De achterste helft van het bakje
+  sorteert 20 voxels terug (`scenes/kamer.gd` `KOM_ACHTER`, was 16), zodat hun
+  kop tussen achter- en voorwand zakt. De kar parkeert waar hij geen snuitplek
+  bezet (`_kar_plek`). Wie geen snuitplek krijgt (een volle kamer) eet ernaast:
+  de plekjes (`eet_plekken`) daarna zijn een vaste lijst op 15..17 voxels van
+  het bakje, dan een ring op 18,5, dan 1,6 keer de eerste lijst — nooit tussen
+  een eter en het bakje; alleen vrije vloer (`Rooms.vrij_vak`), niet op de voet
   van de kar (+6) en minstens 11 voxels uit elkaar. In rustmodus staan ze er
   meteen; buiten beeld eet `_grof_tik` het bakje in één keer leeg. Na het eten
   zijn ze wakker en blij en klimmen ze niet terug in bed. (Tot 2026-09-24:

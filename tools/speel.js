@@ -320,8 +320,18 @@ const midden = (l) => {
     const id = vak ? vak[1] : kaal;
     // Een hotspot meldt zich als `knop <id>=`, een chip als `chip <id>=`; een
     // strook of kaart meldt zich kaal als `<id>=[P: ...]`.  Alle drie mogen.
+    // Een spel dat zijn eigen knoppen meldt (de voerkar: `[probe] vk knop karhot=`)
+    // mag ook.
+    // Een geleend doel (`[probe] vk doel deur_gang_kamer1=<opening> knop=<knop>`)
+    // wordt op zijn knop getikt, niet op de opening.
+    const doel = () => {
+      const r = laatste(`[probe] vk doel ${id}=`);
+      const k = r && r.match(/knop=(\[P: [^\]]*\])/);
+      return k ? `[probe] ${id}=${k[1]}` : null;
+    };
     const zoek = () => laatste(`[probe] ${soort} ${id}=`)
-      || (chip ? null : (laatste(`[probe] bladknop ${id}=`) || laatste(`[probe] ${id}=`)));
+      || (chip ? null : (laatste(`[probe] bladknop ${id}=`) || laatste(`[probe] ${id}=`)
+        || laatste(`[probe] vk knop ${id}=`) || doel()));
     const regel = await wacht(zoek, 8000);
     if (!regel) {
       const nu = idsSinds(merk, soort);
