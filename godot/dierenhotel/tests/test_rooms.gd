@@ -975,10 +975,11 @@ func test_de_kas_is_een_glazen_kas_achter_het_hotel() -> void:
 		var mz := (float(m["z0"]) + float(m["z1"])) / 2.0
 		waar(not Rooms.vrij_vak("kas", mx, mz), "geen gekocht meubel op een spel (%s)" % str(m))
 	waar(kas.zones.has("rijen"), "de moesbakken houden hun zone (R3)")
-	# every other room but the shops (their customers' spots, 2026-09-24): no
-	# `mijd`, so nothing moved there
+	# every other room but the shops (their customers' spots, 2026-09-24) and
+	# the playroom (the easel of `spiegel`, 2026-09-25 — its floor is checked in
+	# `test_spiegel.gd::test_de_rustende_ezel`): no `mijd`, so nothing moved there
 	for id in Rooms.lijst():
-		if id != "kas" and id != "winkels":
+		if id != "kas" and id != "winkels" and id != "speelzaal":
 			gelijk(Rooms.get_kamer(id).mijd.size(), 0, "%s houdt al zijn vloer" % id)
 
 ## A gate's rectangle is the gate in the fence line, not the door line behind
