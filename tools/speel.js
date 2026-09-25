@@ -38,6 +38,8 @@ function hulp() {
   --doe "a; b; c"     de reeks stappen: een knop-id, chip:<naam>,
                       "veeg chip:<naam> <dx>" (een vinger veegt de kamerbalk),
                       chroom:<naam> (Munt/Brieven/Geluid/Prikbord/Avond),
+                      vw:<id> (het voorwerp van een geleende hotelknop: het
+                      bakje of de deuropening zelf, niet de knop),
                       of "wacht <ms>"
   --toon              speel niets; meld alleen wat er in deze kamer te tikken valt
   --stap-wacht MS     wachttijd na elke tik voor de foto (standaard 1800)
@@ -311,6 +313,27 @@ const midden = (l) => {
     // eigen stapsoort was de hele dagcyclus onbespeelbaar (eigenaarsvraag
     // 2026-09-22: "speel de lus, dag na dag").
     const chroom = stap.match(/^chroom[:\s]+(\S+)$/i);
+    // `vw:<id>` tikt het VOORWERP van een geleende hotelknop, niet de knop: het
+    // bakje of de deuropening zelf (`[probe] vk doel <id>=<voorwerp> knop=…`),
+    // zoals een kind op het getekende bakje tikt (eigenaar, 2026-09-25: "wanneer
+    // ik op het bakje tik gebeurt er niks").
+    const vw = stap.match(/^vw[:\s]+(\S+)$/i);
+    if (vw) {
+      const regel = await wacht(() => laatste(`[probe] vk doel ${vw[1]}=`), 8000);
+      if (!regel) {
+        await foto(`${nr}-${vw[1]}-ONBEKEND`);
+        await stop(`stap ${nr - 2} "vw:${vw[1]}": het spel meldt dat voorwerp niet (vk doel)`);
+      }
+      const p = midden(regel);
+      await page.touchscreen.tap(p.x, p.y);
+      await page.waitForTimeout(opt.stapWacht);
+      const f = await foto(`${nr}-vw-${vw[1]}`);
+      console.log(`\nstap ${nr - 2}: tik het voorwerp van ${vw[1]} (${Math.round(p.x)}, ${Math.round(p.y)})  →  ${path.basename(f)}`);
+      const m = meldingenSinds(merk);
+      if (m.length) console.log('  meldingen:\n    ' + m.slice(-8).join('\n    '));
+      merk = logs.length;
+      continue;
+    }
     const soort = chip ? 'chip' : (chroom ? 'chroomknop' : 'knop');
     // Een strook meldt zichzelf als één rechthoek (bv. `bd_som_keuzes`), niet
     // als vier knoppen.  Met `id#2/4` tik je het tweede van vier vakjes erin,

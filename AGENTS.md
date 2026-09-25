@@ -43,7 +43,9 @@ node tools/speel.js --kamer receptie --band 4 \
   --doe "bel; wacht 4500; ci_som_keuzes#2/4" --uit tmp/speel
 ```
 
-A step is a hotspot id, `chip:<naam>` for the room bar, or `wacht <ms>`. A strip
+A step is a hotspot id, `chip:<naam>` for the room bar, `vw:<id>` for the OBJECT
+a borrowed hotel button hangs on (the bowl or the door opening itself, as a child
+taps it), `kamer_<id>` for a room in the stairs' tower sheet, or `wacht <ms>`. A strip
 reports itself as ONE rectangle (`ci_som_keuzes`), so tap the k-th of n boxes
 inside it with `id#k/n`, or a free spot with `id@0.5,0.8`. An unknown id stops
 the run and prints what the game did report — that answer is itself a finding.

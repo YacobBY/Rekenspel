@@ -84,6 +84,8 @@ func _ready() -> void:
 	Hotel.trap_gevraagd.connect(_trap)
 	Rooms.kamers_veranderd.connect(_nieuwe_kamers)
 	World.kamer_veranderd.connect(func(_k: String) -> void: kamerbalk.ververs())
+	if OS.has_feature("web"):
+		World.kamer_veranderd.connect(func(_k: String) -> void: _meld_na_de_rit())
 	# V5 (PLAN.md): a bowl level can change right in the middle of the world
 	# tick, while the eat loop is still walking over the animals.  A repaint
 	# there would rebuild the hotel's buttons underneath that loop, so it goes
@@ -345,6 +347,21 @@ func _toren(titel: String, hint: String, beeld: Texture2D = null) -> void:
 		Hotel.naar_kamer(id))
 	Ui.blad_open({"titel": titel, "hint": hint, "beeld": beeld,
 		"inhoud": [kaart], "knoppen": [{"id": "sluit", "tekst": UiTekst.SLUITEN}]})
+	if OS.has_feature("web"):
+		_meld_toren(kaart)
+
+## The rooms of the tower as `[probe] bladknop kamer_<id>=`, once the sheet is
+## laid out and has popped in (0.2 s, `UiBlad`), so `tools/speel.js` can tap
+## one (`kamer_winkels`) like any button.
+func _meld_toren(kaart: UiPlattegrond) -> void:
+	await _na_plaatsing()
+	await get_tree().create_timer(0.3).timeout
+	if not is_instance_valid(kaart) or not kaart.is_inside_tree():
+		return
+	for id in Rooms.lijst():
+		var knop := kaart.knop_van(id)
+		if knop != null:
+			print("[probe] bladknop kamer_", id, "=", knop.get_global_rect())
 
 # --------------------------------------------------------------- de maten
 
@@ -610,6 +627,14 @@ func _na_plaatsing() -> void:
 ## the start screen was answered: "Verder spelen" restores a saved day, the
 ## hotel lays its buttons out for THAT day, and a probe that kept tapping the
 ## boot rectangles would tap empty glass (I1 finding 1).
+## In another room the buttons stand elsewhere: once the camera has slid in
+## (`World.TRAP_S`, the longer of the two rides), a probe hears where — so
+## `tools/speel.js` can take the stairs twice in one run.
+func _meld_na_de_rit() -> void:
+	await get_tree().create_timer(World.TRAP_S + 0.25).timeout
+	if is_inside_tree():
+		_meld_knoppen()
+
 func _meld_knoppen() -> void:
 	await _na_plaatsing()
 	for id in Hits.debug().keys():
