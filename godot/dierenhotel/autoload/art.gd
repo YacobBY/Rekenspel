@@ -36,6 +36,14 @@ const KOEL := Vector3(116, 100, 116)
 
 ## Silhouette treatment (art-sound-rules.md §1.6).
 const OMLIJN_KLEUR := Color(112.0 / 255.0, 90.0 / 255.0, 76.0 / 255.0, 0.26)
+
+## The pixel style (docs/ART-STIJL.md, owner 2026-09-30: "Zacht pastel is het
+## mooist").  Every face is flat: no ambient occlusion, three tones per colour.
+const P_TOP := 0.10                          ## the top face: this much toward white
+const P_RECHTS := 0.97                       ## the +x face catches the light
+const P_LINKS := Vector3(0.82, 0.80, 0.88)   ## the +z face: a cool, slightly lilac shade
+const P_RAND := 0.18                         ## rim light: a top pixel right over a side face
+const P_OMLIJN := 0.58                       ## the outline is the pixel inside it, this dark
 ## LRU size of the plate cache.  110 in the HTML; 160 since the review of
 ## 2026-09-24: a guest in view now draws a blink, a wag and a passing step on
 ## top of its poses, and eight dressed guests in one room would otherwise push
@@ -75,11 +83,45 @@ var _span_cache: Dictionary = {}    ## "vlak|g" -> Array of [y, x0, breedte]
 var _tint_cache: Dictionary = {}    ## rgb << 4 | (vlak * 5 + buren) -> tinted rgb
 var _bakken := 0                    ## how many plates were baked this session
 
+## The art style (docs/ART-STIJL.md).  "pixel" = soft pastel isometric pixel
+## art, the game's look since 2026-09-30; "voxel" = the original shaded voxel
+## look, kept so the two can be compared: `index.html?stijl=voxel`.
+var stijl := "pixel"
+
 signal model_geregistreerd(naam: String)
 
 func _ready() -> void:
 	_registreer_ingebouwd()
+	if OS.has_feature("web"):
+		var zoek := str(JavaScriptBridge.eval("location.search", true))
+		if zoek.contains("stijl=voxel"):
+			stijl = "voxel"
 	_bakmeting_misschien()
+
+## True in the pixel style: plates, floor and walls are drawn one pixel per
+## voxel-px and scaled up by g, and a sprite lands on that pixel grid.
+func pixel() -> bool:
+	return stijl == "pixel"
+
+## Switch the style (tests, and the URL flag at boot).  Every cached plate,
+## face list and shade belongs to one style, so they all go.
+func zet_stijl(s: String) -> void:
+	if s == stijl:
+		return
+	stijl = s
+	wis_platen()
+	_vlak_cache.clear()
+	_vlak_orde.clear()
+	_tint_cache.clear()
+	_stempels.clear()
+
+## Snap a canvas position to the pixel grid of the world: whole multiples of g
+## from `oorsprong` (the canvas point of voxel-px 0,0).  The voxel style does
+## not snap.
+func op_raster(p: Vector2, oorsprong: Vector2, g: int) -> Vector2:
+	if not pixel() or g <= 1:
+		return p
+	return oorsprong + ((p - oorsprong) / float(g)).round() * float(g)
 
 # ------------------------------------------------------------- bakmeting (web)
 ##
@@ -366,6 +408,8 @@ func bak(voxels: Array, g: int, opties: Dictionary = {}) -> Plaat:
 	# exactly as `extent()` does — a voxel whose three faces are all culled adds
 	# nothing to the plate.
 	var box := _doos(bron if bron["n"] > 0 else lijst)
+	if pixel():
+		return _bak_pixel(lijst, bron, box, g, omlijnen)
 	var w: int = maxi(1, (box[1] - box[0]) * g + 2 * PAD)
 	var h: int = maxi(1, (box[3] - box[2]) * g + 2 * PAD)
 	var dx: int = box[0] * g - PAD
@@ -388,6 +432,103 @@ func bak(voxels: Array, g: int, opties: Dictionary = {}) -> Plaat:
 	elif g >= 2:
 		_rond_af(img, false)
 	return Plaat.new(ImageTexture.create_from_image(img), dx, dy)
+
+## The pixel-style bake (docs/ART-STIJL.md).  The faces are stamped one pixel
+## per voxel-px — a top face is the 2-4 pixel diamond, each side face 2 x 2 —
+## then a top pixel resting on a side face gets a rim light, every empty pixel
+## next to the silhouette gets the outline (the colour of the pixel inside it,
+## darker), and the whole plate is scaled up by g without smoothing.
+##
+## The plate keeps the anchor convention of `bak`: it is drawn at
+## (anker * g + dx, anker * g + dy), with a padding of one voxel-px (so g canvas
+## px) where the outline lives.  `bron` is the silhouette the outline follows:
+## the whole bowl for its back half, so both halves share one ring.
+func _bak_pixel(lijst: Dictionary, bron: Dictionary, box: Array, g: int,
+		omlijnen: bool) -> Plaat:
+	var bw: int = box[1] - box[0] + 2
+	var bh: int = box[3] - box[2] + 2
+	var ox: int = -box[0] + 1
+	var oy: int = -box[2] + 1
+	var n := bw * bh
+	var kl := PackedInt32Array(); kl.resize(n); kl.fill(-1)
+	var soort := PackedByteArray(); soort.resize(n)   # 1 = top pixel, 2 = side pixel
+	_pixel_lijst(lijst, kl, soort, bw, ox, oy)
+	var sil := kl
+	if omlijnen and not is_same(bron, lijst):
+		sil = PackedInt32Array(); sil.resize(n); sil.fill(-1)
+		var s2 := PackedByteArray(); s2.resize(n)
+		_pixel_lijst(bron, sil, s2, bw, ox, oy)
+	var data := PackedByteArray(); data.resize(n * 4)
+	for y in bh:
+		for x in bw:
+			var i := y * bw + x
+			var c := kl[i]
+			var a := 255
+			if c >= 0:
+				if soort[i] == 1 and y + 1 < bh and soort[i + bw] == 2:
+					c = _licht(c, P_RAND)
+			elif omlijnen:
+				var b := -1
+				if y + 1 < bh and sil[i + bw] >= 0: b = sil[i + bw]
+				elif y > 0 and sil[i - bw] >= 0: b = sil[i - bw]
+				elif x + 1 < bw and sil[i + 1] >= 0: b = sil[i + 1]
+				elif x > 0 and sil[i - 1] >= 0: b = sil[i - 1]
+				if b < 0:
+					continue
+				c = _donker(b, P_OMLIJN)
+			else:
+				continue
+			var o := i * 4
+			data[o] = c >> 16 & 255
+			data[o + 1] = c >> 8 & 255
+			data[o + 2] = c & 255
+			data[o + 3] = a
+	var img := Image.create_from_data(bw, bh, false, Image.FORMAT_RGBA8, data)
+	if g > 1:
+		img.resize(bw * g, bh * g, Image.INTERPOLATE_NEAREST)
+	return Plaat.new(ImageTexture.create_from_image(img), (box[0] - 1) * g, (box[2] - 1) * g)
+
+## Stamp a face list one pixel per voxel-px, in painter order.
+func _pixel_lijst(lijst: Dictionary, kl: PackedInt32Array, soort: PackedByteArray,
+		bw: int, ox: int, oy: int) -> void:
+	var px: PackedInt32Array = lijst["px"]
+	var py: PackedInt32Array = lijst["py"]
+	var ct: PackedInt32Array = lijst["ct"]
+	var cr: PackedInt32Array = lijst["cr"]
+	var cl: PackedInt32Array = lijst["cl"]
+	for f in lijst["n"]:
+		var i := (py[f] + oy) * bw + px[f] + ox
+		var c := ct[f]
+		if c >= 0:
+			kl[i - 1] = c; kl[i] = c
+			soort[i - 1] = 1; soort[i] = 1
+			var j := i + bw
+			kl[j - 2] = c; kl[j - 1] = c; kl[j] = c; kl[j + 1] = c
+			soort[j - 2] = 1; soort[j - 1] = 1; soort[j] = 1; soort[j + 1] = 1
+		c = cr[f]
+		if c >= 0:
+			var j := i + 2 * bw
+			kl[j] = c; kl[j + 1] = c; kl[j + bw] = c; kl[j + bw + 1] = c
+			soort[j] = 2; soort[j + 1] = 2; soort[j + bw] = 2; soort[j + bw + 1] = 2
+		c = cl[f]
+		if c >= 0:
+			var j := i + 2 * bw
+			kl[j - 2] = c; kl[j - 1] = c; kl[j + bw - 2] = c; kl[j + bw - 1] = c
+			soort[j - 2] = 2; soort[j - 1] = 2; soort[j + bw - 2] = 2; soort[j + bw - 1] = 2
+
+## A packed rgb, `t` of the way toward white.
+static func _licht(rgb: int, t: float) -> int:
+	var r := rgb >> 16 & 255
+	var gr := rgb >> 8 & 255
+	var b := rgb & 255
+	return (int(r + (255 - r) * t + 0.5) << 16) | (int(gr + (255 - gr) * t + 0.5) << 8) \
+		| int(b + (255 - b) * t + 0.5)
+
+## A packed rgb times `f` (per channel when `f` is a Vector3).
+static func _donker(rgb: int, f) -> int:
+	var m := Vector3(f, f, f) if typeof(f) != TYPE_VECTOR3 else (f as Vector3)
+	return (int(float(rgb >> 16 & 255) * m.x + 0.5) << 16) \
+		| (int(float(rgb >> 8 & 255) * m.y + 0.5) << 8) | int(float(rgb & 255) * m.z + 0.5)
 
 ## Voxels -> a culled face list in painter order.  The result is a bundle of
 ## parallel packed arrays, which is what keeps a bake inside its budget:
@@ -640,6 +781,15 @@ func _maak_stempel(vlak: int, g: int, rgb: int, masker: bool, dik: int) -> Array
 ## `shade(hex, m)` — mix toward WARM above 1, toward KOEL below.  Returns the
 ## packed rgb, so a face list stays a PackedInt32Array.
 func _tint(rgb: int, vlak: int, buren: int) -> int:
+	if pixel():
+		# flat, no occlusion: slots 15..17 are free (the voxel keys stop at 14)
+		var ps := (rgb << 4) | (15 + vlak)
+		if _tint_cache.has(ps):
+			return _tint_cache[ps]
+		var pk := _licht(rgb, P_TOP) if vlak == Vlak.TOP \
+			else (_donker(rgb, P_RECHTS) if vlak == Vlak.RECHTS else _donker(rgb, P_LINKS))
+		_tint_cache[ps] = pk
+		return pk
 	var sleutel := (rgb << 4) | (vlak * 5 + buren)
 	if _tint_cache.has(sleutel):
 		return _tint_cache[sleutel]

@@ -956,7 +956,13 @@ func _bakplaat(st: Dictionary) -> Dictionary:
 	var img: Image = plaat.tex.get_image()
 	var op := Vector2i((World.scherm_doel(float(st["x"]), float(st["z"]), 0.0)
 		+ Vector2(plaat.dx, plaat.dy)).round())
-	var inkt := img.get_used_rect()
+	# `ink` is the plate itself.  In the pixel style (docs/ART-STIJL.md) every
+	# plate also wears a one-pixel outline; two neighbouring outlines may touch,
+	# like the frames of two signs side by side, but `img` (plate AND outline)
+	# must still share no pixel with its neighbour.
+	var kaal = Art.bak(deel, int(World.schaal()["g"]), {"omlijn": false})
+	var inkt: Rect2i = kaal.tex.get_image().get_used_rect()
+	inkt.position += Vector2i(kaal.dx - plaat.dx, kaal.dy - plaat.dy)
 	return {"img": img, "op": op, "ink": Rect2i(op + inkt.position, inkt.size)}
 
 ## The plate of stone `i` on the screen spot the world gives that stone, or `{}`

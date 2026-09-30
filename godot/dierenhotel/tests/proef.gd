@@ -53,6 +53,11 @@ func alleen_spellen(ids: Array) -> void:
 			Games._scenes.erase(k)
 
 func herstel_spellen() -> void:
+	# a test that looked at the old voxel style (docs/ART-STIJL.md) hands the
+	# game back in its own style
+	var art = Engine.get_main_loop().root.get_node_or_null(^"Art")
+	if art != null and art.stijl != "pixel":
+		art.zet_stijl("pixel")
 	for k in _spellen_weg.keys():
 		Games._defs[k] = _spellen_weg[k]
 		if _scenes_weg.get(k) != null:

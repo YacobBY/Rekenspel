@@ -97,6 +97,12 @@ func ververs() -> void:
 		- Vector2(0.0, vy * Art.HG * g + scheef)
 	if beeld.flip_h:
 		beeld.position.x = -plaat.dx - plaat.w + ankerpx.x
+	# The pixel style (docs/ART-STIJL.md): the sprite lands on the world's pixel
+	# grid, so a walking guest moves a whole pixel at a time and its pixels line
+	# up with the floor's instead of shimmering between them.
+	if Art.pixel():
+		var raster := Art.op_raster(position + beeld.position, World.scherm(0.0, 0.0, 0.0), g)
+		beeld.position = raster - position
 
 ## The object's screen rectangle in frame units — Hits needs it to keep a
 ## button completely off its object.

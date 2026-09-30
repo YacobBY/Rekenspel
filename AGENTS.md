@@ -106,8 +106,10 @@ written down and moved past is worth more than a session that waits.
 
 ## 1. What this is
 
-A tablet maths game for Dutch children of 6–9 (groep 3–5): a voxel **animal
-hotel** in which every number lives in the world (biscuits in a bag, beds in a
+A tablet maths game for Dutch children of 6–9 (groep 3–5): an **animal hotel**
+built from voxel models and drawn as **soft pastel isometric pixel art** (since
+2026-09-30; the binding style rules are `docs/ART-STIJL.md`, the old voxel look is
+`index.html?stijl=voxel`), in which every number lives in the world (biscuits in a bag, beds in a
 room, coins on a counter, hands on a clock). No quiz screens, no punishment, no
 reading required. Eighteen minigames (§6), the rooms as data (`Rooms.lijst()`,
 eleven of them today), a day cycle with guests, wishes, check-in and a bill at
@@ -174,6 +176,7 @@ HANDOFF.md                state of the port, verification status, known limits, 
 ANALYSIS.md               2026-09-15 analysis: shortfalls + prioritised improvements (§4), and
                           §5 "things deliberately NOT to change"
 HOTEL.md                  game design; §9 = the rules for every child-facing text
+docs/ART-STIJL.md         the art style (pastel isometric pixel art): rules, model tips, golden-plate round
 IDEAS.md                  curriculum table (groep 3/4/5) and design traps
 main.py                   PyCharm leftover, ignore
 ```
@@ -414,4 +417,6 @@ Per-game maths lives in the classes `Sommen.Zwembad`, `.Wekker`, `.Hinkel`,
 - Hotspot option keys: `world.md` §5.4; card/bubble/tag keys: §5.5–5.6; room data: §1.
 - Every child-facing string the shell owns: `godot/dierenhotel/ui/teksten.gd`.
 - Text rules for children: `HOTEL.md` §9. Curriculum: `IDEAS.md`.
+- The look: `docs/ART-STIJL.md` (pixel style; after changing a model rewrite the
+  pixel goldens: `DH_GOUD_SCHRIJF=1 DH_TEST_FILTER=test_pixelstijl tools/test.sh`).
 - Append-only build log of the port: `.fanout/ledger.md`.

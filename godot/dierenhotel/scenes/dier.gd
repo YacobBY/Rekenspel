@@ -21,6 +21,7 @@ static func maak_dier(id: String) -> Dierbeeld:
 	o.name = "dier_" + id
 	o.gast_id = id
 	o.anker = Art.DIER_ANKER
+	o.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST   # the pixel shadow stays crisp
 	var s := Sprite2D.new()
 	s.name = "Beeld"
 	s.centered = false
@@ -86,6 +87,12 @@ func _draw() -> void:
 	var straal := ArtEffect.grondschaduw(g, _staat)
 	var kl := ArtEffect.SCHADUW_KL
 	kl.a = ArtEffect.SCHADUW_ALFA
+	if Art.pixel():
+		# the pixel style (docs/ART-STIJL.md): a stepped ellipse on the pixel grid
+		var tex := ArtEffect.schaduw_pixels(g, _staat)
+		var mid := Art.op_raster(position, World.scherm(0.0, 0.0, 0.0), g) - position
+		draw_texture(tex, mid - tex.get_size() / 2.0)
+		return
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, straal.y / maxf(1.0, straal.x)))
 	draw_circle(Vector2.ZERO, straal.x, kl)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

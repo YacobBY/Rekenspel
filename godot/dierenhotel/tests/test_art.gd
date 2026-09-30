@@ -1,6 +1,12 @@
 extends Proef
 ## W4 — the voxel baker against the golden-image oracle (architecture.md §3.6).
 ##
+## Since 2026-09-30 the game draws in the pixel style (docs/ART-STIJL.md).  The
+## golden plates below come from the HTML engine and pin the VOXEL style, which
+## stays reachable as `index.html?stijl=voxel`; every golden test therefore
+## switches to it first (`Proef.herstel_spellen` switches back).  The pixel
+## style has its own goldens and rules in tests/test_pixelstijl.gd.
+##
 ## `tests/gouden/` holds 72 plates that were pulled losslessly out of the
 ## running HTML engine (73 rows in `meta.json`: `gast_hond_rust_g4` is both a
 ## pose and a species).  Every test below bakes the same model/pose/g in Godot
@@ -146,11 +152,13 @@ func _schrijf_rapport() -> void:
 # ----------------------------------------------------------------- de gasten
 
 func test_gouden_gast_alle_houdingen() -> void:
+	Art.zet_stijl("voxel")   # the HTML goldens pin the voxel style (docs/ART-STIJL.md)
 	for pose in ArtGasten.POSE.keys():
 		_keur("gast_hond_%s_g4" % pose, Art.dier("hond", pose, 4))
 	_schrijf_rapport()
 
 func test_gouden_gast_alle_soorten() -> void:
+	Art.zet_stijl("voxel")   # the HTML goldens pin the voxel style (docs/ART-STIJL.md)
 	for kind in ArtGasten.SOORTEN:
 		_keur("gast_%s_rust_g4" % kind, Art.dier(kind, "rust", 4))
 	_schrijf_rapport()
@@ -165,28 +173,33 @@ func test_gouden_gast_alle_soorten() -> void:
 ## half (art-sound-rules.md §11.5), which cannot come out of `Art.kit.dier` and
 ## is asserted in `test_water_alleen_op_de_zwemmer` instead.
 func test_gouden_gast_lig_en_loop() -> void:
+	Art.zet_stijl("voxel")   # the HTML goldens pin the voxel style (docs/ART-STIJL.md)
 	for kind in ["poes", "konijn", "gans"]:
 		for pose in ["lig", "loopA", "loopB"]:
 			_keur("gast_%s_%s_g4" % [kind, pose], Art.dier(kind, pose, 4))
 	_schrijf_rapport()
 
 func test_gouden_gast_alle_schalen() -> void:
+	Art.zet_stijl("voxel")   # the HTML goldens pin the voxel style (docs/ART-STIJL.md)
 	for g in [2, 3, 5]:
 		_keur("gast_hond_rust_g%d" % g, Art.dier("hond", "rust", g))
 	_schrijf_rapport()
 
 func test_gouden_gast_tooi() -> void:
+	Art.zet_stijl("voxel")   # the HTML goldens pin the voxel style (docs/ART-STIJL.md)
 	for acc in ["hoedje", "sjaaltje", "bal", "hoedje,sjaaltje,bal"]:
 		_keur("gast_hond_rust_g4_%s" % acc.replace(",", "+"), Art.dier("hond", "rust", 4, acc))
 	_schrijf_rapport()
 
 func test_gouden_kom() -> void:
+	Art.zet_stijl("voxel")   # the HTML goldens pin the voxel style (docs/ART-STIJL.md)
 	for n in 5:
 		_keur("kom_n%d_achter_g4" % n, Art.kom(n, 4, false))
 		_keur("kom_n%d_voor_g4" % n, Art.kom(n, 4, true))
 	_schrijf_rapport()
 
 func test_gouden_decor() -> void:
+	Art.zet_stijl("voxel")   # the HTML goldens pin the voxel style (docs/ART-STIJL.md)
 	for naam in ["boom", "hok", "bed", "prikbord", "kar", "tobbe", "kist", "plant",
 			"balie", "mand", "bal", "zak", "kast", "lamp"]:
 		for g in [2, 4]:
@@ -196,6 +209,7 @@ func test_gouden_decor() -> void:
 # ------------------------------------------------------- maten, anker, census
 
 func test_plaatmaat_en_offset() -> void:
+	Art.zet_stijl("voxel")   # the HTML goldens pin the voxel style (docs/ART-STIJL.md)
 	var meta := _meta()
 	if meta.is_empty():
 		fout("meta.json ontbreekt")
@@ -241,6 +255,7 @@ func test_modelcensus() -> void:
 		gelijk(c["lxhxd"], Vector3i(int(m[0]), int(m[1]), int(m[2])), "%s l x h x d" % kind)
 
 func test_anker_en_projectie() -> void:
+	Art.zet_stijl("voxel")   # the HTML goldens pin the voxel style (docs/ART-STIJL.md)
 	# X4 §5.1: gast_hond_rust is 64 x 60 voxel-px at (-16, -29); at g = 4 that is
 	# 64*4 + 4 = 260 wide and the offset is -16*4 - 2 = -66.
 	var p := Art.dier("hond", "rust", 4)
@@ -486,6 +501,7 @@ func test_opnieuw_aanmelden_gooit_de_plaat_weg() -> void:
 ## the contour's alpha), so the bowl's front wall — the one plate that is drawn
 ## without a contour of its own — is where it has to show.
 func test_rondaf_bijt_alleen_zonder_omlijning() -> void:
+	Art.zet_stijl("voxel")   # the HTML goldens pin the voxel style (docs/ART-STIJL.md)
 	var voor = Art.kom(4, 4, true)
 	var achter = Art.kom(4, 4, false)
 	var t := 0

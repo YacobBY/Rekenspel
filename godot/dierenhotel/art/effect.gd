@@ -98,6 +98,33 @@ static func grondschaduw(g: int, staat := "") -> Vector2:
 	var r := SCHADUW_R_ZIT if (staat == "zit" or staat == "sip") else SCHADUW_R
 	return Vector2(r * g, r * 0.5 * g)
 
+static var _schaduw_cache := {}
+
+## The pixel style's ground shadow (docs/ART-STIJL.md): the same ellipse, one
+## pixel per voxel-px with hard steps, blown up by g.  Even-sized, so its middle
+## falls on a grid line under the paws.
+static func schaduw_pixels(g: int, staat := "") -> ImageTexture:
+	var r := SCHADUW_R_ZIT if (staat == "zit" or staat == "sip") else SCHADUW_R
+	var sleutel := "%d|%s" % [g, r]
+	if _schaduw_cache.has(sleutel):
+		return _schaduw_cache[sleutel]
+	var w := int(r) * 2
+	var h := int(r)
+	var img := Image.create_empty(w, h, false, Image.FORMAT_RGBA8)
+	var kl := SCHADUW_KL
+	kl.a = SCHADUW_ALFA
+	for y in h:
+		for x in w:
+			var dx := (x + 0.5 - w / 2.0) / (w / 2.0)
+			var dy := (y + 0.5 - h / 2.0) / (h / 2.0)
+			if dx * dx + dy * dy <= 1.0:
+				img.set_pixel(x, y, kl)
+	if g > 1:
+		img.resize(w * g, h * g, Image.INTERPOLATE_NEAREST)
+	var tex := ImageTexture.create_from_image(img)
+	_schaduw_cache[sleutel] = tex
+	return tex
+
 ## The card shadow: two stacked ground rhombi, the inner one inset by 2 voxels,
 ## each filled rgba(74,59,51,.07) — the overlap makes the middle darker.
 const KAART_SCHADUW := [3, 1, 19, 14]

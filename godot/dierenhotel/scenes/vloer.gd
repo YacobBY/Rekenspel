@@ -128,9 +128,21 @@ const TRAP_AF_TREDEN := 8
 const TRAP_PAAL := 8.0                    ## the banister stands this high over a step
 const TRAP_DIEPTE := -80.0                ## how far down the dark of a flight going down runs
 
+## The pixel style (docs/ART-STIJL.md): the outline along the front edges of the
+## floor and the top of the walls, as dark as a plate's (`Art.P_OMLIJN`).
+const RAND_VLOER := Color("#84765F")
+const RAND_WAND := Color("#928B80")
+
 var _mesh: ArrayMesh = null
 var _kamer := ""
 var _vignet: ImageTexture = null
+## The pixel style draws the same mesh one pixel per voxel-px into this
+## texture, which the node's own scale (g) blows up without smoothing.
+var _beeld: ImageTexture = null
+var _beeld_bij := Vector2.ZERO    ## voxel-px of the texture's top-left pixel
+
+func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 func _draw() -> void:
 	var r := Rooms.get_kamer(World.kamer_nu())
@@ -138,7 +150,10 @@ func _draw() -> void:
 		return
 	if _mesh == null or _kamer != r.id:
 		_bouw(r)
-	draw_mesh(_mesh, null)
+	if Art.pixel() and _beeld != null:
+		draw_texture(_beeld, _beeld_bij)
+	else:
+		draw_mesh(_mesh, null)
 	_teken_vignet(r)
 
 ## Rebuild after a furniture change (the door frames and the mats move along).
@@ -167,6 +182,11 @@ func _bouw(r: Rooms.Kamer) -> void:
 		_wanden(r, v, k, i)
 	if not r.gevel.is_empty():
 		_gevel(r, v, k, i)
+	_beeld = null
+	if Art.pixel():
+		if not r.erf:
+			_randen(r, v, k, i)
+		_rasteriseer(v, k, i)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = v
@@ -759,6 +779,114 @@ static func _knip(p: Array, vlakken: Array) -> Array:
 				nieuw.append(s.lerp(e, ds / (ds - de)))
 		uit = nieuw
 	return uit
+
+## The pixel style's outline round the room (docs/ART-STIJL.md): one voxel-px
+## of dark under the two front edges of the floor, over the back edge of each
+## wall's top cap and down the two open ends of the walls — the same ring a
+## plate gets, so the room reads as one more object.
+func _randen(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
+		i: PackedInt32Array) -> void:
+	var een := Vector2(0, 1)
+	var a := _proj(r.w, 0)
+	var b := _proj(r.w, r.d)
+	var c := _proj(0, r.d)
+	_vlak(v, k, i, [a, b, b + een, a + een], RAND_VLOER)
+	_vlak(v, k, i, [c, b, b + een, c + een], RAND_VLOER)
+	if r.wand <= 0:
+		return
+	var h := float(r.wand)
+	var t := float(WAND_DIK)
+	# the corner the two top caps leave open, and the open end of each wall:
+	# a wall that is a plane with a cap would show its cap overhanging in the air
+	_vlak(v, k, i, [_proj(-t, -t, h), _proj(0, -t, h), _proj(0, 0, h), _proj(-t, 0, h)], W_TOP)
+	_vlak(v, k, i, [_proj(r.w, -t, 0), _proj(r.w, 0, 0), _proj(r.w, 0, h), _proj(r.w, -t, h)],
+		W_R.darkened(0.06))
+	_vlak(v, k, i, [_proj(-t, r.d, 0), _proj(0, r.d, 0), _proj(0, r.d, h), _proj(-t, r.d, h)],
+		W_L.darkened(0.06))
+	# the ring: over the back edges of the caps, down the two ends, under their feet
+	var p0 := _proj(-t, -t, h)
+	var p1 := _proj(r.w, -t, h)
+	var p2 := _proj(-t, r.d, h)
+	_vlak(v, k, i, [p0 - een, p1 - een, p1, p0], RAND_WAND)
+	_vlak(v, k, i, [p0 - een, p2 - een, p2, p0], RAND_WAND)
+	var e0 := _proj(r.w, -t, 0)
+	_vlak(v, k, i, [Vector2(p1.x, p1.y), Vector2(p1.x + 1, p1.y), Vector2(e0.x + 1, e0.y + 1),
+		Vector2(e0.x, e0.y + 1)], RAND_WAND)
+	_vlak(v, k, i, [e0, a, a + een, e0 + een], RAND_WAND)
+	var f0 := _proj(-t, r.d, 0)
+	_vlak(v, k, i, [Vector2(p2.x - 1, p2.y), Vector2(p2.x, p2.y), Vector2(f0.x, f0.y + 1),
+		Vector2(f0.x - 1, f0.y + 1)], RAND_WAND)
+	_vlak(v, k, i, [f0, c, c + een, f0 + een], RAND_WAND)
+
+## Fill the mesh's triangles one pixel per voxel-px (pixel centres, painter
+## order = index order, the same order `draw_mesh` uses), each row span in the
+## colour the vertex colours give at its middle.  Translucent spans (the wall
+## shadow, the lintel's fading shade) are blended; opaque ones are plain fills.
+func _rasteriseer(v: PackedVector2Array, k: PackedColorArray, i: PackedInt32Array) -> void:
+	if i.is_empty():
+		return
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for p in v:
+		lo = Vector2(minf(lo.x, p.x), minf(lo.y, p.y))
+		hi = Vector2(maxf(hi.x, p.x), maxf(hi.y, p.y))
+	var x0 := int(floor(lo.x))
+	var y0 := int(floor(lo.y))
+	var bw := int(ceil(hi.x)) - x0 + 1
+	var bh := int(ceil(hi.y)) - y0 + 1
+	if bw <= 0 or bh <= 0 or bw * bh > 8_000_000:
+		return
+	var img := Image.create_empty(bw, bh, false, Image.FORMAT_RGBA8)
+	var strook := {}     # translucent colour -> a bw x 1 strip of it, for blend_rect
+	var t := 0
+	while t + 2 < i.size():
+		var a := v[i[t]] - Vector2(x0, y0)
+		var b := v[i[t + 1]] - Vector2(x0, y0)
+		var c := v[i[t + 2]] - Vector2(x0, y0)
+		var ka := k[i[t]]
+		var kb := k[i[t + 1]]
+		var kc := k[i[t + 2]]
+		t += 3
+		var ymin := maxi(0, int(ceil(minf(a.y, minf(b.y, c.y)) - 0.5)))
+		var ymax := mini(bh - 1, int(ceil(maxf(a.y, maxf(b.y, c.y)) - 0.5)) - 1)
+		var opp := (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)
+		if absf(opp) < 0.000001:
+			continue
+		var effen := ka == kb and kb == kc
+		for y in range(ymin, ymax + 1):
+			var my := y + 0.5
+			var l := INF
+			var rr := -INF
+			for e in [[a, b], [b, c], [c, a]]:
+				var p: Vector2 = e[0]
+				var q: Vector2 = e[1]
+				if (p.y <= my and q.y > my) or (q.y <= my and p.y > my):
+					var sx := p.x + (q.x - p.x) * (my - p.y) / (q.y - p.y)
+					l = minf(l, sx)
+					rr = maxf(rr, sx)
+			if l > rr:
+				continue
+			var xs := maxi(0, int(ceil(l - 0.5)))
+			var xe := mini(bw, int(ceil(rr - 0.5)))
+			if xe <= xs:
+				continue
+			var kl := ka
+			if not effen:
+				var m := Vector2((xs + xe) * 0.5, my)
+				var w1 := ((b.x - m.x) * (c.y - m.y) - (c.x - m.x) * (b.y - m.y)) / opp
+				var w2 := ((c.x - m.x) * (a.y - m.y) - (a.x - m.x) * (c.y - m.y)) / opp
+				kl = ka * w1 + kb * w2 + kc * (1.0 - w1 - w2)
+			if kl.a >= 0.995:
+				img.fill_rect(Rect2i(xs, y, xe - xs, 1), Color(kl, 1.0))
+			elif kl.a > 0.004:
+				var sl := Color(kl.r, kl.g, kl.b, snappedf(kl.a, 1.0 / 64.0))
+				if not strook.has(sl):
+					var s := Image.create_empty(bw, 1, false, Image.FORMAT_RGBA8)
+					s.fill(sl)
+					strook[sl] = s
+				img.blend_rect(strook[sl], Rect2i(0, 0, xe - xs, 1), Vector2i(xs, y))
+	_beeld = ImageTexture.create_from_image(img)
+	_beeld_bij = Vector2(x0, y0)
 
 ## A soft radial vignette over the WHOLE view, as one stretched texture — the
 ## HTML paints it over the entire floor plate, which is the frame.  Anchoring

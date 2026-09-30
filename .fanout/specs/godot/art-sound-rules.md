@@ -20,6 +20,15 @@ translate them, do not re-word them, do not add punctuation.
 
 ## 1. The rendering model
 
+> **Since 2026-09-30 the game's default look is soft pastel isometric pixel art —
+> `docs/ART-STIJL.md` is binding for it** (owner's choice). The models, palettes,
+> poses, anchors and projection below still hold; what changed is how a face list
+> is drawn: one pixel per voxel-px, three flat tones per colour (no occlusion), a
+> one-pixel outline in the neighbouring colour × 0.58, no anti-aliasing, blown up by
+> `g` with nearest filtering, sprites snapped to the pixel grid. §1.1, §1.6 and §3
+> describe the ORIGINAL voxel look, which stays reachable as `index.html?stijl=voxel`
+> and is still what `tests/gouden/` pins.
+
 ### 1.1 What kind of art is this
 
 Not voxel 3D, not pixel art, not vector, not emoji sprites: it is **hand-built voxel
