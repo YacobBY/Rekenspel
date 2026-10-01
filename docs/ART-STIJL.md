@@ -1,5 +1,16 @@
 # De art-stijl van Dierenhotel Kwispelsteeg: zacht pastel isometrische pixelart
 
+> **2026-10-01 — de standaard is weer de voxelstijl.** De eigenaar: *"Ik wil het spel
+> eigenlijk toch graag terug naar de oude isometrische 3d files. Gooi de nieuwe art style niet
+> weg maar bewaar het als backup zodat ik uiteindelijk eventueel kan vergelijken."* Het spel
+> tekent weer in de gladde isometrische voxelstijl (`Art.STANDAARD = "voxel"`). Alles in dit
+> document blijft gelden voor de **pixelstijl als backup**: die zit volledig in de code en is te
+> zien met **`index.html?stijl=pixel`** (naast de standaard, om te vergelijken); de tak
+> `backup/pixelart` op GitHub bewaart het spel zoals het in pixelart was. De pixeltests
+> (`tests/test_pixelstijl.gd`, de gouden pixelplaatjes) schakelen zelf naar de pixelstijl en
+> blijven dus bewaken dat de backup heel blijft. Een nieuw model maak je voortaan voor de
+> voxelstijl; de pixelplaatjes schrijf je daarna nog wel opnieuw (§6, stap 2).
+
 Vastgelegd op 2026-09-30 na de keuze van de eigenaar ("Zacht pastel is het mooist"), uit drie
 mockups: A Habbo-klassiek (zwarte randen), **B zacht pastel** (gekozen) en C grove pixels. Dit
 document is de regel voor alles wat in de wereld getekend wordt. Het vervangt voor de standaardstijl
@@ -108,7 +119,7 @@ De gouden plaatjes in `tests/gouden_pixel/` zijn op `g = 1` gebakken: dat is de 
 dat je die plaatjes opnieuw schrijft (stap 2) en meecommit. Een onbewuste wijziging laat de test
 rood worden.
 
-## 7. De oude voxelstijl
+## 7. De voxelstijl (sinds 2026-10-01 weer de standaard)
 
 De oorspronkelijke look (gladde vlakken, occlusie-schaduw, zachte donkere contour) blijft bestaan
 om te kunnen vergelijken: open het spel als **`index.html?stijl=voxel`**. De gouden plaatjes van

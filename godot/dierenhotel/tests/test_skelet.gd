@@ -30,9 +30,10 @@ func test_baker_maakt_een_plaat() -> void:
 	waar(p != null, "plaat bestaat")
 	if p == null:
 		return
-	# 4x4x4 voxels: the box is (4 + 4) * S = 16 voxel-px wide; the pixel style
-	# (docs/ART-STIJL.md) pads one voxel-px of outline on each side, so 18 * g
-	gelijk(p.w, ((4 + 4) * 2 + 2) * 4, "plaatbreedte bij g=4")
+	# 4x4x4 voxels: the box is (4 + 4) * S = 16 voxel-px wide, + 2 px padding in
+	# the voxel style; the pixel style (docs/ART-STIJL.md) pads one voxel-px of
+	# outline on each side, so 18 * g
+	gelijk(p.w, ((4 + 4) * 2 + 2) * 4 if Art.pixel() else (4 + 4) * 2 * 4 + 4, "plaatbreedte bij g=4")
 	waar(p.h > 0, "plaathoogte")
 	waar(p.tex.get_image().get_used_rect().size.x > 0, "er staat iets op")
 	# a second call must hit the cache, not bake again

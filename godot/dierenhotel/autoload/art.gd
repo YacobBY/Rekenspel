@@ -83,10 +83,16 @@ var _span_cache: Dictionary = {}    ## "vlak|g" -> Array of [y, x0, breedte]
 var _tint_cache: Dictionary = {}    ## rgb << 4 | (vlak * 5 + buren) -> tinted rgb
 var _bakken := 0                    ## how many plates were baked this session
 
-## The art style (docs/ART-STIJL.md).  "pixel" = soft pastel isometric pixel
-## art, the game's look since 2026-09-30; "voxel" = the original shaded voxel
-## look, kept so the two can be compared: `index.html?stijl=voxel`.
-var stijl := "pixel"
+## The art style (docs/ART-STIJL.md).  "voxel" = the original shaded
+## isometric voxel look; "pixel" = soft pastel isometric pixel art, the game's
+## look from 2026-09-30 until the owner went back to the voxels on 2026-10-01
+## ("Ik wil het spel eigenlijk toch graag terug naar de oude isometrische 3d
+## files. Gooi de nieuwe art style niet weg maar bewaar het als backup zodat ik
+## uiteindelijk eventueel kan vergelijken").  The pixel style stays whole and
+## reachable as `index.html?stijl=pixel` (and `?stijl=voxel` still works); the
+## branch `backup/pixelart` holds the game as it was in pixel art.
+const STANDAARD := "voxel"
+var stijl := STANDAARD
 
 signal model_geregistreerd(naam: String)
 
@@ -94,9 +100,16 @@ func _ready() -> void:
 	_registreer_ingebouwd()
 	if OS.has_feature("web"):
 		var zoek := str(JavaScriptBridge.eval("location.search", true))
-		if zoek.contains("stijl=voxel"):
+		if zoek.contains("stijl=pixel"):
+			stijl = "pixel"
+		elif zoek.contains("stijl=voxel"):
 			stijl = "voxel"
 	_bakmeting_misschien()
+
+## The style the game draws in when nothing asks for another (tests switch
+## back to it after every test, `Proef.herstel_spellen`).
+func standaard() -> String:
+	return STANDAARD
 
 ## True in the pixel style: plates, floor and walls are drawn one pixel per
 ## voxel-px and scaled up by g, and a sprite lands on that pixel grid.

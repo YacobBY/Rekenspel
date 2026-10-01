@@ -52,7 +52,9 @@ func _init() -> void:
 	name = "FotoScherm"
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	focus_mode = Control.FOCUS_NONE
-	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	# pixel art stays crisp when it is blown up; the voxel plates are smooth
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST if Art.pixel() \
+		else CanvasItem.TEXTURE_FILTER_LINEAR
 
 ## How large `Hits` must put it down (`hits.gd:_maat_van`).  `Hits` pins the
 ## size it placed into `custom_minimum_size` and takes the larger of that and

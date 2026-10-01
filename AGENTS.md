@@ -107,9 +107,13 @@ written down and moved past is worth more than a session that waits.
 ## 1. What this is
 
 A tablet maths game for Dutch children of 6–9 (groep 3–5): an **animal hotel**
-built from voxel models and drawn as **soft pastel isometric pixel art** (since
-2026-09-30; the binding style rules are `docs/ART-STIJL.md`, the old voxel look is
-`index.html?stijl=voxel`), in which every number lives in the world (biscuits in a bag, beds in a
+built from voxel models and drawn in the **isometric voxel style** (shaded, smooth;
+the look of the HTML original). From 2026-09-30 to 2026-10-01 it was drawn as soft
+pastel isometric pixel art; the owner went back to the voxels and asked to keep the
+pixel art as a backup to compare: it is whole in the code (`Art.STANDAARD = "voxel"`,
+`index.html?stijl=pixel` shows the pixel art, rules in `docs/ART-STIJL.md`, its tests
+switch to it themselves) and the branch `backup/pixelart` holds the game as it was.
+Every number lives in the world (biscuits in a bag, beds in a
 room, coins on a counter, hands on a clock). No quiz screens, no punishment, no
 reading required. Nineteen minigames (§6), the rooms as data (`Rooms.lijst()`,
 eleven of them today), a day cycle with guests, wishes, check-in and a bill at
@@ -433,6 +437,7 @@ Per-game maths lives in the classes `Sommen.Zwembad`, `.Wekker`, `.Hinkel`,
 - Hotspot option keys: `world.md` §5.4; card/bubble/tag keys: §5.5–5.6; room data: §1.
 - Every child-facing string the shell owns: `godot/dierenhotel/ui/teksten.gd`.
 - Text rules for children: `HOTEL.md` §9. Curriculum: `IDEAS.md`.
-- The look: `docs/ART-STIJL.md` (pixel style; after changing a model rewrite the
-  pixel goldens: `DH_GOUD_SCHRIJF=1 DH_TEST_FILTER=test_pixelstijl tools/test.sh`).
+- The look: the voxel style is the default again (2026-10-01); `docs/ART-STIJL.md`
+  holds the pixel style kept as a backup (`?stijl=pixel`). After changing a model
+  still rewrite the pixel goldens: `DH_GOUD_SCHRIJF=1 DH_TEST_FILTER=test_pixelstijl tools/test.sh`.
 - Append-only build log of the port: `.fanout/ledger.md`.
