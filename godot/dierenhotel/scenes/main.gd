@@ -154,16 +154,57 @@ func _begin() -> void:
 	print("[probe] opslag= dag=", int(bewaard.get("dag", 1)),
 		" sterren=", int(bewaard.get("sterren", 0)),
 		" munten=", int(bewaard.get("munten", 0)))
+	_maak_startblad()
+	startblad.toon()
+
+func _maak_startblad() -> void:
+	if startblad != null and is_instance_valid(startblad):
+		return
 	startblad = UiStartblad.new()
 	add_child(startblad)
 	startblad.gekozen.connect(_hotel_gekozen)
+	startblad.vervangen.connect(_hotel_vervangen)
 	startblad.blad_klaar.connect(_meld_stand)
+
+## `🏨 Hotels` in the chrome (2026-10-01): the hotels again, during play — to
+## switch to a sister's hotel without restarting the app, to start a new one,
+## or for a parent's `💾`/`📂` on a tablet that had no hotel before this one.
+## A running game stops the normal way first, and the hotel is saved before
+## anything else can happen to it.
+func _hotels() -> void:
+	if not Games.actief().is_empty():
+		Games.stop()
+	_bewaar_huidig()
+	_maak_startblad()
+	startblad.in_spel = true
 	startblad.toon()
+
+## The hotel that is running goes to its file now (a no-op before the start
+## sheet was answered: then nothing runs that could be lost).
+func _bewaar_huidig() -> void:
+	if State.gestart():
+		State.bewaar()
+
+## Leave the running hotel's world behind before another one takes its place:
+## the walk-along, and every button of the old day — a half-done check-in, a
+## bill on the counter, the evening's families.  `Hotel.start()` paints the new
+## hotel's own afterwards, exactly as after a reload.
+func _ruim_hotel_op() -> void:
+	Hotel.stop_volgen()
+	Hits.wis_alles()
 
 ## The child picked hotel `n` on the start sheet: continue it, or (`nieuw`)
 ## begin a fresh hotel there — the sheet already asked whether an old one may
 ## go.  A hotel whose file turns out unreadable after all begins fresh.
+## During play the hotel that runs is saved first; picking it again plays on.
 func _hotel_gekozen(n: int, nieuw: bool) -> void:
+	if State.gestart():
+		if n == State.hotel and not nieuw:
+			_meld_stand("blijf")
+			_meld_knoppen()
+			return
+		_bewaar_huidig()
+		_ruim_hotel_op()
 	State.kies_hotel(n)
 	if not nieuw and State.lees():
 		State.start_gekozen()
@@ -181,6 +222,19 @@ func _hotel_gekozen(n: int, nieuw: bool) -> void:
 	_meld_stand("nieuw")
 	_intro_start()
 	_meld_knoppen()
+
+## A parent's `📂 Open` gave up the RUNNING hotel's slot for a file: the file
+## is the hotel now, so it is loaded without saving the old one over it.
+func _hotel_vervangen(n: int) -> void:
+	_ruim_hotel_op()
+	State.kies_hotel(n)
+	if not State.lees():
+		return
+	State.start_gekozen()
+	_volg_geluid()
+	Hotel.start()
+	_ververs_chroom()
+	_meld_stand("vervangen")
 
 # ------------------------------------------------------------------- intro
 
@@ -223,6 +277,7 @@ func _bouw_chroom() -> void:
 	chroom.geluid_knop.pressed.connect(_geluid)
 	chroom.prikbord_knop.pressed.connect(Hotel.bord_open)
 	chroom.avond_knop.pressed.connect(Hotel.avondronde)
+	chroom.hotels_knop.pressed.connect(_hotels)
 	kamerbalk.bouw(Ui.maten)
 	if not kamerbalk.kamer_gekozen.is_connected(_naar_kamer):
 		kamerbalk.kamer_gekozen.connect(_naar_kamer)
@@ -624,7 +679,7 @@ func _meld_later() -> void:
 	_meld_stand("boot")
 	print("[probe] tik=", _tikken)
 	for k in [chroom.munt_badge, chroom.brief_badge, chroom.geluid_knop,
-			chroom.prikbord_knop, chroom.avond_knop]:
+			chroom.prikbord_knop, chroom.avond_knop, chroom.hotels_knop]:
 		print("[probe] chroomknop ", k.name, "=", k.get_global_rect())
 	await _meld_knoppen()
 	# a fresh game is under the intro: say so, and where its buttons are

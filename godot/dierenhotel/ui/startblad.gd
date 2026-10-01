@@ -16,13 +16,24 @@ extends Node
 ## (`gekozen`).  Nothing is written before that answer, except by the parent's
 ## `📂 Open`, which writes only the file it was given into a free hotel (or the
 ## one the confirmation gave up).
+##
+## During play the same sheet comes back through the chrome's `🏨 Hotels`
+## (`in_spel`): titled `🏨 Kies een hotel`, with `⬅ Terug`, and closable with
+## a tap beside it.  The running hotel is the highlighted tile; tapping it
+## plays on.  A file opened then never changes which hotel is running — unless
+## the confirmation gave up the running hotel itself, then the file's hotel is
+## loaded at once (`vervangen`), or the next save would overwrite it.
 
 ## The child chose hotel `n`: continue it, or (`nieuw`) start a fresh one there.
 signal gekozen(n: int, nieuw: bool)
+## A file from `📂 Open` replaced the RUNNING hotel's slot: load it now.
+signal vervangen(n: int)
 ## A sheet of this flow is on the glass and laid out (for the probe lines).
 signal blad_klaar(waarom: String)
 
 var bestand: UiHotelbestand = null
+## Opened from the chrome during play rather than at the start.
+var in_spel := false
 ## The last thing a parent's file action said, shown under the title.
 var _melding := ""
 
@@ -53,6 +64,10 @@ func toon(stil := false) -> void:
 	tegels.bouw(hotels, Ui.maten, {"actief": State.hotel})
 	tegels.gekozen.connect(_tegel_gekozen.bind(hotels))
 	var knoppen: Array = []
+	if in_spel:
+		# back to the hotel that is running, as it was
+		knoppen.append({"id": "terug", "tekst": UiTekst.TERUG,
+			"aan": func() -> void: blad_klaar.emit("terug")})
 	if vol:
 		# all three taken: a new hotel first asks which one may go
 		# (on a phone held upright a row of its own, never beside 💾 and 📂)
@@ -67,8 +82,9 @@ func toon(stil := false) -> void:
 	knoppen.append({"id": "open", "tekst": UiTekst.HOTEL_OPEN, "klein": true,
 		"dicht": false, "aan": open_knop})
 	var b := Ui.blad_open({
-		"titel": UiTekst.START_TERUG, "hint": _melding, "inhoud": [tegels],
-		"sluitbaar": false, "stil": stil, "knoppen": knoppen})
+		"titel": UiTekst.HOTELS_TITEL if in_spel else UiTekst.START_TERUG,
+		"hint": _melding, "inhoud": [tegels],
+		"sluitbaar": in_spel, "stil": stil, "knoppen": knoppen})
 	_melding = ""
 	# the browser opens a file picker only inside a user gesture: the button
 	# arms it the moment the finger goes down (`UiHotelbestand`)
@@ -167,9 +183,12 @@ func laad_tekst(tekst: String) -> bool:
 
 func _zet(n: int, uit: Dictionary) -> void:
 	if State.zet_hotel(n, uit):
-		State.kies_hotel(n)
 		print("[probe] hotel_open=", n, " dag=", int(uit["dag"]))
 		_melding = UiTekst.HOTEL_GELADEN
+		if not State.gestart():
+			State.kies_hotel(n)          # at the start: the opened hotel stands out
+		elif n == State.hotel:
+			vervangen.emit(n)            # the running hotel was given up for it
 	else:
 		_melding = UiTekst.HOTEL_KAPOT
 	toon(true)

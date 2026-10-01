@@ -16,6 +16,8 @@ var geluid_knop: Button
 var ronde_label: Label
 var prikbord_knop: Button
 var avond_knop: Button
+## The hotels (save slots, 2026-10-01): another hotel, a new one, or 💾/📂.
+var hotels_knop: Button
 var logo: Label
 
 ## Safe to call again: the breakpoint moved and every label wants a new size.
@@ -54,6 +56,8 @@ func bouw(mt: Dictionary) -> void:
 
 	prikbord_knop = _knop("Prikbord", UiTekst.PRIKBORD, mt)
 	avond_knop = _knop("Avond", UiTekst.AVOND, mt)
+	hotels_knop = _knop("Hotels", UiTekst.HOTELS, mt)
+	hotels_knop.tooltip_text = UiTekst.HOTELS_UITLEG
 	ververs()
 
 ## A badge that opens something is a real button, so it is a real tap target
@@ -121,9 +125,15 @@ func ververs() -> void:
 ## buttons on a second — 100 units instead of 152, which is what gives the world
 ## frame back its 60 % of a 740 unit screen (I1 finding 4).  Seven items of at
 ## least 48 units cannot share one 336 unit row, so two is the floor here.
+##
+## The compact landscape shell (a phone on its side) drops the round name too
+## since `🏨 Hotels` joined the row (2026-10-01): with it the row was 38 units
+## short and wrapped, and a second chrome row there costs the world frame 52 of
+## its 289 units.  The round name is the one item without a number or an
+## action; the evening button and the pulsing bell still say which round it is.
 func zet_vorm(compact: bool, telefoon: bool = false) -> void:
 	logo.visible = not compact and not telefoon
-	ronde_label.visible = not telefoon
+	ronde_label.visible = not telefoon and not compact
 
 ## Kept for the older call sites: the compact landscape shell.
 func zet_compact(compact: bool) -> void:

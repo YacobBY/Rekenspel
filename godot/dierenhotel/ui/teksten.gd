@@ -72,6 +72,12 @@ const HOTEL_NEE := "⬅ Nee, terug"
 const HOTEL_BEWAAR := "💾 Bewaar"
 const HOTEL_OPEN := "📂 Open"
 const HOTEL_WELKE := "💾 Welk hotel bewaar je?"
+## The chrome button that brings the hotels back during play — another child's
+## hotel, a new one, or the parent's 💾/📂 on a tablet that had none yet — and
+## the title of that sheet (the start sheet's own title says "welcome back").
+const HOTELS := "🏨 Hotels"
+const HOTELS_TITEL := "🏨 Kies een hotel"
+const HOTELS_UITLEG := "Wissel van hotel"
 const HOTEL_BEWAARD := "💾 Het hotel is bewaard!"
 const HOTEL_GELADEN := "📂 Het hotel is er!"
 const HOTEL_KAPOT := "📂 Dit bestand is geen hotel."

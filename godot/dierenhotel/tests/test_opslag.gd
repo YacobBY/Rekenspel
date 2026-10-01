@@ -11,10 +11,22 @@ extends Proef
 ## "are you sure?"; `💾 Bewaar` → `📂 Open` gives the same hotel back, bytes in;
 ## a file that is not a hotel is refused and changes nothing at all; and the
 ## start sheet with its tiles and its two buttons fits on four screens.
+##
+## And during play, through `🏨 Hotels` in the chrome: the button fits on the
+## four screens without taking a unit from the world frame; it stops a running
+## game and saves the hotel; switching to hotel 2 and back keeps both whole;
+## the same hotel again plays on; a new hotel works as at the start; a new
+## tablet reaches `📂 Open` through it; and a file that replaces the RUNNING
+## hotel is loaded, not overwritten by the next save.
 
 ## The four screens of the brief: iPad both ways, a phone both ways.
 const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740),
 	Vector2i(740, 360)]
+## The world frames of those screens (`test_ui.gd::test_shell_op_vijf_schermen`
+## prints them, `test_hits.gd::KADERS` walks every room through them): the
+## chrome's new button must not cost them a unit.
+const KADERS := {Vector2i(1024, 768): Vector2(990, 637), Vector2i(768, 1024): Vector2(734, 788),
+	Vector2i(360, 740): Vector2(326, 558), Vector2i(740, 360): Vector2(558, 289)}
 const BLAD := "Bladlaag/Blad/Midden/Blad/Rol/Kolom/"
 
 var _vp: SubViewport = null
@@ -626,9 +638,10 @@ func test_teksten_houden_zich_aan_hotel_9() -> void:
 	if Ui.thema == null or Ui.thema.default_font == null:
 		Ui._bouw_thema(17)
 	var knoppen := [UiTekst.HOTEL_NIEUW, UiTekst.HOTEL_JA, UiTekst.HOTEL_NEE,
-		UiTekst.HOTEL_BEWAAR, UiTekst.HOTEL_OPEN, UiTekst.TERUG]
+		UiTekst.HOTEL_BEWAAR, UiTekst.HOTEL_OPEN, UiTekst.TERUG, UiTekst.HOTELS]
 	var zinnen := [UiTekst.START_TERUG, UiTekst.HOTEL_WEG, UiTekst.HOTEL_ZEKER,
-		UiTekst.HOTEL_WELKE, UiTekst.HOTEL_BEWAARD, UiTekst.HOTEL_GELADEN, UiTekst.HOTEL_KAPOT,
+		UiTekst.HOTEL_WELKE, UiTekst.HOTELS_TITEL, UiTekst.HOTELS_UITLEG,
+		UiTekst.HOTEL_BEWAARD, UiTekst.HOTEL_GELADEN, UiTekst.HOTEL_KAPOT,
 		UiTekst.hotel_naam(3), UiTekst.hotel_cijfers(104, 345, 8)] + knoppen
 	for i in UiTekst.HOTEL_ICOON.size():
 		zinnen.append(UiTekst.HOTEL_ICOON[i])
@@ -647,3 +660,165 @@ func test_teksten_houden_zich_aan_hotel_9() -> void:
 	for d in UiTekst.HOTEL_ICOON:
 		dieren[d] = true
 	gelijk(dieren.size(), State.HOTELS, "drie verschillende dieren")
+
+# ------------------------------------------------- 🏨 Hotels tijdens het spel
+
+func _hotelsknop() -> Button:
+	return _shell.get_node_or_null("Scherm/Kolom/Chroom/Hotels") as Button
+
+## Press `🏨 Hotels` in the chrome and let the sheet lay itself out.
+func _hotels() -> void:
+	var k := _hotelsknop()
+	if k == null:
+		fout("geen knop Hotels in de bovenbalk")
+		return
+	k.pressed.emit()
+	await _frames(3)
+
+## The button stands in the chrome on the four screens — pictogram AND word, a
+## whole tap target, on the glass and on no other button — and it found its
+## room without taking a unit from the world frame.
+func test_de_hotelsknop_staat_op_vier_schermen() -> void:
+	_onthoud()
+	_hotel(1, 4, 5, 2)
+	for maat in SCHERMEN:
+		await _start(maat)
+		var k := _hotelsknop()
+		waar(k != null and k.is_visible_in_tree(), "%s: de knop Hotels staat er" % str(maat))
+		if k != null:
+			gelijk(k.text, UiTekst.HOTELS, "%s: 🏨 Hotels, pictogram en woord" % str(maat))
+			var r := k.get_global_rect()
+			waar(r.size.x >= 48.0 and r.size.y >= 48.0, "%s: een tikdoel (%s)" % [str(maat), str(r)])
+			waar(Rect2(Vector2.ZERO, Vector2(maat)).encloses(r), "%s: in beeld (%s)" % [str(maat), str(r)])
+			for ander in k.get_parent().get_children():
+				if ander != k and ander is Control and (ander as Control).visible:
+					waar(not (ander as Control).get_global_rect().grow(-0.5).intersects(r.grow(-0.5)),
+						"%s: niet over %s heen" % [str(maat), ander.name])
+		var kader: Control = _shell.get_node("Scherm/Kolom/Middenrij/Kaderdoos/Kader")
+		gelijk(kader.size, KADERS[maat], "%s: het wereldkader blijft even groot" % str(maat))
+		await _weg()
+	await _af()
+
+## During play: the running game stops the normal way, the hotel is saved
+## before anything else, then hotel 2 and back again — both whole, no welcome.
+## `⬅ Terug` and the same hotel again just play on.
+func test_wisselen_naar_hotel_2_en_terug() -> void:
+	_onthoud()
+	_hotel(1, 4, 5, 2)
+	_hotel(2, 7, 3, 1)
+	await _start(Vector2i(1024, 768))
+	await _druk("Hotels/Khotel1")
+	gelijk(State.hotel, 1, "hotel 1 speelt")
+	State.s["sterren"] = 8                   # earned since the last save
+	waar(Games.start("sleutels"), "er begint een spel")
+	await _frames(3)
+	await _hotels()
+	gelijk(Games.actief(), "", "🏨 Hotels stopt het spel eerst")
+	gelijk(_titel(), UiTekst.HOTELS_TITEL, "het hotelblad staat er")
+	gelijk(int(State.lees_hotel(1).get("sterren", 0)), 8, "hotel 1 is bewaard voor er iets gebeurt")
+	# ⬅ Terug: nothing changes, the hotel plays on
+	var zelfde := State.s
+	await _druk("Knoppen/Kterug")
+	waar(_blad() == null, "⬅ Terug sluit het blad")
+	waar(is_same(State.s, zelfde) and State.hotel == 1, "en hotel 1 speelt door")
+	# hotel 2
+	await _hotels()
+	await _druk("Hotels/Khotel2")
+	gelijk(State.hotel, 2, "nu speelt hotel 2")
+	gelijk(int(State.s["dag"]), 7, "met zijn eigen dag")
+	waar(not _intro_loopt(), "een hotel dat al bestaat krijgt geen welkom")
+	gelijk(State.lees_keuze(), 2, "en dat wordt onthouden")
+	gelijk(int(State.lees_hotel(1).get("sterren", 0)), 8, "hotel 1 is heel")
+	State.s["sterren"] = 11
+	# and back
+	await _hotels()
+	await _druk("Hotels/Khotel1")
+	gelijk(State.hotel, 1, "terug in hotel 1")
+	gelijk([int(State.s["dag"]), int(State.s["sterren"])], [4, 8], "zoals het was")
+	gelijk([int(State.lees_hotel(2).get("dag", 0)), int(State.lees_hotel(2).get("sterren", 0))],
+		[7, 11], "en hotel 2 is bewaard toen er weer gewisseld werd")
+	# the same hotel again: the sheet closes, the hotel plays on
+	zelfde = State.s
+	await _hotels()
+	await _druk("Hotels/Khotel1")
+	waar(_blad() == null, "hetzelfde hotel: het blad gaat dicht")
+	waar(is_same(State.s, zelfde), "en het hotel speelt gewoon door")
+	await _af()
+
+## `➕ Nieuw hotel` during play works as at the start: a fresh hotel with the
+## welcome in the empty one, the running one saved.
+func test_een_nieuw_hotel_tijdens_het_spelen() -> void:
+	_onthoud()
+	_hotel(1, 4, 5, 2)
+	await _start(Vector2i(1024, 768))
+	await _druk("Hotels/Khotel1")
+	State.s["sterren"] = 9
+	await _hotels()
+	await _druk("Hotels/Khotel3")
+	gelijk(State.hotel, 3, "het nieuwe hotel is hotel 3")
+	gelijk(int(State.s["dag"]), 1, "een vers hotel")
+	waar(_intro_loopt(), "met het welkom")
+	gelijk(int(State.lees_hotel(1).get("sterren", 0)), 9, "hotel 1 is bewaard")
+	gelijk(int(State.lees_hotel(1).get("dag", 0)), 4, "en heel")
+	await _af()
+
+## A brand-new tablet has no start sheet (the first hotel starts at once), so
+## the parent reaches `📂 Open` through `🏨 Hotels`.  The opened hotel goes into
+## a free slot; the running one stays the running one.
+func test_een_nieuwe_tablet_vindt_open_via_hotels() -> void:
+	_onthoud()
+	await _start(Vector2i(1024, 768))
+	waar(_intro_loopt(), "geen hotel: het eerste begint meteen, met het welkom")
+	var intro = _shell.get("intro")
+	if intro != null and is_instance_valid(intro):
+		intro.sluit("weg")
+		await _frames(2)
+	await _hotels()
+	gelijk(_titel(), UiTekst.HOTELS_TITEL, "het hotelblad")
+	waar(_knop("Knoppen/Kopen") != null, "📂 Open is te bereiken")
+	var een := _knop("Hotels/Khotel1")
+	waar(een != null and een.get_node_or_null("Cijfers") != null, "hotel 1 staat erop")
+	var oud := State.standaard()
+	oud["dag"] = 12
+	oud["sterren"] = 20
+	var blad: UiStartblad = _shell.get("startblad")
+	waar(blad != null and blad.laad_tekst(JSON.stringify({"v": 1, "s": oud})), "het bestand komt binnen")
+	await _frames(3)
+	gelijk(_hint(), UiTekst.HOTEL_GELADEN, "het blad zegt het")
+	gelijk(_titel(), UiTekst.HOTELS_TITEL, "het blijft het hotelblad")
+	gelijk(State.hotel, 1, "het lopende hotel blijft het lopende")
+	gelijk(int(State.samenvatting(2).get("dag", 0)), 12, "het bestand is hotel 2")
+	State.bewaar()
+	gelijk(int(State.samenvatting(2).get("dag", 0)), 12, "en bewaren raakt het niet")
+	await _druk("Hotels/Khotel2")
+	gelijk([State.hotel, int(State.s["dag"])], [2, 12], "verder in het geopende hotel")
+	await _af()
+
+## All three taken during play, and the file is to replace the RUNNING hotel:
+## after the two questions the file's hotel is loaded at once — the next save
+## must not put the old one back over it.
+func test_open_in_de_plaats_van_het_lopende_hotel() -> void:
+	_onthoud()
+	_hotel(1, 4, 5, 2)
+	_hotel(2, 7, 3, 1)
+	_hotel(3, 9, 1, 0)
+	await _start(Vector2i(1024, 768))
+	await _druk("Hotels/Khotel2")
+	var een := _tekst(1)
+	var drie := _tekst(3)
+	await _hotels()
+	var nieuw := State.standaard()
+	nieuw["dag"] = 21
+	var blad: UiStartblad = _shell.get("startblad")
+	waar(blad != null and blad.laad_tekst(JSON.stringify({"v": 1, "s": nieuw})), "een goed bestand")
+	await _frames(3)
+	gelijk(_titel(), UiTekst.HOTEL_WEG, "welk hotel mag weg?")
+	await _druk("Hotels/Khotel2")
+	await _druk("Knoppen/Kja")
+	gelijk(State.hotel, 2, "hotel 2 blijft het lopende")
+	gelijk(int(State.s["dag"]), 21, "maar het is nu het geopende hotel")
+	State.bewaar()
+	gelijk(int(State.samenvatting(2).get("dag", 0)), 21, "en bewaren zet het oude er niet overheen")
+	gelijk(_tekst(1), een, "hotel 1 is heel")
+	gelijk(_tekst(3), drie, "hotel 3 is heel")
+	await _af()
