@@ -91,14 +91,20 @@ class Kamer extends RefCounted:
 	## dingen als het zwembad en de tuin").  0 is the ground floor — the lobby
 	## and everything outdoors — the floors above count up, the cellar is −1.
 	var etage := 0
-	## The stairs, {wand, at, breed} like a door in a wall (a lift until
-	## 2026-09-25, owner: "Ik wil graag de lift vervangen voor een trap").
+	## The stairs (a lift until 2026-09-25, owner: "Ik wil graag de lift
+	## vervangen voor een trap"): a flight UP and a flight DOWN, each in its own
+	## opening, `{"op": {wand, at, breed}, "af": {wand, at, breed}}` like a door
+	## in a wall (owner, 2026-10-01: "ik wil dat je bij de trap tussen etages
+	## beweegt misschien een trap omhoog en een omlaag").  A room has the flight
+	## up when a floor above it has stairs, the flight down when a floor below
+	## has them: the top floor only goes down, the cellar only up.
 	## Every room with stairs is ONE step from every other room with stairs:
-	## `bouw_af` gives each of them an entry in `deur_punten`, all on this one
-	## opening and marked `trap`, so `pad`, `World.reis` and every "keep the
-	## door free" rule treat a climb like a walk through a door.  It is not in
-	## `deuren`: the wall drawing (`scenes/vloer.gd`), the map and the door
-	## buttons each draw it once, as stairs, instead of once per floor.
+	## `bouw_af` gives each of them an entry in `deur_punten`, marked `trap` and
+	## on the flight that goes that way — up to a higher floor, down to a lower
+	## one — so `pad`, `World.reis` and every "keep the door free" rule treat a
+	## climb like a walk through a door, and a guest takes the matching flight.
+	## It is not in `deuren`: the wall drawing (`scenes/vloer.gd`), the map and
+	## the door buttons each draw a flight once, as stairs, not once per floor.
 	var trap: Dictionary = {}
 	## The hotel's front door, {wand, at, breed} like a door (the receptie only,
 	## owner 2026-09-23: guests "komen momenteel vanuit de gang binnen ipv
@@ -215,7 +221,8 @@ func buren(kamer_id: String) -> Array[String]:
 			uit.append(str(dr["naar"]))
 	if not r.trap.is_empty():
 		for ander in trap_kamers():
-			if ander != kamer_id and not uit.has(ander):
+			if ander != kamer_id and not uit.has(ander) \
+					and r.trap.has(trap_richting(kamer_id, ander)):
 				uit.append(ander)
 	return uit
 
@@ -271,14 +278,59 @@ func via_trap(van: String, naar: String) -> bool:
 	var r := get_kamer(van)
 	return r != null and bool((r.deur_punten.get(naar, {}) as Dictionary).get("trap", false))
 
-## The stairs' point in a room, like a door's (`{x, z, ix, iz, wand, trap}`);
-## `{}` for a room the stairs do not reach.
-func trap_punt(kamer_id: String) -> Dictionary:
+## The two flights of the stairs: `op` climbs to the floor above, `af` goes
+## down to the floor below.
+const TRAP_RICHTINGEN: Array[String] = ["op", "af"]
+
+## The flights of the stairs in a room, up first: `["op", "af"]` on a floor in
+## the middle of the tower, `["af"]` on the top floor, `["op"]` in the cellar,
+## `[]` where the stairs do not come.
+func trap_richtingen(kamer_id: String) -> Array[String]:
+	var uit: Array[String] = []
 	var r := get_kamer(kamer_id)
-	if r == null or r.trap.is_empty():
+	if r == null:
+		return uit
+	for richting in TRAP_RICHTINGEN:
+		if r.trap.has(richting):
+			uit.append(richting)
+	return uit
+
+## Which flight leads from `van` towards `naar`: `op` to a higher floor, `af` to
+## a lower one, "" on the same floor.
+func trap_richting(van: String, naar: String) -> String:
+	var a := etage(van)
+	var b := etage(naar)
+	if b > a:
+		return "op"
+	if b < a:
+		return "af"
+	return ""
+
+## Where one flight of a room leads: the room the stairs reach on the NEXT floor
+## up (`op`) or down (`af`) — one floor, never more.  "" when that flight is not
+## there.
+func trap_naar(kamer_id: String, richting: String) -> String:
+	var r := get_kamer(kamer_id)
+	if r == null or not r.trap.has(richting):
+		return ""
+	var e := r.etage
+	var beste := ""
+	for ander in trap_kamers():
+		if ander == kamer_id or trap_richting(kamer_id, ander) != richting:
+			continue
+		if beste.is_empty() or absi(etage(ander) - e) < absi(etage(beste) - e):
+			beste = ander
+	return beste
+
+## One flight's point in a room, like a door's (`{x, z, ix, iz, wand, trap,
+## richting}`); `{}` where that flight is not.
+func trap_punt(kamer_id: String, richting: String) -> Dictionary:
+	var r := get_kamer(kamer_id)
+	if r == null or not r.trap.has(richting):
 		return {}
-	var lp := _deurpunt(r.trap)
+	var lp := _deurpunt(r.trap[richting])
 	lp["trap"] = true
+	lp["richting"] = richting
 	return lp
 
 ## How a floor is written on the tower's floor buttons: its number, the cellar "K".
@@ -333,13 +385,13 @@ func bouw_af(r: Kamer) -> void:
 	r.deur_punten = {}
 	for dr in r.deuren:
 		r.deur_punten[dr["naar"]] = _deurpunt(dr)
-	# the stairs: one opening, an entry for every other floor they reach
+	# the stairs: an entry for every other floor they reach, on the flight that
+	# goes that way — up to a higher floor, down to a lower one
 	if not r.trap.is_empty():
-		var lp := _deurpunt(r.trap)
-		lp["trap"] = true
 		for ander in trap_kamers():
-			if ander != r.id and not r.deur_punten.has(ander):
-				r.deur_punten[ander] = lp.duplicate()
+			var lp := trap_punt(r.id, trap_richting(r.id, ander))
+			if ander != r.id and not lp.is_empty() and not r.deur_punten.has(ander):
+				r.deur_punten[ander] = lp
 	# the front door is derived like a door, but kept apart from `deur_punten`:
 	# every door button, path and "komt eraan" bubble walks that table
 	r.ingang_punt = {}
@@ -361,9 +413,12 @@ func bouw_af(r: Kamer) -> void:
 	_bouw_vrij(r)
 	_bouw_plekken(r)
 
-## A door's point in the wall and the step inside it, `{x, z, ix, iz, wand, poort}`.
+## A door's point in the wall and the step inside it, `{x, z, ix, iz, wand, poort}`:
+## the middle of the opening, or `punt` along the wall when the opening says
+## where (the two flights in the arcade, which stand closer to a stall and a
+## shop front than a door may).
 func _deurpunt(dr: Dictionary) -> Dictionary:
-	var mid: float = float(dr["at"]) + float(dr["breed"]) / 2.0
+	var mid: float = float(dr.get("punt", float(dr["at"]) + float(dr["breed"]) / 2.0))
 	if str(dr["wand"]) == "z":
 		return {"x": mid, "z": 0.0, "ix": mid, "iz": 8.0, "wand": "z",
 			"poort": dr.get("poort", false)}
@@ -945,7 +1000,12 @@ func _bouw_kamers() -> void:
 		# `om_het_water`).  The playroom door by the far plant is gone: the
 		# playroom is a floor of its own.
 		"etage": 0,
-		"trap": {"wand": "x", "at": 24, "breed": 12},
+		# Two flights (owner, 2026-10-01: "een trap omhoog en een omlaag"): up to
+		# the shops where the one flight stood, and down to the laundry in the
+		# cellar at the front of the same wall, past the key board — near the
+		# back corner the notice board leaves no room for a second sign.
+		"trap": {"op": {"wand": "x", "at": 24, "breed": 12},
+			"af": {"wand": "x", "at": 102, "breed": 12}},
 		"deuren": [{"naar": "tuin", "wand": "z", "at": 106, "breed": 12}],
 		# The hotel's front door (owner, 2026-09-23: the guests "komen momenteel
 		# vanuit de gang binnen ipv ingang").  It stands where the pink rug lies,
@@ -992,7 +1052,7 @@ func _bouw_kamers() -> void:
 	# end.  The stairs stand where the door down to the lobby was.
 	_kamer({"id": "gang", "naam": "Gang", "icoon": "🚪", "w": 120, "d": 36,
 		"wand": 56, "vloer": "loper", "loop": 1.0, "etage": 3,
-		"trap": {"wand": "x", "at": 10, "breed": 12},
+		"trap": {"af": {"wand": "x", "at": 10, "breed": 12}},
 		"deuren": [
 			{"naar": "kamer1", "wand": "z", "at": 24, "breed": 12},
 			{"naar": "kamer2", "wand": "z", "at": 60, "breed": 12},
@@ -1216,7 +1276,7 @@ func _bouw_kamers() -> void:
 	# below the lobby; the stairs stand where its door to the kitchen was.
 	_kamer({"id": "wasserij", "naam": "Wasserij", "icoon": "🧺", "w": 100, "d": 90,
 		"wand": 52, "vloer": "tegel", "loop": 1.25, "etage": -1,
-		"trap": {"wand": "z", "at": 62, "breed": 12},
+		"trap": {"op": {"wand": "z", "at": 62, "breed": 12}},
 		"matten": {"x0": 40, "x1": 80, "z0": 36, "z1": 68,
 			"kl": [Color("#C9E7EC"), Color("#BCDFE6")]},
 		"kijk": Vector2(60, 52),
@@ -1237,7 +1297,9 @@ func _bouw_kamers() -> void:
 	# where its door to the lobby was.
 	_kamer({"id": "speelzaal", "naam": "Speelzaal", "icoon": "🧸",
 		"w": 114, "d": 100, "wand": 56, "vloer": "hout", "loop": 1.5, "etage": 2,
-		"trap": {"wand": "z", "at": 57, "breed": 12},
+		# up beside the climbing frame, down where the one flight stood
+		"trap": {"op": {"wand": "z", "at": 36, "breed": 12},
+			"af": {"wand": "z", "at": 57, "breed": 12}},
 		"matten": {"x0": 20, "x1": 94, "z0": 18, "z1": 82,
 			"kl": [Color("#BFE3F2"), Color("#AEDAEC")]},
 		"zones": {"dans": {"x0": 40, "x1": 74, "z0": 56, "z1": 80}},
@@ -1325,7 +1387,18 @@ func _bouw_kamers() -> void:
 	# it on the street, and `mijd` keeps that floor free as well.
 	_kamer({"id": "winkels", "naam": "Winkels", "icoon": "🛍️", "w": 156, "d": 112,
 		"wand": 54, "vloer": "tegel", "loop": 1.5, "etage": 1,
-		"trap": {"wand": "x", "at": 24, "breed": 12},
+		# The two flights side by side between the lantern and the luxury shop
+		# (z 16..40, the only stretch of wall the shops leave; owner,
+		# 2026-10-01: "een trap omhoog en een omlaag"): a little narrower than a
+		# door, up nearer the corner, down beside the shop, their middles 13
+		# apart, so that on a phone each sign still finds its own place.  Where
+		# a guest steps onto a flight (`punt`) is at the landing between the
+		# two: the middle of the flight up is too close to the hat stall, and
+		# from the middle of the flight down the straight way to the shops
+		# would cut the luxury counter — so a customer from the lobby still
+		# steps off the stairs at (8, 30), as before.
+		"trap": {"op": {"wand": "x", "at": 16, "breed": 11, "punt": 26},
+			"af": {"wand": "x", "at": 29, "breed": 11, "punt": 30}},
 		"matten": [{"x0": 0, "x1": 156, "z0": 28, "z1": 42,
 			"kl": [Color("#E9C2B4"), Color("#E2B5A6")]}],
 		"kijk": Vector2(96, 34),
@@ -1348,7 +1421,8 @@ func _bouw_kamers() -> void:
 			{"n": "luxepuiz", "x": 1, "z": 62, "ver": true},
 			{"n": "vitrinez", "x": 30, "z": 62},
 			{"n": "spiegelz", "x": 1, "z": 94, "ver": true},
-			{"n": "lantaarn", "x": 4, "z": 18},
+			# (4, 14), not (4, 18): the flight up stands beside it since 2026-10-01
+			{"n": "lantaarn", "x": 4, "z": 14},
 			{"n": "tassen", "x": 122, "z": 102},
 			{"n": "plant", "x": 146, "z": 84},
 			{"n": "bloembak", "x": 90, "z": 104}]})

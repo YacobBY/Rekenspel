@@ -83,7 +83,7 @@ func _ready() -> void:
 	Hotel.hud_veranderd.connect(_ververs_chroom)
 	Hotel.dag_veranderd.connect(func(_d: int) -> void: _meld_stand("dag"))
 	Hotel.bord_veranderd.connect(_ververs_chroom)
-	Hotel.trap_gevraagd.connect(_trap)
+	Hotel.trap_genomen.connect(_trap_genomen)
 	Rooms.kamers_veranderd.connect(_nieuwe_kamers)
 	World.kamer_veranderd.connect(func(_k: String) -> void: kamerbalk.ververs())
 	if OS.has_feature("web"):
@@ -391,24 +391,24 @@ func _brievenmuur() -> void:
 	Ui.blad_open({"titel": UiTekst.BRIEVEN_TITEL, "inhoud": regels,
 		"knoppen": [{"id": "sluit", "tekst": UiTekst.SLUITEN}]})
 
+## The map (owner, 2026-09-24: the hotel is a tower): a floor is a row, and a
+## tap on a room rides there (`World.naar` slides the new floor in from above
+## or below).  Until 2026-10-01 the stairs opened this same tower; they have a
+## flight up and a flight down now, one floor a tap (`Hotel.neem_trap`).
 func _plattegrond() -> void:
 	_toren(UiTekst.KAART_TITEL, UiTekst.KAART_HINT)
 
-## The stairs' panel (owner, 2026-09-24: the hotel is a tower; stairs instead of
-## a lift since 2026-09-25): the same tower as the map, under the stairs' own
-## title and pictogram — a floor is a row, and a tap on a
-## room rides there (`World.naar` slides the new floor in from above or below).
-func _trap(_kamer: String) -> void:
-	print("[probe] trap open kamer=", _kamer)
-	_toren(UiTekst.TRAP_BLAD, UiTekst.TRAP_HINT, UiTrapIcoon.beeld())
+## The child took the stairs: one line, so `tools/speel.js` can follow the ride.
+func _trap_genomen(van: String, naar: String, richting: String) -> void:
+	print("[probe] trap ", richting, " van=", van, " naar=", naar)
 
-func _toren(titel: String, hint: String, beeld: Texture2D = null) -> void:
+func _toren(titel: String, hint: String) -> void:
 	var kaart := UiPlattegrond.new()
 	kaart.bouw(Ui.maten)
 	kaart.kamer_gekozen.connect(func(id: String) -> void:
 		Ui.blad_dicht()
 		Hotel.naar_kamer(id))
-	Ui.blad_open({"titel": titel, "hint": hint, "beeld": beeld,
+	Ui.blad_open({"titel": titel, "hint": hint,
 		"inhoud": [kaart], "knoppen": [{"id": "sluit", "tekst": UiTekst.SLUITEN}]})
 	if OS.has_feature("web"):
 		_meld_toren(kaart)
@@ -712,6 +712,8 @@ func _meld_na_de_rit() -> void:
 
 func _meld_knoppen() -> void:
 	await _na_plaatsing()
+	# the room these buttons are in: `tools/speel.js` resolves `trap:op` with it
+	print("[probe] kamer_nu=", World.kamer_nu())
 	for id in Hits.debug().keys():
 		var s := Hits.spot(id)
 		if s != null and is_instance_valid(s.knoop) and s.knoop.visible:

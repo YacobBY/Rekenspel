@@ -115,11 +115,13 @@ func test_deurpunten() -> void:
 		# 2026-09-24, the tower: the stairs in the lobby stand where the door to
 		# the gang was (the left wall — owner decision, §13 Q-X1-13), and in
 		# every other stairs room where its door down to the lobby was, so these
-		# points did not move; a ride to any floor starts there
+		# points did not move.  2026-10-01 (owner: "een trap omhoog en een
+		# omlaag"): a ride UP starts at the flight up, a ride DOWN at the flight
+		# down — in the lobby at the front of the same wall
 		["receptie", "gang", 0, 30, 8, 30],
 		["receptie", "speelzaal", 0, 30, 8, 30],
 		["receptie", "winkels", 0, 30, 8, 30],
-		["receptie", "wasserij", 0, 30, 8, 30],
+		["receptie", "wasserij", 0, 108, 8, 108],
 		["gang", "receptie", 0, 16, 8, 16],
 		["gang", "kamer1", 30, 0, 30, 8],
 		["gang", "kamer2", 66, 0, 66, 8],
@@ -136,11 +138,16 @@ func test_deurpunten() -> void:
 		# the laundry in the cellar: the stairs where its kitchen door was
 		["wasserij", "receptie", 68, 0, 68, 8],
 		["speelzaal", "receptie", 63, 0, 63, 8],
+		# the playroom's flight up stands beside the climbing frame
+		["speelzaal", "gang", 42, 0, 42, 8],
 		# R3: de glazen deur van de kas in de achtergevel, waar het keukenraam
 		# hing, en de tuindeur van de kas midden in haar achterwand
 		["tuin", "kas", 0, 68, 8, 68],
 		["kas", "tuin", 58, 0, 58, 8],
 		["winkels", "receptie", 0, 30, 8, 30],
+		# the arcade's two flights stand side by side; a guest steps onto
+		# either at the landing between them (`punt`)
+		["winkels", "speelzaal", 0, 26, 8, 26],
 	]
 	for rij in verwacht:
 		var dp := Rooms.deur(rij[0], rij[1])

@@ -71,8 +71,9 @@ func bouw(o: Dictionary, mt: Dictionary, tap: int) -> void:
 	custom_minimum_size = Vector2(tap, tap)
 	clip_text = false
 	add_theme_font_size_override("font_size", mt["wereld"])
-	# A drawn pictogram where no emoji exists (the stairs, `UiTrapIcoon`): as
-	# wide as an emoji of this size, left of the word with an emoji's space.
+	# A drawn pictogram where no emoji exists (the stairs' sign carried one until
+	# 2026-10-01): as wide as an emoji of this size, left of the word with an
+	# emoji's space.
 	var beeld = o.get("beeld", null)
 	if beeld is Texture2D:
 		icon = beeld

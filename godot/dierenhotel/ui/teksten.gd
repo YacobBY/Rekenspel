@@ -108,14 +108,16 @@ const SLUITEN := "Sluiten"
 
 # ------------------------------------------------------------------ de trap
 ## The stairs between the floors (owner, 2026-09-24: the hotel is a tower; a
-## lift until 2026-09-25: "Ik wil graag de lift vervangen voor een trap").  Its
-## button on the stairwell, the words a screen reader says, and the panel it
-## opens — the same tower as the map (`ui/plattegrond.gd`).  No emoji: the
-## pictogram is drawn (`UiTrapIcoon`), on the button and before the title.
-const TRAP := "Trap"
-const TRAP_TITEL := "Neem de trap"
-const TRAP_BLAD := "De trap"
-const TRAP_HINT := "Waar wil je heen?"
+## lift until 2026-09-25: "Ik wil graag de lift vervangen voor een trap"): a
+## flight up and a flight down, each with its button (owner, 2026-10-01: "een
+## trap omhoog en een omlaag") — the arrow, the word, and what a screen reader
+## says.  One tap is one floor; there is no panel.
+const TRAP_OP := "Omhoog"
+const TRAP_AF := "Omlaag"
+const TRAP_OP_ICOON := "⬆"
+const TRAP_AF_ICOON := "⬇"
+const TRAP_OP_TITEL := "Ga de trap op"
+const TRAP_AF_TITEL := "Ga de trap af"
 
 # ------------------------------------------------------------ §7.7 prikbord
 ## The board is a sheet (owner, 2026-09-23); its cards are the hotel's own

@@ -11,7 +11,7 @@ extends Proef
 
 const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740)]
 ## the buttons of the lobby that hang on things standing still
-const VAST := ["trap_receptie", "deur_receptie_tuin", "prikbord", "spel_meubels", "spel_sleutels"]
+const VAST := ["trap_op_receptie", "trap_af_receptie", "deur_receptie_tuin", "prikbord", "spel_meubels", "spel_sleutels"]
 
 func _boom() -> SceneTree:
 	return Engine.get_main_loop() as SceneTree
