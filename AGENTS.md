@@ -438,6 +438,7 @@ Per-game maths lives in the classes `Sommen.Zwembad`, `.Wekker`, `.Hinkel`,
 - Every child-facing string the shell owns: `godot/dierenhotel/ui/teksten.gd`.
 - Text rules for children: `HOTEL.md` §9. Curriculum: `IDEAS.md`.
 - The look: the voxel style is the default again (2026-10-01); `docs/ART-STIJL.md`
-  holds the pixel style kept as a backup (`?stijl=pixel`). After changing a model
+  holds the pixel style kept as a backup (`?stijl=pixel`; `kiek.js --stijl pixel`
+  takes the same picture in it, to compare). After changing a model
   still rewrite the pixel goldens: `DH_GOUD_SCHRIJF=1 DH_TEST_FILTER=test_pixelstijl tools/test.sh`.
 - Append-only build log of the port: `.fanout/ledger.md`.

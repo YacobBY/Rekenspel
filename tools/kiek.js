@@ -40,6 +40,7 @@ function hulp() {
   --gasten N          eigen gastenaantal (overschrijft --band; max 7)
   --dag N             dagnummer in de opslag (standaard 1)
   --kleding           kleed elke gast aan uit de winkelstraat (een vaste set per gast)
+  --stijl pixel|voxel  de art-stijl (standaard voxel; pixel = de pixelart-backup, om te vergelijken)
   --hotels N          zet ook hotel 2..N (max 3) op de tablet: kopieën met een andere dag,
                       zodat het startblad meer hotels toont
   --startblad IDS     tik op het startblad deze knoppen (bv. "Knieuw; Khotel2"), maak na elke
@@ -57,7 +58,7 @@ const argv = process.argv.slice(2);
 const opt = {
   kamer: 'receptie', tik: null, chip: null, wacht: 2500, band: 3, gasten: null, dag: 1, kleding: false,
   uit: path.join(process.env.DH_LOG_DIR || '/tmp/dierenhotel-log', 'kiek'),
-  viewport: '1024x768@2:ipad-land', url: null, opslag: null, hotels: 1, startblad: null,
+  viewport: '1024x768@2:ipad-land', url: null, opslag: null, hotels: 1, startblad: null, stijl: null,
   playwright: process.env.PLAYWRIGHT_PAD || null,
 };
 for (let i = 0; i < argv.length; i++) {
@@ -73,6 +74,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--dag') opt.dag = parseInt(v(), 10);
   else if (a === '--kleding') opt.kleding = true;
   else if (a === '--opslag') opt.opslag = v();
+  else if (a === '--stijl') opt.stijl = v();
   else if (a === '--hotels') opt.hotels = Math.max(1, Math.min(3, parseInt(v(), 10)));
   else if (a === '--startblad') opt.startblad = v();
   else if (a === '--uit') opt.uit = v();
@@ -261,6 +263,7 @@ const midden = (l) => {
 
   let extra = '';
   for (let n = 2; n <= opt.hotels; n++) extra += `&hotel${n}=${base64url(maakHotel(n))}`;
+  if (opt.stijl) extra += `&stijl=${encodeURIComponent(opt.stijl)}`;
   await page.goto(`${url}?opslag=${base64url(maakOpslag())}${extra}`, { waitUntil: 'load' });
   if (!await wacht(() => laatste('[probe] klaar'), 90000)) { await foto('0-geen-boot'); await stop('"[probe] klaar" bleef uit (log.txt)'); }
   if (!laatste('[probe] opslag_uit_url=')) console.log('LET OP: de opslag-hook meldde niets; de kamer is dan de receptie');
