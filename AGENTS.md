@@ -111,7 +111,7 @@ built from voxel models and drawn as **soft pastel isometric pixel art** (since
 2026-09-30; the binding style rules are `docs/ART-STIJL.md`, the old voxel look is
 `index.html?stijl=voxel`), in which every number lives in the world (biscuits in a bag, beds in a
 room, coins on a counter, hands on a clock). No quiz screens, no punishment, no
-reading required. Eighteen minigames (§6), the rooms as data (`Rooms.lijst()`,
+reading required. Nineteen minigames (§6), the rooms as data (`Rooms.lijst()`,
 eleven of them today), a day cycle with guests, wishes, check-in and a bill at
 checkout, and a wardrobe: what an animal buys in the shops it wears.
 Exported to the web (GitHub Pages, PWA).
@@ -259,7 +259,8 @@ to the garden right of the desk), `gang`,
 stall moved to the shops on 2026-09-24),
 `zwembad` (outdoor since 2026-09-14; `bad` rect = the lane), `wasserij`,
 `speelzaal`, `kas` (glass house behind the garden), `winkels` (the shopping
-arcade — stalls hoeden, sjaals, schoenen, souvenirs, the luxe shop and the mirror).
+arcade — stalls hoeden, sjaals, schoenen, souvenirs, the photo booth at the end of the
+row, the luxe shop and the mirror).
 **The hotel is a tower** (owner 2026-09-24, "net als Habbo Hotel"; world.md §1.2):
 `Kamer.etage` — 0 receptie, tuin, zwembad, kas (the ground floor is the lobby and
 the outdoors only); 1 winkels; 2 speelzaal; 3 gang, kamer1, kamer2, keuken; −1
@@ -347,6 +348,7 @@ Sounds: `ctx.snd.plop(i)`, `ja()`, `hoera()` … Particles: `World.spetter`.
 | `luxe` | Luxe winkel | winkels | sum with a gift box, half price, change from €50/€100 | games-d §4 |
 | `paskamer` | Paskamer | winkels | dressing up from the wardrobe (no sum, no star) | games-d §5 |
 | `spiegel` | Spiegelmaskers | speelzaal (on the easel, `SpiegelBord` shows the mask large) | mirror symmetry: a sum per band (groep 3 `5 − 2`, groep 4 doubling `4 + 4`, groep 5 two fold lines `3 × 4`), then per dot "which of three coloured marks is the mirror image?" | PLAN.md §3.7.2 (M3/M4) |
+| `foto` | Fotohokje | winkels (the booth at the end of the row; `FotoScherm` shows the photo large) | choose at least two animals, one price per animal under each, then how much money goes in: groep 3 `€2 + €2 + €2`, groep 4/5 `3 × €2`; a wrong amount sends them out (the shop rule) | games-d §5a |
 
 Each has `test_<id>.gd` next to it (200–1000 lines, run headless with shells
 at four viewports). Owner's rules for zwembad are verbatim in games-b §1.

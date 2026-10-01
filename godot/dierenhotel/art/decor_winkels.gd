@@ -58,10 +58,19 @@ const LANTAARN := Color("#6E6A72")
 const LICHT := Color("#FFE8A3")
 const TAS := [Color("#F2A7B8"), Color("#A9CDEE"), Color("#9FD8C4")]
 const KUSSEN := Color("#B98BC4")
+## Het fotohokje (eigenaar, 2026-10-01): koraalrood, met een groen gordijn, een
+## donker hokje met een bankje en een gouden bord met een fototoestel erop.
+const HOKJE := Color("#EF9483")
+const HOKJE_D := Color("#D97B6C")
+const HOKJE_BINNEN := Color("#6A5670")
+const HOKJE_GORDIJN := Color("#6FBDB5")
+const HOKJE_GORDIJN_D := Color("#57A59D")
+const SCHERM := Color("#BFE3F2")
+const TOESTEL := Color("#4E4A57")
 
 const NAMEN: Array[String] = ["hoedenkraam", "sjaalkraam", "schoenenkraam",
 	"souvenirkraam", "luxepui", "luxepuiz", "vitrine", "vitrinez", "spiegel", "spiegelz",
-	"lantaarn", "winkelbord", "winkelbordz", "tassen", "bloembak", "cadeaudoos",
+	"lantaarn", "winkelbord", "winkelbordz", "tassen", "bloembak", "cadeaudoos", "fotohokje",
 	"waar_hoedje", "waar_sjaaltje", "waar_bal", "waar_pet", "waar_strohoed",
 	"waar_strik", "waar_kroon", "waar_streepsjaal", "waar_das", "waar_parels",
 	"waar_gympjes", "waar_laarsjes", "waar_sokjes", "waar_slofjes", "waar_zonnebril"]
@@ -287,6 +296,62 @@ static func bloembak(_p := {}) -> Array:
 		ArtVorm.bx(v, x, 8, 0, 1, 1, 1, TAS[((x + 7) >> 2) % 3])
 	return v
 
+## Het fotohokje (eigenaar, 2026-10-01: "bij de winkel ook graag een fotohokje"),
+## het vijfde in de rij langs de achterwand, rechts naast de souvenirkraam:
+## 18 breed (x) en 16 diep (z), met zijn rug tegen de wand, het anker midden
+## onder de voet.  Links het hokje zelf, open naar de straat (+z): een donker
+## binnenste met een bankje, het gordijn opzij geschoven.  Rechts de automaat,
+## op zijn voorkant een schermpje, de gleuf voor het geld en het luikje waar de
+## foto uit komt (er steekt er al een uit).  Op de zijkant een fotostrook met
+## drie fotootjes, en bovenop een gouden bord met een fototoestel: zo zie je
+## zonder te lezen wat dit is.
+static func fotohokje(_p := {}) -> Array:
+	var v: Array = []
+	# de voet, donker, onder het hele hokje
+	ArtVorm.bx(v, -9, 0, -8, 18, 2, 16, HOKJE_D)
+	# de achterwand, de linkerwand en de automaat (rechts, massief)
+	ArtVorm.bx(v, -9, 2, -8, 18, 30, 2, HOKJE)
+	ArtVorm.bx(v, -9, 2, -6, 2, 30, 14, HOKJE)
+	ArtVorm.bx(v, 2, 2, -6, 7, 30, 14, HOKJE)
+	# boven de opening dicht
+	ArtVorm.bx(v, -7, 26, -6, 9, 6, 14, HOKJE)
+	# binnen donker: de achterwand en de binnenkant van de linkerwand
+	ArtVorm.verf(v, -7, 1, 2, 25, -7, -7, HOKJE_BINNEN)
+	ArtVorm.verf(v, -8, -8, 2, 25, -6, 6, HOKJE_BINNEN)
+	# het bankje achterin, met een kussen
+	ArtVorm.bx(v, -7, 2, -6, 9, 6, 5, ArtDecor.HOUT)
+	ArtVorm.bx(v, -7, 8, -6, 9, 1, 5, KUSSEN)
+	# de gordijnroede en het gordijn, opzij geschoven naar links, met plooien
+	ArtVorm.bx(v, -7, 25, 7, 9, 1, 1, GOUD)
+	ArtVorm.bx(v, -7, 4, 7, 3, 21, 1, HOKJE_GORDIJN)
+	ArtVorm.verf(v, -6, -6, 4, 24, 7, 7, HOKJE_GORDIJN_D)
+	# een crèmekleurige band rondom, en het dak met een randje
+	ArtVorm.verf(v, -9, 8, 28, 29, -8, 7, LUIFEL_WIT)
+	ArtVorm.bx(v, -10, 32, -9, 20, 1, 17, HOKJE_D)
+	# de automaat: het schermpje met een streepje licht
+	ArtVorm.verf(v, 3, 7, 17, 22, 7, 7, SCHERM)
+	ArtVorm.verf(v, 4, 4, 20, 21, 7, 7, LUIFEL_WIT)
+	# de gleuf voor het geld, in een gouden plaatje
+	ArtVorm.verf(v, 3, 6, 10, 14, 7, 7, GOUD)
+	ArtVorm.verf(v, 4, 5, 11, 13, 7, 7, TOESTEL)
+	# het luikje van de foto, met een foto die er half uit steekt
+	ArtVorm.verf(v, 3, 7, 5, 6, 7, 7, TOESTEL)
+	ArtVorm.bx(v, 4, 2, 8, 3, 4, 1, PAPIER)
+	ArtVorm.bx(v, 5, 4, 8, 1, 1, 1, CADEAU)
+	# de fotostrook op de zijkant: drie fotootjes onder elkaar
+	ArtVorm.verf(v, 8, 8, 6, 26, -4, 2, PAPIER)
+	ArtVorm.verf(v, 8, 8, 20, 24, -3, 1, SCHERM)
+	ArtVorm.verf(v, 8, 8, 14, 18, -3, 1, CADEAU)
+	ArtVorm.verf(v, 8, 8, 8, 12, -3, 1, STREEP["sjaals"])
+	# het bord op het dak: een gouden lijst met een fototoestel
+	ArtVorm.bx(v, -8, 33, -2, 16, 11, 1, GOUD)
+	ArtVorm.bx(v, -7, 34, -1, 14, 9, 1, PAPIER)
+	ArtVorm.bx(v, -4, 35, 0, 8, 5, 1, TOESTEL)
+	ArtVorm.bx(v, -3, 40, 0, 3, 1, 1, TOESTEL)
+	ArtVorm.bx(v, 2, 40, 0, 2, 1, 1, LICHT)
+	ArtVorm.bx(v, -1, 36, 1, 3, 3, 1, SCHERM)
+	return v
+
 # --------------------------------------------------------------- de koopwaar
 
 ## Verschuif een stuk voxels.
@@ -420,6 +485,7 @@ static func tabel() -> Dictionary:
 		"tassen": Callable(ArtDecorWinkels, "tassen"),
 		"bloembak": Callable(ArtDecorWinkels, "bloembak"),
 		"cadeaudoos": Callable(ArtDecorWinkels, "cadeaudoos"),
+		"fotohokje": Callable(ArtDecorWinkels, "fotohokje"),
 	}
 	for naam in ArtGasten.KLEDING:
 		t["waar_" + str(naam)] = _waar_fn(str(naam))

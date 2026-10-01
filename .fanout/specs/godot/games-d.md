@@ -76,11 +76,11 @@ zonder heeft een lege kast) plus wat hij draagt (`State.kast_van`).  `State.in_k
 | veld | waarde |
 |---|---|
 | id / naam / icoon | `winkels` / `Winkels` / 🛍️ |
-| w × d / wand / vloer / loop | 132 × 112 / 54 / `tegel` / 1.5 |
-| kader | `[-234, 274, -120, 254]` |
-| mat | een warme loper x 0..132, z 28..42 (`#E9C2B4` / `#E2B5A6`): de straat |
+| w × d / wand / vloer / loop | 156 × 112 / 54 / `tegel` / 1.5 (tot 2026-10-01 132 breed: het fotohokje kwam erbij, §5a) |
+| kader | `[-234, 322, -120, 278]` |
+| mat | een warme loper x 0..156, z 28..42 (`#E9C2B4` / `#E2B5A6`): de straat |
 | `kijk` | (96, 34): door de deur zie je de loper en de schoenenkraam |
-| `mijd` | x 8..126 z 22..36 (voor de vier kraampjes) · x 34..58 z 50..74 (voor de vitrine) · x 0..24 z 38..84 (de strook tussen de pui en de vitrine) · x 26..76 z 76..104 (de vloer die de vitrine voor de deur verbergt) · x 8..26 z 84..102 (voor de spiegel) |
+| `mijd` | x 8..126 z 22..36 (voor de vier kraampjes) · x 34..58 z 50..74 (voor de vitrine) · x 0..24 z 38..84 (de strook tussen de pui en de vitrine) · x 26..76 z 76..104 (de vloer die de vitrine voor de deur verbergt) · x 8..26 z 84..102 (voor de spiegel) · x 110..156 z 22..50 (voor het fotohokje: de vier fotoplekken) · x 130..156 z 50..112 (de nieuwe strook rechts: geen dwaalplek waaruit een wandeling door het hokje of de plant loopt) |
 | zone | `kraam` x 112..124, z 28..40: de klant van de souvenirkraam, en waar een gast met de wens 🎁 wacht (`Hotel.plek_van_behoefte`) |
 | deur | **de trap** (eigenaar, 2026-09-24: "Ik wil de winkels op een andere etage ... net als Habbo Hotel"; tot 2026-09-25 een lift: "Ik wil graag de lift vervangen voor een trap"): de winkelstraat is de **eerste verdieping** (`Kamer.etage` 1, world.md §1.2) en heeft geen deur naar de receptie meer; de trap staat in de linkerwand (x, at 24, deurpunt (0, 30), binnen (8, 30)), waar tot die dag de deur naar de receptie zat. In de receptie is waar de winkeldeur zat (achterwand rechts van de balie, z/106) nu de achterdeur naar de tuin. De trap van de receptie hierheen is één stap (`Rooms.pad("receptie", "winkels")` = 2 kamers) |
 | geluid | `SFEER["winkels"] = "speeldoos"` (hergebruik: een winkel met muziek) |
@@ -95,7 +95,8 @@ kapitelen, twee etalages met een kroon en een parelketting, een paars uithangbor
 gouden kroontje en een luifel met gouden franje), de glazen **vitrine** `vitrinez` @
 (30, 62), de **spiegel** van de paskamer `spiegelz` @ (1, 94) met een roze gordijntje, een
 **lantaarn** @ (4, 18) naast de deur, een stapel **tassen** @ (122, 102), een plant @
-(124, 76) en een **bloembak** @ (90, 104).
+(146, 84) (tot 2026-10-01 @ (124, 76)) en een **bloembak** @ (90, 104), en sinds
+2026-10-01 aan het eind van de rij het **fotohokje** `fotohokje` @ (144, 12) (§5a).
 
 **De vierde kraam en de lopen (2026-09-24).**  Elke wand was vol, dus de souvenirkraam
 kwam in de rij langs de achterwand, op de plek van de deur; de deur ging naar de linkerwand,
@@ -265,6 +266,65 @@ voor heeft (hooguit vier), elke tik het volgende stuk van dat slot, na het laats
 ("🎩 Geen").  Het dier draagt het meteen, kijkt blij of kijkt even (`blijA` / `kijk`), en
 de save onthoudt het.  Geen som en geen ster: aankleden is geen rekenen.  `kan`: iemand
 met een bed heeft iets in zijn kast.  Regel "🪞 Wat trekt %s aan?".
+
+## 5a. Het fotohokje (`foto`, eigenaar 2026-10-01)
+
+> "Ik wil bij de winkel ook graag een fotohokje maken waar je minimaal 2 dieren moet kiezen
+> die op de foto gaan en de prijs per dier daaronder en dan een hoe veel geld je moet
+> inwerpen"
+
+**Het hokje** (`art/decor_winkels.gd::fotohokje`, 18 × 16, koraalrood) is het vijfde in de rij
+langs de achterwand, rechts naast de souvenirkraam @ (144, 12); de winkelstraat werd daarvoor
+24 breder (132 → 156) en de plant schoof naar rechtsvoor @ (146, 84).  Links het hokje zelf,
+open naar de straat (donker binnenste, bankje, groen gordijn opzij), rechts de automaat met
+een schermpje, de geldgleuf en het luikje waar de foto uit komt; op de zijkant een
+fotostrook, op het dak een gouden bord met een fototoestel.  Tegen de wand verbergt het geen
+klant en geen toonbank — een los hokje midden op de vloer stond voor de klant van de
+schoenenkraam.  Knop `📸 Foto` (`spel_foto`), open vanaf twee gasten met een bed.
+
+**De beurt** (`games/foto/spel.gd`, `beurt.gd`):
+
+1. **Kiezen.** "📸 Wie gaan er op de foto?" — op de strook de dieren die mee mogen (hooguit
+   vier: eerst wie al gekozen is, dan het dier van de spelbalk, dan de rest vanaf een plek die
+   elke dag opschuift) en vanaf het tweede gekozen dier "📸 Klaar".  Elk gekozen dier loopt naar
+   zijn plek voor het hokje (vier plekken in twee rijen: (140, 28), (124, 30), (132, 42),
+   (116, 42)).  Zijn alle vier gekozen, dan gaat het meteen door.
+2. **Het scherm** (`games/foto/scherm.gd`, `FotoScherm`, `kind: "eigen"`): het schermpje van
+   het hokje groot in beeld, één vakje per dier met het dier erin en **de prijs per dier
+   eronder** (een gouden prijskaartje "€3"); zolang er nog geen twee zijn, lege vakjes met een
+   "?" en toch de prijs eronder.  Het staat in de grootste vrije band boven of onder de
+   dieren bij het hokje (tablet: erboven, over de achterwand; telefoon rechtop: eronder),
+   nooit over hen heen.
+3. **Het geld.** Zodra iedereen bij het hokje staat: "💶 Hoeveel geld gooi je erin?" met de
+   som eronder en vier bedragen op de strook.
+4. **Goed:** de munten vallen erin (`munt`), even later de flits (`tik`, het scherm wit), het
+   scherm wordt de foto — een polaroid: de dieren naast elkaar, blij — "✨ Klik! Wat een mooie
+   foto!" met het bedrag in het vakje, 😍 mooi!, één ster.
+5. **Fout:** zoals in elke winkel (§4.4): de kaart gaat meteen weg, de dieren kijken sip
+   ("😞 Dat klopt niet"), sjokken langzaam weg naar (122, 70), (96, 54), (104, 88), (78, 70),
+   en het spel sluit.  Een tik op het hokje brengt dezelfde dieren terug en dezelfde vraag met
+   dezelfde vier bedragen.  Geen hulp, niets kwijt.
+
+**Het rekenen.**  Eén prijs per dier, voor elk dier dezelfde, zoals in een echt fotohokje;
+`k·N + r` in het bereik van de groep (eigen zaad, `core/sommen.gd` blijft bevroren):
+
+| groep | prijs per dier | som | bereik |
+|---|---|---|---|
+| 3 | €2 … €5 | `€2 + €2 + €2 =` (herhaald optellen: wat onder elk vakje staat) | tot €20 |
+| 4 | €2, €3, €4, €5, €10 (de tafels van groep 4) | `3 × €2 =` | tot €40 |
+| 5 | €3 … €9 | `4 × €7 =` | tot €36 |
+
+Afleiders: één dier te weinig of te veel, aantal + prijs, de prijs van één dier.
+
+**Kindtekst, letterlijk:** knop `📸 Foto` · "📸 Wie gaan er op de foto?" · knop `📸 Klaar` ·
+"💶 Hoeveel geld gooi je erin?" · "✨ Klik! Wat een mooie foto!" · "😞 Dat klopt niet" ·
+"😍 mooi!" · "🛏 nog te weinig gasten".
+
+**Tests:** `games/foto/test_foto.gd` — aanmelding, prijs en som per groep/N/dag, elke zin past,
+een hele beurt per groep via de echte knoppen (Klaar pas bij twee), vier dieren gaan meteen
+door, verkeerd geld stuurt ze weg (en dezelfde vraag daarna), herladen, te weinig gasten, het
+hokje in de rij (geen loop door een kraam of het hokje), op vier schermen (het scherm ligt
+niet over de kaart, de strook of de dieren).
 
 ## 6. Tests
 

@@ -1317,17 +1317,25 @@ func _bouw_kamers() -> void:
 	# the counter or the plant (`games/kraam/test_kraam.gd`).
 	# 2026-09-24 (owner: "Ik wil de winkels op een andere etage"): the arcade
 	# is the FIRST floor, the stairs stand where its door to the lobby was.
-	_kamer({"id": "winkels", "naam": "Winkels", "icoon": "🛍️", "w": 132, "d": 112,
+	# 2026-10-01 (owner: "Ik wil bij de winkel ook graag een fotohokje maken"):
+	# the PHOTO BOOTH (`games/foto`) is the fifth in the row along the back
+	# wall, right of the souvenir stall (`fotohokje` @ (144, 12)), so the arcade
+	# grew from 132 to 156 wide and the runner with it.  Standing against the
+	# wall it hides no customer and no counter; its animals stand in front of
+	# it on the street, and `mijd` keeps that floor free as well.
+	_kamer({"id": "winkels", "naam": "Winkels", "icoon": "🛍️", "w": 156, "d": 112,
 		"wand": 54, "vloer": "tegel", "loop": 1.5, "etage": 1,
 		"trap": {"wand": "x", "at": 24, "breed": 12},
-		"matten": [{"x0": 0, "x1": 132, "z0": 28, "z1": 42,
+		"matten": [{"x0": 0, "x1": 156, "z0": 28, "z1": 42,
 			"kl": [Color("#E9C2B4"), Color("#E2B5A6")]}],
 		"kijk": Vector2(96, 34),
 		"mijd": [{"x0": 8, "x1": 126, "z0": 22, "z1": 36},
 			{"x0": 34, "x1": 58, "z0": 50, "z1": 74},
 			{"x0": 0, "x1": 24, "z0": 38, "z1": 84},
 			{"x0": 26, "x1": 76, "z0": 76, "z1": 104},
-			{"x0": 8, "x1": 26, "z0": 84, "z1": 102}],
+			{"x0": 8, "x1": 26, "z0": 84, "z1": 102},
+			{"x0": 110, "x1": 156, "z0": 22, "z1": 50},
+			{"x0": 130, "x1": 156, "z0": 50, "z1": 112}],
 		# where the souvenir stall's customer stands, and where a guest with the
 		# 🎁 wish waits for it (`Hotel.plek_van_behoefte`)
 		"zones": {"kraam": {"x0": 112, "x1": 124, "z0": 28, "z1": 40}},
@@ -1336,12 +1344,13 @@ func _bouw_kamers() -> void:
 			{"n": "sjaalkraam", "x": 54, "z": 12},
 			{"n": "schoenenkraam", "x": 86, "z": 12},
 			{"n": "souvenirkraam", "x": 118, "z": 12},
+			{"n": "fotohokje", "x": 144, "z": 12},
 			{"n": "luxepuiz", "x": 1, "z": 62, "ver": true},
 			{"n": "vitrinez", "x": 30, "z": 62},
 			{"n": "spiegelz", "x": 1, "z": 94, "ver": true},
 			{"n": "lantaarn", "x": 4, "z": 18},
 			{"n": "tassen", "x": 122, "z": 102},
-			{"n": "plant", "x": 124, "z": 76},
+			{"n": "plant", "x": 146, "z": 84},
 			{"n": "bloembak", "x": 90, "z": 104}]})
 	_bouw_tuin(_kamers["tuin"])
 	_bouw_zwembad(_kamers["zwembad"])

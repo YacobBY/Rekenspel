@@ -76,8 +76,9 @@ func test_maten_en_vloeren() -> void:
 		# meubels, en toch ≥ 8 loopplekken)
 		"kas": [128, 112, 40, "tegel", 1.25],
 		# 2026-09-24: de winkelstraat naast de receptie, drie kraampjes en de
-		# luxe winkel
-		"winkels": [132, 112, 54, "tegel", 1.5],
+		# luxe winkel; 2026-10-01 24 breder voor het fotohokje aan het eind
+		# van de rij
+		"winkels": [156, 112, 54, "tegel", 1.5],
 	}
 	for id in verwacht:
 		var r := Rooms.get_kamer(id)
@@ -101,7 +102,7 @@ func test_kamerkaders() -> void:
 		"wasserij": [-190, 210, -116, 200],
 		"speelzaal": [-210, 238, -124, 224],
 		"kas": [-234, 266, -92, 250],
-		"winkels": [-234, 274, -120, 254],
+		"winkels": [-234, 322, -120, 278],
 	}
 	for id in verwacht:
 		var box := Rooms.kader(Rooms.get_kamer(id))
