@@ -138,6 +138,32 @@ of the frame height) — and `Hotel.naar_kamer` plays `Snd.trap(op)`, four woode
 climbing or going down, instead of the door sound. From the garden the facade rises three floors of
 windows over the lobby's back door (`gevel.etages`).
 
+**2026-10-01 — a flight UP and a flight DOWN** (owner: "ik wil dat je bij de trap tussen etages
+beweegt misschien een trap omhoog en een omlaag"). What is written above about ONE opening
+per stair room is history: `Kamer.trap = {op: {wand, at, breed[, punt]}, af: {…}}` — receptie,
+winkels and speelzaal have both, the gang (top floor) only `af`, the wasserij (cellar) only
+`op`. `deur_punten[ander]` lies on the flight that goes that way (a guest going up leaves by
+the up flight and steps out of the arriving floor's down flight; every stair room stays one
+step from every other in `pad`). `_trap` draws each flight in its own frame with a blue arrow
+plate over the lintel; behind an up flight the wall gets lighter, behind a down flight darker.
+The two door signs `trap_op_<kamer>` ("⬆ Omhoog") and `trap_af_<kamer>` ("⬇ Omlaag", also a tap
+on the opening, `tik_vlak`) go exactly one floor (`Hotel.neem_trap(van, richting)`, signal
+`trap_genomen`) with the vertical slide and `Snd.trap(op)` — no sheet; `UiTrapIcoon` is gone and
+the tower sheet (§6.3) is reached from the floor plan only. API: `trap_richtingen(k)`,
+`trap_richting(van, naar)`, `trap_naar(k, richting)`, `trap_punt(k, richting)`,
+`World.vlak_van_trap(k, richting)`. The stairs rows of the table below are:
+
+| room | flight | wand | at | breed | door point (x, z) | inside (ix, iz) |
+|---|---|---|---|---|---|---|
+| receptie | *trap op* | x | 24 | 12 | (0, 30) | (8, 30) — to winkels, speelzaal, gang |
+| receptie | *trap af* | x | 102 | 12 | (0, 108) | (8, 108) — to wasserij |
+| gang | *trap af* | x | 10 | 12 | (0, 16) | (8, 16) |
+| wasserij | *trap op* | z | 62 | 12 | (68, 0) | (68, 8) |
+| speelzaal | *trap op* | z | 36 | 12 | (42, 0) | (42, 8) — to gang |
+| speelzaal | *trap af* | z | 57 | 12 | (63, 0) | (63, 8) — to winkels, receptie, wasserij |
+| winkels | *trap op* | x | 16 | 11 | (0, 26) | (8, 26) — `punt` 26; to speelzaal, gang |
+| winkels | *trap af* | x | 29 | 11 | (0, 30) | (8, 30) — `punt` 30; to receptie, wasserij |
+
 | from | to | wand | at | breed | door point (x, z) | inside (ix, iz) |
 |---|---|---|---|---|---|---|
 | receptie | *trap* | x | 24 | 12 | (0, 30) | (8, 30) — to gang, speelzaal, winkels, wasserij |
@@ -1900,8 +1926,9 @@ the six-page story of 2026-09-23 (guests walking in, wishes, a spotlight on the 
   band; the room in view stays the sunny cell. Everything is placed by hand, no `Container`.
   On a narrow sheet the gaps give way first (8 → 4), then the shaft (36 → 24), then the
   cells (never under 56 wide: a 48 tap target plus air); with five floors a short screen
-  scrolls the sheet. The same sheet, titled `De trap` after the drawn stairs pictogram (`UiBlad` `beeld`), is the stairs' panel
-  (`scenes/main.gd::_toren`).
+  scrolls the sheet. Until 2026-10-01 the same sheet was the stairs' panel
+  (`scenes/main.gd::_toren`); since then the stairs go one floor per tap (§1.2) and only the
+  floor plan opens it.
 * `Hotel.naarKamer(id)` = `World.naar(id)` + `state.kamerNu = id` + `Snd.deur()` +
   `render()`.
 * **Port (owner 2026-09-23): `👀 Volg`.**  The "komt eraan" bubble (a guest walking in

@@ -1166,6 +1166,26 @@ from ~240 Hz, not a sub-bass: a tablet speaker does not play 60 Hz.
 
 ---
 
+
+### 15.6 Louder, and the world sounds (Godot addition, owner 2026-10-01)
+
+Owner: "Ik wil sound effects voor het spel". Measured in the web export, what reached the
+speaker was exactly the buffer at the HTML's master gain 0.16 (a tap −26.7 dBFS, the desk
+bell −18.2, the room ambience −36) — barely audible on a tablet. Since then every voice
+player and the ambience player play their buffer `Snd.LUID_DB` = 12 dB louder
+(`volume_db`, ×3.98): the buffers, `MEESTER` and the HTML oracle of §15.4 are unchanged,
+the balance between all sounds too (re-measured: tap −14.7, bell + tap + door −4.9, the
+loudest single buffer `ding` peaks at −6.2 dBFS). Muting also silences a sound that is still
+ringing. Thirteen world sounds were added (`Snd.wereld_namen()`, seeded noise so each is
+built once): `klik` (the photo booth's flash), `kassa` (coins earned, `Econ.geef_munt` with
+n > 0; a star at the same moment waits 0.3 s), `zwiep` (a sheet opens), `knabbel` (guests
+eat at a bowl in view, one per level), `pluk` (oogst), `gewicht` (weeg), `sleutel`
+(sleutels), `plof` (was), `sticker` (spiegel), `bubbel` (tobbe), `kleed(aan)` (paskamer, on
+and off) and `avond` (the evening round, three falling notes). Peaks on the buffers between
+−30.0 and −23.8 dBFS: never above `ja`, the frequent ones at most `plop`, no 50 ms louder than
+`hoera`; each is throttled per name. Tests: `tests/test_snd_wereld.gd`, and a call-site
+assertion in each game. Open: iOS silent mode mutes Web Audio (`navigator.audioSession`,
+an owner decision); the ambience loop restarts on the web every ≈ 4.2 s with a small gap.
 ## 16. Style and layout (`style.css`, `index.html`, `ui.js`)
 
 ### 16.1 Page shell

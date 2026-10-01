@@ -1545,6 +1545,18 @@ envelope), cached per name, bit-identical per call.
 web, so it survives a reload and an "Add to Home Screen" install). Written atomically:
 `dierenhotel.json.tmp` then rename.
 
+**Three hotels (owner 2026-10-01: "En ik wil save files maken").** Three documents of this
+format, one per hotel: hotel 1 = `user://dierenhotel.json` (unchanged, so an old save, the
+`?opslag=` hook and the tests are hotel 1), hotels 2/3 = `user://dierenhotel-2.json` /
+`-3.json`, each written atomically via `<path>.tmp`; `user://dierenhotel-keuze.json` =
+`{"hotel": n}` is the one in use. The start sheet (`ui/startblad.gd`, `ui/hotelkeuze.gd`)
+shows a tile per hotel; a new hotel takes a free slot, a full tablet asks which one to
+replace and then "Weet je het zeker?". "💾 Bewaar" exports `{"v":1,"s":…}` of the checked
+document as a `.json` download, "📂 Open" reads one (`ui/hotelbestand.gd`: web via
+`JavaScriptBridge`, desktop via `FileDialog`); every document, from the tablet or a file,
+passes `State.ontleed()` (shape, normalise, repair, shape) and a bad file changes nothing.
+"🏨 Hotels" in the top bar switches hotels during play.
+
 ```json
 {"v": 1, "s": { ... }}
 ```

@@ -155,7 +155,9 @@ godot/dierenhotel/        THE GAME (Godot 4.7.2, GDScript). Everything you edit 
   games/_voorbeeld/       reference game: copy its shape; it is a `stub` (never shown)
   games/_winkel/          the shared shop game (`WinkelSpel`), its maths (beurt.gd) and its
                           tests; no spel.tscn, so the scan skips it (games-d.md)
-  ui/                     kaart, keuzestrook, afleiders, wolk, hud, kamerbalk, blad, thema, teksten …
+  ui/                     kaart, keuzestrook, afleiders, wolk, hud, kamerbalk, blad, thema, teksten,
+                          startblad + hotelkeuze (the start sheet with the three hotels) + hotelbestand
+                          (💾 Bewaar / 📂 Open: the web/desktop file glue) …
   hotel/prikbord.gd       task board (≤ 3 cards);  hotel/rekening.gd  the checkout bill
   scenes/main.gd          the shell (boots the world, owns the `[probe] …` lines)
   scenes/kamer.gd dier.gd vloer.gd wereldobject.gd   the room in view
@@ -243,15 +245,15 @@ ones a game or a feature normally needs.
 | autoload | owns | key API |
 |---|---|---|
 | `Art` | voxel models, baking to plates (`Plaat`), golden-image cache | `registreer_model(naam, fn)` (namespace with your game id), `model`, `plaat`, `bak`, `dier(kind, pose, g)` |
-| `Rooms` | the rooms as data (`Kamer`, `lijst()` counts them), doors, paths, furniture slots | `get_kamer(id)`, `plek(kamer, fx, fz)`, `deur`, `pad(van, naar)`, `om_het_water`, `meubel_zet/meubel_weg/meubels`, `slots/slot`, `vrij_vak`, `ingang(kamer)` (the receptie's front door, outside the door graph), floors: `etage(kamer)`, `etages()` (top down), `op_etage(e)`, `trap_kamers()`, `trap_kamer(e)`, `via_trap(van, naar)`, `trap_punt(kamer)`, `buren(kamer)` |
+| `Rooms` | the rooms as data (`Kamer`, `lijst()` counts them), doors, paths, furniture slots | `get_kamer(id)`, `plek(kamer, fx, fz)`, `deur`, `pad(van, naar)`, `om_het_water`, `meubel_zet/meubel_weg/meubels`, `slots/slot`, `vrij_vak`, `ingang(kamer)` (the receptie's front door, outside the door graph), floors: `etage(kamer)`, `etages()` (top down), `op_etage(e)`, `trap_kamers()`, `trap_kamer(e)`, `via_trap(van, naar)`, `trap_richtingen(k)` (`op`/`af`), `trap_richting(van, naar)`, `trap_naar(k, richting)` (exactly one floor), `trap_punt(k, richting)`, `buren(kamer)` |
 | `Hits` | the hotspot layer: buttons/drop targets on world objects, band grid, 0 % overlap; the hotel's buttons (doors, stairs, bell, board, game entries, bowls) choose their place against what stands STILL — a walking guest moves none of them, one who stands on a place for 8 ticks makes it step aside once (2026-09-24, `tests/test_knoppen_staan_stil.gd`); name plates give way to them; a hotspot made with `tik_vlak` (the hotel's bowls and doors, 2026-09-25) also takes a tap on its OBJECT — its catch area presses the button (`Hits.tik_onder`) | `maak(o)`, `weg(id)`, `wis_eigenaar(door)`, `leen/geef_terug`, `spot(id)`, `dekking(id)`, `lijst()`; signal `hotspot_getikt` |
 | `World` | camera/room in view, guests (`Dier`), movement, decor, particles | `naar(kamer)`, `kamer_nu()`, `dier(id)`, `dieren(kamer)`, `await stappen(id, punten)`, `await ga(id, x, z)`, `reis(id, kamer)`, `kom_binnen(id, x, z)` (a new guest through the front door, per kind), `vlak_van_ingang()`, `slaap`, `pose`, `mood`, `decor(kamer, o)`, `decor_weg`, `zet_bak`, `spetter(kamer, x, z, n, kl)`, `scherm(x, z, y)`, `verberg_bed(kamer, slot)` (a free bed out of sight until the camera leaves the room); signals `kamer_veranderd`, `getekend`, `reis_gestart` |
-| `Snd` | 18 procedural sounds + per-room ambience loops, and per guest kind a sad and a happy sound (2026-09-24) | `tik plop ja hoera bel deur kar munt ster plons au klok hup tover dag brief terug zacht`, `ding` (the desk bell), `trap(op)` (four footfalls up or down the stairs to another floor), `sfeer(kamer)`, `dempt()`; `dier_sip(wie)` (plays in `Ui.misser` and when a shop sends an animal out, instead of `zacht`), `dier_blij(wie)` (follows every `ja()` for the animal of the turn); tests listen via `gehoord()` |
+| `Snd` | 18 procedural sounds + per-room ambience loops, and per guest kind a sad and a happy sound (2026-09-24) | `tik plop ja hoera bel deur kar munt ster plons au klok hup tover dag brief terug zacht`, `ding` (the desk bell), `trap(op)` (four footfalls up or down the stairs to another floor), `sfeer(kamer)`, `dempt()`; `dier_sip(wie)` (plays in `Ui.misser` and when a shop sends an animal out, instead of `zacht`), `dier_blij(wie)` (follows every `ja()` for the animal of the turn); since 2026-10-01 every player plays its buffer `LUID_DB` (12 dB) louder (`volume_db`; buffers and the HTML oracle unchanged), and thirteen world sounds `klik kassa zwiep knabbel pluk gewicht sleutel plof sticker bubbel kleed(aan) avond` (`wereld_namen()`; coins earned, a sheet opening, eating at a bowl, the photo booth, …); tests listen via `gehoord()` or `luister(fn) -> Array[String]` |
 | `Ui` | cards, bubbles, strips, toasts, sheets, theme, text rules | `somkaart(obj, som, o)` (`reken: true` marks a maths card without a number answer or sum line), `wolk(o)`, `wolk_weg`, `getal_tag(obj, n)`, `bron(obj, o)`, `toast(tekst)`, `blad_open/blad_dicht`, `naamplaat`, `keur_regel(id, zin)`, `is_som(id)` (while a sum is on screen the room bar and the unborrowed door signs are hidden); `maak_knop` kind `"eigen"` = a game's own Control placed by `Hits` (the wekker's big clock) |
-| `State` | the save (`State.s`, JSON in `user://dierenhotel.json`, atomic), band | `bewaar()`, `lees()`, `nieuw_spel()`, `spel_data(id)`, `band()`, `tel(goed, ms)`, `n_gasten()`, `max_gasten()`, `plek_voor_gast()`, `kamers_met_plek()`, `plek_in(kamer)`, `bed_plek(kamer)`, `bed_vrij(kamer?)`, `gasten_in(kamer)`, `herstel_bedden()` — beds stand on fixed bed places per bedroom (4 each, `Rooms.meubel_zet` snaps to the next free one), so the hotel holds 8 guests (2026-09-24) |
+| `State` | the save (`State.s`, JSON, atomic), band; THREE hotels (save slots, owner 2026-10-01): hotel 1 = `user://dierenhotel.json`, 2/3 = `user://dierenhotel-2.json`/`-3.json`, the one in use in `user://dierenhotel-keuze.json`; every save from the tablet or a file passes `ontleed()` | `bewaar()`/`lees()` (act on `State.hotel`), `HOTELS`, `kies_hotel(n)`, `lees_hotel(n)`, `ontleed(tekst)`, `hotels()`/`samenvatting(n)`, `vrij_hotel()`, `exporteer(n)`, `zet_hotel(n, s)`, `nieuw_spel()`, `spel_data(id)`, `band()`, `tel(goed, ms)`, `n_gasten()`, `max_gasten()`, `plek_voor_gast()`, `kamers_met_plek()`, `plek_in(kamer)`, `bed_plek(kamer)`, `bed_vrij(kamer?)`, `gasten_in(kamer)`, `herstel_bedden()` — beds stand on fixed bed places per bedroom (4 each, `Rooms.meubel_zet` snaps to the next free one), so the hotel holds 8 guests (2026-09-24) |
 | `Econ` | stars, coins, the bill | `sterren(n)`, `geef_munt(n)`, `buidel(totaal)`, `splits(n)`, `rekening(o)`; signals `sterren_veranderd`, `munten_veranderd` |
 | `Games` | registry of minigames, start/stop/supersede | `lijst()`, `definitie(id)`, `actief()`, `ontgrendeld(id)`, `start(id)`, `stop()`, `hersteek()`, `verhuis(kamer)` (the running game's room walks along with its animal); signals `spel_gestart`, `spel_gestopt` |
-| `Hotel` | day cycle, wishes, board, check-in, evening round, letters, hotel buttons | `start()`, `bel()`, `morgen()`, `avondronde()`, `taak_af(id)`, `spel_taken()`, `wens_af(gast, welke)`, `kies_kamer(kamer)` / `checkin_terug()` / `wijs_bed(kamer, bed, {loop})` (check-in steps 3–4), `komt_eraan()`, `volg(id)`, `stop_volgen()`, `hotspots()`, `naar_kamer(id)`; signal `trap_gevraagd(kamer)` |
+| `Hotel` | day cycle, wishes, board, check-in, evening round, letters, hotel buttons | `start()`, `bel()`, `morgen()`, `avondronde()`, `taak_af(id)`, `spel_taken()`, `wens_af(gast, welke)`, `kies_kamer(kamer)` / `checkin_terug()` / `wijs_bed(kamer, bed, {loop})` (check-in steps 3–4), `komt_eraan()`, `volg(id)`, `stop_volgen()`, `hotspots()`, `naar_kamer(id)`, `neem_trap(van, richting)` (one floor up or down, no sheet); signal `trap_genomen(van, naar, richting)` (drives the probe line) |
 
 Rooms (`Rooms.lijst()`): `receptie` (desk top-right, stairs top-left, back door
 to the garden right of the desk), `gang`,
@@ -264,15 +266,22 @@ row, the luxe shop and the mirror).
 **The hotel is a tower** (owner 2026-09-24, "net als Habbo Hotel"; world.md §1.2):
 `Kamer.etage` — 0 receptie, tuin, zwembad, kas (the ground floor is the lobby and
 the outdoors only); 1 winkels; 2 speelzaal; 3 gang, kamer1, kamer2, keuken; −1
-(cellar, "K") wasserij.  Doors stay on their floor; ONE stairwell (`Kamer.trap`, a
-`deur_punten` entry per other floor marked `trap`; a lift until 2026-09-25, owner:
-"Ik wil graag de lift vervangen voor een trap") joins the floors, so `pad` and
-`World.reis` take it like a door.  `scenes/vloer.gd::_trap` draws a wooden flight
-seen from the side through a door frame — up where there is a floor above, down on
-the top floor.  Its button `trap_<kamer>` ("Trap" with a DRAWN pictogram, `UiTrapIcoon`
-— there is no stairs emoji; a door sign) opens the tower sheet (`Hotel.trap_gevraagd`
-→ `scenes/main.gd::_toren`, titled with the same picture); `World.naar` to another
-floor slides the room in vertically and `Hotel.naar_kamer` plays `Snd.trap(op)`.
+(cellar, "K") wasserij.  Doors stay on their floor; ONE stairwell joins the floors
+(a lift until 2026-09-25, owner: "Ik wil graag de lift vervangen voor een trap"),
+and since 2026-10-01 (owner: "bij de trap tussen etages beweegt misschien een trap
+omhoog en een omlaag") every stair room has a flight per direction:
+`Kamer.trap = {op: {wand, at, breed[, punt]}, af: {…}}` — receptie, winkels and
+speelzaal both, the gang (top) only `af`, the wasserij (cellar) only `op`.
+`deur_punten[ander]` lies on the flight that goes that way, so `pad` and `World.reis`
+take the right flight like a door (a guest going up leaves by the up flight and
+steps out of the arriving floor's down flight).  `scenes/vloer.gd::_trap` draws each
+flight in its own frame with a blue arrow plate over the lintel (behind an up flight
+the wall gets lighter, behind a down flight darker).  Their door signs
+`trap_op_<kamer>` ("⬆ Omhoog") and `trap_af_<kamer>` ("⬇ Omlaag", `tik_vlak`) go
+exactly one floor (`Hotel.neem_trap`): `World.naar` slides the room in vertically
+and `Snd.trap(op)` plays.  The tower sheet (`scenes/main.gd::_toren`) is only
+reached from the floor plan now; `UiTrapIcoon` is gone.  `speel.js` steps
+`trap:op` / `trap:af`.
 A hotspot button can carry such a picture as `beeld` (a `Texture2D`), a sheet too.
 Every walk leg inside a room goes round what stands there (`World.looppad`,
 A* in `wereld/looppad.gd` over `Rooms.hindernissen`, cached per obstacle set);
@@ -386,6 +395,11 @@ Per-game maths lives in the classes `Sommen.Zwembad`, `.Wekker`, `.Hinkel`,
   `Proef.alleen_spellen`.
 - Godot `--script` SceneTree scripts cannot name autoloads at compile time; use
   `root.get_node("State")`.
+- Three hotels (2026-10-01): `?opslag=` seeds hotel 1 and makes it the hotel in use,
+  `&hotel2=`/`&hotel3=` seed the others; `kiek.js --hotels N --startblad "Knieuw; Khotel2"`
+  taps the start sheet (it reports `bladknop Kverder` = the last-played tile,
+  `Khotel1..3`, `Knieuw`, `Kbewaar`, `Kopen`, `Knee`/`Kja`); the top bar's
+  "🏨 Hotels" (`chroom:Hotels` in `speel.js`) switches hotels during play.
 - URL save hook: `index.html?opslag=<base64url of a complete save JSON>` writes
   the save before it is read (base64url: `-`/`_`; `uri_decode()` turns `+` into
   a space). Make the JSON with a headless script: `State.nieuw_spel()`, set
