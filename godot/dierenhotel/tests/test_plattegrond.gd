@@ -182,18 +182,18 @@ func test_de_plattegrond_is_een_toren() -> void:
 			waar(absf(knop.get_center().y - cel.get_center().y) <= 0.5,
 				"de etageknop van etage %s staat midden op zijn rij" % e)
 			waar(knop.end.x <= cel.position.x, "en links van %s, in het trappenhuis" % trap)
-	# the building reads top-down: the guest rooms up high, the lobby on the
+	# the building reads top-down: the guest rooms over the lobby, the lobby on the
 	# ground, the laundry in the cellar
 	var gang := (kaart.get_node("Pgang") as Control).get_global_rect()
 	var receptie := (kaart.get_node("Preceptie") as Control).get_global_rect()
 	var wasserij := (kaart.get_node("Pwasserij") as Control).get_global_rect()
 	waar(gang.end.y <= receptie.position.y, "de gang ligt boven de receptie")
 	waar(wasserij.position.y >= receptie.end.y, "de wasserij ligt onder de receptie")
-	gelijk(UiPlattegrond.rij_van(3), ["gang", "kamer1", "kamer2", "keuken"] as Array[String],
-		"de bovenste etage: de gang bij de trap, dan de kamers erlangs")
+	gelijk(UiPlattegrond.rij_van(1), ["gang", "kamer1", "kamer2", "keuken"] as Array[String],
+		"de eerste verdieping: de gang bij de trap, dan de kamers erlangs")
 	gelijk(UiPlattegrond.rij_van(0), ["receptie", "tuin", "zwembad", "kas"] as Array[String],
 		"de begane grond: receptie, tuin, en door de tuin naar buiten")
-	# every door between two cells side by side, once per pair: on the top floor
+	# every door between two cells side by side, once per pair: on the first floor
 	# gang|kamer1 (kamer 2 and the kitchen also open onto the gang but cannot
 	# stand beside it in one row), on the ground floor receptie|tuin and the
 	# gate tuin|zwembad (the tuin's door to the kas is not a neighbour); the

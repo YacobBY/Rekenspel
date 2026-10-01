@@ -1001,9 +1001,9 @@ func _bouw_kamers() -> void:
 		# playroom is a floor of its own.
 		"etage": 0,
 		# Two flights (owner, 2026-10-01: "een trap omhoog en een omlaag"): up to
-		# the shops where the one flight stood, and down to the laundry in the
-		# cellar at the front of the same wall, past the key board — near the
-		# back corner the notice board leaves no room for a second sign.
+		# the guest rooms where the one flight stood, and down to the laundry in
+		# the cellar at the front of the same wall, past the key board — near
+		# the back corner the notice board leaves no room for a second sign.
 		"trap": {"op": {"wand": "x", "at": 24, "breed": 12},
 			"af": {"wand": "x", "at": 102, "breed": 12}},
 		"deuren": [{"naar": "tuin", "wand": "z", "at": 106, "breed": 12}],
@@ -1048,11 +1048,23 @@ func _bouw_kamers() -> void:
 			# and the key board (z 84): the bench runs z 48..67, the case z 70..73
 			{"n": "bankjez", "x": 6, "z": 58}, {"n": "koffer", "x": 6, "z": 72},
 			{"n": "plant", "x": 16, "z": 96}, {"n": "plant", "x": 104, "z": 96}]})
-	# The top floor: the corridor of the guest rooms, with the kitchen at its
-	# end.  The stairs stand where the door down to the lobby was.
+	# The first floor (owner, 2026-10-01: "Maak de kamers de eerste
+	# verdieping"; it was the top floor from 2026-09-24): the corridor of the
+	# guest rooms, with the kitchen at its end, one flight up from the lobby.
+	# In the middle of the tower now, so two flights: down in the short left
+	# wall (where the door down to the lobby was), at its front end, and up
+	# round the corner in the back wall, left of the kamer 1 door, where the
+	# coat rack hung.  Not both in the left wall, as in the arcade: on a phone
+	# held upright that wall is the left edge of the screen, and the sign of
+	# the front flight cannot step aside from the other flight's opening.  The
+	# flight down sits as far forward as the wall allows, so that on a phone
+	# held sideways the sign of the flight up fits between its opening and the
+	# kamer 1 door; and at 7 the flight up leaves the kamer 1 sign in the
+	# middle of its door on a tablet (`tests/test_trap.gd` holds all four).
 	_kamer({"id": "gang", "naam": "Gang", "icoon": "🚪", "w": 120, "d": 36,
-		"wand": 56, "vloer": "loper", "loop": 1.0, "etage": 3,
-		"trap": {"af": {"wand": "x", "at": 10, "breed": 12}},
+		"wand": 56, "vloer": "loper", "loop": 1.0, "etage": 1,
+		"trap": {"op": {"wand": "z", "at": 7, "breed": 12},
+			"af": {"wand": "x", "at": 22, "breed": 12}},
 		"deuren": [
 			{"naar": "kamer1", "wand": "z", "at": 24, "breed": 12},
 			{"naar": "kamer2", "wand": "z", "at": 60, "breed": 12},
@@ -1067,8 +1079,11 @@ func _bouw_kamers() -> void:
 		# kamer 1 door and 29 % of the kamer 2 door.  Here they cover nothing,
 		# and at x = 36 and 108 they sit exactly between the walking cells of
 		# the front row, so the corridor keeps its four wander places.
-		"decor": [{"n": "kapstok", "x": 12, "z": 1, "ver": true},
-			{"n": "poster_poot", "x": 48, "z": 1, "y": 30, "ver": true},
+		# the coat rack made room for the flight up (2026-10-01): it hangs
+		# between the kamer 2 and kitchen doors now, under the tree poster
+		# (between kamer 1 and kamer 2 hangs the clock of `wekker`)
+		"decor": [{"n": "poster_poot", "x": 48, "z": 1, "y": 30, "ver": true},
+			{"n": "kapstok", "x": 84, "z": 1, "ver": true},
 			{"n": "poster_boom", "x": 84, "z": 1, "y": 30, "ver": true},
 			{"n": "plant", "x": 36, "z": 30}, {"n": "plant", "x": 108, "z": 30},
 			{"n": "kist", "x": 114, "z": 14}]})
@@ -1080,7 +1095,7 @@ func _bouw_kamers() -> void:
 	# a window on the back wall between the door and the corner, a bedside table
 	# with a picture over it against the left wall, blocks in the near corner.
 	_kamer({"id": "kamer1", "naam": "Kamer 1", "icoon": "🛏️",
-		"w": 114, "d": 114, "wand": 58, "vloer": "zacht", "loop": 1.5, "etage": 3,
+		"w": 114, "d": 114, "wand": 58, "vloer": "zacht", "loop": 1.5, "etage": 1,
 		"matten": {"x0": 51, "x1": 93, "z0": 45, "z1": 87,
 			"kl": [Color("#DFCBEA"), Color("#D6BFE4")]},
 		"deuren": [{"naar": "gang", "wand": "z", "at": 72, "breed": 12}],
@@ -1112,7 +1127,7 @@ func _bouw_kamers() -> void:
 	# the window hangs on the LEFT wall and the back wall carries a book shelf
 	# right of the door.  Slot ids stay bed1, bed2, bak.
 	_kamer({"id": "kamer2", "naam": "Kamer 2", "icoon": "🛏️",
-		"w": 114, "d": 114, "wand": 58, "vloer": "zacht", "loop": 1.5, "etage": 3,
+		"w": 114, "d": 114, "wand": 58, "vloer": "zacht", "loop": 1.5, "etage": 1,
 		"matten": {"x0": 24, "x1": 96, "z0": 58, "z1": 76,
 			"kl": [Color("#CBE3D6"), Color("#BFDBCB")]},
 		"deuren": [{"naar": "gang", "wand": "z", "at": 72, "breed": 12}],
@@ -1136,7 +1151,7 @@ func _bouw_kamers() -> void:
 		"bed_model": "bedz",
 		"bedden": [[18, 30], [52, 30], [18, 78], [52, 78]]})
 	_kamer({"id": "keuken", "naam": "Keuken", "icoon": "🍪", "w": 120, "d": 114,
-		"wand": 56, "vloer": "tegel", "loop": 1.5, "etage": 3,
+		"wand": 56, "vloer": "tegel", "loop": 1.5, "etage": 1,
 		# an apricot runner in front of the sink: the laundry and the pool deck
 		# have the same tiles, so a door into the kitchen shows the runner too
 		# (`kijk`, owner 2026-09-23)
@@ -1293,13 +1308,14 @@ func _bouw_kamers() -> void:
 	# slinger vlaggetjes aan de achterwand boven de ballenbak (eigenaar,
 	# 2026-09-25: "De speelzaal lijkt momenteel kapot" — hij hing als een los
 	# latje midden in de zaal).
-	# 2026-09-24, the tower: the playroom is the second floor; the stairs stand
-	# where its door to the lobby was.
+	# 2026-09-24, the tower: the playroom is a floor of its own; the stairs
+	# stand where its door to the lobby was.  Since 2026-10-01 (owner: "Maak de
+	# kamers de eerste verdieping") it is the TOP floor, over the shops: only
+	# the flight down, where the one flight stood (the flight up beside the
+	# climbing frame went with it).
 	_kamer({"id": "speelzaal", "naam": "Speelzaal", "icoon": "🧸",
-		"w": 114, "d": 100, "wand": 56, "vloer": "hout", "loop": 1.5, "etage": 2,
-		# up beside the climbing frame, down where the one flight stood
-		"trap": {"op": {"wand": "z", "at": 36, "breed": 12},
-			"af": {"wand": "z", "at": 57, "breed": 12}},
+		"w": 114, "d": 100, "wand": 56, "vloer": "hout", "loop": 1.5, "etage": 3,
+		"trap": {"af": {"wand": "z", "at": 57, "breed": 12}},
 		"matten": {"x0": 20, "x1": 94, "z0": 18, "z1": 82,
 			"kl": [Color("#BFE3F2"), Color("#AEDAEC")]},
 		"zones": {"dans": {"x0": 40, "x1": 74, "z0": 56, "z1": 80}},
@@ -1378,7 +1394,9 @@ func _bouw_kamers() -> void:
 	# door — no wander place is left from which a stroll would cross a stall,
 	# the counter or the plant (`games/kraam/test_kraam.gd`).
 	# 2026-09-24 (owner: "Ik wil de winkels op een andere etage"): the arcade
-	# is the FIRST floor, the stairs stand where its door to the lobby was.
+	# is a floor of its own, the stairs stand where its door to the lobby was;
+	# the SECOND floor since 2026-10-01 (owner: "Maak de kamers de eerste
+	# verdieping"), between the guest rooms and the playroom.
 	# 2026-10-01 (owner: "Ik wil bij de winkel ook graag een fotohokje maken"):
 	# the PHOTO BOOTH (`games/foto`) is the fifth in the row along the back
 	# wall, right of the souvenir stall (`fotohokje` @ (144, 12)), so the arcade
@@ -1386,7 +1404,7 @@ func _bouw_kamers() -> void:
 	# wall it hides no customer and no counter; its animals stand in front of
 	# it on the street, and `mijd` keeps that floor free as well.
 	_kamer({"id": "winkels", "naam": "Winkels", "icoon": "🛍️", "w": 156, "d": 112,
-		"wand": 54, "vloer": "tegel", "loop": 1.5, "etage": 1,
+		"wand": 54, "vloer": "tegel", "loop": 1.5, "etage": 2,
 		# The two flights side by side between the lantern and the luxury shop
 		# (z 16..40, the only stretch of wall the shops leave; owner,
 		# 2026-10-01: "een trap omhoog en een omlaag"): a little narrower than a

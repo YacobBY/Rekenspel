@@ -17,12 +17,14 @@ const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740),
 	Vector2i(740, 360)]
 
 ## Which flights each stair room has, and where each one leads: one floor up or
-## down, to the stairs of that floor.
+## down, to the stairs of that floor.  The guest rooms on the first floor
+## (owner, 2026-10-01: "Maak de kamers de eerste verdieping"), the shops over
+## them and the playroom on top.
 const VLUCHTEN := {
-	"gang": {"af": "speelzaal"},
-	"speelzaal": {"op": "gang", "af": "winkels"},
-	"winkels": {"op": "speelzaal", "af": "receptie"},
-	"receptie": {"op": "winkels", "af": "wasserij"},
+	"speelzaal": {"af": "winkels"},
+	"winkels": {"op": "speelzaal", "af": "gang"},
+	"gang": {"op": "winkels", "af": "receptie"},
+	"receptie": {"op": "gang", "af": "wasserij"},
 	"wasserij": {"op": "receptie"},
 }
 
@@ -248,9 +250,9 @@ func test_omhoog_en_omlaag_is_precies_een_verdieping() -> void:
 	await _frames(40)
 	# the climb: the cellar to the top floor, then all the way down again
 	var ritten: Array = []
-	for kamer in ["wasserij", "receptie", "winkels", "speelzaal"]:
+	for kamer in ["wasserij", "receptie", "gang", "winkels"]:
 		ritten.append([kamer, "op"])
-	for kamer in ["gang", "speelzaal", "winkels", "receptie"]:
+	for kamer in ["speelzaal", "winkels", "gang", "receptie"]:
 		ritten.append([kamer, "af"])
 	for rit in ritten:
 		var van: String = rit[0]
@@ -296,7 +298,7 @@ func test_omhoog_en_omlaag_is_precies_een_verdieping() -> void:
 ## A flight that is not there goes nowhere: the top floor has no way up, the
 ## cellar no way down.
 func test_geen_trap_omhoog_vanaf_de_bovenste_verdieping() -> void:
-	waar(not Hotel.neem_trap("gang", "op"), "de gang is de bovenste verdieping")
+	waar(not Hotel.neem_trap("speelzaal", "op"), "de speelzaal is de bovenste verdieping")
 	waar(not Hotel.neem_trap("wasserij", "af"), "onder de kelder is niets")
 	waar(not Hotel.neem_trap("tuin", "op"), "in de tuin is geen trap")
 

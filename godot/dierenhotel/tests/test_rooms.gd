@@ -122,7 +122,10 @@ func test_deurpunten() -> void:
 		["receptie", "speelzaal", 0, 30, 8, 30],
 		["receptie", "winkels", 0, 30, 8, 30],
 		["receptie", "wasserij", 0, 108, 8, 108],
-		["gang", "receptie", 0, 16, 8, 16],
+		# the guest rooms on the first floor (owner, 2026-10-01): down at the
+		# front of the short left wall, up round the corner, left of kamer 1
+		["gang", "receptie", 0, 28, 8, 28],
+		["gang", "winkels", 13, 0, 13, 8],
 		["gang", "kamer1", 30, 0, 30, 8],
 		["gang", "kamer2", 66, 0, 66, 8],
 		["gang", "keuken", 102, 0, 102, 8],
@@ -138,8 +141,8 @@ func test_deurpunten() -> void:
 		# the laundry in the cellar: the stairs where its kitchen door was
 		["wasserij", "receptie", 68, 0, 68, 8],
 		["speelzaal", "receptie", 63, 0, 63, 8],
-		# the playroom's flight up stands beside the climbing frame
-		["speelzaal", "gang", 42, 0, 42, 8],
+		# the playroom is the top floor (2026-10-01): every ride goes down
+		["speelzaal", "gang", 63, 0, 63, 8],
 		# R3: de glazen deur van de kas in de achtergevel, waar het keukenraam
 		# hing, en de tuindeur van de kas midden in haar achterwand
 		["tuin", "kas", 0, 68, 8, 68],
@@ -148,6 +151,7 @@ func test_deurpunten() -> void:
 		# the arcade's two flights stand side by side; a guest steps onto
 		# either at the landing between them (`punt`)
 		["winkels", "speelzaal", 0, 26, 8, 26],
+		["winkels", "gang", 0, 30, 8, 30],
 	]
 	for rij in verwacht:
 		var dp := Rooms.deur(rij[0], rij[1])

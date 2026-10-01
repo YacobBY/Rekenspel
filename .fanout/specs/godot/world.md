@@ -111,8 +111,9 @@ for a door in a wall, the facade's height standing in for `wand` in the garden, 
 bedoeling dat het hotel heel groot en hoog aanvoelt net als Habbo Hotel. Op de begane grond
 zijn enkel de buiten dingen als het zwembad en de tuin").** Every room has a floor,
 `Kamer.etage`: 0 is the ground floor — the lobby, the one room indoors there, and the
-outdoors (tuin, zwembad, kas) — 1 the shops (`winkels`), 2 the playroom (`speelzaal`), 3 the
-guest floor (gang, kamer1, kamer2 and the keuken that feeds them) and −1 the cellar with the
+outdoors (tuin, zwembad, kas) — 1 the guest floor (gang, kamer1, kamer2 and the keuken that
+feeds them; owner 2026-10-01: "Maak de kamers de eerste verdieping" — until then it was floor
+3), 2 the shops (`winkels`), 3 the playroom (`speelzaal`) and −1 the cellar with the
 laundry (`wasserij`, "K" in the tower, `Rooms.etage_teken`). A door never leaves its floor.
 ONE stairwell joins the floors (a lift until 2026-09-25, owner: "Ik wil graag de lift
 vervangen voor een trap"): `Kamer.trap = {wand, at, breed}` like a door, in exactly one room
@@ -141,8 +142,8 @@ windows over the lobby's back door (`gevel.etages`).
 **2026-10-01 — a flight UP and a flight DOWN** (owner: "ik wil dat je bij de trap tussen etages
 beweegt misschien een trap omhoog en een omlaag"). What is written above about ONE opening
 per stair room is history: `Kamer.trap = {op: {wand, at, breed[, punt]}, af: {…}}` — receptie,
-winkels and speelzaal have both, the gang (top floor) only `af`, the wasserij (cellar) only
-`op`. `deur_punten[ander]` lies on the flight that goes that way (a guest going up leaves by
+gang and winkels have both, the speelzaal (top floor since the guest rooms became the first
+floor, 2026-10-01) only `af`, the wasserij (cellar) only `op`. `deur_punten[ander]` lies on the flight that goes that way (a guest going up leaves by
 the up flight and steps out of the arriving floor's down flight; every stair room stays one
 step from every other in `pad`). `_trap` draws each flight in its own frame with a blue arrow
 plate over the lintel; behind an up flight the wall gets lighter, behind a down flight darker.
@@ -155,14 +156,25 @@ the tower sheet (§6.3) is reached from the floor plan only. API: `trap_richting
 
 | room | flight | wand | at | breed | door point (x, z) | inside (ix, iz) |
 |---|---|---|---|---|---|---|
-| receptie | *trap op* | x | 24 | 12 | (0, 30) | (8, 30) — to winkels, speelzaal, gang |
+| receptie | *trap op* | x | 24 | 12 | (0, 30) | (8, 30) — to gang, winkels, speelzaal |
 | receptie | *trap af* | x | 102 | 12 | (0, 108) | (8, 108) — to wasserij |
-| gang | *trap af* | x | 10 | 12 | (0, 16) | (8, 16) |
+| gang | *trap op* | z | 7 | 12 | (13, 0) | (13, 8) — to winkels, speelzaal; back wall, left of kamer 1 |
+| gang | *trap af* | x | 22 | 12 | (0, 28) | (8, 28) — to receptie, wasserij; front of the left wall |
 | wasserij | *trap op* | z | 62 | 12 | (68, 0) | (68, 8) |
-| speelzaal | *trap op* | z | 36 | 12 | (42, 0) | (42, 8) — to gang |
-| speelzaal | *trap af* | z | 57 | 12 | (63, 0) | (63, 8) — to winkels, receptie, wasserij |
-| winkels | *trap op* | x | 16 | 11 | (0, 26) | (8, 26) — `punt` 26; to speelzaal, gang |
-| winkels | *trap af* | x | 29 | 11 | (0, 30) | (8, 30) — `punt` 30; to receptie, wasserij |
+| speelzaal | *trap af* | z | 57 | 12 | (63, 0) | (63, 8) — to winkels, gang, receptie, wasserij |
+| winkels | *trap op* | x | 16 | 11 | (0, 26) | (8, 26) — `punt` 26; to speelzaal |
+| winkels | *trap af* | x | 29 | 11 | (0, 30) | (8, 30) — `punt` 30; to gang, receptie, wasserij |
+
+2026-10-01, the guest rooms on the first floor: the gang is in the middle of the tower, so it
+has two flights. They do not stand side by side in the left wall as in the arcade: the gang is
+only 36 deep, and on a phone held upright that wall is the left edge of the screen, so the sign
+of the front flight could not step aside from the other opening (`tests/test_trap.gd`
+`test_elke_vlucht_heeft_een_eigen_bordje`, four screens). The flight down moved to the front
+end of the left wall (z 22..34, as far forward as a frame post allows) so that on a phone held
+sideways the up sign fits between it and the kamer 1 door; the flight up is in the back wall
+left of the kamer 1 door, where the coat rack hung (the rack hangs between kamer 2 and the
+kitchen now, under the tree poster — between kamer 1 and kamer 2 hangs the clock of `wekker`).
+The speelzaal's flight up beside the climbing frame is gone.
 
 | from | to | wand | at | breed | door point (x, z) | inside (ix, iz) |
 |---|---|---|---|---|---|---|

@@ -269,13 +269,14 @@ arcade — stalls hoeden, sjaals, schoenen, souvenirs, the photo booth at the en
 row, the luxe shop and the mirror).
 **The hotel is a tower** (owner 2026-09-24, "net als Habbo Hotel"; world.md §1.2):
 `Kamer.etage` — 0 receptie, tuin, zwembad, kas (the ground floor is the lobby and
-the outdoors only); 1 winkels; 2 speelzaal; 3 gang, kamer1, kamer2, keuken; −1
-(cellar, "K") wasserij.  Doors stay on their floor; ONE stairwell joins the floors
+the outdoors only); 1 gang, kamer1, kamer2, keuken (owner 2026-10-01: "Maak de
+kamers de eerste verdieping"); 2 winkels; 3 speelzaal; −1 (cellar, "K") wasserij.  Doors stay on their floor; ONE stairwell joins the floors
 (a lift until 2026-09-25, owner: "Ik wil graag de lift vervangen voor een trap"),
 and since 2026-10-01 (owner: "bij de trap tussen etages beweegt misschien een trap
 omhoog en een omlaag") every stair room has a flight per direction:
-`Kamer.trap = {op: {wand, at, breed[, punt]}, af: {…}}` — receptie, winkels and
-speelzaal both, the gang (top) only `af`, the wasserij (cellar) only `op`.
+`Kamer.trap = {op: {wand, at, breed[, punt]}, af: {…}}` — receptie, gang and
+winkels both (the gang's up flight is round the corner in the back wall, left of
+the kamer 1 door), the speelzaal (top) only `af`, the wasserij (cellar) only `op`.
 `deur_punten[ander]` lies on the flight that goes that way, so `pad` and `World.reis`
 take the right flight like a door (a guest going up leaves by the up flight and
 steps out of the arriving floor's down flight).  `scenes/vloer.gd::_trap` draws each
