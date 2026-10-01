@@ -294,10 +294,21 @@ func test_een_beurt_per_band() -> void:
 		var goed := aantal * prijs
 		gelijk(_strook().size(), 4, "band %d: vier bedragen" % band)
 		waar(_strook().has("Kn%d" % goed), "band %d: het goede bedrag staat erbij (%s)" % [band, str(_strook())])
+		# the flash comes KLIK_S later, so listen to the band itself until then
+		var gehoord: Array[String] = []
+		var hoor := func(naam: String) -> void: gehoord.append(naam)
+		var was := [Snd._wakker, Snd._uit]
+		Snd._wakker = true
+		Snd._uit = false
+		Snd.gespeeld.connect(hoor)
 		_druk("Kn%d" % goed)
 		gelijk(str(_stand().get("stap", "")), "af", "band %d: betaald" % band)
 		gelijk(int(State.s["sterren"]), sterren + 1, "band %d: één ster voor het meedoen" % band)
 		await _wacht(Spel.KLIK_S + 0.2)
+		Snd.gespeeld.disconnect(hoor)
+		Snd._wakker = bool(was[0])
+		Snd._uit = bool(was[1])
+		waar(gehoord.has("klik"), "band %d: de sluiter klikt (%s)" % [band, str(gehoord)])
 		sch = _scherm()
 		waar(sch != null and sch.foto, "band %d: het scherm is nu de foto" % band)
 		gelijk(_kaart_tekst("Kolom/Regel"), "✨ " + Beurt.T_AF, "band %d: de slotzin" % band)

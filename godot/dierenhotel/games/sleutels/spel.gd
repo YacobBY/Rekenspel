@@ -1545,7 +1545,7 @@ func _goed(i: int) -> void:
 	h["sleutel"] = gast
 	s["op"] = true
 	_licht = i
-	ctx.snd.munt()
+	ctx.snd.sleutel()
 	ctx.snd.ja()
 	var nu := Time.get_ticks_msec()
 	ctx.state.tel(int(s.get("mis", 0)) == 0, maxi(0, nu - int(_p.get("t0", nu))))

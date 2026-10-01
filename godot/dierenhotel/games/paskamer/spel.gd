@@ -166,7 +166,7 @@ func wissel(slot: String) -> void:
 		ctx.wereld.accessoire(_gast, nu, false)
 	else:
 		ctx.wereld.accessoire(_gast, volgende)
-	ctx.snd.tik()
+	ctx.snd.kleed(not volgende.is_empty())
 	var d = World.dier(_gast)
 	if d != null:
 		World.pose(_gast, "blijA" if not volgende.is_empty() else "kijk", 8)

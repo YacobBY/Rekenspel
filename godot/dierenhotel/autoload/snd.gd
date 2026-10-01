@@ -21,8 +21,21 @@ extends Node
 ##
 ## Peaks and audible lengths are asserted against the WAV export of the running
 ## HTML engine in `tests/test_snd.gd` (±1 dB, ±10 ms).
+##
+## LOUDNESS (owner, 2026-10-01: "Ik wil sound effects voor het spel").  Measured
+## in the real web export (chromium, an analyser on the AudioContext's
+## destination): what leaves the speaker is exactly the buffer — `tik` peaked at
+## −26.7 dBFS, the loudest sound (`ding`) at −18.2, the room ambience at −36.
+## That is the HTML's 0.16 master gain, meant for a laptop; on a tablet speaker
+## at a normal volume a child barely hears it, so the owner heard "no sound
+## effects".  The buffers keep their exact level (their meaning is the
+## reference export, `tests/test_snd.gd`); every player plays them `LUID_DB`
+## louder instead — one gain for all, so the balance between the sounds, and
+## between a sound and the ambience, stays exactly as it was.  With it the
+## loudest buffer peaks near −6 dBFS: audible, still never harsh.
 
 const MEESTER := 0.16      ## master gain of snd.js
+const LUID_DB := 12.0      ## every player plays its buffer this much louder (×3.98)
 const SR := 22050          ## sample rate; enough for these tones, small buffers
 const REF_SR := 48000.0    ## sample rate of the reference export (§15.4)
 const STEMMEN := 6
@@ -58,10 +71,12 @@ func _ready() -> void:
 	for i in STEMMEN:
 		var p := AudioStreamPlayer.new()
 		p.bus = "Master"
+		p.volume_db = LUID_DB
 		add_child(p)
 		_spelers.append(p)
 	_sfeer = AudioStreamPlayer.new()
 	_sfeer.bus = "Master"
+	_sfeer.volume_db = LUID_DB
 	add_child(_sfeer)
 	World.kamer_veranderd.connect(sfeer)
 
@@ -85,6 +100,8 @@ func dempt() -> bool:
 ## It never unlocks the audio: that stays tied to the first real touch (§8).
 func stem_af(aan: bool) -> void:
 	_uit = not aan
+	if _uit:
+		_zwijg()
 	sfeer(World.kamer_nu())
 
 func schakel() -> bool:
@@ -93,8 +110,17 @@ func schakel() -> bool:
 	if not _uit:
 		ontgrendel()
 		tik()
+	else:
+		_zwijg()
 	sfeer(World.kamer_nu())
 	return _uit
+
+## The mute is at once: a long sound that was still ringing (the `ding`, a
+## `hoera`) stops with it instead of finishing under the crossed-out speaker.
+func _zwijg() -> void:
+	for p in _spelers:
+		p.stop()
+		p.stream = null
 
 ## Everything stops when the app goes to the background — the browser suspends
 ## the audio band there too (§15.1).
@@ -455,6 +481,11 @@ func munt() -> void:
 
 ## een sterretje erbij
 func ster() -> void:
+	# at the bill the coins and the star come in one frame (`Econ.geef_munt`,
+	# then `Econ.sterren`): the coins ring first, the star a moment later
+	if _net("kassa", KASSA_MS) and is_inside_tree():
+		get_tree().create_timer(KASSA_S).timeout.connect(_speel.bind("ster", _bouw.bind("ster")))
+		return
 	_speel("ster", _bouw.bind("ster"))
 
 ## een dier glijdt het zwembad in: een plons met wat spetters
@@ -485,6 +516,8 @@ func hup() -> void:
 func _bouw(naam: String, hand := 0) -> PackedFloat32Array:
 	if DIER_LENGTE.has(naam):
 		return _bouw_dier(naam)       # the eight animal voices, below
+	if WERELD_LENGTE.has(naam):
+		return _bouw_wereld(naam)     # the sounds of the world, at the end
 	var b := _maak(LENGTE.get(naam, 0.5))
 	match naam:
 		"tik":
@@ -643,6 +676,29 @@ func _onthoud(wat: String) -> void:
 ## What started lately, oldest first — for the tests and the probe.
 func gehoord() -> Array[String]:
 	return _gehoord.duplicate()
+
+## Run `fn` with the band awake and on, and return every sound that started
+## inside it, in order — for the tests, which run with the band asleep.  Wake
+## and mute are put back as they were, and the throttles of the world sounds
+## are cleared first, so an earlier test can never swallow the one asked for.
+## Straight from `gespeeld`: `gehoord()` keeps only the last GEHOORD_MAX.
+func luister(fn: Callable) -> Array[String]:
+	var was_wakker := _wakker
+	var was_uit := _uit
+	_wakker = true
+	_uit = false
+	for naam in WERELD_MS:
+		_laatst.erase(naam)
+	var hoorde: Array[String] = []
+	var hoor := func(naam: String) -> void: hoorde.append(naam)
+	gespeeld.connect(hoor)
+	fn.call()
+	gespeeld.disconnect(hoor)
+	_wakker = was_wakker
+	_uit = was_uit
+	if not _wakker or _uit:
+		_zwijg()                # a band that was asleep is quiet again
+	return hoorde
 
 ## Did `naam` start within the last `ms` milliseconds?
 func _net(naam: String, ms: int) -> bool:
@@ -842,4 +898,218 @@ func _bouw_dier(naam: String) -> PackedFloat32Array:
 			var toet := {"boven": [1.0, 0.5, 0.35, 0.2, 0.1], "aan": 0.015, "los": 0.4}
 			_stem(b, 360, 0, 450, 0.15, 0.30, 0.0, toet)
 			_stem(b, 430, 0, 560, 0.18, 0.32, 0.17, toet)
+	return b
+
+# ------------------------------------------------------------ de wereld klinkt
+#
+# The owner's wish of 2026-10-01 ("Ik wil sound effects voor het spel"): the
+# sounds are louder now (`LUID_DB`, at the top), and every moment where
+# something HAPPENS in the world got a sound of its own instead of silence or a
+# borrowed `tik`/`plop`: the shutter of the photo booth, coins in the till, a
+# sheet that opens, guests munching at their bowl, a strawberry coming off, a
+# weight on the pan, a key on its hook, washing into a crate, a sticker on the
+# mask, bubbles in the tub, clothes on and off, and the evening falling.
+#
+# Not in the HTML table (`namen()` stays the eighteen, with their oracle) and
+# not animal voices: made with the same generators plus one SEEDED noise
+# (`_ruis`), so each is cached per name and bit-identical on every call — on
+# the web that is one sample, registered once, not a new one per splash.
+#
+# House rules, held by `tests/test_snd_wereld.gd`: short (the evening, the only
+# tune, 1.1 s), every peak at or under the one of `ja`, the ones that repeat
+# (the crunch, the swish, a picked berry, a crate) no louder than `plop`;
+# silent first sample; no buzzer, no harsh fall, nothing that leans on the
+# bass a tablet speaker cannot play.  What a fast finger or the world tick can
+# repeat is throttled per name (`WERELD_MS`).
+
+## Buffer length per world sound: max(wacht + duur) plus a little air.
+const WERELD_LENGTE := {
+	"klik": 0.16, "kassa": 0.70, "zwiep": 0.22, "knabbel": 0.26, "pluk": 0.20,
+	"gewicht": 0.36, "sleutel": 0.32, "plof": 0.18, "sticker": 0.24,
+	"bubbel": 0.34, "kleed_aan": 0.52, "kleed_uit": 0.22, "avond": 1.10,
+}
+## Not twice within this many ms: a burst of taps, or the bowls chewing.
+const WERELD_MS := {
+	"klik": 200, "kassa": 300, "zwiep": 150, "knabbel": 350, "pluk": 60,
+	"gewicht": 60, "sleutel": 80, "plof": 60, "sticker": 60, "bubbel": 120,
+	"kleed_aan": 80, "kleed_uit": 80, "avond": 1000,
+}
+const KASSA_MS := 120     ## a `ster` this soon after `kassa` waits for the coins ...
+const KASSA_S := 0.30     ## ... this many seconds
+
+## The world sounds, in the order of the recipes below.
+func wereld_namen() -> Array:
+	return WERELD_LENGTE.keys()
+
+func _wereld(naam: String) -> void:
+	if _uit or not _wakker:
+		return
+	if _te_snel(naam, int(WERELD_MS.get(naam, 0))):
+		return
+	_speel(naam, _bouw.bind(naam))
+
+## KA-TSJIK — de sluiter van het fotohokje: twee lamellen, kort en droog
+func klik() -> void:
+	_wereld("klik")
+
+## RINKEL-TING — verdiend geld valt in de kassa (`Econ.geef_munt`)
+func kassa() -> void:
+	_wereld("kassa")
+
+## ZWIEP — een blad schuift open
+func zwiep() -> void:
+	_wereld("zwiep")
+
+## KRR-KRR — een dier knabbelt aan zijn bakje, één hapje uit de bak
+func knabbel() -> void:
+	_wereld("knabbel")
+
+## PLOP — een aardbei laat los en valt in het bakje
+func pluk() -> void:
+	_wereld("pluk")
+
+## TINK-DONK — een gewicht op de schaal, en de schaal zakt een beetje
+func gewicht() -> void:
+	_wereld("gewicht")
+
+## RINKEL — een sleutel aan zijn haakje
+func sleutel() -> void:
+	_wereld("sleutel")
+
+## PLOF — de was valt in een krat
+func plof() -> void:
+	_wereld("plof")
+
+## PF-TING — een sticker op het masker
+func sticker() -> void:
+	_wereld("sticker")
+
+## BLUBBEL — een dier stapt in de tobbe: belletjes
+func bubbel() -> void:
+	_wereld("bubbel")
+
+## ZWIEP-PLING — kleren aan (een zwiep en twee sterretjes), of uit (een zwiep)
+func kleed(aan := true) -> void:
+	_wereld("kleed_aan" if aan else "kleed_uit")
+
+## SLAAPLIEDJE — het wordt avond in het hotel: drie zachte tonen omlaag, de
+## spiegel van `dag`
+func avond() -> void:
+	_wereld("avond")
+
+## `ruis(duur, f, naar, top, wacht, zaad, aan, q)` — noise through a bandpass
+## whose centre glides exponentially from `f` to `naar` (0: it stays at `f`):
+## a swish rises, a crunch stays put.  Unlike `_papier` the noise is SEEDED with
+## `zaad`, so the sound is the same on every call and can be cached.  Envelope:
+## sin² up over `aan` seconds, then an exponential fall that is 60 dB down at
+## `duur`; `top` scales it under MEESTER like every other generator.
+func _ruis(uit: PackedFloat32Array, duur: float, f: float, naar: float, top: float,
+		wacht: float, zaad: int, aan := 0.003, q := 1.2) -> void:
+	var n := int(duur * SR)
+	var start := int(wacht * SR)
+	var rnd := RandomNumberGenerator.new()
+	rnd.seed = zaad
+	var x1 := 0.0
+	var x2 := 0.0
+	var y1 := 0.0
+	var y2 := 0.0
+	var aanzet := maxf(0.001, aan)
+	for i in n:
+		var t := float(i) / SR
+		var fc := f
+		if naar > 0.0:
+			fc = f * pow(naar / f, t / duur)
+		# the RBJ constant-0-dB-peak bandpass, as in `_papier`, per sample
+		var w0 := TAU * fc / SR
+		var alfa := sin(w0) / (2.0 * q)
+		var x := rnd.randf_range(-1.0, 1.0)
+		var y := (alfa * x - alfa * x2 + 2.0 * cos(w0) * y1 - (1.0 - alfa) * y2) / (1.0 + alfa)
+		x2 = x1
+		x1 = x
+		y2 = y1
+		y1 = y
+		var g := 0.0
+		if t < aanzet:
+			g = pow(sin(0.5 * PI * t / aanzet), 2.0)
+		else:
+			g = exp(-6.9 * (t - aanzet) / maxf(0.001, duur - aanzet))
+		var k := start + i
+		if k >= 0 and k < uit.size():
+			uit[k] += y * g * top * MEESTER
+
+## The thirteen recipes.  Metal is `_slag` (a 3 ms strike and a ring) with the
+## inharmonic partial of a small plate over it; air and cloth are `_ruis`.
+func _bouw_wereld(naam: String) -> PackedFloat32Array:
+	var b := _maak(float(WERELD_LENGTE[naam]))
+	match naam:
+		"klik":
+			# two shutter blades: a dry snap, and 75 ms later a second, lower one
+			_ruis(b, 0.022, 3600, 0, 0.50, 0.0, 11, 0.001, 1.6)
+			_slag(b, 2200.0, 0.03, 0.14, 0.0)
+			_ruis(b, 0.032, 2500, 0, 0.45, 0.075, 12, 0.001, 1.4)
+			_slag(b, 1650.0, 0.04, 0.14, 0.075)
+		"kassa":
+			# four little coins land on each other, then the till's bell: ting!
+			var munten := [[2637.0, 0.0], [3136.0, 0.055], [2794.0, 0.10], [3322.0, 0.15]]
+			for m in munten:
+				_slag(b, float(m[0]), 0.14, 0.17, float(m[1]))
+				_slag(b, float(m[0]) * 2.76, 0.05, 0.06, float(m[1]))
+			_slag(b, 1568.0, 0.45, 0.30, 0.22)
+			_slag(b, 2093.0, 0.35, 0.16, 0.24)
+		"zwiep":
+			# a sheet slides up: air that rises from 700 to 2600 Hz and swells
+			_ruis(b, 0.18, 700, 2600, 0.45, 0.0, 21, 0.09, 1.4)
+		"knabbel":
+			# three small bites: krr-krr-krr, each one a little different
+			var hap := [2300.0, 1900.0, 2600.0]
+			for i in 3:
+				_ruis(b, 0.04, float(hap[i]), 0, 0.60, 0.075 * i, 31 + i, 0.002, 1.0)
+		"pluk":
+			# the stem lets go (a quick rising pop) and the berry lands softly
+			_noot(b, 520, 1250, 0.05, "sine", 0.30, 0.0)
+			_ruis(b, 0.015, 2500, 0, 0.8, 0.0, 41, 0.001, 1.0)
+			_noot(b, 700, 420, 0.07, "sine", 0.22, 0.08)
+		"gewicht":
+			# a brass weight touches the pan (tink) and the pan dips (donk)
+			_slag(b, 1760.0, 0.30, 0.24, 0.0)
+			_slag(b, 4857.6, 0.08, 0.05, 0.0)
+			_noot(b, 380, 300, 0.12, "sine", 0.22, 0.0)
+		"sleutel":
+			# the hook knocks (tok) and the key ring jingles: three small tinks
+			_noot(b, 620, 460, 0.05, "sine", 0.28, 0.0)
+			var tinks := [[3520.0, 0.02], [4186.0, 0.065], [3729.0, 0.11]]
+			for k in tinks:
+				_slag(b, float(k[0]), 0.12, 0.17, float(k[1]))
+				_slag(b, float(k[0]) * 1.48, 0.05, 0.05, float(k[1]))
+		"plof":
+			# a bundle of washing in a crate: a soft whoomp of cloth and a thud
+			_ruis(b, 0.12, 900, 480, 0.60, 0.0, 51, 0.006, 0.9)
+			_noot(b, 330, 210, 0.10, "sine", 0.20, 0.01)
+		"sticker":
+			# pressed on with a thumb (pf) and it shines (ting)
+			_ruis(b, 0.035, 1500, 900, 0.45, 0.0, 61, 0.004, 1.0)
+			_noot(b, 1568, 0, 0.15, "triangle", 0.30, 0.03)
+			_noot(b, 2093, 0, 0.12, "sine", 0.16, 0.08)
+		"bubbel":
+			# five bubbles come up, each a quick little rise
+			var bel := [[480.0, 0.0, 0.38], [640.0, 0.05, 0.34], [560.0, 0.10, 0.30],
+				[760.0, 0.16, 0.28], [900.0, 0.22, 0.22]]
+			for q in bel:
+				_noot(b, float(q[0]), float(q[0]) * 2.2, 0.07, "sine", float(q[2]), float(q[1]))
+		"kleed_aan":
+			# swish on, and two little sparkles: zwiep-pling-pling
+			_ruis(b, 0.15, 900, 2800, 0.40, 0.0, 71, 0.07, 1.4)
+			_slag(b, 2093.0, 0.25, 0.16, 0.12)
+			_slag(b, 2637.0, 0.30, 0.16, 0.19)
+		"kleed_uit":
+			# swish off: the same air, falling
+			_ruis(b, 0.15, 2600, 900, 0.38, 0.0, 72, 0.06, 1.4)
+		"avond":
+			# a lullaby of three: G, E, C going down, round held notes like a
+			# little flute (`_stem` at one pitch), the last one fading out
+			var toon := {"boven": [1.0, 0.18, 0.05], "aan": 0.04, "los": 0.6}
+			_stem(b, 784, 0, 784, 0.30, 0.24, 0.0, toon)
+			_stem(b, 659, 0, 659, 0.30, 0.24, 0.25, toon)
+			_stem(b, 523, 0, 523, 0.55, 0.24, 0.50,
+				{"boven": [1.0, 0.18, 0.05], "aan": 0.04, "los": 0.7, "verval": 1.0})
 	return b

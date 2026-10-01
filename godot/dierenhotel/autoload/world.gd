@@ -1882,6 +1882,7 @@ func _bakjes_kauwen() -> void:
 		if stand <= 0:
 			continue
 		zet_bak(delen[0], delen[1], stand - 1)
+		Snd.knabbel()         # one bite out of the bowl in view: krr-krr (throttled)
 		if not rust():
 			_pluis(_kauwers[sleutel] as Dier, ArtEffect.KRUIMEL_N, ArtEffect.KRUIMEL_KL, false)
 	_kauwers.clear()

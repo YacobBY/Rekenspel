@@ -387,7 +387,8 @@ func test_een_beurt_in_groep_4() -> void:
 	waar(_knoop(PLUK) != null, "de plukknop hangt aan de aardbeienbak")
 	gelijk(_kaart_tekst("Kolom/Regel"), "🍓 " + Beurt.T_PLUK % int(o["nodig"]), "pluk er nog …")
 	for i in int(o["nodig"]):
-		_tik(PLUK)
+		var hoor := Snd.luister(func() -> void: _tik(PLUK))
+		waar(hoor.has("pluk"), "een aardbei klinkt als plukken (%s)" % str(hoor))
 		if i < int(o["nodig"]) - 1:
 			gelijk(_kaart_tekst("Kolom/Rij/Vak"), str(int(o["T"]) + i + 1), "het vakje telt mee")
 	gelijk(_stand().get("stap", ""), "af", "alle bakjes vol")

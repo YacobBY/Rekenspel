@@ -351,7 +351,7 @@ func _klaar() -> void:
 		return
 	if S.is_empty() or _stap() != "af":
 		return
-	ctx.snd.tik()
+	ctx.snd.klik()
 	_scherm_neer()
 	var s := Hits.spot(SCHERM_ID)
 	if s != null and is_instance_valid(s.knoop) and s.knoop is FotoScherm:

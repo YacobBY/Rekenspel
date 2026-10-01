@@ -660,7 +660,8 @@ func test_mis_sorteren_is_niet_straffend() -> void:
 	gelijk(str(na2["stap"]), "sorteren", "de beurt loopt gewoon door")
 	# the same piece in the RIGHT crate does work
 	waar(_tik("ws_berg"), "pak het opnieuw")
-	waar(_tik("ws_k%d" % soort), "en leg het goed")
+	var hoor := Snd.luister(func() -> void: waar(_tik("ws_k%d" % soort), "en leg het goed"))
+	waar(hoor.has("plof"), "de was valt met een plof in de krat (%s)" % str(hoor))
 	var na3 := _stand()
 	gelijk(int(na3["i"]), berg_voor + 1, "nu gaat er een stuk van de berg af")
 	gelijk(int(na3["vak"][soort]), int(voor["vak"][soort]) + 1, "en komt er een blokje bij")
