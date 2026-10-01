@@ -341,12 +341,25 @@ func test_de_chips_staan_per_etage() -> void:
 				waar(rm.end.x <= rc.position.x + 0.5 and rc.position.x - rm.end.x <= UiKamerbalk.GAT
 					and absf(rm.get_center().y - rc.get_center().y) <= 1.0,
 					"%s staat vlak voor zijn eerste chip (%s, %s)" % [naam, str(rm), str(rc)])
-		# the upright tablet wraps anyway: its second row opens with a floor
+		# the upright tablet wraps anyway, in two rows; when a few columns less
+		# give the same two rows with every row opening on a floor, the bar
+		# takes them.  Since the guest rooms are the first floor (owner,
+		# 2026-10-01: "Maak de kamers de eerste verdieping") no split of these
+		# cells into two rows opens on a floor at this width — the ground floor
+		# and the first floor are four cells each — so the first floor runs on
+		# into the second row; until then the top floor (the gang) opened it.
 		if scherm == SCHERMEN[1]:
 			gelijk(_balk.rijen(), 2, "%s: twee rijen, zoals altijd" % wat)
-			var tweede: Control = _balk._cellen()[_balk.kolommen()]
-			waar(tweede is BoxContainer, "%s: de tweede rij begint met een etage (%s)"
-				% [wat, tweede.name])
+			var n_cellen := _balk._cellen().size()
+			var kan := false
+			for k in range(_balk.kolommen(), 0, -1):
+				if ceili(n_cellen / float(k)) != _balk.rijen():
+					break
+				kan = kan or _balk._rijen_op_etage(k)
+			if kan:
+				var tweede: Control = _balk._cellen()[_balk.kolommen()]
+				waar(tweede is BoxContainer, "%s: de tweede rij begint met een etage (%s)"
+					% [wat, tweede.name])
 		# a chip that shares a floor's cell is still found where it is in the
 		# grid (the scrolling row brings the current room into view by it)
 		for id in _balk.chips():
