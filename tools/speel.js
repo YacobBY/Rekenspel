@@ -13,7 +13,11 @@
 // valt.  Begin daarmee; de id's uit die lijst zijn de stappen van `--doe`.
 //
 // Een stap is een knop-id (`bd_som_keuze0`), een chip van de kamerbalk
-// (`chip:kaart`) of een pauze (`wacht 2500`).  Onbekende id's stoppen de reeks
+// (`chip:kaart`) of een pauze (`wacht 2500`).  De trap heeft twee bordjes per
+// kamer, `trap_op_<kamer>` en `trap_af_<kamer>`; `trap:op` en `trap:af` tikken
+// die van de kamer waar je NU bent (eigenaar 2026-10-01: een trap omhoog en een
+// omlaag), dus `--doe "trap:op; trap:op; trap:af"` loopt de toren door.
+// Onbekende id's stoppen de reeks
 // met een foutmelding én de lijst van wat er wél gemeld is — dat is zelf al een
 // bevinding: een knop die je verwacht en die er niet is.
 //
@@ -34,8 +38,10 @@ const BUILD = path.join(REPO, 'godot', 'dierenhotel', 'build', 'web');
 function hulp() {
   console.log(`gebruik: node tools/speel.js [opties]
 
-  --kamer ID          receptie | gang | kamer1 | kamer2 | keuken | tuin | zwembad | wasserij  (standaard receptie)
+  --kamer ID          receptie | tuin | zwembad | kas | winkels | speelzaal | gang | kamer1 |
+                      kamer2 | keuken | wasserij  (standaard receptie)
   --doe "a; b; c"     de reeks stappen: een knop-id, chip:<naam>,
+                      trap:op / trap:af (de trap omhoog/omlaag in de kamer van nu),
                       "veeg chip:<naam> <dx>" (een vinger veegt de kamerbalk),
                       chroom:<naam> (Munt/Brieven/Geluid/Prikbord/Avond),
                       vw:<id> (het voorwerp van een geleende hotelknop: het
@@ -318,6 +324,41 @@ const midden = (l) => {
     // zoals een kind op het getekende bakje tikt (eigenaar, 2026-09-25: "wanneer
     // ik op het bakje tik gebeurt er niks").
     const vw = stap.match(/^vw[:\s]+(\S+)$/i);
+    // `trap:op` / `trap:af`: het trapbordje van de kamer waar je nu bent.  Na
+    // elke rit meldt het spel `[probe] kamer_nu=<kamer>` en daarna de knoppen
+    // van die kamer; het bordje moet ná die regel gemeld zijn, anders is het
+    // nog dat van de vorige verdieping.
+    const trap = stap.match(/^trap[:\s]+(op|af)$/i);
+    if (trap) {
+      const richting = trap[1].toLowerCase();
+      const zoekTrap = () => {
+        let i = logs.length - 1;
+        while (i >= 0 && !logs[i].includes('[probe] kamer_nu=')) i--;
+        if (i < 0) return null;
+        const kamer = (logs[i].match(/kamer_nu=(\S+)/) || [])[1];
+        const id = `trap_${richting}_${kamer}`;
+        for (let j = logs.length - 1; j > i; j--) {
+          if (logs[j].includes(`[probe] knop ${id}=`)) return { id, regel: logs[j] };
+        }
+        return null;
+      };
+      const gevonden = await wacht(zoekTrap, 8000);
+      if (!gevonden) {
+        await foto(`${nr}-trap-${richting}-ONBEKEND`);
+        await stop(`stap ${nr - 2} "trap:${richting}": geen trap ${richting === 'op' ? 'omhoog' : 'omlaag'} in deze kamer`
+          + ` — wel gemeld sinds de vorige stap: ${idsSinds(merk, 'knop').join(' ') || 'niets'}`);
+      }
+      const p = midden(gevonden.regel);
+      await page.touchscreen.tap(p.x, p.y);
+      await page.waitForTimeout(opt.stapWacht);
+      const f = await foto(`${nr}-${gevonden.id}`);
+      console.log(`\nstap ${nr - 2}: tik ${gevonden.id}  →  ${path.basename(f)}`);
+      console.log('  knoppen: ' + (idsSinds(merk, 'knop').join(' ') || 'niets nieuws gemeld'));
+      const m = meldingenSinds(merk);
+      if (m.length) console.log('  meldingen:\n    ' + m.slice(-8).join('\n    '));
+      merk = logs.length;
+      continue;
+    }
     if (vw) {
       const regel = await wacht(() => laatste(`[probe] vk doel ${vw[1]}=`), 8000);
       if (!regel) {

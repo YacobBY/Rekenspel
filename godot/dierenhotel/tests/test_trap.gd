@@ -3,15 +3,30 @@ extends Proef
 ## andere etage. Het is de bedoeling dat het hotel heel groot en hoog aanvoelt
 ## net als Habbo Hotel. Op de begane grond zijn enkel de buiten dingen als het
 ## zwembad en de tuin"; a lift until 2026-09-25: "Ik wil graag de lift
-## vervangen voor een trap").  The floors themselves are data and
-## `test_rooms.gd` holds them; this is what the child meets, on the real shell:
-## one stairs button in every room the stairs reach, with a drawn pictogram,
-## the panel it opens, the camera going up or down with footsteps, and a guest
-## who takes the stairs to his room.
+## vervangen voor een trap"; two flights since 2026-10-01: "ik wil dat je bij
+## de trap tussen etages beweegt misschien een trap omhoog en een omlaag").
+## The floors themselves are data and `test_rooms.gd` holds them; this is what
+## the child meets, on the real shell: a flight up and a flight down in every
+## room the stairs reach — only the ones that go somewhere — each with its own
+## sign, one tap is one floor with the camera and the footsteps going that way,
+## and a guest takes the flight that goes his way.
 
-const SCHERMEN := [Vector2i(1024, 768), Vector2i(360, 740)]
+## The shells of the suite: tablet landscape and portrait, phone portrait and
+## landscape.
+const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740),
+	Vector2i(740, 360)]
 
-var _gevraagd: Array[String] = []
+## Which flights each stair room has, and where each one leads: one floor up or
+## down, to the stairs of that floor.
+const VLUCHTEN := {
+	"gang": {"af": "speelzaal"},
+	"speelzaal": {"op": "gang", "af": "winkels"},
+	"winkels": {"op": "speelzaal", "af": "receptie"},
+	"receptie": {"op": "winkels", "af": "wasserij"},
+	"wasserij": {"op": "receptie"},
+}
+
+var _genomen: Array = []
 
 func _boom() -> SceneTree:
 	return Engine.get_main_loop() as SceneTree
@@ -34,7 +49,8 @@ func _hotel_op(maat: Vector2i) -> Dictionary:
 	State.nieuw_spel()
 	Hotel.start()
 	await _frames(4)
-	return {"vp": vp, "shell": shell}
+	var kader: Control = shell.get_node("Scherm/Kolom/Middenrij/Kaderdoos/Kader")
+	return {"vp": vp, "shell": shell, "kader": kader}
 
 func _hotel_af(h: Dictionary) -> void:
 	Ui.blad_dicht()
@@ -49,120 +65,247 @@ func _naar(kamer: String) -> void:
 	Hotel.naar_kamer(kamer)
 	await _frames(3)
 
-# ------------------------------------------------------------------ de knop
+## Until the camera has stopped sliding (a headless frame can be much shorter
+## than a drawn one), at most a few hundred frames.
+func _tot_stil() -> void:
+	for _f in 400:
+		if not World.reist():
+			break
+		await _boom().process_frame
+	await _frames(3)
 
-## One button on the stairs in every room they reach — never one per floor —
-## and none where they do not.  It is a door sign (`hotdeur`), so it hangs by
-## its opening like every door's sign, and it counts the wishes waiting on the
-## other floors.  Its pictogram is drawn (there is no stairs emoji), and it
-## says `Trap` — never the lift's 🛗.
-func test_elke_trapkamer_heeft_een_trapknop() -> void:
+# ------------------------------------------------------------------ de vluchten
+
+## Up where a floor above has stairs, down where a floor below has them —
+## and only there: the top floor only goes down, the cellar only up, and a
+## room the stairs do not reach has neither.  Each flight leads exactly one
+## floor, to the stairs of that floor.
+func test_een_trap_omhoog_en_een_trap_omlaag_waar_ze_ergens_heen_gaan() -> void:
+	gelijk(Rooms.trap_kamers().size(), VLUCHTEN.size(), "de trap komt in vijf kamers")
+	for kamer in Rooms.lijst():
+		var verwacht: Dictionary = VLUCHTEN.get(kamer, {})
+		var hoort: Array[String] = []
+		for richting in ["op", "af"]:
+			if verwacht.has(richting):
+				hoort.append(richting)
+		gelijk(Rooms.trap_richtingen(kamer), hoort, "%s: de juiste vluchten" % kamer)
+		for richting in ["op", "af"]:
+			var naar := Rooms.trap_naar(kamer, richting)
+			gelijk(naar, str(verwacht.get(richting, "")), "%s %s: waar hij heen gaat" % [kamer, richting])
+			if naar.is_empty():
+				waar(Rooms.trap_punt(kamer, richting).is_empty(), "%s %s: geen trap, geen punt" % [kamer, richting])
+				continue
+			gelijk(Rooms.etage(naar) - Rooms.etage(kamer), 1 if richting == "op" else -1,
+				"%s %s: precies één verdieping" % [kamer, richting])
+			gelijk(Rooms.trap_richting(kamer, naar), richting, "%s -> %s gaat %s" % [kamer, naar, richting])
+			# and back the other way, on the other flight
+			gelijk(Rooms.trap_naar(naar, "af" if richting == "op" else "op"), kamer,
+				"%s %s: de andere vlucht daar brengt je terug" % [kamer, richting])
+
+## Each flight is its own opening in a wall of its room: inside the wall, clear
+## of the other flight and of every door in that wall, and its point (where a
+## guest stands before he climbs) is a different one from the other flight's.
+func test_elke_vlucht_heeft_een_eigen_opening() -> void:
+	for kamer in Rooms.trap_kamers():
+		var r := Rooms.get_kamer(kamer)
+		var gaten: Array = []
+		for richting in Rooms.trap_richtingen(kamer):
+			var gat: Dictionary = r.trap[richting]
+			var a := float(gat["at"])
+			var b := a + float(gat["breed"])
+			var lang := float(r.w) if str(gat["wand"]) == "z" else float(r.d)
+			waar(a >= 2.0 and b <= lang - 2.0, "%s %s: in de wand (%s..%s van %s)" % [kamer, richting, a, b, lang])
+			gaten.append({"wand": str(gat["wand"]), "a": a, "b": b, "wat": "trap " + richting})
+		for dr in r.deuren:
+			gaten.append({"wand": str(dr["wand"]), "a": float(dr["at"]), "b": float(dr["at"]) + float(dr["breed"]),
+				"wat": "deur " + str(dr["naar"])})
+		for i in gaten.size():
+			for j in range(i + 1, gaten.size()):
+				var p: Dictionary = gaten[i]
+				var q: Dictionary = gaten[j]
+				if p["wand"] != q["wand"]:
+					continue
+				# a frame post on each side: at least two voxels of wall between
+				waar(float(p["b"]) + 2.0 <= float(q["a"]) or float(q["b"]) + 2.0 <= float(p["a"]),
+					"%s: %s en %s staan niet in elkaar" % [kamer, p["wat"], q["wat"]])
+		if Rooms.trap_richtingen(kamer).size() == 2:
+			var op := Rooms.trap_punt(kamer, "op")
+			var af := Rooms.trap_punt(kamer, "af")
+			waar(Vector2(op["ix"], op["iz"]) != Vector2(af["ix"], af["iz"]),
+				"%s: omhoog en omlaag hebben elk hun eigen punt" % kamer)
+
+## Every way between two floors takes the flight that goes that way: the door
+## point of the step up is on the flight up, the step down on the flight down —
+## from every stair room to every other, however many floors apart.
+func test_de_route_neemt_de_vlucht_die_zijn_kant_op_gaat() -> void:
+	for van in Rooms.trap_kamers():
+		for naar in Rooms.trap_kamers():
+			if van == naar:
+				continue
+			var richting := Rooms.trap_richting(van, naar)
+			var dp := Rooms.deur(van, naar)
+			var lp := Rooms.trap_punt(van, richting)
+			waar(not lp.is_empty(), "%s -> %s: de vlucht %s is er" % [van, naar, richting])
+			waar(Rooms.via_trap(van, naar), "%s -> %s gaat met de trap" % [van, naar])
+			gelijk(Vector2(dp.get("ix", -1.0), dp.get("iz", -1.0)), Vector2(lp.get("ix", -2.0), lp.get("iz", -2.0)),
+				"%s -> %s: via de trap %s" % [van, naar, richting])
+			gelijk(str(dp.get("richting", "")), richting, "%s -> %s: het punt zegt welke vlucht" % [van, naar])
+
+# ------------------------------------------------------------------ de knoppen
+
+## A sign on every flight — `⬆ Omhoog` on the one up, `⬇ Omlaag` on the one
+## down — and none for a flight that is not there, nor a door sign per floor.
+## Each is a door sign (`hotdeur`) that hangs at its own opening and never on
+## the other flight's; no button of the room overlaps another, and on a tablet
+## both signs stand ON their doors (the door sign rule), on every screen.
+func test_elke_vlucht_heeft_een_eigen_bordje() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	var rust := Ui.rust_modus()
 	Ui.zet_rust_modus(true)
 	for maat in SCHERMEN:
 		var h: Dictionary = await _hotel_op(maat)
+		var kader: Control = h["kader"]
+		var tablet: bool = mini(maat.x, maat.y) >= 400
 		for kamer in Rooms.lijst():
 			await _naar(kamer)
-			var s := Hits.spot("trap_" + kamer)
-			var stopt := not Rooms.trap_punt(kamer).is_empty()
-			waar((s != null) == stopt, "%s: een trapknop precies waar de trap komt (%s)"
-				% [str(maat), kamer])
+			var wat := "%s %s" % [str(maat), kamer]
+			waar(Hits.spot("trap_" + kamer) == null, "%s: geen oude trapknop" % wat)
 			for ander in Rooms.trap_kamers():
 				waar(Hits.spot("deur_%s_%s" % [kamer, ander]) == null or not Rooms.via_trap(kamer, ander),
-					"%s: geen deurknop per verdieping in %s (%s)" % [str(maat), kamer, ander])
-			if s == null:
-				continue
-			waar(s.klas.contains("hotdeur"), "%s: de trapknop is een deurbordje (%s)" % [str(maat), kamer])
-			waar(s.knoop != null and s.knoop.visible, "%s: de trapknop staat in beeld (%s)" % [str(maat), kamer])
-			var knop := s.knoop as Button
-			gelijk(knop.text if knop != null else "", "Trap", "%s: het woord (%s)" % [str(maat), kamer])
-			waar(knop != null and knop.icon == UiTrapIcoon.beeld(),
-				"%s: met het getekende trapje ervoor (%s)" % [str(maat), kamer])
-			waar(knop != null and knop.get_combined_minimum_size().x
-				> knop.get_theme_font("font").get_string_size("Trap", HORIZONTAL_ALIGNMENT_LEFT, -1,
-					knop.get_theme_font_size("font_size")).x + 12.0,
-				"%s: het trapje neemt echt plaats in naast het woord (%s)" % [str(maat), kamer])
-			var vlak := World.vlak_van_trap(kamer)
-			waar(vlak.size.x > 0.0 and vlak.size.y > 0.0, "%s: de trap heeft een vlak (%s)" % [str(maat), kamer])
-			var r: Rect2 = s.knoop.get_global_rect()
-			# the sign stands on the opening or over the lintel: its middle
-			# above the foot of the stairs and within a sign's width of it
-			waar(absf(r.get_center().x - vlak.get_center().x) <= r.size.x,
-				"%s: de trapknop hangt bij de trap in %s (%s, trap %s)" % [str(maat), kamer, str(r), str(vlak)])
+					"%s: geen deurknop per verdieping (%s)" % [wat, ander])
+			var dbg := Hits.debug()
+			for richting in ["op", "af"]:
+				var id := Hotel.trap_knop_id(kamer, richting)
+				var s := Hits.spot(id)
+				var hoort := Rooms.trap_richtingen(kamer).has(richting)
+				waar((s != null) == hoort, "%s: een bordje %s precies waar die vlucht is" % [wat, richting])
+				if s == null:
+					continue
+				waar(s.klas.contains("hotdeur"), "%s: %s is een deurbordje" % [wat, id])
+				waar(s.knoop != null and s.knoop.visible, "%s: %s staat in beeld" % [wat, id])
+				var knop := s.knoop as Button
+				var tekst := "⬆ Omhoog" if richting == "op" else "⬇ Omlaag"
+				gelijk(knop.text if knop != null else "", tekst, "%s: pictogram én woord" % wat)
+				gelijk(Ui.mist_tekens(tekst), [] as Array[String], "%s: elk teken bestaat in de letters" % wat)
+				var vlak := World.vlak_van_trap(kamer, richting)
+				waar(vlak.size.x > 0.0 and vlak.size.y > 0.0, "%s: de vlucht %s heeft een vlak" % [wat, richting])
+				# where `Hits` put it, in frame units like the flight's rectangle
+				var r: Rect2 = (dbg.get(id, {}) as Dictionary).get("rect", Rect2())
+				var plek := str((dbg.get(id, {}) as Dictionary).get("deurplek", ""))
+				waar(Hits.DEURPLEK.has(plek), "%s: %s staat op zijn opening of erboven (%s)" % [wat, id, plek])
+				if tablet:
+					gelijk(plek, "deur", "%s: op een tablet hangt %s midden op zijn opening" % [wat, id])
+				# the middle of its own opening under the sign, never the other one's
+				var hart := vlak.get_center().x
+				waar(r.position.x <= hart and r.end.x >= hart,
+					"%s: %s hangt bij zijn eigen vlucht (%s, vlucht %s)" % [wat, id, str(r), str(vlak)])
+				var ander := World.vlak_van_trap(kamer, "af" if richting == "op" else "op")
+				if ander.size.x > 0.0:
+					waar(not r.intersects(ander), "%s: %s bedekt de andere vlucht niet (%s, %s)"
+						% [wat, id, str(r), str(ander)])
+				waar(r.position.x >= -0.5 and r.end.x <= kader.size.x + 0.5,
+					"%s: %s staat binnen het kader" % [wat, id])
+			# nothing in the room overlaps anything else
+			var rechthoeken := {}
+			for id in dbg.keys():
+				var s := Hits.spot(id)
+				if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
+					rechthoeken[id] = dbg[id]["rect"]
+					waar(not bool(dbg[id]["krap"]), "%s: %s heeft ruimte" % [wat, id])
+			var ids: Array = rechthoeken.keys()
+			for i in ids.size():
+				for j in range(i + 1, ids.size()):
+					var p: Rect2 = rechthoeken[ids[i]]
+					var q: Rect2 = rechthoeken[ids[j]]
+					waar(not p.grow(-0.5).intersects(q.grow(-0.5)),
+						"%s: %s en %s overlappen niet (%s, %s)" % [wat, ids[i], ids[j], str(p), str(q)])
 		await _hotel_af(h)
 	Ui.zet_rust_modus(rust)
 	State.s = bewaard
 
-## A tap on the stairs asks the shell for the tower, and the shell opens it
-## under the stairs' own title, with the drawn pictogram before it; a tap on a
-## room there goes to it.
-func test_de_trapknop_opent_de_toren() -> void:
+## A tap on a flight's sign goes exactly one floor up or down, straight to the
+## stairs there — no panel in between — with the camera sliding the new floor
+## in from above (up) or from below (down) and footsteps climbing or going
+## down.  Every flight of every room, one after the other, as a child takes
+## them: up from the cellar to the top, and down again.
+func test_omhoog_en_omlaag_is_precies_een_verdieping() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	var rust := Ui.rust_modus()
-	Ui.zet_rust_modus(true)
-	_gevraagd.clear()
+	Ui.zet_rust_modus(false)
+	var wakker: bool = Snd.get("_wakker")
+	var uit: bool = Snd.get("_uit")
+	Snd.set("_wakker", true)
+	Snd.set("_uit", false)
 	var h: Dictionary = await _hotel_op(SCHERMEN[0])
-	var luister := func(k: String) -> void: _gevraagd.append(k)
-	Hotel.trap_gevraagd.connect(luister)
-	await _naar("receptie")
-	var s := Hits.spot("trap_receptie")
-	waar(s != null, "de lobby heeft een trapknop")
-	if s != null:
+	_genomen.clear()
+	var neem := func(van: String, naar: String, richting: String) -> void:
+		_genomen.append([van, naar, richting])
+	Hotel.trap_genomen.connect(neem)
+	var gehoord: Array[String] = []
+	var hoor := func(naam: String) -> void: gehoord.append(naam)
+	Snd.gespeeld.connect(hoor)
+	await _naar("wasserij")
+	await _frames(40)
+	# the climb: the cellar to the top floor, then all the way down again
+	var ritten: Array = []
+	for kamer in ["wasserij", "receptie", "winkels", "speelzaal"]:
+		ritten.append([kamer, "op"])
+	for kamer in ["gang", "speelzaal", "winkels", "receptie"]:
+		ritten.append([kamer, "af"])
+	for rit in ritten:
+		var van: String = rit[0]
+		var richting: String = rit[1]
+		var naar: String = VLUCHTEN[van][richting]
+		var wat := "%s %s" % [van, richting]
+		gelijk(World.kamer_nu(), van, "%s: hier staan we" % wat)
+		await _tot_stil()             # the last slide is done
+		var s := Hits.spot(Hotel.trap_knop_id(van, richting))
+		waar(s != null and is_instance_valid(s.knoop), "%s: het bordje is er" % wat)
+		if s == null or not is_instance_valid(s.knoop):
+			break
+		gehoord.clear()
+		_genomen.clear()
 		(s.knoop as BaseButton).emit_signal("pressed")
-	await _frames(3)
-	gelijk(_gevraagd, ["receptie"] as Array[String], "de tik vraagt om de trap vanuit de receptie")
-	waar(Ui.blad_open_nu(), "het trappaneel staat open")
-	var blad := Ui.huidig_blad()
-	var titel: Label = blad.find_child("Titel", true, false) if blad != null else null
-	gelijk(titel.text if titel != null else "", "De trap", "onder de titel van de trap")
-	var beeld: TextureRect = blad.find_child("Beeld", true, false) if blad != null else null
-	waar(beeld != null and beeld.texture == UiTrapIcoon.beeld(), "met het trapje ervoor")
-	if beeld != null and titel != null:
-		waar(beeld.get_global_rect().end.x <= titel.get_global_rect().position.x + 0.5,
-			"links van de titel (%s, %s)" % [str(beeld.get_global_rect()), str(titel.get_global_rect())])
-	var kaart: UiPlattegrond = null
-	if Ui.bladlaag != null:
-		var gevonden := Ui.bladlaag.find_children("*", "UiPlattegrond", true, false)
-		if not gevonden.is_empty():
-			kaart = gevonden[0]
-	waar(kaart != null, "in het paneel staat de toren")
-	if kaart != null:
-		var knop := kaart.knop_van("winkels")
-		waar(knop != null, "met de winkels erin")
-		if knop != null:
-			knop.emit_signal("pressed")
+		var zij: Vector2 = World.get("_reis_zij")
+		waar(World.reist(), "%s: de camera beweegt" % wat)
+		if richting == "op":
+			waar(zij.x == 0.0 and zij.y < 0.0, "%s: de verdieping erboven komt van boven (%s)" % [wat, str(zij)])
+			waar(gehoord.has("trap_op") and not gehoord.has("trap_af"), "%s: voetstappen de trap op (%s)" % [wat, str(gehoord)])
+		else:
+			waar(zij.x == 0.0 and zij.y > 0.0, "%s: de verdieping eronder komt van onder (%s)" % [wat, str(zij)])
+			waar(gehoord.has("trap_af") and not gehoord.has("trap_op"), "%s: voetstappen de trap af (%s)" % [wat, str(gehoord)])
+		waar(not gehoord.has("deur"), "%s: geen deur (%s)" % [wat, str(gehoord)])
+		gelijk(World.kamer_nu(), naar, "%s: precies één verdieping verder, bij de trap" % wat)
+		gelijk(_genomen, [[van, naar, richting]], "%s: de shell hoort welke trap" % wat)
 		await _frames(3)
-		gelijk(World.kamer_nu(), "winkels", "een tik op de winkels brengt je daarheen")
-		waar(not Ui.blad_open_nu(), "en het paneel gaat dicht")
-	# the same tower as the map, so the same size: the picture before the title
-	# adds no height (a wrapping title in a row once made the sheet a strip
-	# taller, empty under `Sluiten`)
-	h["shell"]._plattegrond()
-	await _frames(3)
-	var kaart_hoog := _blad_hoogte()
-	h["shell"]._trap("receptie")
-	await _frames(3)
-	var trap_hoog := _blad_hoogte()
-	waar(kaart_hoog > 0.0 and absf(trap_hoog - kaart_hoog) <= 4.0,
-		"het trappaneel is zo hoog als de plattegrond (%.0f, %.0f)" % [trap_hoog, kaart_hoog])
-	Ui.blad_dicht()
-	Hotel.trap_gevraagd.disconnect(luister)
+		waar(not Ui.blad_open_nu(), "%s: geen paneel ertussen" % wat)
+	await _tot_stil()
+	waar(not World.reist(), "de rit is voorbij")
+	Snd.gespeeld.disconnect(hoor)
+	Hotel.trap_genomen.disconnect(neem)
+	for p in Snd.get("_spelers"):
+		(p as AudioStreamPlayer).stop()
+		(p as AudioStreamPlayer).stream = null
+	Snd._sfeer_stop()
+	Snd.set("_wakker", wakker)
+	Snd.set("_uit", uit)
 	await _hotel_af(h)
 	Ui.zet_rust_modus(rust)
 	State.s = bewaard
 
-## The height of the sheet on screen, 0 without one.
-func _blad_hoogte() -> float:
-	var b := Ui.huidig_blad()
-	var paneel: Control = b.get_node_or_null("Midden/Blad") if b != null else null
-	return paneel.size.y if paneel != null else 0.0
+## A flight that is not there goes nowhere: the top floor has no way up, the
+## cellar no way down.
+func test_geen_trap_omhoog_vanaf_de_bovenste_verdieping() -> void:
+	waar(not Hotel.neem_trap("gang", "op"), "de gang is de bovenste verdieping")
+	waar(not Hotel.neem_trap("wasserij", "af"), "onder de kelder is niets")
+	waar(not Hotel.neem_trap("tuin", "op"), "in de tuin is geen trap")
 
 # ------------------------------------------------------------------ de rit
 
-## To another floor you take the stairs: the new floor slides in from ABOVE
-## going up and from BELOW going down, with footsteps climbing up or going
-## down; on the same floor it is the sideways slide and the door as always.
+## To another floor by the room bar or the map you take the stairs as well:
+## the new floor slides in from ABOVE going up and from BELOW going down, with
+## footsteps climbing up or going down; on the same floor it is the sideways
+## slide and the door as always.
 func test_een_andere_verdieping_is_de_trap() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	var rust := Ui.rust_modus()
@@ -286,3 +429,55 @@ func test_een_gast_neemt_de_trap() -> void:
 		"de winkels uit, de trap af, de tuin door")
 	World.weg("t_trap")
 	Ui.zet_rust_modus(rust)
+
+## On the think tick, step by step: a guest going UP walks to the flight up and
+## steps off the flight DOWN of the floor he arrives on (he came up it); a guest
+## going DOWN walks to the flight down and comes out of the flight up below.
+## The last place he stood in the room he leaves, and the first in the room he
+## enters, are those flights' points.
+func test_omhoog_loopt_hij_de_trap_op_en_omlaag_de_trap_af() -> void:
+	Rooms.herstel()
+	var was: bool = Ui.rust_modus()
+	Ui.set("_rust", false)
+	# [from, to, the flight he leaves by, the flight he arrives by]
+	for rit in [["receptie", "gang", "op", "af"], ["speelzaal", "receptie", "af", "op"],
+			["winkels", "wasserij", "af", "op"], ["wasserij", "speelzaal", "op", "af"]]:
+		var van: String = rit[0]
+		var naar: String = rit[1]
+		var wat := "%s -> %s" % [van, naar]
+		var start := Vector2(Rooms.get_kamer(van).plekken[0][0], Rooms.get_kamer(van).plekken[0][1])
+		var d := World.zet("t_vlucht", van, start.x, start.y, {"kind": "konijn"})
+		var route := World.reis("t_vlucht", naar, {"na": "wacht"})
+		gelijk(route, [van, naar], "%s: één keer de trap" % wat)
+		var weg := Vector2.INF
+		var aan := Vector2.INF
+		var vorig := Vector2(d.x, d.z)
+		var t := 0
+		while d.kamer == van and t < 3000:
+			vorig = Vector2(d.x, d.z)
+			World._tik()
+			t += 1
+		weg = vorig
+		if d.kamer == naar:
+			aan = Vector2(d.x, d.z)
+		var uit_lp := Rooms.trap_punt(van, str(rit[2]))
+		var in_lp := Rooms.trap_punt(naar, str(rit[3]))
+		gelijk(d.kamer, naar, "%s: hij is de trap genomen" % wat)
+		var uit_p := Vector2(uit_lp["ix"], uit_lp["iz"])
+		waar(weg.distance_to(uit_p) <= 3.0,
+			"%s: hij liep naar de trap %s (%s, trap %s)" % [wat, rit[2], str(weg), str(uit_p)])
+		var andere := Rooms.trap_punt(van, "af" if str(rit[2]) == "op" else "op")
+		if not andere.is_empty():
+			var andere_p := Vector2(andere["ix"], andere["iz"])
+			waar(weg.distance_to(uit_p) < weg.distance_to(andere_p),
+				"%s: naar de trap %s, niet naar de andere (%s)" % [wat, rit[2], str(andere_p)])
+		var in_p := Vector2(in_lp["ix"], in_lp["iz"])
+		waar(aan.distance_to(in_p) <= 3.0,
+			"%s: hij komt uit de trap %s (%s, trap %s)" % [wat, rit[3], str(aan), str(in_p)])
+		var daar := Rooms.trap_punt(naar, "af" if str(rit[3]) == "op" else "op")
+		if not daar.is_empty():
+			waar(aan.distance_to(in_p) < aan.distance_to(Vector2(daar["ix"], daar["iz"])),
+				"%s: uit de trap %s, niet uit de andere" % [wat, rit[3]])
+		World.weg("t_vlucht")
+	Ui.set("_rust", was)
+	World.naar("receptie")

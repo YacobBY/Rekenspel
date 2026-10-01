@@ -23,8 +23,9 @@ signal dag_veranderd(dag: int)
 signal checkin_veranderd()
 signal avond_veranderd()
 signal brief_gereed(brief: Dictionary)
-## The child tapped the stairs in `kamer`: the shell opens its panel of floors.
-signal trap_gevraagd(kamer: String)
+## The child took the stairs from `van` one floor `richting` (`op`/`af`) to
+## `naar`: the shell prints its `[probe]` line.
+signal trap_genomen(van: String, naar: String, richting: String)
 
 ## The short word that goes next to the pictogram (world.md §3.2).  An icon
 ## without a word is unreadable for a six-year-old, so an unknown need falls
@@ -1745,31 +1746,53 @@ func _volg_balieplek(id: String) -> Callable:
 
 ## The stairs (owner, 2026-09-24: "Het is de bedoeling dat het hotel heel groot
 ## en hoog aanvoelt net als Habbo Hotel"; a lift until 2026-09-25: "Ik wil
-## graag de lift vervangen voor een trap"): ONE button on the stairwell's
-## opening, however many floors it goes to.  A tap opens the panel of floors
-## (`trap_gevraagd`; the shell shows the tower, `ui/plattegrond.gd`), and it is
-## a door sign like every door's (`klas: hotdeur`), so it hangs where they hang
-## and steps aside during a sum as they do.  Its badge counts the wishes waiting
-## on the other floors.  There is no stairs emoji (🪜 is a ladder), so its
-## pictogram is drawn: `UiTrapIcoon`.
+## graag de lift vervangen voor een trap"): a flight UP and a flight DOWN, each
+## with its own button on its opening (owner, 2026-10-01: "ik wil dat je bij de
+## trap tussen etages beweegt misschien een trap omhoog en een omlaag").  A tap
+## takes the child exactly one floor up or down, to the stairs of that floor —
+## no panel in between; the room bar and the map still go anywhere.  A button
+## is a door sign like every door's (`klas: hotdeur`), so it hangs where they
+## hang and steps aside during a sum as they do, and a tap on the opening
+## itself takes the stairs too (`tik_vlak`).  Its badge counts the wishes
+## waiting on the floors that way.  `trap_genomen` tells the shell (a `[probe]`
+## line for `tools/speel.js`).
 func _trap_knop(nu: String) -> void:
-	var lp := Rooms.trap_punt(nu)
-	if lp.is_empty():
-		return
-	var w := 0
-	for id in Rooms.lijst():
-		if Rooms.etage(id) != Rooms.etage(nu):
-			w += wacht_in(id)
-	Hits.maak({"id": "trap_%s" % nu, "door": EIGENAAR, "kamer": nu,
-		"x": lp.get("x", 0), "z": lp.get("z", 0), "y": 9,
-		"beeld": UiTrapIcoon.beeld(), "label": UiTekst.TRAP, "titel": UiTekst.TRAP_TITEL,
-		"badge": str(w) if w > 0 else "", "klas": "hotdeur hottrap", "prio": 11,
-		"op": "aan", "volg": _volg_trap(nu),
-		"aan": func(_s): trap_gevraagd.emit(nu)})
+	for richting in Rooms.trap_richtingen(nu):
+		var lp := Rooms.trap_punt(nu, richting)
+		if lp.is_empty() or Rooms.trap_naar(nu, richting).is_empty():
+			continue
+		var op := richting == "op"
+		var w := 0
+		for id in Rooms.lijst():
+			if Rooms.trap_richting(nu, id) == richting:
+				w += wacht_in(id)
+		Hits.maak({"id": trap_knop_id(nu, richting), "door": EIGENAAR, "kamer": nu,
+			"x": lp.get("x", 0), "z": lp.get("z", 0), "y": 9,
+			"icoon": UiTekst.TRAP_OP_ICOON if op else UiTekst.TRAP_AF_ICOON,
+			"label": UiTekst.TRAP_OP if op else UiTekst.TRAP_AF,
+			"titel": UiTekst.TRAP_OP_TITEL if op else UiTekst.TRAP_AF_TITEL,
+			"badge": str(w) if w > 0 else "", "klas": "hotdeur hottrap", "prio": 11,
+			"op": "aan", "tik_vlak": true, "volg": _volg_trap(nu, richting),
+			"aan": func(_s): neem_trap(nu, richting)})
 
-func _volg_trap(kamer_id: String) -> Callable:
+## The id of a flight's button: `trap_op_receptie`, `trap_af_receptie`.
+static func trap_knop_id(kamer: String, richting: String) -> String:
+	return "trap_%s_%s" % [richting, kamer]
+
+## One floor up (`op`) or down (`af`) from `van`, to the stairs there: the camera
+## slides the new floor in from above or below and the footsteps climb or go
+## down (`naar_kamer`).  False when `van` has no such flight.
+func neem_trap(van: String, richting: String) -> bool:
+	var naar := Rooms.trap_naar(van, richting)
+	if naar.is_empty():
+		return false
+	trap_genomen.emit(van, naar, richting)
+	naar_kamer(naar)
+	return true
+
+func _volg_trap(kamer_id: String, richting: String) -> Callable:
 	return func() -> Dictionary:
-		return {"vlak": World.vlak_van_trap(kamer_id)}
+		return {"vlak": World.vlak_van_trap(kamer_id, richting)}
 
 ## The same for a door: its rectangle moves with the camera, so it is measured
 ## every pass instead of once at creation.

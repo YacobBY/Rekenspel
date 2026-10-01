@@ -504,25 +504,27 @@ func vlak_van_deur(kamer_id: String, naar: String) -> Rect2:
 		for p in hoeken:
 			vak = vak.expand(p)
 		return vak
-	# up or down the stairs: their one opening, whichever floor they go to
+	# up or down the stairs: the opening of the flight that goes that way,
+	# whichever floor it goes to
 	if Rooms.via_trap(kamer_id, naar):
-		return vlak_van_trap(kamer_id)
+		return vlak_van_trap(kamer_id, Rooms.trap_richting(kamer_id, naar))
 	return Rect2()
 
-## The screen rectangle of the stairs in a room (`Kamer.trap`): their opening,
-## measured exactly as a door's (`vlak_van_deur`), so their sign hangs where the
-## door that stood there hung — only the opening, never more over the lintel:
-## when the lift's floor lights were counted in, the sign rose a band and on a
-## phone took the place over the head of a guest in front of it.  `Rect2()`
-## without stairs.
-func vlak_van_trap(kamer_id: String = "") -> Rect2:
+## The screen rectangle of one flight of the stairs in a room (`Kamer.trap`,
+## `richting` `op` or `af`): its opening, measured exactly as a door's
+## (`vlak_van_deur`), so its sign hangs where a door's sign hangs — only the
+## opening, never more over the lintel: when the lift's floor lights were
+## counted in, the sign rose a band and on a phone took the place over the head
+## of a guest in front of it.  `Rect2()` where that flight is not.
+func vlak_van_trap(kamer_id: String, richting: String) -> Rect2:
 	var r := Rooms.get_kamer(kamer_id if kamer_id != "" else _kamer_nu)
-	if r == null or r.trap.is_empty():
+	if r == null or not r.trap.has(richting):
 		return Rect2()
-	var a := float(r.trap.get("at", 0))
-	var b := a + float(r.trap.get("breed", 12))
-	var h := float(Rooms.deur_hoog(r, r.trap))
-	var randen: Array = [[a, 0.0], [b, 0.0]] if str(r.trap.get("wand", "z")) == "z" \
+	var dr: Dictionary = r.trap[richting]
+	var a := float(dr.get("at", 0))
+	var b := a + float(dr.get("breed", 12))
+	var h := float(Rooms.deur_hoog(r, dr))
+	var randen: Array = [[a, 0.0], [b, 0.0]] if str(dr.get("wand", "z")) == "z" \
 		else [[0.0, a], [0.0, b]]
 	var vak := Rect2(mik_punt(float(randen[0][0]), float(randen[0][1]), 0.0), Vector2.ZERO)
 	for xz in randen:

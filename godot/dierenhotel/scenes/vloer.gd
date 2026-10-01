@@ -99,11 +99,13 @@ const GLAS_KOP := 22.0                    ## the transom
 # The stairs (`Kamer.trap`, owner 2026-09-24: the hotel is a tower; a lift
 # until 2026-09-25: "Ik wil graag de lift vervangen voor een trap").  A door
 # frame in the wall, and through it the stairwell with a wooden flight seen from
-# the side — the saw-tooth of the steps, light treads, a banister on posts, like
-# the pictogram on its button (`UiTrapIcoon`).  Where there is a floor above,
-# the flight climbs from the foot of the doorway towards the back corner of the
-# room, getting lighter towards upstairs; on the top floor it goes down from a
-# landing into the dark instead.  Everything is clipped to the opening.
+# the side — the saw-tooth of the steps, light treads, a banister on posts.
+# A room has a flight up and a
+# flight down, each in its own opening (owner, 2026-10-01: "een trap omhoog en
+# een omlaag"; the top floor only the one down, the cellar only the one up).
+# The flight up climbs from the foot of its doorway towards the back corner of
+# the room, getting lighter towards upstairs; the flight down goes down from a
+# landing into the dark.  Everything is clipped to its opening.
 const TRAP_TREE := Color("#EDC38F")       ## the top of a step
 const TRAP_ZIJ := Color("#C98B5B")        ## the side of the flight, the saw-tooth
 const TRAP_STOOTBORD := Color("#A87044")  ## the front of a step
@@ -125,6 +127,17 @@ const TRAP_AF_BREED := 9.0
 const TRAP_AF_STAP := 2.6
 const TRAP_AF_HOOG := 3.0
 const TRAP_AF_TREDEN := 8
+## The arrow sign over a flight's lintel (`_trap_bordje`): this far over the
+## frame, this tall and wide, in the blue of the ⬆ / ⬇ on its button.
+const TRAP_BORD_GAT := 1.2
+const TRAP_BORD_MAAT := 6.0
+const TRAP_BORD := Color("#93B9DA")
+const TRAP_BORD_RAND := Color("#6F97BC")
+const TRAP_BORD_PIJL := Color("#FDFBF6")
+## The stairwell's wall changes over this height: up to the light over a flight
+## up, down to the dusk (this share of the dark) behind a flight down.
+const TRAP_LICHT_HOOG := 26.0
+const TRAP_AF_SCHEMER := 0.7
 const TRAP_PAAL := 8.0                    ## the banister stands this high over a step
 const TRAP_DIEPTE := -80.0                ## how far down the dark of a flight going down runs
 
@@ -421,14 +434,19 @@ func _deurblad(z0: float, z1: float, hoog: float, v: PackedVector2Array,
 	_vlak(v, k, i, [_proj(dik, z1 - 2.4, 12.0), _proj(dik, z1 - 1.2, 12.0),
 		_proj(dik, z1 - 1.2, 13.2), _proj(dik, z1 - 2.4, 13.2)], DEURKNOP)
 
-## The stairs in their wall (`Kamer.trap`): the stairwell seen through a door
-## frame (see TRAP_*).  The opening is as tall as a door (`Rooms.deur_hoog`), so
-## the door sign rule and `World.vlak_van_trap` measure the same box.
+## The stairs in their wall (`Kamer.trap`): each flight in its own door frame,
+## the stairwell seen through it (see TRAP_*) — the flight up climbing into the
+## light, the flight down going into the dark (owner, 2026-10-01: "een trap
+## omhoog en een omlaag").  An opening is as tall as a door (`Rooms.deur_hoog`),
+## so the door sign rule and `World.vlak_van_trap` measure the same box.
 func _trap(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 		i: PackedInt32Array) -> void:
-	if r.trap.is_empty():
-		return
-	var dr: Dictionary = r.trap
+	for richting in Rooms.trap_richtingen(r.id):
+		_trap_gat(r, r.trap[richting], richting == "op", v, k, i)
+
+## One flight in its opening `dr` ({wand, at, breed}): `op` the flight up.
+func _trap_gat(r: Rooms.Kamer, dr: Dictionary, op: bool, v: PackedVector2Array,
+		k: PackedColorArray, i: PackedInt32Array) -> void:
 	var langs_z := str(dr.get("wand", "z")) == "z"
 	var hoog := float(Rooms.deur_hoog(r, dr))
 	var a := float(dr["at"])
@@ -438,10 +456,7 @@ func _trap(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 		return _proj(t, -diep, y) if langs_z else _proj(-diep, t, y)
 	var vak := _scherm_vlakken([pw.call(a, 0.0, 0.0), pw.call(b, 0.0, 0.0),
 		pw.call(b, 0.0, hoog), pw.call(a, 0.0, hoog)])
-	var boven := false
-	for ander in Rooms.trap_kamers():
-		boven = boven or Rooms.etage(ander) > r.etage
-	if boven:
+	if op:
 		_trap_op(pw, vak, a, b, v, k, i)
 	else:
 		_trap_af(pw, vak, a, b, v, k, i)
@@ -463,6 +478,28 @@ func _trap(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 		pw.call(b, 0.0, hoog + 1.4)], HOUT_D)
 	_vlak(v, k, i, [pw.call(a - 1.0, 0.0, hoog), pw.call(b + 1.0, 0.0, hoog),
 		pw.call(b + 1.0, 0.0, hoog + 1.4), pw.call(a - 1.0, 0.0, hoog + 1.4)], HOUT)
+	_trap_bordje(pw, (a + b) * 0.5, hoog + 1.4 + TRAP_BORD_GAT, op, v, k, i)
+
+## The little sign over a flight's lintel, as in a real stairwell: a blue plate
+## with a white arrow up or down — the arrow of its button (⬆ / ⬇), so the
+## opening says where it goes even where its button hangs on the door.  `t` is
+## the middle of the opening along the wall, `y0` the foot of the plate.
+func _trap_bordje(pw: Callable, t: float, y0: float, op: bool, v: PackedVector2Array,
+		k: PackedColorArray, i: PackedInt32Array) -> void:
+	var h := TRAP_BORD_MAAT
+	var r := h * 0.5
+	_vlak(v, k, i, [pw.call(t - r, 0.0, y0), pw.call(t + r, 0.0, y0), pw.call(t + r, 0.0, y0 + h),
+		pw.call(t - r, 0.0, y0 + h)], TRAP_BORD_RAND)
+	_vlak(v, k, i, [pw.call(t - r + 0.6, 0.0, y0 + 0.6), pw.call(t + r - 0.6, 0.0, y0 + 0.6),
+		pw.call(t + r - 0.6, 0.0, y0 + h - 0.6), pw.call(t - r + 0.6, 0.0, y0 + h - 0.6)], TRAP_BORD)
+	# the arrow, drawn as if it pointed up and mirrored for a flight going down
+	var ay := func(f: float) -> float:
+		return y0 + h * (f if op else 1.0 - f)
+	_vlak(v, k, i, [pw.call(t - 0.6, 0.0, ay.call(0.18)), pw.call(t + 0.6, 0.0, ay.call(0.18)),
+		pw.call(t + 0.6, 0.0, ay.call(0.55)), pw.call(t - 0.6, 0.0, ay.call(0.55))], TRAP_BORD_PIJL)
+	var punt: Vector2 = pw.call(t, 0.0, ay.call(0.84))
+	_vlak(v, k, i, [pw.call(t - 1.9, 0.0, ay.call(0.5)), pw.call(t + 1.9, 0.0, ay.call(0.5)),
+		punt, punt], TRAP_BORD_PIJL)
 
 ## The flight up, clipped to `vak`: it starts at the foot of the doorway's far
 ## side and climbs along the wall towards the back corner (`t` down), set a
@@ -474,8 +511,16 @@ func _trap(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
 ## light upstairs.
 func _trap_op(pw: Callable, vak: Array, a: float, b: float, v: PackedVector2Array,
 		k: PackedColorArray, i: PackedInt32Array) -> void:
+	# the stairwell's wall, brightening upwards into the light of the floor above
+	# — beside a flight going down, which darkens downwards, the two read as
+	# up and down at a glance (owner, 2026-10-01: "een trap omhoog en een omlaag")
 	_scherm_vlak(v, k, i, [pw.call(a - 60.0, 0.0, -40.0), pw.call(b + 60.0, 0.0, -40.0),
-		pw.call(b + 60.0, 0.0, 80.0), pw.call(a - 60.0, 0.0, 80.0)], vak, TRAP_MUUR)
+		pw.call(b + 60.0, 0.0, 0.0), pw.call(a - 60.0, 0.0, 0.0)], vak, TRAP_MUUR)
+	_scherm_vlak_kl(v, k, i, [pw.call(a - 60.0, 0.0, 0.0), pw.call(b + 60.0, 0.0, 0.0),
+		pw.call(b + 60.0, 0.0, TRAP_LICHT_HOOG), pw.call(a - 60.0, 0.0, TRAP_LICHT_HOOG)], vak,
+		[TRAP_MUUR, TRAP_MUUR, TRAP_LICHT, TRAP_LICHT])
+	_scherm_vlak(v, k, i, [pw.call(a - 60.0, 0.0, TRAP_LICHT_HOOG), pw.call(b + 60.0, 0.0, TRAP_LICHT_HOOG),
+		pw.call(b + 60.0, 0.0, 80.0), pw.call(a - 60.0, 0.0, 80.0)], vak, TRAP_LICHT)
 	var u0 := TRAP_OP_VOOR
 	var u1 := u0 + TRAP_OP_BREED
 	# a point behind the wall shows `diep` further along it: this puts the foot
@@ -504,7 +549,14 @@ func _trap_op(pw: Callable, vak: Array, a: float, b: float, v: PackedVector2Arra
 ## The viewer stands on the side of the lower steps: drawn from the top down.
 func _trap_af(pw: Callable, vak: Array, a: float, b: float, v: PackedVector2Array,
 		k: PackedColorArray, i: PackedInt32Array) -> void:
+	# the stairwell's wall, darkening downwards towards the floor below
+	var laag := TRAP_MUUR_AF.lerp(TRAP_DIEP, TRAP_AF_SCHEMER)
 	_scherm_vlak(v, k, i, [pw.call(a - 60.0, 0.0, -40.0), pw.call(b + 60.0, 0.0, -40.0),
+		pw.call(b + 60.0, 0.0, 0.0), pw.call(a - 60.0, 0.0, 0.0)], vak, laag)
+	_scherm_vlak_kl(v, k, i, [pw.call(a - 60.0, 0.0, 0.0), pw.call(b + 60.0, 0.0, 0.0),
+		pw.call(b + 60.0, 0.0, TRAP_LICHT_HOOG), pw.call(a - 60.0, 0.0, TRAP_LICHT_HOOG)], vak,
+		[laag, laag, TRAP_MUUR_AF, TRAP_MUUR_AF])
+	_scherm_vlak(v, k, i, [pw.call(a - 60.0, 0.0, TRAP_LICHT_HOOG), pw.call(b + 60.0, 0.0, TRAP_LICHT_HOOG),
 		pw.call(b + 60.0, 0.0, 80.0), pw.call(a - 60.0, 0.0, 80.0)], vak, TRAP_MUUR_AF)
 	var u0 := TRAP_AF_VOOR
 	var u1 := u0 + TRAP_AF_BREED

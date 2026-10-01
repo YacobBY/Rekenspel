@@ -12,8 +12,8 @@ extends Control
 ## (`Rooms.etage_teken`), lit on the floor the child is on, and that floor's
 ## whole row wears a faint sunny band.  Every cell wears its own floor colour
 ## and the room you are in is the sunny one, so the plan reads as a building
-## and not as a menu.  The same sheet is the stairs' panel
-## (`scenes/main.gd::_toren`).
+## and not as a menu (`scenes/main.gd::_toren`).  Until 2026-10-01 it was the
+## stairs' panel too; the stairs go one floor up or down a tap now.
 ##
 ## The table is COMPUTED from `Rooms` (`kaart()`), never written down: a room
 ## added later gets a cell on its own floor without anyone touching this file.
