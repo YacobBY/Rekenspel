@@ -53,3 +53,4 @@ FE0F               # variation selector-16: 🛎️ ☀️ 🛏️ carry it
 23EA                 # ⏪ wekker: "uur eraf" (2026-09-24)
 1F3AD 1F499 1F49A 1F60D # 🎭 💙 💚 😍 Spiegelmaskers in de speelzaal (2026-09-25)
 1F4F8                # 📸 het fotohokje in de winkelstraat (2026-10-01)
+1F4BE 1F4C2 1F5D1    # 💾 📂 🗑 de hotels op het startblad: bewaar, open, weg (2026-10-01)

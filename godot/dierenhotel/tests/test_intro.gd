@@ -20,6 +20,7 @@ var _bewaard: Dictionary = {}
 var _gekozen := false
 var _bestand := ""            ## the save on disk before the test, verbatim
 var _had_bestand := false
+var _hotel_terug := 1
 var _scherm_terug = null
 var _rust_terug := false
 var _thema_terug := Vector2i(18, 0)
@@ -42,6 +43,7 @@ func _onthoud() -> void:
 	_gekozen = State.gestart()
 	_had_bestand = FileAccess.file_exists(State.PAD)
 	_bestand = FileAccess.get_file_as_string(State.PAD) if _had_bestand else ""
+	_hotel_terug = State.hotel
 	_scherm_terug = Ui.get("_scherm")
 	_rust_terug = Ui.rust_modus()
 	_thema_terug = Vector2i(Ui.basis_maat(), 1 if bool(Ui.get("_ruim")) else 0)
@@ -54,6 +56,8 @@ func _start(maat: Vector2i, opslag := false) -> void:
 	var d := DirAccess.open("user://")
 	if d != null and FileAccess.file_exists(State.PAD):
 		d.remove(State.PAD.get_file())
+	_wis_hotels()
+	State.hotel = 1
 	if opslag:
 		State.nieuw_spel()
 		State.start_gekozen()
@@ -101,6 +105,8 @@ func _af() -> void:
 		Ui._bouw_thema(_thema_terug.x, _thema_terug.y == 1)
 	State.s = _bewaard
 	State.set("_start_keuze", _gekozen)
+	_wis_hotels()
+	State.hotel = _hotel_terug
 	var d := DirAccess.open("user://")
 	if d != null and FileAccess.file_exists(State.PAD):
 		d.remove(State.PAD.get_file())
@@ -109,6 +115,16 @@ func _af() -> void:
 		if f != null:
 			f.store_string(_bestand)
 			f.close()
+
+## Hotels 2 and 3 and the remembered choice go (hotel 1 is `State.PAD`, which
+## `_start` and `_af` handle themselves).
+func _wis_hotels() -> void:
+	var d := DirAccess.open("user://")
+	if d == null:
+		return
+	for n in range(2, State.HOTELS + 1):
+		d.remove(State.pad_van(n).get_file())
+	d.remove(State.PAD_KEUZE.get_file())
 
 func _intro() -> UiIntro:
 	if _shell == null or not is_instance_valid(_shell):
@@ -227,13 +243,14 @@ func test_een_tik_sluit_het_welkom() -> void:
 		waar(_intro() == null, "en de schil laat het los")
 	await _af()
 
-## A child who comes back is never held up: `Verder spelen` has no welcome.
+## A child who comes back is never held up: continuing a hotel (its tile on
+## the start sheet, what `Verder spelen` was) has no welcome.
 func test_verder_spelen_houdt_niemand_op() -> void:
 	_onthoud()
 	await _start(Vector2i(1024, 768), true)
 	waar(_intro() == null, "onder het startblad loopt geen welkom")
-	var verder: Button = _shell.get_node_or_null("Bladlaag/Blad/Midden/Blad/Rol/Kolom/Knoppen/Kverder")
-	waar(verder != null, "het startblad heeft Verder spelen")
+	var verder: Button = _shell.get_node_or_null("Bladlaag/Blad/Midden/Blad/Rol/Kolom/Hotels/Khotel1")
+	waar(verder != null, "het startblad heeft het hotel om verder te spelen")
 	if verder != null:
 		verder.pressed.emit()
 		await _frames(3)
@@ -242,20 +259,24 @@ func test_verder_spelen_houdt_niemand_op() -> void:
 		gelijk(_boom().get_nodes_in_group(UiIntro.GROEP).size(), 0, "en nergens anders")
 	await _af()
 
-## `Nieuw spel` IS a fresh game: the welcome comes after it.
+## `➕ Nieuw hotel` (an empty tile on the start sheet, what `Nieuw spel` was)
+## IS a fresh game: the welcome comes after it — in the empty hotel, the saved
+## one stays as it was.
 func test_nieuw_spel_krijgt_het_welkom() -> void:
 	_onthoud()
 	await _start(Vector2i(1024, 768), true)
-	var nieuw: Button = _shell.get_node_or_null("Bladlaag/Blad/Midden/Blad/Rol/Kolom/Knoppen/Knieuw")
-	waar(nieuw != null, "het startblad heeft Nieuw spel")
+	var nieuw: Button = _shell.get_node_or_null("Bladlaag/Blad/Midden/Blad/Rol/Kolom/Hotels/Khotel2")
+	waar(nieuw != null, "het startblad heeft een leeg hotel")
 	if nieuw != null:
 		nieuw.pressed.emit()
 		await _frames(3)
 		var intro := _intro()
-		waar(intro != null, "Nieuw spel begint met het welkom")
+		waar(intro != null, "een nieuw hotel begint met het welkom")
 		if intro != null:
 			gelijk(int(State.s["dag"]), 1, "in een vers hotel")
 			waar(not Hotel.bord_is_open(), "zonder prikbord")
+		gelijk(State.hotel, 2, "in het lege hotel")
+		gelijk(int(State.samenvatting(1).get("dag", 0)), 3, "hotel 1 is er nog")
 	await _af()
 
 # ------------------------------------------------------------------ de zin

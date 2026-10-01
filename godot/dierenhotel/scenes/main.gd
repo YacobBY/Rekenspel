@@ -49,6 +49,8 @@ var _compact := false
 var _telefoon := false
 ## The intro of a fresh game while it is on the glass, or null (ui/intro.gd).
 var intro: UiIntro = null
+## The start sheet with the hotels, when there was a hotel to come back to.
+var startblad: UiStartblad = null
 
 func _ready() -> void:
 	Ui.registreer_lagen(knoplaag, naamlaag, toastlaag, bladlaag, vanglaag, balklaag)
@@ -124,55 +126,61 @@ func _schildert_bak() -> void:
 ## and only then ask.  Nothing is written before the child answered
 ## (architecture.md §9), so looking at the start screen cannot destroy a save.
 ##
-## A FRESH game — no save at all, or `Nieuw spel` — begins with the intro
-## (ui/intro.gd); `Verder spelen` never does: a child who comes back is not held
-## up by a story it has already seen.  The flow decides this, the save carries
-## no field for it.
+## A FRESH game — no hotel at all, or a new one from the start sheet — begins
+## with the intro (ui/intro.gd); continuing a hotel never does: a child who
+## comes back is not held up by a story it has already seen.  The flow decides
+## this, the save carries no field for it.
+##
+## The tablet holds three hotels (save slots, `State.HOTELS`; owner 2026-10-01).
+## With none of them in use the first one starts at once, as before; otherwise
+## the start sheet shows them (`ui/startblad.gd`) and the child picks one.
 func _begin() -> void:
 	_opslag_uit_url()
-	var had_save := State.lees()
-	var bewaard: Dictionary = State.s.duplicate(true) if had_save else {}
 	State.nieuw_spel()
 	Hotel.start()
 	_ververs_chroom()
-	if not had_save:
+	if not UiStartblad.een_hotel():
+		State.kies_hotel(1)
 		State.start_gekozen()
 		_volg_geluid()
 		_meld_stand("vers")
 		_intro_start()
 		return
-	var verder := func() -> void:
-		State.s = bewaard
+	var bewaard := State.samenvatting(State.hotel)
+	var lijst: Array[String] = []
+	for h in State.hotels():
+		lijst.append("%d:%s" % [int(h["hotel"]), "leeg" if bool(h["leeg"]) else "dag%d" % int(h["dag"])])
+	print("[probe] hotels=", " ".join(lijst), " actief=", State.hotel)
+	print("[probe] opslag= dag=", int(bewaard.get("dag", 1)),
+		" sterren=", int(bewaard.get("sterren", 0)),
+		" munten=", int(bewaard.get("munten", 0)))
+	startblad = UiStartblad.new()
+	add_child(startblad)
+	startblad.gekozen.connect(_hotel_gekozen)
+	startblad.blad_klaar.connect(_meld_stand)
+	startblad.toon()
+
+## The child picked hotel `n` on the start sheet: continue it, or (`nieuw`)
+## begin a fresh hotel there — the sheet already asked whether an old one may
+## go.  A hotel whose file turns out unreadable after all begins fresh.
+func _hotel_gekozen(n: int, nieuw: bool) -> void:
+	State.kies_hotel(n)
+	if not nieuw and State.lees():
 		State.start_gekozen()
 		_volg_geluid()
 		Hotel.start()
 		_ververs_chroom()
 		_meld_stand("verder")
 		_meld_knoppen()
-	var nieuw := func() -> void:
-		State.nieuw_spel()
-		State.start_gekozen()
-		_volg_geluid()
-		Hotel.start()
-		_ververs_chroom()
-		_meld_stand("nieuw")
-		_intro_start()
-		_meld_knoppen()
-	print("[probe] opslag= dag=", int(bewaard.get("dag", 1)),
-		" sterren=", int(bewaard.get("sterren", 0)),
-		" munten=", int(bewaard.get("munten", 0)),
-		" geluid=", bool(bewaard.get("geluid", true)))
-	var regel := Label.new()
-	regel.text = UiTekst.start_stand(int(bewaard.get("dag", 1)),
-		(bewaard.get("gasten", []) as Array).size(),
-		int(bewaard.get("munten", 0)), int(bewaard.get("sterren", 0)))
-	regel.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	Ui.blad_open({
-		"titel": UiTekst.START_TERUG, "inhoud": [regel], "sluitbaar": false,
-		"knoppen": [
-			{"id": "verder", "tekst": UiTekst.START_VERDER, "groot": true, "aan": verder},
-			{"id": "nieuw", "tekst": UiTekst.START_NIEUW, "aan": nieuw},
-		]})
+		return
+	State.nieuw_spel()
+	State.start_gekozen()
+	_volg_geluid()
+	Hotel.start()
+	_ververs_chroom()
+	_meld_stand("nieuw")
+	_intro_start()
+	_meld_knoppen()
 
 # ------------------------------------------------------------------- intro
 
@@ -538,6 +546,18 @@ func _meld_stand(waarom: String) -> void:
 		return
 	var paneel: Control = blad.get_node_or_null("Midden/Blad")
 	print("[probe] blad=", paneel.get_global_rect() if paneel != null else Rect2())
+	# the hotels on the start sheet (ui/hotelkeuze.gd).  The tile of the hotel
+	# played last is ALSO reported as `Kverder`, first: it is what "Verder
+	# spelen ▸" was, and `tools/kiek.js`, `speel.js` and `probe.js` tap that
+	var tegels := blad.get_node_or_null("Midden/Blad/Rol/Kolom/Hotels") as UiHotelkeuze
+	if tegels != null:
+		var mijn := tegels.tegel(State.hotel)
+		if mijn != null and not mijn.disabled and mijn.mouse_filter != Control.MOUSE_FILTER_IGNORE \
+				and not State.samenvatting(State.hotel)["leeg"]:
+			print("[probe] bladknop Kverder=", mijn.get_global_rect())
+		for k in tegels.get_children():
+			if k is Button and (k as Button).visible:
+				print("[probe] bladknop ", k.name, "=", (k as Control).get_global_rect())
 	var rij: Control = blad.get_node_or_null("Midden/Blad/Rol/Kolom/Knoppen")
 	if rij != null:
 		for k in rij.get_children():
@@ -665,6 +685,9 @@ func _exit_tree() -> void:
 ## writes that save to `user://` BEFORE it is read, so a browser proof can start
 ## on any day and band without playing the days first.  Without the flag nothing
 ## is written; a corrupt payload is caught by `State.lees()` like any other file.
+## `opslag=` is hotel 1, and hotel 1 becomes the one in use: the seeded day is
+## what `Kverder` (its tile on the start sheet) continues.  `hotel2=` and
+## `hotel3=` seed the other two hotels the same way (`tools/kiek.js --hotels`).
 func _opslag_uit_url() -> void:
 	if not OS.has_feature("web"):
 		return
@@ -672,17 +695,21 @@ func _opslag_uit_url() -> void:
 	if zoek == null:
 		return
 	var s := str(zoek)
-	var i := s.find("opslag=")
-	if i < 0:
-		return
-	# base64url (no + or /, so no percent-decoding trouble); plain base64 works too
-	var b64 := s.substr(i + 7).split("&")[0].replace("-", "+").replace("_", "/")
-	var json := Marshalls.base64_to_utf8(b64)
-	if json.is_empty():
-		print("[probe] opslag_uit_url=onleesbaar")
-		return
-	var f := FileAccess.open(State.PAD, FileAccess.WRITE)
-	if f != null:
-		f.store_string(json)
-		f.close()
-		print("[probe] opslag_uit_url=%d" % json.length())
+	for n in range(1, State.HOTELS + 1):
+		var sleutel := "opslag=" if n == 1 else "hotel%d=" % n
+		var i := s.find(sleutel)
+		if i < 0:
+			continue
+		# base64url (no + or /, so no percent-decoding trouble); plain base64 works too
+		var b64 := s.substr(i + sleutel.length()).split("&")[0].replace("-", "+").replace("_", "/")
+		var json := Marshalls.base64_to_utf8(b64)
+		if json.is_empty():
+			print("[probe] %s_uit_url=onleesbaar" % sleutel.trim_suffix("="))
+			continue
+		var f := FileAccess.open(State.pad_van(n), FileAccess.WRITE)
+		if f != null:
+			f.store_string(json)
+			f.close()
+			if n == 1:
+				State.kies_hotel(1)
+			print("[probe] %s_uit_url=%d" % [sleutel.trim_suffix("="), json.length()])

@@ -9,6 +9,12 @@ extends Node
 ## does not parse, or carries another `v`, is ignored entirely -> the child gets
 ## the start screen and a fresh hotel.  Nothing is ever half-loaded.
 ##
+## Since 2026-10-01 the tablet holds three such documents, one per hotel (save
+## slot): hotel 1 is `user://dierenhotel.json` exactly as before, hotels 2 and
+## 3 have a file of their own (`pad_van`), `hotel` says which one `bewaar()` and
+## `lees()` mean, and `PAD_KEUZE` remembers it.  `ontleed()` is the one gate a
+## save passes — from this tablet or from a file a parent opens.
+##
 ## Beyond the envelope this file owns the guest pool, the guest record and its
 ## repairs (world.md §4.3), the bed bookkeeping every other module asks about
 ## (`plek_voor_gast`, `kamers_met_plek`, `plek_in`, `bed_vrij`, `max_gasten`,
@@ -25,6 +31,16 @@ signal aai_gevuld()
 const PAD := "user://dierenhotel.json"
 const PAD_TMP := "user://dierenhotel.json.tmp"
 const VERSIE := 1
+## Save slots (owner 2026-10-01: "En ik wil save files maken").  The tablet
+## holds up to three hotels.  Hotel 1 IS the old single save — same file, same
+## document — so every save made before the slots, the `?opslag=` URL hook and
+## every test that names `PAD` keep working; hotels 2 and 3 get a file of their
+## own (`pad_van`).  Which hotel was played last is remembered in `PAD_KEUZE`.
+const HOTELS := 3
+const PAD_KEUZE := "user://dierenhotel-keuze.json"
+## A save is a few tens of kB; a file the parent opens that is far bigger than
+## this is not a hotel, and is refused before it is parsed.
+const BESTAND_MAX := 1000000
 const SIGNAAL_MAX := 10
 ## PLAN.md §3.4 — the petting supply of one guest.  Petting spends it, maths
 ## fills it up again and the clock never touches it.  Three is the whole ladder
@@ -34,10 +50,13 @@ const AAI_MAX := 3
 
 var s: Dictionary = {}
 var _start_keuze := false      ## nothing is saved until the start screen answered
+## The hotel (save slot, 1..HOTELS) that `bewaar()` writes and `lees()` reads.
+var hotel := 1
 
 func _ready() -> void:
 	s = standaard()
 	_vul_wachtlijst(s)
+	hotel = lees_keuze()
 
 ## The window is closing or the tablet went to sleep: never lose a day
 ## (architecture.md §9).  `bewaar()` is a no-op before the start screen.
@@ -136,36 +155,64 @@ func gestart() -> bool:
 func bewaar() -> bool:
 	if not _start_keuze:
 		return false
-	var doc := {"v": VERSIE, "s": s}
-	var f := FileAccess.open(PAD_TMP, FileAccess.WRITE)
+	return _schrijf(pad_van(hotel), {"v": VERSIE, "s": s})
+
+## Atomic: the whole document goes to `<pad>.tmp` first and only then takes the
+## place of the old file, so a tablet that dies halfway keeps the last hotel.
+func _schrijf(pad: String, doc: Dictionary) -> bool:
+	var tmp := pad + ".tmp"
+	var f := FileAccess.open(tmp, FileAccess.WRITE)
 	if f == null:
 		return false
 	f.store_string(JSON.stringify(doc))
 	f.close()
 	var dir := DirAccess.open("user://")
 	if dir != null:
-		dir.remove(PAD.get_file())
-		dir.rename(PAD_TMP.get_file(), PAD.get_file())
+		dir.remove(pad.get_file())
+		dir.rename(tmp.get_file(), pad.get_file())
 	return true
 
 ## Returns true when a usable save was read.  Anything wrong -> fresh game.
+## Reads the hotel in use (`hotel`); hotel 1 is the old single save.
 func lees() -> bool:
-	if not FileAccess.file_exists(PAD):
+	var uit := lees_hotel(hotel)
+	if uit.is_empty():
 		return false
-	var f := FileAccess.open(PAD, FileAccess.READ)
+	s = uit
+	_herbereken()
+	veranderd.emit()
+	return true
+
+## The checked, normalised and repaired save of hotel `n`, or `{}` when that
+## hotel is empty or its file is not a hotel.  Never touches `s`: the start
+## sheet asks this for all three hotels while a fresh world runs behind it.
+func lees_hotel(n: int) -> Dictionary:
+	var pad := pad_van(n)
+	if not FileAccess.file_exists(pad):
+		return {}
+	var f := FileAccess.open(pad, FileAccess.READ)
 	if f == null:
-		return false
+		return {}
 	var tekst := f.get_as_text()
 	f.close()
+	return ontleed(tekst)
+
+## A save document as text -> the `s` it carries, checked, normalised and
+## repaired; `{}` for anything that is not a whole hotel.  The ONE gate every
+## save passes: the file of a hotel on this tablet and a file a parent opens
+## (`📂 Open`) alike, so an opened file can never half-load either.
+func ontleed(tekst: String) -> Dictionary:
+	if tekst.is_empty() or tekst.length() > BESTAND_MAX:
+		return {}
 	# JSON.new().parse() reports a broken file quietly; parse_string() would
 	# push an engine error for what is a perfectly normal case here.
 	var lezer := JSON.new()
 	if lezer.parse(tekst) != OK:
-		return false
+		return {}
 	var doc = lezer.data
-	if typeof(doc) != TYPE_DICTIONARY or int(doc.get("v", 0)) != VERSIE \
-			or typeof(doc.get("s")) != TYPE_DICTIONARY:
-		return false
+	if typeof(doc) != TYPE_DICTIONARY or not _is_getal(doc.get("v", 0)) \
+			or int(doc.get("v", 0)) != VERSIE or typeof(doc.get("s")) != TYPE_DICTIONARY:
+		return {}
 	var uit := standaard()
 	for k in uit.keys():
 		if doc["s"].has(k) and doc["s"][k] != null:
@@ -175,15 +222,82 @@ func lees() -> bool:
 	# through all four whole is swapped in, so a hand-edited blob ends at the
 	# start screen with the running game untouched (world.md §4.4).
 	if not _vorm_klopt(uit):
-		return false
+		return {}
 	_normaliseer(uit)
 	_repareer(uit)
 	if not _vorm_klopt(uit):
+		return {}
+	return uit
+
+# ------------------------------------------------------------------ hotels
+
+## The file of hotel `n`.  Hotel 1 is the save as it always was.
+static func pad_van(n: int) -> String:
+	return PAD if n <= 1 else "user://dierenhotel-%d.json" % n
+
+## Which hotel was played last, from `PAD_KEUZE`; 1 when nothing (or nonsense)
+## was remembered.
+func lees_keuze() -> int:
+	if not FileAccess.file_exists(PAD_KEUZE):
+		return 1
+	var lezer := JSON.new()
+	if lezer.parse(FileAccess.get_file_as_string(PAD_KEUZE)) != OK \
+			or typeof(lezer.data) != TYPE_DICTIONARY or not _is_getal(lezer.data.get("hotel")):
+		return 1
+	return clampi(int(lezer.data["hotel"]), 1, HOTELS)
+
+## From now on `bewaar()` and `lees()` mean hotel `n`, also after a reload.
+## Changes nothing in `s`: the caller reads or starts the hotel itself.
+func kies_hotel(n: int) -> void:
+	hotel = clampi(n, 1, HOTELS)
+	var f := FileAccess.open(PAD_KEUZE, FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify({"hotel": hotel}))
+		f.close()
+
+## What the start sheet shows of hotel `n`, with numbers only: the day, the
+## stars, the guests (and the coins, for the tooltip).  `leeg` when there is
+## no hotel to continue — no file, or a file that is not a hotel.
+func samenvatting(n: int) -> Dictionary:
+	var uit := lees_hotel(n)
+	if uit.is_empty():
+		return {"hotel": n, "leeg": true}
+	return {"hotel": n, "leeg": false, "dag": int(uit["dag"]),
+		"sterren": int(uit["sterren"]), "munten": int(uit["munten"]),
+		"gasten": (uit["gasten"] as Array).size()}
+
+## All three, in order.
+func hotels() -> Array[Dictionary]:
+	var uit: Array[Dictionary] = []
+	for n in range(1, HOTELS + 1):
+		uit.append(samenvatting(n))
+	return uit
+
+## The first hotel nobody plays yet, or 0 when all three are taken.
+func vrij_hotel() -> int:
+	for n in range(1, HOTELS + 1):
+		if lees_hotel(n).is_empty():
+			return n
+	return 0
+
+## Hotel `n` as the text of a file a parent keeps (`💾 Bewaar`): the save
+## document itself, `{"v": 1, "s": …}`, so `📂 Open` — and `?opslag=` and
+## `tools/kiek.js --opslag` — take it back as it is.  The running hotel is
+## written first, so the file is what the child sees now.  "" when empty.
+func exporteer(n: int) -> String:
+	if n == hotel and _start_keuze:
+		bewaar()
+	var uit := lees_hotel(n)
+	if uit.is_empty():
+		return ""
+	return JSON.stringify({"v": VERSIE, "s": uit})
+
+## Put a hotel that came through `ontleed()` into slot `n`, atomically.  The
+## running game is not touched; the caller decides what the child sees next.
+func zet_hotel(n: int, uit: Dictionary) -> bool:
+	if uit.is_empty() or n < 1 or n > HOTELS:
 		return false
-	s = uit
-	_herbereken()
-	veranderd.emit()
-	return true
+	return _schrijf(pad_van(n), {"v": VERSIE, "s": uit})
 
 # ------------------------------------------------------------- vormcontrole
 ##

@@ -30,15 +30,51 @@ const VOET := "Dierenhotel Kwispelsteeg · demo · rustig aan, je mag alles zo v
 
 # ------------------------------------------------------------ §7.2 startscherm
 const START_TERUG := "Welkom terug in het Dierenhotel! 👋"
-const START_VERDER := "Verder spelen ▸"
-const START_NIEUW := "Nieuw spel"
 ## `Je was bij <n dag|dagen> — met <n gast|gasten>, <n munt|munten> en
 ## <n ster|sterren>.`  world.md §7.10: `meervoud` is ALWAYS used — "1 sterren"
 ## makes a six-year-old read the sentence twice (V1 finding 3).
+## Since the hotels (2026-10-01) the sheet shows numbers with pictograms on a
+## tile per hotel instead; this sentence is what a tile says to a screen reader.
 static func start_stand(dagen: int, gasten: int, munten: int, sterren: int) -> String:
 	return "Je was bij %s — met %s, %s en %s." % [
 		Ui.meervoud(dagen, "dag", "dagen"), Ui.meervoud(gasten, "gast", "gasten"),
 		Ui.meervoud(munten, "munt", "munten"), Ui.meervoud(sterren, "ster", "sterren")]
+
+# ------------------------------------------------------------- de hotels
+## Save slots (owner 2026-10-01: "En ik wil save files maken"): the tablet
+## holds three hotels, each a tile on the start sheet that is told apart
+## without reading — its own animal and colour, its number, and the day, the
+## stars and the guests as numbers with a pictogram.  `Verder spelen ▸` and
+## `Nieuw spel` are gone: a tile IS the button that continues that hotel, an
+## empty one starts a new hotel there.
+##
+## The animal is the HOTEL's, one per slot, and not its first guest's: every
+## hotel starts with the same guest (Boef 🐶, the pool has a fixed order), so a
+## first-guest picture would make all three tiles look alike.
+const HOTEL_ICOON := ["🐶", "🐱", "🐰"]
+static func hotel_naam(n: int) -> String:
+	return "Hotel %d" % n
+## `📅 3  ⭐ 5  🐾 2` — day, stars, guests.  Each pictogram is glued to its
+## number with a no-break space, so a narrow tile wraps between the pairs and
+## never between a pictogram and its number.
+static func hotel_cijfers(dag: int, sterren: int, gasten: int) -> String:
+	return "📅 %d  ⭐ %d  🐾 %d" % [dag, sterren, gasten]
+## An empty tile, and the button that asks for a fourth when all three are taken.
+const HOTEL_NIEUW := "➕ Nieuw hotel"
+## A new hotel when all three are taken: which one goes?  Then once more, with
+## that hotel alone on the sheet, before anything is thrown away.
+const HOTEL_WEG := "🗑️ Welk hotel mag weg?"
+const HOTEL_ZEKER := "🗑️ Weet je het zeker?"
+const HOTEL_JA := "✅ Ja, weg ermee"
+const HOTEL_NEE := "⬅ Nee, terug"
+## For a parent: the hotel as a file (back-up, another tablet), small, under the
+## tiles.  `💾 Bewaar` downloads it, `📂 Open` puts a file into a hotel.
+const HOTEL_BEWAAR := "💾 Bewaar"
+const HOTEL_OPEN := "📂 Open"
+const HOTEL_WELKE := "💾 Welk hotel bewaar je?"
+const HOTEL_BEWAARD := "💾 Het hotel is bewaard!"
+const HOTEL_GELADEN := "📂 Het hotel is er!"
+const HOTEL_KAPOT := "📂 Dit bestand is geen hotel."
 
 # ------------------------------------------------------------ §7.2 de intro
 ## The welcome of a FRESH game, `ui/intro.gd`: one card that goes by itself

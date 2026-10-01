@@ -874,8 +874,8 @@ func test_bewaard_geluid_uit_komt_terug() -> void:
 		await boom.process_frame
 	# behind the sheet a FRESH game runs, and a fresh game has sound
 	waar(not Snd.dempt(), "achter het startblad speelt het verse spel geluid")
-	var verder: Button = shell.get_node_or_null("Bladlaag/Blad/Midden/Blad/Rol/Kolom/Knoppen/Kverder")
-	waar(verder != null, "de knop 'Verder spelen' staat er")
+	var verder: Button = shell.get_node_or_null("Bladlaag/Blad/Midden/Blad/Rol/Kolom/Hotels/Khotel1")
+	waar(verder != null, "het hotel om verder te spelen staat er")
 	if verder != null:
 		verder.emit_signal("pressed")
 		await boom.process_frame
@@ -891,8 +891,9 @@ func test_bewaard_geluid_uit_komt_terug() -> void:
 	Ui.registreer_wortels([])
 
 ## world.md §6.2: with a save on disk the shell asks before it touches anything.
-## Nothing is written before the child answered (architecture.md §9), and the
-## two buttons carry their wording verbatim.
+## Nothing is written before the child answered (architecture.md §9).  Since the
+## hotels (2026-10-01) the answer is a tile per hotel: the saved one with its
+## numbers, the empty ones `➕ Nieuw hotel`, and under them the parent's two.
 func test_startscherm_vraagt_voor_het_bewaart() -> void:
 	var boom := Engine.get_main_loop() as SceneTree
 	var bewaard: Dictionary = State.s.duplicate(true)
@@ -926,18 +927,23 @@ func test_startscherm_vraagt_voor_het_bewaart() -> void:
 		waar(scherm.encloses(pr), "en staat in beeld (%s)" % str(pr))
 		gelijk((blad.get_node("Midden/Blad/Rol/Kolom/Titel") as Label).text,
 			UiTekst.START_TERUG, "de kop staat er woordelijk")
-		var regel: Label = blad.get_node("Midden/Blad/Rol/Kolom").get_child(1)
-		gelijk(regel.text, UiTekst.start_stand(4, 0, 12, 5), "de stand staat er woordelijk")
-		var verder: Button = blad.get_node("Midden/Blad/Rol/Kolom/Knoppen/Kverder")
-		var nieuw: Button = blad.get_node("Midden/Blad/Rol/Kolom/Knoppen/Knieuw")
-		gelijk(verder.text, UiTekst.START_VERDER, "Verder spelen ▸")
-		gelijk(nieuw.text, UiTekst.START_NIEUW, "Nieuw spel")
-		for knop in [verder, nieuw]:
+		var verder: Button = blad.get_node("Midden/Blad/Rol/Kolom/Hotels/Khotel1")
+		var nieuw: Button = blad.get_node("Midden/Blad/Rol/Kolom/Hotels/Khotel2")
+		gelijk((verder.get_node("Cijfers") as Label).text, UiTekst.hotel_cijfers(4, 5, 0),
+			"de stand staat er in cijfers: dag, sterren, gasten")
+		gelijk((verder.get_node("Naam") as Label).text, UiTekst.hotel_naam(1), "Hotel 1")
+		gelijk("%s %s" % [(nieuw.get_node("Icoon") as Label).text, (nieuw.get_node("Naam") as Label).text],
+			UiTekst.HOTEL_NIEUW, "een leeg hotel: ➕ Nieuw hotel")
+		var bewaar: Button = blad.get_node("Midden/Blad/Rol/Kolom/Knoppen/Kbewaar")
+		var open: Button = blad.get_node("Midden/Blad/Rol/Kolom/Knoppen/Kopen")
+		gelijk(bewaar.text, UiTekst.HOTEL_BEWAAR, "💾 Bewaar")
+		gelijk(open.text, UiTekst.HOTEL_OPEN, "📂 Open")
+		for knop in [verder, nieuw, bewaar, open]:
 			var kr := (knop as Control).get_global_rect()
 			waar(kr.size.x >= 48.0 and kr.size.y >= 48.0,
-				"%s is een tikdoel (%s)" % [knop.text, str(kr)])
+				"%s is een tikdoel (%s)" % [knop.name, str(kr)])
 			waar(Rect2(Vector2.ZERO, Vector2(1024, 768)).encloses(kr),
-				"%s is te bereiken (%s)" % [knop.text, str(kr)])
+				"%s is te bereiken (%s)" % [knop.name, str(kr)])
 		# behind the sheet a living world is already running (world.md §6.2)
 		gelijk(int(State.s["dag"]), 1, "achter het blad draait een vers hotel")
 		verder.emit_signal("pressed")

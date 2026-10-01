@@ -40,6 +40,10 @@ function hulp() {
   --gasten N          eigen gastenaantal (overschrijft --band; max 7)
   --dag N             dagnummer in de opslag (standaard 1)
   --kleding           kleed elke gast aan uit de winkelstraat (een vaste set per gast)
+  --hotels N          zet ook hotel 2..N (max 3) op de tablet: kopieën met een andere dag,
+                      zodat het startblad meer hotels toont
+  --startblad IDS     tik op het startblad deze knoppen (bv. "Knieuw; Khotel2"), maak na elke
+                      tik een foto en stop dan, zonder "Verder spelen"
   --opslag BESTAND    een eigen opslag (JSON: {v, s} of alleen s) in plaats van de gezaaide;
                       --kamer zet er kamerNu in (bv. een hotel vol gekochte bedden)
   --uit MAP           uitvoermap (standaard $DH_LOG_DIR/kiek of /tmp/dierenhotel-log/kiek)
@@ -53,7 +57,7 @@ const argv = process.argv.slice(2);
 const opt = {
   kamer: 'receptie', tik: null, chip: null, wacht: 2500, band: 3, gasten: null, dag: 1, kleding: false,
   uit: path.join(process.env.DH_LOG_DIR || '/tmp/dierenhotel-log', 'kiek'),
-  viewport: '1024x768@2:ipad-land', url: null, opslag: null,
+  viewport: '1024x768@2:ipad-land', url: null, opslag: null, hotels: 1, startblad: null,
   playwright: process.env.PLAYWRIGHT_PAD || null,
 };
 for (let i = 0; i < argv.length; i++) {
@@ -69,6 +73,8 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--dag') opt.dag = parseInt(v(), 10);
   else if (a === '--kleding') opt.kleding = true;
   else if (a === '--opslag') opt.opslag = v();
+  else if (a === '--hotels') opt.hotels = Math.max(1, Math.min(3, parseInt(v(), 10)));
+  else if (a === '--startblad') opt.startblad = v();
   else if (a === '--uit') opt.uit = v();
   else if (a === '--viewport') opt.viewport = v();
   else if (a === '--url') opt.url = v();
@@ -152,6 +158,15 @@ function maakOpslag() {
     checkin: null, rekening: null, geluid: true,
   };
   return JSON.stringify({ v: 1, s });
+}
+// `--hotels N`: hotel 2 and 3 are the seeded hotel on another day, with other
+// numbers, so the three tiles on the start sheet can be told apart
+function maakHotel(n) {
+  const doc = JSON.parse(maakOpslag());
+  doc.s.dag = doc.s.dag + 6 * (n - 1);
+  doc.s.sterren = doc.s.sterren + 7 * (n - 1);
+  doc.s.gasten = doc.s.gasten.slice(0, Math.max(0, doc.s.gasten.length - (n - 1)));
+  return JSON.stringify(doc);
 }
 const base64url = (s) => Buffer.from(s, 'utf8').toString('base64')
   .replace(/\+/g, '-').replace(/\//g, '_');   // keep the '=' padding: Marshalls needs it
@@ -244,10 +259,29 @@ const midden = (l) => {
     process.exit(reden ? 1 : 0);
   };
 
-  await page.goto(`${url}?opslag=${base64url(maakOpslag())}`, { waitUntil: 'load' });
+  let extra = '';
+  for (let n = 2; n <= opt.hotels; n++) extra += `&hotel${n}=${base64url(maakHotel(n))}`;
+  await page.goto(`${url}?opslag=${base64url(maakOpslag())}${extra}`, { waitUntil: 'load' });
   if (!await wacht(() => laatste('[probe] klaar'), 90000)) { await foto('0-geen-boot'); await stop('"[probe] klaar" bleef uit (log.txt)'); }
   if (!laatste('[probe] opslag_uit_url=')) console.log('LET OP: de opslag-hook meldde niets; de kamer is dan de receptie');
   await foto('1-blad');
+
+  // `--startblad`: the start sheet's own questions (a new hotel when all three
+  // are taken, which one may go, are you sure), one picture per tap
+  if (opt.startblad) {
+    let nr = 0;
+    for (const id of opt.startblad.split(';').map((x) => x.trim()).filter(Boolean)) {
+      const regel = await wacht(() => laatste(`[probe] bladknop ${id}=`), 10000);
+      if (!regel) await stop(`startbladknop "${id}" is niet gemeld`);
+      const p = midden(regel);
+      const voor = logs.length;
+      await page.touchscreen.tap(p.x, p.y);
+      await wacht(() => logs.slice(voor).find((l) => l.includes('[probe] blad')), 5000);
+      await page.waitForTimeout(800);
+      await foto(`1${String.fromCharCode(98 + nr++)}-${id}`);
+    }
+    await stop(null);
+  }
 
   // "Verder spelen": the seeded day, in the room the save names
   const verder = laatste('[probe] bladknop Kverder=');

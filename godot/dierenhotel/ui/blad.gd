@@ -153,6 +153,14 @@ func bouw(o: Dictionary, mt: Dictionary, kader: Vector2) -> void:
 			if bool(kn.get("groot", false)) or bool(kn.get("primair", false)):
 				b.theme_type_variation = "KnopActief"
 				b.add_theme_font_size_override("font_size", mt["knop_groot"])
+			elif bool(kn.get("klein", false)):
+				# a button for the grown-up (the start sheet's `💾 Bewaar`):
+				# still a whole tap target, only its words are quieter
+				b.add_theme_font_size_override("font_size", mt["klein"])
+			if bool(kn.get("rij", false)):
+				# a row of its own: the start sheet's `➕ Nieuw hotel` on a
+				# phone, so it never shares a row with the grown-up's buttons
+				b.custom_minimum_size.x = breed - 2 * VULLING
 			var aan: Callable = kn.get("aan", Callable())
 			var dicht := bool(kn.get("dicht", true))
 			b.pressed.connect(func() -> void:
