@@ -406,6 +406,22 @@ func test_de_sleutel_draagt_nog_geen_getal() -> void:
 	_af()
 
 
+## De sleutel rinkelt aan zijn haakje (eigenaar 2026-10-01: "Ik wil sound
+## effects voor het spel") — niet meer het muntje van de toonbank.
+func test_de_sleutel_rinkelt_aan_zijn_haakje() -> void:
+	_op()
+	_wereld(5, 3)
+	waar(Games.start(ID), "het spel start")
+	waar(await _beantwoord(), "het getal is gekozen")
+	var p := _bord()
+	var s: Dictionary = (p["sleutels"] as Array)[int(p.get("nu", 0))]
+	var hoor := Snd.luister(func() -> void: _hang_rauw(int(s["haak"])))
+	waar(bool(s.get("op", false)), "de sleutel hangt")
+	waar(hoor.has("sleutel"), "en rinkelt aan zijn haakje (%s)" % str(hoor))
+	waar(not hoor.has("munt"), "geen munt meer")
+	_af()
+
+
 ## Zoekt een kind op naam, hoe diep het ook hangt (de `Regel` van de kaart
 ## zit in een kolom, niet direct onder de kaart).
 func _kind(node: Node, naam: String) -> Node:

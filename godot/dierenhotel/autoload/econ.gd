@@ -32,6 +32,8 @@ func sterren(n: int = 1, _bron: String = "") -> void:
 
 func geef_munt(n: int) -> void:
 	State.s["munten"] = int(State.s["munten"]) + n
+	if n > 0:
+		Snd.kassa()           # earned money rings in the till; spending does not
 	munten_veranderd.emit(int(State.s["munten"]))
 	Hotel.hud()
 

@@ -1054,7 +1054,7 @@ func _in_bad(id: String, i) -> void:
 		World.behoefte_klaar(id, "bad")
 		_s["wens"] = 1
 	g["waar"] = KAMER
-	ctx.snd.plop(1)
+	ctx.snd.bubbel()
 	_zeg({"icoon": "😌", "tekst": "lekker warm", "klas": "goed"})
 	_bewaar()
 	Hotel.render()

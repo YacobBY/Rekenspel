@@ -358,7 +358,7 @@ func _kies(j: int) -> void:
 	_bezig = true
 	S["pog"] = 0
 	S["i"] = i + 1
-	ctx.snd.plop(1)
+	ctx.snd.sticker()
 	var cel: Array = d["cel"]
 	var p := Modellen.cel_midden(int(cel[0]), int(cel[1]), int(O["R"]), int(O["K"]), str(O["as"]))
 	ctx.wereld.spetter(KAMER, float(EZEL_X) + p.x, float(EZEL_Z) + p.z, 5,

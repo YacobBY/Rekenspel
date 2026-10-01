@@ -575,7 +575,7 @@ func _leg_in(i: int) -> bool:
 	if soort == i:
 		_s["vak"][i] = int(_s["vak"][i]) + 1
 		_s["i"] = int(_s["i"]) + 1
-		ctx.snd.plop(1)
+		ctx.snd.plof()
 	else:
 		ctx.snd.terug()
 	State.bewaar()

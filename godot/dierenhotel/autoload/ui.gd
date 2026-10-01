@@ -744,6 +744,8 @@ func blad_open(o: Dictionary) -> UiBlad:
 		kader = Vector2(get_window().content_scale_size)
 	b.bouw(o, maten, kader)
 	_blad = b
+	if not bool(o.get("stil", false)):
+		Snd.zwiep()           # a sheet slides open; a quiet rebuild does not
 	return b
 
 func blad_dicht() -> void:

@@ -357,7 +357,7 @@ func pluk() -> void:
 	var voor := Beurt.bakjes(O, int(S["geplukt"]))
 	S["geplukt"] = int(S["geplukt"]) + stap_n
 	var na_b := Beurt.bakjes(O, int(S["geplukt"]))
-	ctx.snd.plop(1 if stap_n == 1 else 3)
+	ctx.snd.pluk()
 	for i in 10:
 		if int(na_b[i]) != int(voor[i]):
 			var p := Modellen.plek(i)

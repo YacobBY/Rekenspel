@@ -374,7 +374,8 @@ func test_een_beurt_per_band() -> void:
 				waar(is_sip(gast), "band %d: en het dier is teleurgesteld" % band)
 				waar(mis_wolk(KAART, gast), "band %d: alleen 🔄 Nog een keer" % band)
 				await _wacht_mispauze()
-			_kleur(goed)
+			var hoor := Snd.luister(func() -> void: _kleur(goed))
+			waar(hoor.has("sticker"), "band %d, stip %d: de sticker plakt hoorbaar (%s)" % [band, i, str(hoor)])
 			if i < doel.size() - 1:
 				gelijk(int(_stand().get("i", -1)), i + 1, "band %d: stip %d zit" % [band, i])
 				gelijk(((_ezel()["params"] as Dictionary)["stip"] as Array).size(), int(o["basis"]) + i + 1,

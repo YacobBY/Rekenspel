@@ -351,7 +351,8 @@ func test_een_beurt_in_groep_4() -> void:
 	waar(_knoop(ERAF) == null, "zonder gewichten is er niets om eraf te halen")
 	# too light: the weights side goes up
 	var oplossing := Beurt.splits(g2, o["rek"])
-	_leg(int(oplossing[0]))
+	var hoor := Snd.luister(func() -> void: _leg(int(oplossing[0])))
+	waar(hoor.has("gewicht"), "een gewicht op de schaal klinkt: tink-donk (%s)" % str(hoor))
 	if Beurt.som([oplossing[0]]) < g2:
 		waar(int(_schaal()["params"]["kant"]) < 0, "te licht: het ding hangt nog lager")
 		waar(_wolk_tekst(ZEG).contains(Beurt.T_LICHT), "het wolkje zegt: nog te licht")

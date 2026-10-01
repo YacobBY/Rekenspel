@@ -1188,6 +1188,7 @@ func avond_klaar() -> bool:
 func avondronde() -> void:
 	State.s["ronde"] = "avond"
 	World.zet_ding("balielamp", {"model": "lampaan"})
+	Snd.avond()
 	bord_dicht()
 	naar_kamer("receptie")
 	toon_avond()

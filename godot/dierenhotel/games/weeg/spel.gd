@@ -375,7 +375,7 @@ func leg(kg: int) -> void:
 	pan.append(kg)
 	S["pan"] = pan
 	S["acties"] = int(S["acties"]) + 1
-	ctx.snd.plop(1)
+	ctx.snd.gewicht()
 	# the weight of that kind in the stock puffs: this is where it came from
 	var i := (O["rek"] as Array).find(kg)
 	if i >= 0:

@@ -234,10 +234,12 @@ func test_wie_je_aantikt_gaat_in_bad() -> void:
 	var tweede := str(gasten[1]["id"])
 	var spot := Hits.spot("tb_dier" + tweede)
 	waar(spot != null and is_instance_valid(spot.knoop), "%s heeft een eigen knopje" % tweede)
+	var hoor: Array[String] = []
 	if spot != null and is_instance_valid(spot.knoop):
-		(spot.knoop as BaseButton).pressed.emit()
+		hoor = Snd.luister(func() -> void: (spot.knoop as BaseButton).pressed.emit())
 	var erin: Array = spel._in_bad_ids()
 	waar(erin.has(tweede), "wie je aantikt, gaat in bad (%s)" % str(erin))
+	waar(hoor.has("bubbel"), "met belletjes in de tobbe (%s)" % str(hoor))
 	waar(not erin.has(str(gasten[0]["id"])), "en niet de eerste van het rijtje")
 	_af()
 
