@@ -33,6 +33,33 @@ const MEUBEL := {
 	"badkuip": {"soort": "decor", "model": "tobbe", "naam": "badkuip"},
 }
 
+## Koopbare kamerdecoratie (eigenaar 2026-10-07: "En eventueel ook accessoires
+## om in de kamers te zetten of de kamers te decoreren"; `art/decor_versiering.gd`,
+## the meubelboek's tab 🩷 Decoratie).  Placed, saved and restored exactly like
+## a piece of furniture — a decoration piece IS a furniture line
+## `{id, type, kamer, x, z, rot}` in `State.s["meubels"]` — but kept in its own
+## table: `MEUBEL` stays the six pieces of the frozen shop
+## (`Sommen.Meubels.WINKEL`, `World.meubeltypen()`).  `meubel_soort()` reads
+## both.  The models are world models (`ArtDecor._extra()`).
+const DECORATIE := {
+	"kussen": {"soort": "decor", "model": "versier_kussen", "naam": "kussen"},
+	"bloemen": {"soort": "decor", "model": "versier_bloemen", "naam": "bloemen"},
+	"slinger": {"soort": "decor", "model": "versier_slinger", "naam": "slinger"},
+	"bankje": {"soort": "decor", "model": "versier_bankje", "naam": "bankje"},
+	"lamp": {"soort": "decor", "model": "versier_lamp", "naam": "lamp"},
+	"schilderij": {"soort": "decor", "model": "versier_schilderij", "naam": "schilderij"},
+	"kastje": {"soort": "decor", "model": "versier_kastje", "naam": "nachtkastje"},
+	"kist": {"soort": "decor", "model": "versier_kist", "naam": "speelkist"},
+	"aquarium": {"soort": "decor", "model": "versier_aquarium", "naam": "aquarium"},
+}
+
+## What a type of furniture or decoration is (`MEUBEL`, then `DECORATIE`):
+## `{soort, model, naam}`, or `{}` for a type nobody can buy.
+static func meubel_soort(type: String) -> Dictionary:
+	if MEUBEL.has(type):
+		return MEUBEL[type]
+	return DECORATIE.get(type, {})
+
 var _kamers: Dictionary = {}   ## id -> Kamer
 var _volgorde: Array[String] = []
 var _basis: Dictionary = {}    ## id -> the base layout, for "Nieuw spel"
@@ -811,10 +838,10 @@ func _op_een_bed(r: Kamer, x: float, z: float, rand: float) -> bool:
 func meubel_zet(kamer_id: String, type: String, x: float = NAN, z: float = NAN,
 		rot: int = 0, id: String = "") -> Dictionary:
 	var r := get_kamer(kamer_id)
-	if r == null or not MEUBEL.has(type):
+	var soort: Dictionary = meubel_soort(type)
+	if r == null or soort.is_empty():
 		return {}
 	_onthoud_basis()
-	var soort: Dictionary = MEUBEL[type]
 	var op_raster: bool = soort["soort"] == "bed" and not r.bedden.is_empty()
 	if op_raster:
 		var vrij := vrije_bedplekken(kamer_id)
@@ -1170,7 +1197,14 @@ func _bouw_kamers() -> void:
 		# a window, and the laundry went down to the cellar — where its door
 		# was, the left wall has a window too.  From up here both show sky.
 		"deuren": [
-			{"naar": "gang", "wand": "x", "at": 75, "breed": 12}],
+			{"naar": "gang", "wand": "x", "at": 75, "breed": 12},
+			# 2026-10-07 (owner: "Verzin nog vier kamers met activiteiten"): the
+			# bakery lies behind the kitchen, through a door in the left wall at
+			# the BACK corner, before the sack (z 16..28) and under nothing (the
+			# window starts at z 22, above a door's height).  Not at the front
+			# corner (z 96..108), where U1 put it: there its sign and the gang
+			# door's (z 75..87) took each other's place on the upright tablet.
+			{"naar": "bakkerij", "wand": "x", "at": 3, "breed": 12}],
 		# OWNER, 2026-09-17: "de keuken heeft een bed en kast en plant ipv
 		# kookgerei".  The kitchen now reads as a kitchen: one run along the back
 		# wall (voerkast, aanrecht with a sink, fornuis, koelkast) with a
@@ -1180,7 +1214,9 @@ func _bouw_kamers() -> void:
 		# middle of the floor stays open for the guests and the voerkar's bowls.
 		# `keukenkar` is the kitchen's own trolley model (art/decor_keuken.gd);
 		# it keeps the thing key "kar", so the game and the save do not notice.
-		"decor": [{"n": "kast", "x": 33, "z": 6}, {"n": "zak", "x": 12, "z": 22},
+		# the sack stands under the window (z 22..50) since the bakery's door
+		# took the back corner (2026-10-07); at z 22 it hid 16 % of that door
+		"decor": [{"n": "kast", "x": 33, "z": 6}, {"n": "zak", "x": 12, "z": 40},
 			{"n": "aanrecht", "x": 60, "z": 6}, {"n": "fornuis", "x": 80, "z": 6},
 			{"n": "koelkast", "x": 94, "z": 8},
 			{"n": "pottenplank", "x": 55, "z": 2, "y": 18, "ver": true},
@@ -1315,7 +1351,15 @@ func _bouw_kamers() -> void:
 	# climbing frame went with it).
 	_kamer({"id": "speelzaal", "naam": "Speelzaal", "icoon": "🧸",
 		"w": 114, "d": 100, "wand": 56, "vloer": "hout", "loop": 1.5, "etage": 3,
-		"trap": {"af": {"wand": "z", "at": 57, "breed": 12}},
+		# 2026-10-07 (U3, "Verzin nog vier kamers"): the dakterras is the top now,
+		# so the playroom has a flight UP again — in the left wall (x 0, z
+		# 30..42), clear of the klimrek, of the easel's `mijd` and of the
+		# flight down in the back wall.
+		"trap": {"af": {"wand": "z", "at": 57, "breed": 12},
+			"op": {"wand": "x", "at": 30, "breed": 12}},
+		# U2 (2026-10-07): the door to the music room, in the back wall between
+		# the climbing frame and the flight down
+		"deuren": [{"naar": "muziekkamer", "wand": "z", "at": 36, "breed": 12}],
 		"matten": {"x0": 20, "x1": 94, "z0": 18, "z1": 82,
 			"kl": [Color("#BFE3F2"), Color("#AEDAEC")]},
 		"zones": {"dans": {"x0": 40, "x1": 74, "z0": 56, "z1": 80}},
@@ -1350,7 +1394,16 @@ func _bouw_kamers() -> void:
 		"mijd": [{"x0": 16, "x1": 44, "z0": 19, "z1": 57},
 			{"x0": 68, "x1": 112, "z0": 32, "z1": 76},
 			{"x0": 74, "x1": 122, "z0": 54, "z1": 102}],
-		"deuren": [{"naar": "tuin", "wand": "z", "at": 52, "breed": 12}],
+		"deuren": [{"naar": "tuin", "wand": "z", "at": 52, "breed": 12},
+			# 2026-10-07 (integration I1a): the door to the postkamer, in the
+			# left wall between the watering can (z 64..69) and the wheelbarrow
+			# (z 100..109), under nothing (the hanging plant ends at z 79).
+			# U4 hung the post room on the lobby; there a fifth opening found
+			# no place for its sign on a phone and pushed the bell and the board
+			# into the walk of the guests (`tests/test_hits.gd`,
+			# `tests/test_knoppen_staan_stil.gd`; the search is in
+			# .fanout/scratch/uitbreiding/I1a-integratie.md).
+			{"naar": "postkamer", "wand": "x", "at": 82, "breed": 12}],
 		"decor": [
 			{"n": "zonnebloem", "x": 6, "z": 6},
 			{"n": "moesbak", "x": 28, "z": 10, "params": {"groei": 3}},
@@ -1444,6 +1497,104 @@ func _bouw_kamers() -> void:
 			{"n": "tassen", "x": 122, "z": 102},
 			{"n": "plant", "x": 146, "z": 84},
 			{"n": "bloembak", "x": 90, "z": 104}]})
+	# De bakkerij (2026-10-07, owner: "Verzin nog vier kamers met activiteiten";
+	# .fanout/scratch/uitbreiding/U1-bakkerij.md).  Floor 1, behind the kitchen:
+	# one run along the back wall (the oven — `ArtDecorBakkerij.bakoven`, the
+	# thing key "oven" — the counter and the shelf with the pot board above
+	# it), a flour sack
+	# by the left wall, the work table in the near right corner where the
+	# baking trays of `koekjes` lie, a window in the back wall.  A plank floor:
+	# through the kitchen door you must see a floor the kitchen does not have
+	# (`test_elke_deur_laat_zien_waar_hij_heen_gaat`).  No `mijd`: only the
+	# kas, the shops and the playroom reserve floor
+	# (`test_de_kas_is_een_glazen_kas_achter_het_hotel`); the game's tray is
+	# its own decor and goes with it.  Appended LAST on purpose: every room
+	# index before it stays what it was.
+	_kamer({"id": "bakkerij", "naam": "Bakkerij", "icoon": "🍪", "w": 114, "d": 100,
+		"wand": 56, "vloer": "hout", "loop": 1.5, "etage": 1,
+		"deuren": [{"naar": "keuken", "wand": "x", "at": 72, "breed": 12}],
+		# the oven is the bakery's own `bakoven` (26 x 18, centred on its
+		# point): at z 10 its back stands against the back wall
+		"decor": [{"n": "bakoven", "x": 30, "z": 10, "sleutel": "oven"},
+			{"n": "aanrecht", "x": 56, "z": 6}, {"n": "kast", "x": 84, "z": 6},
+			{"n": "pottenplank", "x": 56, "z": 2, "y": 18, "ver": true},
+			{"n": "raam", "x": 104, "z": 1, "y": 25, "ver": true},
+			{"n": "zak", "x": 14, "z": 24},
+			{"n": "keukentafel", "x": 92, "z": 82},
+			# the plant away from the door (at (20, 90) it hid 13 % of it)
+			{"n": "plant", "x": 100, "z": 44}]})
+	# U2: de Muziekkamer 🎵 (owner, 2026-10-07: "Verzin nog vier kamers met
+	# activiteiten").  A warm wooden room on the TOP floor beside the playroom,
+	# through a door in the playroom's back wall.  A round rug in the middle is
+	# the stage (zone `podium`) where De dierenband plays (`games/band`): its
+	# drum, xylophone, upright piano and music stand are the game's resting
+	# props (`definitie().rust`, models `band_*` in `art/decor_muziek.gd`), so
+	# the room data only names models the baker already has.  `mijd` keeps the
+	# stage free of wandering guests and bought furniture.  Design and state:
+	# `.fanout/scratch/uitbreiding/U2-muziekkamer.md`.
+	# icon: the bundled fonts have no 🎵/🥁 yet (`Ui.mist_tekens`), the bell 🔔 they have
+	_kamer({"id": "muziekkamer", "naam": "Muziekkamer", "icoon": "🔔",
+		"w": 100, "d": 90, "wand": 50, "vloer": "hout", "loop": 1.5, "etage": 3,
+		"matten": {"x0": 22, "x1": 78, "z0": 22, "z1": 70,
+			"kl": [Color("#F2C4B0"), Color("#EBB49E")]},
+		"zones": {"podium": {"x0": 22, "x1": 78, "z0": 22, "z1": 70}},
+		"mijd": [{"x0": 20, "x1": 80, "z0": 20, "z1": 72}],
+		"deuren": [{"naar": "speelzaal", "wand": "z", "at": 10, "breed": 12}],
+		# the cushion corner (x −7..16, z −7..14 round its point) stands in the
+		# front corner since the integration (I1a): at (90, 82) it stuck out 7
+		# through the front edges; at (86, 78) by 2, like the playroom's.  Any
+		# further in, or the music box moved in, and the room keeps fewer than
+		# the 8 wander places round the stage (`test_elke_kamer_is_compleet`).
+		"decor": [
+			{"n": "kussenhoek", "x": 86, "z": 78},
+			{"n": "muziekdoos", "x": 6, "z": 84},
+			{"n": "wimpel", "x": 70, "z": 1, "ver": true}]})
+	# U3, 2026-10-07 (owner: "Verzin nog vier kamers met activiteiten"): het
+	# dakterras 🌙, the roof of the tower and its new TOP floor (4), over the
+	# playroom.  Outdoors like the garden (`erf`: no walls, the yard fence is
+	# the railing), a wooden deck, the night sky over it where the stars of
+	# `games/sterren` (Sterren tellen) hang in dot patterns.  The only wall
+	# piece is the stairhouse at the back with the flight DOWN to the
+	# speelzaal; `wand` sizes that frame.  Zone `sterren` keeps the front-right
+	# corner (the telescope and the patch of sky it looks at) free of bought
+	# furniture.  The deck's pieces and their places are
+	# `ArtDecorDak.PLAATSING` (art/decor_dak.gd, registered in
+	# `ArtDecor._extra()`): the telescope, two deck chairs, the string lights
+	# on the stairhouse wall and a piece of railing.
+	_kamer({"id": "dakterras", "naam": "Dakterras", "icoon": "🌙",
+		"w": 114, "d": 100, "wand": 56, "vloer": "hout", "loop": 1.5,
+		"erf": true, "etage": 4,
+		"trap": {"af": {"wand": "z", "at": 51, "breed": 12}},
+		"zones": {"sterren": {"x0": 70, "x1": 104, "z0": 70, "z1": 96}},
+		"decor": ArtDecorDak.PLAATSING.duplicate(true)})
+	# De postkamer (U4, 2026-10-07; owner: "Verzin nog vier kamers met
+	# activiteiten"): a small room on the ground floor, behind the glass house
+	# (U4 put it behind the lobby; the lobby has no room for a fifth opening on
+	# a phone, see the kas's door).  The sorting shelf with the numbered
+	# pigeonholes stands along the back wall (z = 0), the stamp counter with
+	# the parcel scale along the left wall (x = 0) in front of the door; both
+	# are `mijd` so no guest strolls into the game's props.  Door back to the
+	# kas in the left wall.  A plank floor: through the kas's door you must see
+	# a floor the tiled kas does not have
+	# (`test_rooms.gd::test_elke_deur_laat_zien_waar_hij_heen_gaat`).  Static
+	# decor: the room's own `ArtDecorPost` models (registered in
+	# `ArtDecor._extra()`) — the shelf where the game puts its own during a
+	# turn (40, 8), the stamp counter in its `mijd` by the left wall, the
+	# parcel scale at the end of the shelf
+	# (see .fanout/scratch/uitbreiding/U4-postkamer.md).
+	# icon: the letter 💌 of the hotel's own post (the top bar's letter count);
+	# U4's 📮 is not in the bundled fonts and drew as a box with its code
+	# (`Ui.mist_tekens`, seen in the export 2026-10-07)
+	_kamer({"id": "postkamer", "naam": "Postkamer", "icoon": "💌", "w": 96, "d": 88,
+		"wand": 44, "vloer": "hout", "loop": 1.25, "etage": 0,
+		"kijk": Vector2(48, 44),
+		"mijd": [{"x0": 8, "x1": 72, "z0": 0, "z1": 16},
+			{"x0": 0, "x1": 16, "z0": 20, "z1": 48}],
+		"deuren": [{"naar": "kas", "wand": "x", "at": 60, "breed": 12}],
+		"decor": [
+			{"n": "vakkenkast", "x": 40, "z": 8},
+			{"n": "zegelbalie", "x": 8, "z": 34},
+			{"n": "pakketweegschaal", "x": 84, "z": 10}]})
 	_bouw_tuin(_kamers["tuin"])
 	_bouw_zwembad(_kamers["zwembad"])
 	for id in _volgorde:

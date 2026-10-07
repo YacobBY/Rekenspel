@@ -24,6 +24,11 @@ func _pixel() -> void:
 func _schrijven() -> bool:
 	return OS.get_environment("DH_GOUD_SCHRIJF") == "1"
 
+## DH_GOUD_NIEUW=1 writes ONLY the goldens that do not exist yet (a new kind or
+## model), and leaves every existing plate to be compared as usual.
+func _nieuw_schrijven() -> bool:
+	return OS.get_environment("DH_GOUD_NIEUW") == "1"
+
 ## Compare (or, with DH_GOUD_SCHRIJF=1, write) one golden plate.  Exact: the
 ## pixel style has no anti-aliasing, so there is nothing to tolerate.
 func _goud(naam: String, plaat) -> void:
@@ -33,7 +38,7 @@ func _goud(naam: String, plaat) -> void:
 	var img: Image = plaat.tex.get_image()
 	img.convert(Image.FORMAT_RGBA8)
 	var pad := "%s/%s.png" % [GOUD, naam]
-	if _schrijven():
+	if _schrijven() or (_nieuw_schrijven() and not FileAccess.file_exists(pad)):
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(GOUD))
 		img.save_png(ProjectSettings.globalize_path(pad))
 		return

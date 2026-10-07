@@ -1359,3 +1359,103 @@ func _keur_dekking(wat: String, kader: Vector2) -> void:
 	waar(gekeurd >= (2 if kader.y < 340.0 else 3),
 		"%s: er zijn %d knoppen van het spel gekeurd" % [wat, gekeurd])
 
+# ==================================================================================
+# 8. koopbare kamerdecoratie (eigenaar 2026-10-07, U7)
+# ==================================================================================
+
+## Elk decoratiestuk heeft een pictogram dat rendert, een prijs binnen het bereik
+## van de bevroren winkel (1..8), een plek in `Rooms.DECORATIE` en een model dat
+## zonder enginefout bakt.  De zes meubels uit de kern staan onaangeroerd vooraan.
+func test_kamerdecoratie_catalogus() -> void:
+	gelijk(Sommen.Meubels.WINKEL.size(), 6, "de kern verkoopt nog steeds zes meubels")
+	var extra: Array = Spel.VERSIERING_KAMER
+	waar(extra.size() >= 8, "minstens acht decoratiestukken (%d)" % extra.size())
+	var gezien := {}
+	for w in extra:
+		var type := str(w["type"])
+		waar(not gezien.has(type), "%s komt één keer voor" % type)
+		gezien[type] = true
+		gelijk(Sommen.Meubels.prijs_van(type), 0, "%s botst niet met de kern" % type)
+		var prijs := int(w["prijs"])
+		waar(prijs >= 1 and prijs <= 8, "%s kost 1..8 euro (%d)" % [type, prijs])
+		var icoon := str(w["icoon"])
+		waar(Ui.mist_tekens(icoon).is_empty(), "%s: pictogram %s rendert (mist %s)"
+			% [type, icoon, str(Ui.mist_tekens(icoon))])
+		# (integration I1a: the decoration has its own table next to the six
+		# pieces of the frozen shop, `Rooms.DECORATIE`; `Rooms.meubel_soort`
+		# reads both)
+		waar(Rooms.DECORATIE.has(type), "%s staat in Rooms.DECORATIE" % type)
+		waar(not Rooms.MEUBEL.has(type), "%s is geen van de zes meubels" % type)
+		var soort := Rooms.meubel_soort(type)
+		if not soort.is_empty():
+			gelijk(str(soort["soort"]), "decor", "%s is decor" % type)
+			waar(ArtDecorVersiering.NAMEN.has(str(soort["model"])),
+				"%s heeft een model in decor_versiering.gd" % type)
+		var naam := str(w["naam"])
+		waar(naam.split(" ").size() <= 2, "%s: naam van hooguit twee woorden" % type)
+		gelijk(int(Spel._artikel(type).get("prijs", -1)), prijs, "_artikel kent %s" % type)
+	ArtDecorVersiering.registreer()
+	for naam in ArtDecorVersiering.NAMEN:
+		waar(Art.heeft_model(naam), "%s is aangemeld" % naam)
+		waar(not Art.model(naam).is_empty(), "%s heeft voxels" % naam)
+		waar(Art.plaat(naam, 2) != null, "%s bakt" % naam)
+	waar(not Art.model("versier_schilderij", {"motief": "maan"}).is_empty(), "het motief maan bakt")
+
+## Koop → save → herlaad: het stuk staat terug in dezelfde kamer op dezelfde plek,
+## en de oude meubels eromheen ook (geen nieuw save-veld: een decoratiestuk is
+## een meubel-regel).
+func test_kamerdecoratie_overleeft_een_herlaad() -> void:
+	await _op(Vector2(1000, 648), 3, 12)
+	var plant := Rooms.meubel_zet("kamer1", "plant")
+	waar(not plant.is_empty(), "een oude plant staat in kamer 1")
+	var kleed := Rooms.meubel_zet("kamer1", "bankje", 30.0, 30.0)
+	waar(not kleed.is_empty(), "het kleed staat in kamer 1")
+	var lamp := Rooms.meubel_zet("speelzaal", "lamp")
+	waar(not lamp.is_empty(), "de lamp staat in de speelzaal")
+	waar(Art.heeft_model("versier_bankje"), "het model is aangemeld door meubel_zet")
+	Hotel.bewaar_inrichting()
+	var tekst := JSON.stringify(State.s)
+	Rooms.herstel()
+	gelijk(Rooms.meubels("kamer1").size(), 0, "na herstel is kamer 1 leeg")
+	State.s = JSON.parse_string(tekst)
+	Hotel.herstel_inrichting()
+	var terug: Array = Rooms.meubels("kamer1").filter(func(m): return str(m["type"]) == "bankje")
+	gelijk(terug.size(), 1, "het kleed is terug in kamer 1")
+	if terug.size() == 1:
+		gelijk(str(terug[0]["id"]), str(kleed["id"]), "met dezelfde id")
+		gelijk(Vector2(float(terug[0]["x"]), float(terug[0]["z"])),
+			Vector2(float(kleed["x"]), float(kleed["z"])), "op dezelfde plek")
+	gelijk(Rooms.meubels("kamer1").filter(func(m): return str(m["type"]) == "plant").size(), 1,
+		"de oude plant is er ook nog")
+	gelijk(Rooms.meubels("speelzaal").filter(func(m): return str(m["type"]) == "lamp").size(), 1,
+		"de lamp staat weer in de speelzaal")
+	waar(Rooms.gebruikte_modellen().has("versier_bankje"), "de kamer vraagt het kleedmodel")
+	_af()
+
+## In het boek staan de decoratiestukken ÁCHTER de zes meubels, met dezelfde
+## knop en dezelfde zin als een meubel.
+func test_kamerdecoratie_staat_achterin_het_boek() -> void:
+	await _op(Vector2(1000, 648), 3, 12)
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	# het meubelblad is wat het was: zes kaartjes, geen decoratie
+	waar(_blad_knop("Kk_plant") != null, "de plant staat op het meubelblad")
+	waar(_blad_knop("Kk_bankje") == null, "het bankje staat NIET op het meubelblad")
+	waar(_blad_knop("Ktab_decoratie") != null, "er is een derde tab 🩷 Decoratie")
+	waar(_blad_tik("Ktab_decoratie"), "naar de decoratiepagina")
+	await _tel_frames()
+	var bankje := _blad_knop("Kk_bankje")
+	waar(bankje != null, "het bankje heeft een knop op de decoratiepagina")
+	if bankje != null:
+		waar(bankje.tooltip_text.begins_with("bankje"), "met de bestaande zin (%s)" % bankje.tooltip_text)
+	waar(_blad_knop("Kk_plant") == null, "de plant staat niet op de decoratiepagina")
+	for w in Spel.VERSIERING_KAMER:
+		var k := _blad_knop("Kk_%s" % str(w["type"]))
+		waar(k != null, "%s heeft een knop" % str(w["type"]))
+		if k != null:
+			var r := k.get_global_rect()
+			waar(r.end.x <= 1000.0 + 0.01 and r.end.y <= 648.0 + 0.01,
+				"%s staat in beeld op 1000×648 (%s)" % [str(w["type"]), str(r)])
+	_af()
+

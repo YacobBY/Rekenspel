@@ -15,6 +15,14 @@ extends ScrollContainer
 ##     HOTEL.md §9), the current room is always scrolled into view, and the map
 ##     chip opens the sheet that lists every room, so nothing becomes
 ##     unreachable by scrolling.
+##   * and the same scrolling row on a screen held SIDEWAYS whose row does not
+##     fit even at the smallest step (2026-10-07: sixteen chips with the four
+##     new rooms; the 1000 unit tablet row needs some 1150 at its smallest).  A
+##     landscape screen has no height to spare: a second row would take a whole
+##     band from the world frame (990 x 637 became 990 x 585 and the check-in
+##     card lost its guest), so the row keeps the smallest step — as many
+##     rooms in view as it can show — and scrolls.  Upright, where there is
+##     height, the bar still wraps.
 ##
 ## The scrolling is why this is a `ScrollContainer` with the grid inside it: with
 ## both scroll modes disabled it measures and lays out exactly like the plain
@@ -65,6 +73,9 @@ const MERK_GAT := 2           ## between a badge and its floor's first chip
 var _rail := false
 var _strook := false
 var _rolt := false            ## the rail ran out of height and scrolls (R1)
+## a row on a landscape screen that does not fit even at the smallest step
+## scrolls sideways instead of wrapping (2026-10-07, see the top)
+var _rij_rolt := false
 var _maten: Dictionary = {}
 var _raster: GridContainer = null
 var _verstopt := false        ## a sum is being answered: the chips step aside
@@ -332,13 +343,14 @@ func ververs() -> void:
 ## anything scrolled, so the bar never jumps back under the child's finger.
 ## The row scrolls sideways, the overflowing rail up and down.
 func _toon_huidige() -> void:
-	if (not _strook and not _rolt) or size.x <= 0.0:
+	var rij := _strook or _rij_rolt
+	if (not rij and not _rolt) or size.x <= 0.0:
 		return
 	var b: Button = _chips.get(World.kamer_nu())
 	if b == null or not is_instance_valid(b):
 		return
 	var plek := _in_raster(b)
-	if _strook:
+	if rij:
 		var links := plek.position.x - scroll_horizontal
 		if links < 0.0 or links + b.size.x > size.x:
 			ensure_control_visible(b)
@@ -433,6 +445,7 @@ func _vervaag_naar(alfa: float) -> void:
 func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = false) -> void:
 	_rail = rail
 	_strook = strook and not rail
+	_rij_rolt = false
 	if not rail:
 		_rail_rolt(false, 0.0)
 	_zet_rollen(_strook, _rolt)
@@ -468,10 +481,17 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = fal
 	# wraps (VULLING_KRAP, R3).  Only then: every row that fits today keeps its
 	# chips exactly as they were, and a bar that needs two rows anyway keeps
 	# them too.
-	if not _strook and not breedtes.is_empty() \
-			and _rij_breedte(breedtes, breedtes.size()) > breedte:
+	# Since 2026-10-07 (sixteen chips) the same holds for every row a bar would
+	# add, not only the second: an upright tablet that needs a third row at the
+	# full sizes takes the tighter padding — or the next step of the ladder —
+	# when that keeps it at two, so the world frame keeps its height there too
+	# (734 x 788, `tests/test_opslag.gd`).  Held sideways the target stays ONE
+	# row, and a row that does not get there scrolls (see the top).
+	var rijen_vol := _rijen_bij(breedtes, breedte)
+	if not _strook and not breedtes.is_empty() and rijen_vol > 1:
+		var doel := 1 if _liggend() else rijen_vol - 1
 		var krap := _chip_breedtes(VULLING_KRAP)
-		if _rij_breedte(krap, krap.size()) <= breedte:
+		if _rijen_bij(krap, breedte) <= doel:
 			breedtes = krap
 		else:
 			# With the shopping arcade the hotel has twelve chips (2026-09-24),
@@ -484,14 +504,19 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = fal
 			for trap in _rij_trappen():
 				_zet_letters(int(trap[0]), int(trap[1]))
 				krap = _chip_breedtes(int(trap[2]))
-				if _rij_breedte(krap, krap.size()) <= breedte:
+				if _rijen_bij(krap, breedte) <= doel:
 					breedtes = krap
 					gepast = true
 					break
-			if not gepast:
+			if not gepast and _liggend():
+				# held sideways: the row keeps its smallest step and scrolls
+				# (see the top) — the last step of the ladder is still set
+				_rij_rolt = true
+				_zet_rollen(true, false)
+			elif not gepast:
 				_zet_letters(int(_maten["icoon"]), maxi(UiThema.VLOER, int(_maten["klein"])))
 				breedtes = _chip_breedtes(VULLING)
-	if _strook:
+	if _strook or _rij_rolt:
 		# one row, as wide as it needs to be: the ScrollContainer takes the
 		# overflow instead of the world frame taking three rows of chips
 		_raster.columns = maxi(1, _cellen().size())
@@ -519,6 +544,17 @@ func pas_aan(breedte: float, rail: bool, hoogte: float = 0.0, strook: bool = fal
 			if _rij_breedte(breedtes, k) <= breedte and _rijen_op_etage(k):
 				_raster.columns = k
 				break
+
+## Is the screen held sideways?  The shell tells `Ui` the screen's size before
+## it lays this bar out; without one, the world frame stands in.
+func _liggend() -> bool:
+	var s := Ui.scherm_maat()
+	return s.x > s.y
+
+## Does the row scroll sideways — the phone's row, or a landscape row that
+## did not fit even at its smallest step?  (For the probe and the tests.)
+func rolt_zijwaarts() -> bool:
+	return _strook or _rij_rolt
 
 ## Does every row after the first start where a floor (or the map) starts, in
 ## `kolommen_n` columns?
@@ -608,6 +644,17 @@ func _zet_vulling(vulling: int) -> void:
 		if rij != null:
 			rij.offset_left = vulling
 			rij.offset_right = -vulling
+
+## How many rows these cells take in `breedte`: as many columns as fit (the
+## column search of `pas_aan`), at least one.
+func _rijen_bij(breedtes: Array[float], breedte: float) -> int:
+	var n := breedtes.size()
+	if n == 0:
+		return 0
+	for k in range(n, 0, -1):
+		if _rij_breedte(breedtes, k) <= breedte:
+			return ceili(n / float(k))
+	return n
 
 func _rij_breedte(breedtes: Array[float], kolommen_n: int) -> float:
 	var som := float((kolommen_n - 1) * GAT)

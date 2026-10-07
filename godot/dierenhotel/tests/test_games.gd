@@ -245,6 +245,10 @@ func test_elk_spel_hangt_aan_zijn_eigen_rustspul() -> void:
 		var hs: Dictionary = def.get("hotspot", {})
 		if str(hs.get("rust", "")).is_empty():
 			continue
+		# a stub is never shown — no entry and no resting prop
+		# (`Games.hersteek`); `band` (2026-10-07) brings its props already
+		if bool(def.get("stub", false)):
+			continue
 		met_rust.append(id)
 	for moet in ["hinkel", "was", "wekker"]:
 		waar(met_rust.has(moet), "%s hangt aan een rustspul" % moet)

@@ -13,10 +13,12 @@ const FRAMES := [Vector2(1000, 648), Vector2(326, 402), Vector2(534, 289)]
 
 var _laag: Control = null
 
-## The whole tower is no taller than one floor of the widest cell per row
-## (`CEL_MAX` wide, `CEL_HOOG` of that tall) plus a gap per row.
-func _hoog_max() -> float:
-	return UiPlattegrond.rijen() * (UiPlattegrond.CEL_MAX * UiPlattegrond.CEL_HOOG
+## The whole tower is no taller than one floor of the widest cell per line
+## (`CEL_MAX` wide, `CEL_HOOG` of that tall) plus a gap per line.  A line is a
+## floor's row — or, on a sheet too narrow for a floor's rooms, each line that
+## floor wraps onto (2026-10-07: five rooms on the ground floor and the first).
+func _hoog_max(kaart: UiPlattegrond) -> float:
+	return kaart.lijnen() * (UiPlattegrond.CEL_MAX * UiPlattegrond.CEL_HOOG
 		+ UiPlattegrond.GAT)
 var _gekozen: Array[String] = []
 
@@ -100,12 +102,19 @@ func test_cellen_passen_op_het_blad() -> void:
 		print("[maat] plattegrond %s: cel %s gat %.0f schacht %.0f plan %s blad %s rol %s rolt=%s zwembad icoon %s naam %s"
 			% [str(kader), str(kaart.celmaat()), kaart.gat(), kaart.schacht(), str(kaart.size),
 				str(kolom.size), str(rol.size), str(rolt), str(ic.size), str(nm.size)])
-		waar(kaart.size.y <= _hoog_max(),
+		waar(kaart.size.y <= _hoog_max(kaart),
 			"de hele toren blijft onder %.0f eenheden hoog bij %s (%s)"
-				% [_hoog_max(), str(kader), str(kaart.size)])
+				% [_hoog_max(kaart), str(kader), str(kaart.size)])
 		waar(kaart.size.x <= pr.size.x,
 			"en niet breder dan het vel bij %s (%.1f > %.1f)"
 				% [str(kader), kaart.size.x, pr.size.x])
+		# ... and the sheet itself stays on the screen: a plan wider than the
+		# sheet's own rule (`UiBlad.BREED`, the screen minus its margins) used to
+		# push the panel out over both edges of the phone
+		waar(pr.position.x >= -0.5 and pr.end.x <= kader.x + 0.5,
+			"het vel staat op het scherm bij %s (%s)" % [str(kader), str(pr)])
+		waar(kaart.lijnen() >= UiPlattegrond.rijen(),
+			"elke etage heeft minstens een regel bij %s" % str(kader))
 		if kader == FRAMES[0]:
 			waar(kolom.size.y <= rol.size.y + 0.5,
 				"op het grote scherm past het hele blad met de toren zonder rollen (%s in %s)"
@@ -189,21 +198,81 @@ func test_de_plattegrond_is_een_toren() -> void:
 	var wasserij := (kaart.get_node("Pwasserij") as Control).get_global_rect()
 	waar(gang.end.y <= receptie.position.y, "de gang ligt boven de receptie")
 	waar(wasserij.position.y >= receptie.end.y, "de wasserij ligt onder de receptie")
-	gelijk(UiPlattegrond.rij_van(1), ["gang", "kamer1", "kamer2", "keuken"] as Array[String],
-		"de eerste verdieping: de gang bij de trap, dan de kamers erlangs")
-	gelijk(UiPlattegrond.rij_van(0), ["receptie", "tuin", "zwembad", "kas"] as Array[String],
-		"de begane grond: receptie, tuin, en door de tuin naar buiten")
+	# on the big screen no floor wraps: every floor is one row of the tower
+	gelijk(kaart.per_lijn(), UiPlattegrond.kolommen(), "op het grote scherm loopt geen etage door")
+	gelijk(kaart.lijnen(), UiPlattegrond.rijen(), "een regel per etage")
+	# 2026-10-07: the bakery behind the kitchen ends the first floor, the post
+	# room behind the glass house ends the ground floor
+	gelijk(UiPlattegrond.rij_van(1),
+		["gang", "kamer1", "kamer2", "keuken", "bakkerij"] as Array[String],
+		"de eerste verdieping: de gang bij de trap, dan de kamers erlangs, de bakkerij achter de keuken")
+	gelijk(UiPlattegrond.rij_van(0),
+		["receptie", "tuin", "zwembad", "kas", "postkamer"] as Array[String],
+		"de begane grond: receptie, tuin, en door de tuin naar buiten, de postkamer achter de kas")
+	gelijk(UiPlattegrond.rij_van(3), ["speelzaal", "muziekkamer"] as Array[String],
+		"de speelzaal bij de trap, de muziekkamer ernaast")
+	gelijk(UiPlattegrond.rij_van(4), ["dakterras"] as Array[String], "het dakterras bovenop")
 	# every door between two cells side by side, once per pair: on the first floor
 	# gang|kamer1 (kamer 2 and the kitchen also open onto the gang but cannot
-	# stand beside it in one row), on the ground floor receptie|tuin and the
-	# gate tuin|zwembad (the tuin's door to the kas is not a neighbour); the
-	# floors of one room have none, and the stairs are the stairwell, not a door
-	gelijk(kaart.deursleutels(), ["gang|kamer1", "receptie|tuin", "tuin|zwembad"] as Array[String],
+	# stand beside it in one row) and bakkerij|keuken, on the ground floor
+	# receptie|tuin, the gate tuin|zwembad and kas|postkamer (the tuin's door
+	# to the kas is not a neighbour), on the top floor but one
+	# muziekkamer|speelzaal; the floors of one room have none, and the stairs
+	# are the stairwell, not a door
+	gelijk(kaart.deursleutels(), ["bakkerij|keuken", "gang|kamer1", "kas|postkamer",
+		"muziekkamer|speelzaal", "receptie|tuin", "tuin|zwembad"] as Array[String],
 		"de deuren die de toren tekent")
-	gelijk(kaart.deurparen(), 3, "drie deuren tussen buren")
+	gelijk(kaart.deurparen(), 6, "zes deuren tussen buren")
 	# the floor in view wears the band
 	gelijk(kaart.band_rij(), Rooms.etages().find(Rooms.etage(World.kamer_nu())) + 1
 		if Rooms.bestaat(World.kamer_nu()) else 0, "de etage in beeld heeft de zonnige band")
+	_af()
+
+## 2026-10-07: five rooms on the ground floor and five on the first do not fit
+## the phone's sheet in one row (five cells of 56 and the shaft need 322 of its
+## 274 units), so a floor goes on over a second line: under its first, in its
+## own band, the stairs' room still first.  Every room keeps a whole word and a
+## whole tap target, the floors keep their order top-down, and the tower stays
+## exactly as wide as the sheet.
+func test_een_etage_loopt_door_op_een_smal_blad() -> void:
+	var uit: Array = await _open(Vector2(326, 402))
+	var kaart: UiPlattegrond = uit[1]
+	waar(kaart.per_lijn() < UiPlattegrond.kolommen(),
+		"op de telefoon passen niet alle kamers van een etage op een regel (%d < %d)"
+			% [kaart.per_lijn(), UiPlattegrond.kolommen()])
+	waar(kaart.per_lijn() >= 2, "maar wel meer dan een")
+	waar(kaart.lijnen() > UiPlattegrond.rijen(), "dus een etage loopt door op een tweede regel")
+	var vorige_onder := -INF
+	for e in Rooms.etages():
+		var ids := UiPlattegrond.rij_van(e)
+		var boven := INF
+		var onder := -INF
+		for i in ids.size():
+			var r := (kaart.get_node("P" + ids[i]) as Control).get_rect()
+			boven = minf(boven, r.position.y)
+			onder = maxf(onder, r.end.y)
+			# line by line, left to right: cell i is in column i % k of line i / k
+			var eerste := (kaart.get_node("P" + ids[i - i % kaart.per_lijn()]) as Control).get_rect()
+			waar(absf(r.position.y - eerste.position.y) <= 0.5,
+				"%s staat op de regel van %s" % [ids[i], ids[i - i % kaart.per_lijn()]])
+			if i % kaart.per_lijn() == 0 and i > 0:
+				var boven_buur := (kaart.get_node("P" + ids[i - kaart.per_lijn()]) as Control).get_rect()
+				waar(r.position.y > boven_buur.end.y and absf(r.position.x - boven_buur.position.x) <= 0.5,
+					"%s begint de volgende regel van etage %d, onder %s" % [ids[i], e, ids[i - kaart.per_lijn()]])
+			var nm: Label = kaart.get_node("P%s/Naam" % ids[i])
+			var f := nm.get_theme_font("font")
+			waar(f.get_string_size(nm.text, HORIZONTAL_ALIGNMENT_CENTER, -1,
+				nm.get_theme_font_size("font_size")).x <= nm.size.x + 0.5,
+				"%s: het woord past heel op een regel (%s)" % [ids[i], nm.text])
+		waar(boven > vorige_onder, "etage %d staat onder de etage erboven" % e)
+		vorige_onder = onder
+		var trap := Rooms.trap_kamer(e)
+		if not trap.is_empty():
+			gelijk(ids[0], trap, "etage %d begint bij de trap" % e)
+			var knop := kaart.etage_knop(e)
+			var cel := kaart.knop_van(trap).get_rect()
+			waar(absf(knop.get_center().y - cel.get_center().y) <= 0.5,
+				"de etageknop van etage %d staat midden op zijn eerste regel" % e)
 	_af()
 
 ## The tap: `scenes/main.gd` closes the sheet and walks to the room, so the

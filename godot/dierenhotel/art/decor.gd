@@ -40,10 +40,13 @@ const POL_AANTAL := 5
 
 ## The themed decor files (kitchen, laundry, bedrooms, reception and corridor)
 ## each bring their own table; `tabel()` merges them and `alle_namen()` lists
-## every name, base set first.
+## every name, base set first.  The four rooms of 2026-10-07 (bakery, music
+## room, roof terrace, post room) and the room decoration the meubelboek sells
+## come LAST, so every name that was here keeps its place.
 static func _extra() -> Array:
 	return [ArtDecorKeuken, ArtDecorWasserij, ArtDecorSlaapkamer, ArtDecorHotel,
-		ArtDecorSpeelzaal, ArtDecorBuiten, ArtDecorKas, ArtDecorWinkels]
+		ArtDecorSpeelzaal, ArtDecorBuiten, ArtDecorKas, ArtDecorWinkels,
+		ArtDecorBakkerij, ArtDecorMuziek, ArtDecorDak, ArtDecorPost, ArtDecorVersiering]
 
 static func alle_namen() -> Array[String]:
 	var uit: Array[String] = []

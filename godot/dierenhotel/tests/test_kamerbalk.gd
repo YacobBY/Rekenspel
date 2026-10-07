@@ -1,6 +1,7 @@
 extends Proef
-## The room bar (`ui/kamerbalk.gd`) carries the rooms the hotel HAS — eight
-## today plus the map chip, eleven the day the speelzaal and the kas open.
+## The room bar (`ui/kamerbalk.gd`) carries the rooms the hotel HAS — fifteen
+## since 2026-10-07 (bakery, music room, roof terrace and post room) plus the
+## map chip — and counts them from `Rooms.lijst()`, never from this file.
 ##
 ## The bar names no number anywhere; this file is what keeps that honest.  It
 ## lays the bar out exactly as `scenes/main.gd::_zet_balk` does, on the four
@@ -25,8 +26,9 @@ const KADERS := [Vector2(990, 637), Vector2(734, 788), Vector2(326, 558),
 ## the 4 + 4 safe area, minus the 49 unit chrome (measured in the same print)
 ## and the 8 units of column separation.
 const RAIL_HOOGTE := 295.0
-## The two rooms of §3.5, so the bar is measured at its future size today.
-const EXTRA := [["speelzaal", "🧸", "Speelzaal"], ["kas", "🪴", "Kas"]]
+## Two rooms the hotel does not have yet, so the bar is measured at its future
+## size today (it began as the two rooms of §3.5, which opened long ago).
+const EXTRA := [["zolder", "🧸", "Zolder"], ["serre", "🪴", "Serre"]]
 
 var _laag: Control = null
 var _balk: UiKamerbalk = null
@@ -183,44 +185,67 @@ func _keur(scherm: Vector2, extra: bool) -> void:
 		waar(t != null and t.get_theme_font_size("font_size") >= UiThema.VLOER,
 			"%s: het teken van etage %s blijft leesbaar" % [wat, str(e)])
 
-## R3: with the kas the hotel has eleven chips.  On the 1000 unit tablet row
-## (1024 × 768) they need 1029 units at the normal padding, and a second row
-## would take a whole band of height from the world frame (990 × 637 became
-## 990 × 585 and the check-in card lost its guest, test_hits).  So the row first
-## takes the tighter padding, and only a row that does not fit even then wraps.
-## A row that fits keeps its padding exactly as it was.
+## The width the bar's one row needs at full size with this padding, laid out
+## on a screen wide enough for it — the number the ladder below is about.
+func _rij_nodig(vulling: int) -> float:
+	_balk.pas_aan(100000.0, false, 0.0, false)
+	var breedtes: Array[float] = _balk._chip_breedtes(vulling)
+	return _balk._rij_breedte(breedtes, breedtes.size())
+
+## R3: a second row would take a whole band of height from the world frame
+## (990 × 637 became 990 × 585 and the check-in card lost its guest,
+## test_hits).  So a row that overflows first takes the tighter padding, and a
+## row that fits keeps its padding exactly as it was.  Measured against the
+## bar's own width (it began as eleven chips on the 1000 unit tablet, which
+## needed 1029 units at the normal padding; the hotel counts its own rooms).
 func test_elf_chips_op_een_rij_op_de_tablet() -> void:
 	_op(SCHERMEN[0], KADERS[0])
-	await _leg_uit(SCHERMEN[0], 0.0)
+	var vol := _rij_nodig(UiKamerbalk.VULLING)
+	var krap := _rij_nodig(UiKamerbalk.VULLING_KRAP)
+	waar(krap < vol, "de krappe vulling maakt de rij smaller (%.0f < %.0f)" % [krap, vol])
 	gelijk(_balk.chips().size(), Rooms.lijst().size() + 1, "elke kamer en de kaart")
-	waar(_balk.chips().size() >= 11, "met de kas zijn het er elf")
-	gelijk(_balk.rijen(), 1, "één rij op de tablet")
+	# a row that just fits keeps the normal padding
+	_balk.pas_aan(vol, false, 0.0, false)
+	gelijk(_balk.rijen(), 1, "een rij die past (%.0f)" % vol)
 	var rij: Control = (_balk.chips()["kas"] as Button).get_node("Rij")
-	gelijk(rij.offset_left, float(UiKamerbalk.VULLING_KRAP), "met de krappe vulling")
-	_af()
-	# a wide screen has room: the normal padding stays
-	_op(Vector2(1280, 800), Vector2(1170, 669))
-	await _leg_uit(Vector2(1280, 800), 0.0)
-	gelijk(_balk.rijen(), 1, "één rij op 1280")
-	rij = (_balk.chips()["kas"] as Button).get_node("Rij")
 	gelijk(rij.offset_left, float(UiKamerbalk.VULLING), "met de gewone vulling")
+	# a row a little too wide takes the tight padding instead of a second row
+	_balk.pas_aan(krap, false, 0.0, false)
+	gelijk(_balk.rijen(), 1, "een rij die net te breed is (%.0f van %.0f)" % [krap, vol])
+	rij = (_balk.chips()["kas"] as Button).get_node("Rij")
+	gelijk(rij.offset_left, float(UiKamerbalk.VULLING_KRAP), "met de krappe vulling")
+	waar(not _balk.rolt_zijwaarts(), "en die rij rolt niet")
 	_af()
-	# a tablet upright needs two rows anyway: those keep the normal padding too
+	# the tablet held sideways: always ONE row (it scrolls when it must)
+	_op(SCHERMEN[0], KADERS[0])
+	await _leg_uit(SCHERMEN[0], 0.0)
+	gelijk(_balk.rijen(), 1, "één rij op de tablet")
+	_af()
+	# a tablet upright needs two rows anyway, and keeps them: with sixteen chips
+	# (2026-10-07) the steps of the ladder are what keep a third row — and a
+	# band of the world frame — away; every word still whole, never under the
+	# 12 px floor
 	_op(SCHERMEN[1], KADERS[1])
 	await _leg_uit(SCHERMEN[1], 0.0)
-	waar(_balk.rijen() >= 2, "rechtop blijven het twee rijen")
-	rij = (_balk.chips()["kas"] as Button).get_node("Rij")
-	gelijk(rij.offset_left, float(UiKamerbalk.VULLING), "met de gewone vulling")
+	gelijk(_balk.rijen(), 2, "rechtop blijven het twee rijen")
+	for id in _balk.chips():
+		var b: Button = _balk.chips()[id]
+		var w: Label = b.get_node("Rij/Naam")
+		waar(w.get_theme_font_size("font_size") >= UiThema.VLOER, "%s: het woord nooit onder de vloer" % id)
+		waar(w.get_minimum_size().x <= b.custom_minimum_size.x, "%s: het woord past in de chip" % id)
 	_af()
 
 ## Twelve chips with the shopping arcade (2026-09-24): on the 1000 unit tablet
 ## the row takes a step smaller pictures (and words, never under the floor)
 ## before it wraps — a second row would take a band of height from the world
-## frame.  Where there is room, the full sizes stay.
+## frame.  Where there is room, the full sizes stay.  Sixteen since 2026-10-07:
+## not even the smallest step fits the tablet any more, and the row keeps that
+## step and scrolls (`test_zestien_chips_rollen_op_de_tablet`).
 func test_twaalf_chips_op_een_rij_op_de_tablet() -> void:
 	_op(SCHERMEN[0], KADERS[0])
 	await _leg_uit(SCHERMEN[0], 0.0)
-	gelijk(_balk.chips().size(), 12, "elf kamers en de kaart")
+	gelijk(_balk.chips().size(), Rooms.lijst().size() + 1, "elke kamer en de kaart")
+	waar(_balk.chips().size() >= 12, "met de winkels zijn het er minstens twaalf")
 	gelijk(_balk.rijen(), 1, "één rij op de tablet")
 	var ic: Label = (_balk.chips()["winkels"] as Button).get_node("Rij/Icoon")
 	var nm: Label = (_balk.chips()["winkels"] as Button).get_node("Rij/Naam")
@@ -230,13 +255,57 @@ func test_twaalf_chips_op_een_rij_op_de_tablet() -> void:
 		var b: Button = _balk.chips()[id]
 		var w: Label = b.get_node("Rij/Naam")
 		waar(w.get_minimum_size().x <= b.custom_minimum_size.x, "%s: het woord past in de chip" % id)
-	_af()
-	# a wide screen keeps the full sizes
-	_op(Vector2(1280, 800), Vector2(1170, 669))
-	await _leg_uit(Vector2(1280, 800), 0.0)
-	gelijk(_balk.rijen(), 1, "één rij op 1280")
+	# a screen with room for the whole row keeps the full sizes
+	var vol := _rij_nodig(UiKamerbalk.VULLING)
+	_balk.pas_aan(vol, false, 0.0, false)
+	gelijk(_balk.rijen(), 1, "één rij waar hij past (%.0f)" % vol)
 	ic = (_balk.chips()["winkels"] as Button).get_node("Rij/Icoon")
 	gelijk(ic.get_theme_font_size("font_size"), int(Ui.maten["icoon"]), "met de gewone plaatjes")
+	_af()
+
+## 2026-10-07: sixteen chips (fifteen rooms and the map) do not fit the 1000
+## unit tablet row even at the smallest step.  Held sideways the screen has no
+## height to spare, so the row does not wrap: it stays ONE row of chips at that
+## smallest step and scrolls like the phone's row — the bar keeps the height of
+## one chip, the room you are in is in view, and the last chip (the map) can
+## be scrolled into view.  Upright, where there is height, it wraps.
+func test_zestien_chips_rollen_op_de_tablet() -> void:
+	_op(SCHERMEN[0], KADERS[0])
+	await _leg_uit(SCHERMEN[0], 0.0)
+	var nodig := _balk._rij_breedte(_balk._chip_breedtes(UiKamerbalk.VULLING_KRAP - 1),
+		_balk._cellen().size())
+	if nodig > _breedte(SCHERMEN[0]):
+		waar(_balk.rolt_zijwaarts(), "de rij rolt zijwaarts (%.0f > %.0f)"
+			% [nodig, _breedte(SCHERMEN[0])])
+		waar(_balk.horizontal_scroll_mode != ScrollContainer.SCROLL_MODE_DISABLED,
+			"de balk is een rij die rolt")
+	gelijk(_balk.rijen(), 1, "één rij")
+	var hoogst := 0.0
+	for id in _balk.chips():
+		hoogst = maxf(hoogst, (_balk.chips()[id] as Button).get_combined_minimum_size().y)
+	waar(_balk.get_combined_minimum_size().y <= hoogst + 0.5,
+		"de balk is één chip hoog (%.0f, chip %.0f)" % [_balk.get_combined_minimum_size().y, hoogst])
+	# the room you are in is in view (laid out once more: the first layout of a
+	# bar has no width yet to scroll in), the last chip can be brought into view
+	await _leg_uit(SCHERMEN[0], 0.0)
+	var boom := Engine.get_main_loop() as SceneTree
+	await boom.process_frame
+	var hier: Button = _balk.chips().get(World.kamer_nu(), _balk.chips()["receptie"])
+	waar(_balk.get_global_rect().grow(0.5).encloses(hier.get_global_rect()),
+		"de kamer waar je bent staat in beeld (%s in %s)"
+			% [str(hier.get_global_rect()), str(_balk.get_global_rect())])
+	var kaart: Button = _balk.chips()[""]
+	_balk.ensure_control_visible(kaart)
+	await boom.process_frame
+	waar(_balk.get_global_rect().grow(0.5).encloses(kaart.get_global_rect()),
+		"de plattegrondchip rolt in beeld (%s in %s)"
+			% [str(kaart.get_global_rect()), str(_balk.get_global_rect())])
+	_af()
+	# upright the bar wraps — two rows, as always — and does not scroll
+	_op(SCHERMEN[1], KADERS[1])
+	await _leg_uit(SCHERMEN[1], 0.0)
+	waar(not _balk.rolt_zijwaarts(), "rechtop rolt de balk niet")
+	gelijk(_balk.rijen(), 2, "rechtop twee rijen")
 	_af()
 
 # ---------------------------------------------------------------- de etages

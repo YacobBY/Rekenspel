@@ -10,7 +10,10 @@ extends Proef
 ## mulberry32 bit for bit (architecture.md §13, Q-X1-2).
 
 const ORDE := ["receptie", "gang", "kamer1", "kamer2", "keuken", "tuin",
-	"zwembad", "wasserij", "speelzaal", "kas", "winkels"]
+	"zwembad", "wasserij", "speelzaal", "kas", "winkels",
+	# 2026-10-07 ("Verzin nog vier kamers met activiteiten"): de bakkerij (U1),
+	# de muziekkamer (U2), het dakterras (U3), de postkamer (U4)
+	"bakkerij", "muziekkamer", "dakterras", "postkamer"]
 
 ## The five floors `ArtVloer.kleur()` knows how to draw (`art/vloer.gd:18`);
 ## any other word gives a room the plank floor by accident.
@@ -990,8 +993,12 @@ func test_de_kas_is_een_glazen_kas_achter_het_hotel() -> void:
 	# every other room but the shops (their customers' spots, 2026-09-24) and
 	# the playroom (the easel of `spiegel`, 2026-09-25 — its floor is checked in
 	# `test_spiegel.gd::test_de_rustende_ezel`): no `mijd`, so nothing moved there
+	# … and the music room (U2, 2026-10-07: the stage of `band`, its drum and
+	# xylophone are the game's resting props)
 	for id in Rooms.lijst():
-		if id != "kas" and id != "winkels" and id != "speelzaal":
+		# and the postkamer (U4, 2026-10-07): the sorting shelf and the stamp counter
+		if id != "kas" and id != "winkels" and id != "speelzaal" and id != "muziekkamer" \
+				and id != "postkamer":
 			gelijk(Rooms.get_kamer(id).mijd.size(), 0, "%s houdt al zijn vloer" % id)
 
 ## A gate's rectangle is the gate in the fence line, not the door line behind
@@ -1020,7 +1027,9 @@ func test_het_hotel_is_een_toren() -> void:
 	# the ground floor: the lobby and what is outside or under glass
 	for id in Rooms.op_etage(0):
 		var r := Rooms.get_kamer(id)
-		waar(id == "receptie" or r.erf or r.glas,
+		# the postkamer (U4, 2026-10-07) is the one other room indoors down
+		# here: the post room behind the glass house
+		waar(id == "receptie" or id == "postkamer" or r.erf or r.glas,
 			"%s op de begane grond is de lobby of buiten" % id)
 	for id in ["tuin", "zwembad", "kas", "receptie"]:
 		gelijk(Rooms.etage(id), 0, "%s ligt op de begane grond" % id)

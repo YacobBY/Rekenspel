@@ -18,6 +18,18 @@ extends Control
 ## The table is COMPUTED from `Rooms` (`kaart()`), never written down: a room
 ## added later gets a cell on its own floor without anyone touching this file.
 ##
+## A FLOOR WRAPS (2026-10-07, the four new rooms: five on the ground floor and
+## five on the first).  `kaart()` stays the tower's table — one row per floor,
+## a column per room — but on a sheet too narrow for that many cells a floor
+## goes on over a second LINE, under its first one and inside its own sunny
+## band: a floor wraps before a cell drops under `CEL_MIN` or a room's name has
+## to break (HOTEL.md §9: the word stays whole).  The phone sheet then shows
+## three cells a line.  And when the sheet would have to scroll on a screen
+## where a little less air would let the whole tower fit, the cells take that
+## first — the gaps, then the air round the text, then the name steps down to
+## the 12 px floor (`_hoogte_trappen`) — but never just to be smaller: a tower
+## that does not fit even then keeps its roomy cells and scrolls.
+##
 ## WHY THIS LAYS ITSELF OUT.  This used to be a `GridContainer` of `Button`s
 ## with an anchored `VBoxContainer` inside every button.  A `Button` is not a
 ## `Container`: it never sorts that child, so the column kept the size the
@@ -55,6 +67,15 @@ var _cellen: Dictionary = {}   ## kamer id -> {knop, icoon, naam, badge, plek}
 var _deuren: Array = []        ## [{a: Vector2i, b: Vector2i, poort: bool, sleutel}], each pair once
 var _etages: Array[int] = []   ## the floors top-down: row r is `_etages[r - 1]`
 var _kolommen := 1
+## The layout: cells per line (`_kolommen`, unless the sheet is too narrow and
+## a floor wraps), the first line of every floor row (0-based, row r of
+## `kaart()` starts at `_lijn_start[r - 1]`) and the number of lines in all.
+var _per_lijn := 1
+var _lijn_start: Array[int] = []
+var _lijnen := 1
+## The largest size a room's name may take in this layout (`_maten.klein`, or
+## a step down when the tower is made to fit the sheet's height).
+var _naam_max := 0
 var _cel := Vector2(CEL_MAX, CEL_MAX * CEL_HOOG)
 var _gat := float(GAT)
 var _schacht := float(SCHACHT)
@@ -246,11 +267,14 @@ func _wacht(id: String) -> int:
 		return 0
 	return int(Hotel.call("wacht_in", id))
 
-## Every door between two cells that share an edge, once per pair.  A door the
-## tower cannot show (two rooms of one floor that are not side by side, like
-## the gang's doors to kamer 2 and the kitchen) is left out rather than drawn
-## across the map; the stairs are no door and are the stairwell instead.
+## Every door between two cells side by side on one line, once per pair.  A
+## door the tower cannot show (two rooms of one floor that are not side by
+## side, like the gang's doors to kamer 2 and the kitchen, or two rooms a
+## wrapped floor put on different lines) is left out rather than drawn across
+## the map; the stairs are no door and are the stairwell instead.  Found again
+## with every layout: where a floor wraps decides who stands side by side.
 func _zoek_deuren() -> void:
+	_deuren.clear()
 	var gezien: Dictionary = {}
 	for id in _cellen:
 		var r := Rooms.get_kamer(id)
@@ -262,8 +286,9 @@ func _zoek_deuren() -> void:
 				continue
 			var a: Vector2i = _cellen[id]["plek"]
 			var b: Vector2i = _cellen[naar]["plek"]
-			var af := (a - b).abs()
-			if af.x + af.y != 1:
+			var va := _vak(a)
+			var vb := _vak(b)
+			if va.y != vb.y or absi(va.x - vb.x) != 1:
 				continue
 			var sleutel := "%s|%s" % [id, naar] if id < naar else "%s|%s" % [naar, id]
 			if gezien.has(sleutel):
@@ -276,6 +301,18 @@ func _zoek_deuren() -> void:
 
 func _ready() -> void:
 	_leg_uit()
+	# The height the sheet leaves the plan is only known once the sheet's column
+	# has laid out its other children (`_beschikbaar_hoog`), and that does not
+	# resize the plan itself: so every sort of the column lays the plan out once
+	# more, a frame later.  Stable: an unchanged plan changes no minimum size,
+	# and the column does not sort again.
+	var kolom := get_parent() as Container
+	if kolom != null and not kolom.sort_children.is_connected(_na_sorteren):
+		kolom.sort_children.connect(_na_sorteren)
+
+func _na_sorteren() -> void:
+	if not _bezig:
+		_leg_uit.call_deferred()
 
 func _notification(wat: int) -> void:
 	if wat == NOTIFICATION_RESIZED:
@@ -306,49 +343,175 @@ func _leg_uit() -> void:
 	_bezig = true
 	var breedte := _beschikbaar()
 	# On a narrow sheet this gives way in turn: first the gaps, then the stairwell
-	# shaft, and only then the cells — never under 56 (a 48 tap target plus
-	# air).  The 326 unit phone frame ends at a 24 shaft, 4 gaps and four cells
-	# of 59, which is 274: the whole sheet.
-	var gat := float(GAT)
-	var schacht := float(SCHACHT)
-	var cel_w := _cel_breed(breedte, schacht, gat)
-	if cel_w < CEL_WENS:
-		gat = float(GAT_KRAP)
-		cel_w = _cel_breed(breedte, schacht, gat)
-	if cel_w < CEL_WENS:
-		schacht = float(SCHACHT_KRAP)
-		cel_w = _cel_breed(breedte, schacht, gat)
-	cel_w = clampf(cel_w, float(CEL_MIN), float(CEL_MAX))
-	# ... and in a cell that narrow the text keeps 2 units from the edge instead
-	# of 4, so "Zwembad" and "Speelzaal" (54 and 53 at 12 px) stay one word.
-	_lucht = LUCHT if cel_w >= CEL_WENS else LUCHT_KRAP
-	# The word is measured BEFORE the height is fixed: a cell that cannot show
-	# its picture and its word without them overlapping is a taller cell, not a
-	# smaller picture.  On a phone "Zwembad" drops to the 12 px floor rather
-	# than breaking in two (HOTEL.md §9: pictogram AND word, always readable).
-	var nodig := 0.0
-	for id in _cellen:
-		nodig = maxf(nodig, _meet_tekst(_cellen[id], cel_w - 2.0 * _lucht))
+	# shaft, then the air round the text, and only then the cells — a floor
+	# with more rooms than fit wraps onto a second line rather than one cell
+	# dropping under 56 (a 48 tap target plus air) or one name breaking in two.
+	# The 326 unit phone frame ends at a 24 shaft, 4 gaps and three cells of
+	# 80 a line, which is 274: the whole sheet.
+	var keus := _breedte_keus(breedte)
+	_per_lijn = int(keus["k"])
+	_gat = float(keus["gat"])
+	_schacht = float(keus["schacht"])
+	_lucht = float(keus["lucht"])
+	var cel_w := float(keus["cel"])
+	_tel_lijnen()
+	# The height: the roomy layout, unless the sheet has to scroll for it while
+	# a step with less air (and at last smaller names) would let it all fit.
+	var budget := _beschikbaar_hoog()
+	var trappen := _hoogte_trappen()
+	var gekozen: Dictionary = trappen[0]
+	if budget < INF:
+		for trap in trappen:
+			if _plan_hoogte(_cel_met(breedte, trap), trap) <= budget:
+				gekozen = trap
+				break
+	_gat = float(gekozen["gat"])
+	_lucht = float(gekozen["lucht"])
+	_naam_max = int(gekozen["naam"])
+	cel_w = _cel_met(breedte, gekozen)
+	var nodig := _tekst_hoogte(cel_w)
 	_cel = Vector2(cel_w, maxf(maxf(float(CEL_HOOG_MIN), round(cel_w * CEL_HOOG)),
 		ceilf(nodig + 2.0 * _lucht)))
-	_gat = gat
-	_schacht = schacht
-	var rij_n := float(maxi(1, _etages.size()))
-	var maat := Vector2(_breedte(),
-		2.0 * _boven() + rij_n * _cel.y + (rij_n - 1.0) * gat)
+	var maat := Vector2(_breedte(), _hoogte(_cel.y))
 	if custom_minimum_size != maat:
 		custom_minimum_size = maat
 	if not (get_parent() is Container) and size != maat:
 		size = maat
 	for id in _cellen:
 		_zet_cel(_cellen[id])
+	_zoek_deuren()
 	queue_redraw()
 	_bezig = false
 
-## The cell width that fills `breedte` with this shaft and these gaps.
-func _cel_breed(breedte: float, schacht: float, gat: float) -> float:
-	var k := float(_kolommen)
-	return floor((breedte - schacht - gat * 0.5 - (k - 1.0) * gat) / k)
+## How many cells a line gets and with which gaps, shaft and air: the most
+## cells per line (every floor on one line if it can), each step of air given
+## up before a line loses a cell, and a step only taken when the cell is under
+## `CEL_WENS` without it.  A layout is good when the cell is a tap target with
+## air (`CEL_MIN`) and the longest room name fits it on one line at the 12 px
+## floor.  `{k, gat, schacht, lucht, cel}`.
+func _breedte_keus(breedte: float) -> Dictionary:
+	var trappen := [[GAT, SCHACHT, LUCHT], [GAT_KRAP, SCHACHT, LUCHT],
+		[GAT_KRAP, SCHACHT_KRAP, LUCHT], [GAT_KRAP, SCHACHT_KRAP, LUCHT_KRAP]]
+	var woord := _langste_naam(UiThema.VLOER)
+	for k in range(_kolommen, 0, -1):
+		for i in trappen.size():
+			var trap: Array = trappen[i]
+			var cel := minf(_cel_breed(breedte, float(trap[1]), float(trap[0]), k), float(CEL_MAX))
+			var laatste := i == trappen.size() - 1
+			if cel < float(CEL_WENS) and not laatste:
+				continue
+			if cel >= float(CEL_MIN) and woord <= cel - 2.0 * float(trap[2]):
+				return {"k": k, "gat": trap[0], "schacht": trap[1], "lucht": trap[2], "cel": cel}
+	# not even one cell a line fits: the tightest step, and the cell keeps its
+	# minimum (the sheet is narrower than any phone this game knows)
+	var krap: Array = trappen[trappen.size() - 1]
+	return {"k": 1, "gat": krap[0], "schacht": krap[1], "lucht": krap[2],
+		"cel": clampf(_cel_breed(breedte, float(krap[1]), float(krap[0]), 1),
+			float(CEL_MIN), float(CEL_MAX))}
+
+## The widest room name at this font size, in units.
+func _langste_naam(maat: int) -> float:
+	var breedst := 0.0
+	for id in _cellen:
+		var naam: Label = _cellen[id]["naam"]
+		var f := naam.get_theme_font("font")
+		if f != null:
+			breedst = maxf(breedst,
+				f.get_string_size(naam.text, HORIZONTAL_ALIGNMENT_CENTER, -1, maat).x)
+	return breedst
+
+## Which line every floor starts on, and how many lines there are: a floor
+## takes as many lines as its rooms need at `_per_lijn` cells a line.
+func _tel_lijnen() -> void:
+	_lijn_start.clear()
+	var lijn := 0
+	for e in _etages:
+		_lijn_start.append(lijn)
+		lijn += maxi(1, ceili(Rooms.op_etage(e).size() / float(maxi(1, _per_lijn))))
+	_lijnen = maxi(1, lijn)
+
+## The steps the height takes when the sheet would scroll (see the top): the
+## roomy one first, then the tight gaps, the tight air, and the name a size
+## smaller each step down to the 12 px floor.
+func _hoogte_trappen() -> Array:
+	var klein := maxi(UiThema.VLOER, int(_maten.get("klein", UiThema.VLOER)))
+	var uit: Array = [{"gat": _gat, "lucht": _lucht, "naam": klein}]
+	var gat := minf(_gat, float(GAT_KRAP))
+	uit.append({"gat": gat, "lucht": _lucht, "naam": klein})
+	var lucht := minf(_lucht, LUCHT_KRAP)
+	uit.append({"gat": gat, "lucht": lucht, "naam": klein})
+	for maat in range(klein - 1, UiThema.VLOER - 1, -1):
+		uit.append({"gat": gat, "lucht": lucht, "naam": maat})
+	return uit
+
+## The cell width of a height step: a tighter gap gives the cells its units.
+func _cel_met(breedte: float, trap: Dictionary) -> float:
+	return minf(_cel_breed(breedte, _schacht, float(trap["gat"]), _per_lijn), float(CEL_MAX))
+
+## What the tower would measure from top to bottom in this step.
+func _plan_hoogte(cel_w: float, trap: Dictionary) -> float:
+	var oud_gat := _gat
+	var oud_lucht := _lucht
+	var oud_naam := _naam_max
+	_gat = float(trap["gat"])
+	_lucht = float(trap["lucht"])
+	_naam_max = int(trap["naam"])
+	var cel_h := maxf(maxf(float(CEL_HOOG_MIN), round(cel_w * CEL_HOOG)),
+		ceilf(_tekst_hoogte(cel_w) + 2.0 * _lucht))
+	var uit := _hoogte(cel_h)
+	_gat = oud_gat
+	_lucht = oud_lucht
+	_naam_max = oud_naam
+	return uit
+
+## The word is measured BEFORE the height is fixed: a cell that cannot show
+## its picture and its word without them overlapping is a taller cell, not a
+## smaller picture.  On a phone "Zwembad" drops to the 12 px floor rather
+## than breaking in two (HOTEL.md §9: pictogram AND word, always readable).
+func _tekst_hoogte(cel_w: float) -> float:
+	var nodig := 0.0
+	for id in _cellen:
+		nodig = maxf(nodig, _meet_tekst(_cellen[id], cel_w - 2.0 * _lucht))
+	return nodig
+
+## The whole tower: half a gap above and below, the lines and the gaps between them.
+func _hoogte(cel_h: float) -> float:
+	var n := float(_lijnen)
+	return 2.0 * _boven() + n * cel_h + (n - 1.0) * _gat
+
+## The height the sheet leaves this plan before it has to scroll: what its
+## scrolling column shows, minus everything else in that column (the title,
+## the hint, the button row) as the column has laid them out, and the gaps
+## between them.  Not the column's minimum: before the sheet's first layout an
+## autowrapping label still claims thousands of units there (`UiBlad._meet`).
+## INF outside a sheet, or before that layout.
+func _beschikbaar_hoog() -> float:
+	var kolom := get_parent() as BoxContainer
+	var rol: ScrollContainer = null
+	if kolom != null:
+		rol = kolom.get_parent() as ScrollContainer
+	if rol == null or rol.size.y <= 1.0:
+		return INF
+	var anders := 0.0
+	var zichtbaar := 0
+	for kind in kolom.get_children():
+		var c := kind as Control
+		if c == null or not c.visible:
+			continue
+		zichtbaar += 1
+		if c == self:
+			continue
+		if c.size.y <= 0.0:
+			return INF            # not laid out yet: the next pass will tell
+		anders += c.size.y
+	anders += float(kolom.get_theme_constant("separation")) * float(maxi(0, zichtbaar - 1))
+	# two units of slack, as the sheet itself keeps (`UiBlad._meet`)
+	return rol.size.y - anders - 2.0
+
+## The cell width that fills `breedte` with this shaft and these gaps, `k` a line.
+func _cel_breed(breedte: float, schacht: float, gat: float, k: int) -> float:
+	var n := float(maxi(1, k))
+	return floor((breedte - schacht - gat * 0.5 - (n - 1.0) * gat) / n)
 
 ## Where column 1 begins: after the shaft and half a gap.
 func _links() -> float:
@@ -359,22 +522,40 @@ func _links() -> float:
 func _boven() -> float:
 	return _gat * 0.5
 
-## The width of the whole tower: shaft, columns and the gaps between them.
+## The width of the whole tower: shaft, the cells of a line and the gaps between them.
 func _breedte() -> float:
-	var k := float(_kolommen)
+	var k := float(_per_lijn)
 	return _links() + k * _cel.x + (k - 1.0) * _gat
+
+## Where a cell of `kaart()` stands on the sheet: `Vector2i(column, line)`,
+## both 0-based — its floor's first line, and the next one after `_per_lijn`
+## rooms.
+func _vak(plek: Vector2i) -> Vector2i:
+	var k := maxi(1, _per_lijn)
+	var rij := clampi(plek.y - 1, 0, maxi(0, _lijn_start.size() - 1))
+	var begin: int = _lijn_start[rij] if not _lijn_start.is_empty() else plek.y - 1
+	return Vector2i((plek.x - 1) % k, begin + (plek.x - 1) / k)
 
 ## The top-left corner of a cell.
 func _hoek(plek: Vector2i) -> Vector2:
-	return Vector2(_links() + (plek.x - 1) * (_cel.x + _gat),
-		_boven() + (plek.y - 1) * (_cel.y + _gat))
+	var v := _vak(plek)
+	return Vector2(_links() + v.x * (_cel.x + _gat), _boven() + v.y * (_cel.y + _gat))
+
+## The lines floor row `rij` (1-based) takes: `Vector2i(first, last)`, 0-based.
+func _lijnen_van(rij: int) -> Vector2i:
+	if _lijn_start.is_empty():
+		return Vector2i(rij - 1, rij - 1)
+	var i := clampi(rij - 1, 0, _lijn_start.size() - 1)
+	var eind := (_lijn_start[i + 1] if i + 1 < _lijn_start.size() else _lijnen) - 1
+	return Vector2i(_lijn_start[i], eind)
 
 ## How much height this cell's picture and word need at this width, and what
 ## font size the word gets: the biggest that still keeps the name on one line,
 ## never under the 12 px floor.  `naam_h` is remembered for `_zet_cel`.
 func _meet_tekst(c: Dictionary, breed: float) -> float:
 	var naam: Label = c["naam"]
-	var maat := maxi(UiThema.VLOER, int(_maten.get("klein", UiThema.VLOER)))
+	var maat := maxi(UiThema.VLOER, _naam_max if _naam_max > 0
+		else int(_maten.get("klein", UiThema.VLOER)))
 	var f := naam.get_theme_font("font")
 	if f != null:
 		while maat > UiThema.VLOER \
@@ -444,13 +625,16 @@ func _draw() -> void:
 	_teken_deuren()
 
 ## The row of the floor the child is on, a faint sunny band from the shaft to
-## the last column that sticks out half a gap above and below its cells.
+## the last column that sticks out half a gap above and below its cells — over
+## every line of that floor when it wraps.
 func _teken_band() -> void:
 	var rij := band_rij()
 	if rij <= 0:
 		return
-	var y := _hoek(Vector2i(1, rij)).y - _gat * 0.5
-	var band := Rect2(0.0, y, _breedte(), _cel.y + _gat)
+	var lijnen := _lijnen_van(rij)
+	var y := _boven() + lijnen.x * (_cel.y + _gat) - _gat * 0.5
+	var n := float(lijnen.y - lijnen.x + 1)
+	var band := Rect2(0.0, y, _breedte(), n * _cel.y + n * _gat)
 	draw_style_box(UiThema.vlak(Color(UiThema.ZON, BAND_ALFA), 10), band)
 
 ## The stairwell: one line from the top floor down to the cellar, and on it a
@@ -462,8 +646,8 @@ func _teken_schacht() -> void:
 	if _etages.is_empty():
 		return
 	var x := _schacht * 0.5
-	var boven := _hoek(Vector2i(1, 1)).y
-	var onder := _hoek(Vector2i(1, _etages.size())).y + _cel.y
+	var boven := _boven()
+	var onder := _boven() + float(_lijnen) * (_cel.y + _gat) - _gat
 	draw_line(Vector2(x, boven), Vector2(x, onder), UiThema.KNOP_RAND, SCHACHT_DIK, true)
 	var nu := band_rij()
 	var f := get_theme_font("font", "Label")
@@ -490,7 +674,7 @@ func _teken_deuren() -> void:
 		var kl: Color = ArtDecor.DEURKL.lerp(UiThema.WIT, 0.5 if poort else 0.08)
 		var p1 := Vector2.ZERO
 		var p2 := Vector2.ZERO
-		if a.y == b.y:
+		if _vak(a).y == _vak(b).y:
 			var hoek := _hoek(Vector2i(mini(a.x, b.x), a.y))
 			var x := hoek.x + _cel.x + _gat * 0.5
 			var mid := hoek.y + _cel.y * 0.5
@@ -535,8 +719,17 @@ func knop_van(id: String) -> Button:
 func plek_van(id: String) -> Vector2i:
 	return _cellen[id]["plek"] if _cellen.has(id) else Vector2i.ZERO
 
+## How many cells a line holds in this layout (`kolommen()` unless a floor
+## wraps), and how many lines the tower takes (`rijen()` unless one does).
+func per_lijn() -> int:
+	return _per_lijn
+
+func lijnen() -> int:
+	return _lijnen
+
 ## The floor button of floor `e` in the stairwell, as the square around its circle
-## in this control's own units; an empty rectangle for a floor not on the map.
+## in this control's own units, on the middle of the floor's first line (where
+## the stairs' room stands); an empty rectangle for a floor not on the map.
 func etage_knop(e: int) -> Rect2:
 	var i := _etages.find(e)
 	if i < 0:

@@ -42,6 +42,7 @@ const MODELLEN := preload("res://games/meubels/modellen.gd")
 const T_TITEL := "📖 Meubelboek"
 const T_MEUBELS := "Meubels"
 const T_VERSIERING := "Versiering met sterren"
+const T_DECORATIE := "Decoratie voor je kamer"
 const T_AFREKENEN := "Afrekenen"
 const T_LIJST_LEEG := "Lijstje leeg"
 const T_BOEK_DICHT := "Boek dicht"
@@ -110,6 +111,28 @@ var _vak_offset := 0
 var _blad_stil := false      ## een blad dat IK dichtdoe mag geen view omzetten
 var _verbonden := false
 var _t0 := 0
+
+## Koopbare kamerdecoratie (eigenaar 2026-10-07: "accessoires om in de kamers te
+## zetten of de kamers te decoreren").  Zelfde vorm als `Sommen.Meubels.WINKEL`
+## en ÁCHTER die zes in het boek; de prijzen blijven binnen 1..8, het bereik dat
+## de bevroren kern al maakt, dus kassa en som veranderen niet.  De types staan
+## in `Rooms.DECORATIE` (soort decor, modellen in `art/decor_versiering.gd`) en
+## lopen dezelfde weg: kopen → betalen → één tik op een vrij vakje in je kamer.
+const VERSIERING_KAMER := [
+	{"type": "kussen", "icoon": "🩷", "naam": "kussen", "prijs": 1, "plus": ""},
+	{"type": "bloemen", "icoon": "🌸", "naam": "bloemen", "prijs": 2, "plus": ""},
+	{"type": "slinger", "icoon": "🎈", "naam": "slinger", "prijs": 2, "plus": ""},
+	{"type": "bankje", "icoon": "🛋", "naam": "bankje", "prijs": 3, "plus": ""},
+	{"type": "lamp", "icoon": "💡", "naam": "lamp", "prijs": 3, "plus": ""},
+	{"type": "schilderij", "icoon": "🌙", "naam": "schilderij", "prijs": 4, "plus": ""},
+	{"type": "kastje", "icoon": "🕐", "naam": "klokkastje", "prijs": 4, "plus": ""},
+	{"type": "kist", "icoon": "🧸", "naam": "speelkist", "prijs": 5, "plus": ""},
+]
+## Acht kaartjes: twee rijen van vier op het laagste tabletkader (1000×648);
+## een negende (het aquarium, model en `Rooms.DECORATIE` staan klaar) valt daar
+## onder het blad.  Pictogrammen: alleen glyphs uit `fonts/tekens.txt`
+## (🖼 🐠 🕯 🟪 zitten niet in de gebundelde fonts); het schilderij toont zijn
+## motief (de maan), het kastje draagt een klokje.
 
 # =============================================================== registratie
 
@@ -216,6 +239,9 @@ func _zet_nog(nog: Array) -> void:
 
 static func _artikel(type: String) -> Dictionary:
 	for w in Sommen.Meubels.WINKEL:
+		if str(w["type"]) == type:
+			return w
+	for w in VERSIERING_KAMER:              # de kamerdecoratie, ná de kern
 		if str(w["type"]) == type:
 			return w
 	return {}
@@ -510,13 +536,16 @@ func _boek_teken() -> void:
 		_chip("🛏 %d" % ctx.state.max_gasten(), UiThema.MUNT)]))
 	inhoud.append(_rij([
 		_tabknop("meubels", "🪑 %s" % T_MEUBELS, T_MEUBELS),
-		_tabknop("versiering", "⭐ Versiering", T_VERSIERING)]))
+		_tabknop("versiering", "⭐ Versiering", T_VERSIERING),
+		_tabknop("decoratie", "🩷 Decoratie", T_DECORATIE)]))
 	if not _spaar.is_empty():
 		inhoud.append(_rij([
 			_chip("%s %s" % [_spaar["icoon"], _spaar["nodig"]], UiThema.ROZE),
 			_chip("💰 %s" % _spaar["heb"], UiThema.ZON)]))
 	if _tab == "versiering":
 		_blad_versiering(q, inhoud)
+	elif _tab == "decoratie":
+		_blad_meubels(inhoud, VERSIERING_KAMER, "Decoratie")   # eigen blad: het meubelblad blijft 6 kaartjes
 	else:
 		_blad_meubels(inhoud)
 	_blad_open(inhoud)
@@ -540,16 +569,17 @@ func _blad_breed() -> float:
 func _blad_smal() -> bool:
 	return _blad_breed() < 400.0
 
-func _blad_meubels(inhoud: Array[Control]) -> void:
+func _blad_meubels(inhoud: Array[Control], bron: Array = Sommen.Meubels.WINKEL,
+		rooster_naam: String = "Winkel") -> void:
 	if _blad_smal():
 		_lijst_rij(inhoud)
 	var rooster := HFlowContainer.new()
-	rooster.name = "Winkel"
+	rooster.name = rooster_naam
 	rooster.alignment = FlowContainer.ALIGNMENT_CENTER
 	rooster.add_theme_constant_override("h_separation", 6)
 	rooster.add_theme_constant_override("v_separation", 6)
 	var maxi_lijst := _max_lijst()
-	for w in Sommen.Meubels.WINKEL:
+	for w in bron:
 		var type := str(w["type"])
 		var prijs := int(w["prijs"])
 		var delen: Array[Control] = [

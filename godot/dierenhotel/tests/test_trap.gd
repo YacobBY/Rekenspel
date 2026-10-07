@@ -21,7 +21,8 @@ const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740),
 ## (owner, 2026-10-01: "Maak de kamers de eerste verdieping"), the shops over
 ## them and the playroom on top.
 const VLUCHTEN := {
-	"speelzaal": {"af": "winkels"},
+	"dakterras": {"af": "speelzaal"},
+	"speelzaal": {"op": "dakterras", "af": "winkels"},
 	"winkels": {"op": "speelzaal", "af": "gang"},
 	"gang": {"op": "winkels", "af": "receptie"},
 	"receptie": {"op": "gang", "af": "wasserij"},
@@ -298,7 +299,8 @@ func test_omhoog_en_omlaag_is_precies_een_verdieping() -> void:
 ## A flight that is not there goes nowhere: the top floor has no way up, the
 ## cellar no way down.
 func test_geen_trap_omhoog_vanaf_de_bovenste_verdieping() -> void:
-	waar(not Hotel.neem_trap("speelzaal", "op"), "de speelzaal is de bovenste verdieping")
+	# 2026-10-07 (U3): the dakterras is the top now, over the playroom
+	waar(not Hotel.neem_trap("dakterras", "op"), "het dakterras is de bovenste verdieping")
 	waar(not Hotel.neem_trap("wasserij", "af"), "onder de kelder is niets")
 	waar(not Hotel.neem_trap("tuin", "op"), "in de tuin is geen trap")
 
