@@ -289,18 +289,49 @@ schoenenkraam.  Knop `📸 Foto` (`spel_foto`), open vanaf twee gasten met een b
    elke dag opschuift) en vanaf het tweede gekozen dier "📸 Klaar".  Elk gekozen dier loopt naar
    zijn plek voor het hokje (vier plekken in twee rijen: (140, 28), (124, 30), (132, 42),
    (116, 42)).  Zijn alle vier gekozen, dan gaat het meteen door.
-2. **Het scherm** (`games/foto/scherm.gd`, `FotoScherm`, `kind: "eigen"`): het schermpje van
-   het hokje groot in beeld, één vakje per dier met het dier erin en **de prijs per dier
-   eronder** (een gouden prijskaartje "€3"); zolang er nog geen twee zijn, lege vakjes met een
-   "?" en toch de prijs eronder.  Het staat in de grootste vrije band boven of onder de
-   dieren bij het hokje (tablet: erboven, over de achterwand; telefoon rechtop: eronder),
-   nooit over hen heen.
-3. **Het geld.** Zodra iedereen bij het hokje staat: "💶 Hoeveel geld gooi je erin?" met de
-   som eronder en vier bedragen op de strook.
-4. **Goed:** de munten vallen erin (`munt`), even later de flits (`tik`, het scherm wit), het
-   scherm wordt de foto — een polaroid: de dieren naast elkaar, blij — "✨ Klik! Wat een mooie
-   foto!" met het bedrag in het vakje, 😍 mooi!, één ster.
-5. **Fout:** zoals in elke winkel (§4.4): de kaart gaat meteen weg, de dieren kijken sip
+   **Het hokje in (2026-10-07).**  Bij zijn plek kijkt het dier naar het hokje (`kijk`), en
+   `STAP_IN_S` (0,3 s) later stapt het door het gordijn naar binnen: `zwiep`, een paar
+   teal sterretjes bij het gordijn (`GORDIJN` (141, 21)), en het is weg uit de straat
+   (`World.verstop`); pas dan komt het in beeld op het scherm.  Wie binnen zit blijft
+   verstopt staan waar hij stond (zijn plek, kamer en save veranderen niet; hij dwaalt niet
+   weg).  `World.verstop` houdt op vanzelf bij `reis`, elke kamerwissel, `weg`, een nieuwe
+   dag en elke start van het hotel (`zet_dag`), en een nieuw of gelezen hotel
+   (`State.veranderd`); `stop()` van het spel haalt iedereen er zelf ook uit.  De volgorde
+   van binnenkomen (`_binnen`) staat niet in de save: na herladen loopt iedereen weer naar
+   het hokje en stapt opnieuw in.
+2. **Het scherm** (`games/foto/scherm.gd`, `FotoScherm`, `kind: "eigen"`; sinds 2026-10-07 de
+   zoeker van de camera van het hokje, eigenaar: "kan het echt in het hokje geanimeerd worden
+   van een camera hokje PoV"): binnen de koraalrode rand het hokje van binnen — de
+   achterwand in het licht van de lamp, het bankje, links het teal gordijn, de vier witte
+   hoeken van de zoeker.  Een dier dat instapt glijdt achter het gordijn vandaan het beeld
+   in (`KOM_S` 0,5 s) en neemt de plek het verst links, het dichtst bij het gordijn; wie al
+   binnen is schuift op (`SCHUIF_S` 0,35 s).  Binnen staan ze in twee rijen (drie of vier:
+   achteraan op het bankje iets kleiner, en de camera doet een stap terug), elke neus naar
+   het midden, en ze ademen, knipperen en kwispelen.  De dieren zijn de isometrische
+   platen van `Art` (er is geen pose recht van voren).  Onder elke plek **de prijs per dier**
+   (een gouden prijskaartje "€3") zolang de camera live is; zolang er nog geen twee binnen
+   zijn, lege gestippelde plekken met een "?" en toch de prijs eronder.  Het beeld is 5:3
+   (`BEELD`), op een scherm dat lager is dan gevraagd breder voor zijn hoogte tot `BEELD_MIN`,
+   zodat het in de band van 115 px boven de dieren past op een telefoon liggend (740×360)
+   en de prijskaartjes hun maat houden.  Eén klok beweegt alles: `tik(dt)`, gedraaid door
+   `_process`; in rustige beweging en headless is elke verandering meteen af.  Het scherm
+   staat in de grootste vrije band boven of onder de dieren bij het hokje (tablet: erboven,
+   over de achterwand; telefoon rechtop: eronder), nooit over hen heen; vanaf de geldvraag
+   liggen zijn maat, zijn kant en (zolang die in de band past) zijn plek vast tot het spel
+   sluit, zodat het bij een fout niet meegroeit met de kamer.
+3. **Het geld.** Zodra iedereen in het hokje zit (sinds 2026-10-07; daarvoor: bij het hokje
+   staat): "💶 Hoeveel geld gooi je erin?" met de som eronder en vier bedragen op de strook.
+4. **Goed** (2026-10-07): de munten vallen erin (`munt`), één ster, dan telt het scherm af —
+   3, 2, 1, elk cijfer groot in een koraalrode badge (`tel`), elk met een `tik`, `TEL_S`
+   (0,6 s) per cijfer; bij de 1 juichen de dieren.  Dan de sluiter: `klik`, de flits (het
+   scherm wit), en het scherm wordt een polaroid die uit het wit verschijnt
+   (`ONTWIKKEL_S` 1,0 s), de dieren zoals ze stonden, blij, zonder prijskaartjes — "✨ Klik!
+   Wat een mooie foto!".  Daarna `tover`, de dieren komen weer naar buiten (`zwiep`, de
+   straat in, `bouncy`), 😍 mooi!, en `AF_S` (3,5 s; was 5,0 s, het aftellen en het
+   ontwikkelen kosten samen 2,8 s) later sluit het spel.
+5. **Fout:** zoals in elke winkel (§4.4): de kaart gaat meteen weg, de dieren glijden uit het
+   beeld door het gordijn (`vertrek`, `WEG_S` 0,6 s) en staan weer in de straat (sinds
+   2026-10-07), kijken sip
    ("😞 Dat klopt niet"), sjokken langzaam weg naar (122, 70), (96, 54), (104, 88), (78, 70),
    en het spel sluit.  Een tik op het hokje brengt dezelfde dieren terug en dezelfde vraag met
    dezelfde vier bedragen.  Geen hulp, niets kwijt.
@@ -320,11 +351,24 @@ Afleiders: één dier te weinig of te veel, aantal + prijs, de prijs van één d
 "💶 Hoeveel geld gooi je erin?" · "✨ Klik! Wat een mooie foto!" · "😞 Dat klopt niet" ·
 "😍 mooi!" · "🛏 nog te weinig gasten".
 
+**Geen nieuwe kindtekst en geen nieuw geluid (2026-10-07):** het scherm toont alleen cijfers
+(de prijs, het aftellen); de geluiden zijn bestaande (`zwiep`, `tik`, `klik`, `tover`,
+`hoera`) — een veertiende wereldgeluid zou de telling van `test_snd_wereld` breken.
+
 **Tests:** `games/foto/test_foto.gd` — aanmelding, prijs en som per groep/N/dag, elke zin past,
 een hele beurt per groep via de echte knoppen (Klaar pas bij twee), vier dieren gaan meteen
 door, verkeerd geld stuurt ze weg (en dezelfde vraag daarna), herladen, te weinig gasten, het
 hokje in de rij (geen loop door een kraam of het hokje), op vier schermen (het scherm ligt
-niet over de kaart, de strook of de dieren).
+niet over de kaart, de strook of de dieren); sinds 2026-10-07 ook: een dier stapt het hokje in
+(weg uit de straat, op het scherm, `binnen=` in de probe-regel), het aftellen, de klik en weer
+naar buiten (`tel=`, `foto=` in de probe-regel), `stop()` haalt iedereen uit het hokje, wie
+binnen zit blijft binnen, herladen bij de geldvraag (iedereen stapt opnieuw in).
+`games/foto/test_foto_scherm.gd` (nieuw, 17 tests, gedreven door `tik(dt)` op een scherm
+buiten de boom) — maat en vorm, lager dan gevraagd, de plekken per aantal, de kijkrichting,
+de achterste rij eerst, binnenkomen, opschuiven, ademen, knipperen en kwispelen, alleen
+tekenen als er iets beweegt, aftellen en juichen, klik/flits/ontwikkelen, geen prijskaartjes
+op de foto, `vertrek`, rustige beweging en headless.  `tests/test_world.gd` — de regels van
+`World.verstop`/`verstopt`.
 
 ## 6. Tests
 

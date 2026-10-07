@@ -8,20 +8,26 @@ extends MiniGame
 ## arcade).  A turn:
 ##   1. "📸 Wie gaan er op de foto?" — the strip holds the animals that may go
 ##      (at most four) and, from the second one on, "📸 Klaar".  Every animal
-##      the child taps walks to the booth.  The booth's screen comes forward
-##      large (`FotoScherm`): a frame per animal, and under every frame the
-##      price per animal — the same for everyone, as in a real booth.
-##   2. When they all stand at the booth: "💶 Hoeveel geld gooi je erin?" with
-##      the sum under it (groep 3 `€2 + €2 + €2 =`, from groep 4 `3 × €2 =`) and
-##      four amounts on the strip (`beurt.gd`).
-##   3. Right: the coins drop in, the flash, the screen becomes the photo — the
-##      animals side by side and happy — and one star.
+##      the child taps walks to the booth, looks at it and steps INTO it
+##      through the curtain (owner, 2026-10-06: "kan het echt in het hokje
+##      geanimeerd worden van een camera hokje PoV met alle dieren die erin
+##      zitten"): he is gone from the street (`World.verstop`) and the booth's
+##      screen, large in front (`FotoScherm`), shows him sitting inside — a
+##      frame per animal, and under every frame the price per animal, the same
+##      for everyone, as in a real booth.
+##   2. When they all sit inside: "💶 Hoeveel geld gooi je erin?" with the sum
+##      under it (groep 3 `€2 + €2 + €2 =`, from groep 4 `3 × €2 =`) and four
+##      amounts on the strip (`beurt.gd`).
+##   3. Right: the coins drop in, the screen counts 3 – 2 – 1, the shutter
+##      clicks and the photo develops — and one star.  Then the animals come
+##      out again, happy.
 ##
 ## A WRONG AMOUNT SENDS THEM OUT, as in every shop of the street (owner,
-## 2026-09-24, `WinkelSpel`): the card goes at once, the animals sulk ("😞 Dat
-## klopt niet"), walk slowly away with their heads down, and the game closes by
-## itself.  A tap on the booth brings the same animals back and the SAME
-## question — the turn is in the save.  No help, no hint, nothing taken away.
+## 2026-09-24, `WinkelSpel`): the card goes at once, the animals come out of the
+## booth, sulk ("😞 Dat klopt niet"), walk slowly away with their heads down,
+## and the game closes by itself.  A tap on the booth brings the same animals
+## back and the SAME question — the turn is in the save.  No help, no hint,
+## nothing taken away.  Whatever ends the game, nobody stays inside (`stop`).
 
 const KAMER := "winkels"
 const Beurt := preload("res://games/foto/beurt.gd")
@@ -45,8 +51,14 @@ const PLEKKEN := [Vector2(140, 28), Vector2(124, 30), Vector2(132, 42), Vector2(
 const BUITEN := [Vector2(122, 70), Vector2(96, 54), Vector2(104, 88), Vector2(78, 70)]
 
 const SOM_S := 0.6        ## a choice, then the next card this much later
-const KLIK_S := 0.7       ## the coins drop in, then the flash
-const AF_S := 5.0         ## the photo is to be looked at this long before it closes
+const STAP_IN_S := 0.3    ## at the booth: a look at it, then in through the curtain
+const TEL_S := 0.6        ## the countdown on the screen: 3, 2, 1, each this long
+const ONTWIKKEL_S := 1.0  ## the shutter, the photo develops — then they come out
+const AF_S := 3.5         ## out and happy: this long before the game closes
+## The curtain of the cabin, where an animal steps in: a few teal sparkles of
+## the curtain's own colour.
+const GORDIJN := Vector2(141, 21)
+const GORDIJN_N := 6
 const LEEG_S := 1.8
 const SIP_TIKKEN := 18    ## the sulk before they walk out (1,2 s)
 const SIP_S := 1.2
@@ -66,6 +78,18 @@ var O: Dictionary = {}
 var _kaart = null          ## Ui.Kaart
 var _kaart_sleutel := ""   ## the step (and the choice so far) the card on screen was built for
 var _t0 := 0
+## Who stepped into the booth, in the order they did — the screen has them in
+## the same order.  Not saved: after a reload everyone walks to the booth and
+## steps in again.
+var _binnen: Array[String] = []
+var _gaat_in: Dictionary = {}   ## id -> true while he walks there to step in
+## Once the money question is on screen, the booth's screen keeps the size and
+## the side of the animals it had then, and its place as long as that still
+## lies in its band, until the game closes: a wrong amount lets the maths bar
+## go, the room grows into the frame, and a screen that grew along with it
+## during the sad walk out looked like a glitch.  `{kader, maat, boven,
+## midden}`; empty until the question is up.
+var _vast: Dictionary = {}
 
 # ------------------------------------------------------------- aanmelding
 
@@ -122,10 +146,22 @@ func start(_c: SpelCtx) -> void:
 	_t0 = Time.get_ticks_msec()
 	_kaart = null
 	_kaart_sleutel = ""
+	_binnen.clear()
+	_gaat_in.clear()
+	_vast = {}
 	State.bewaar()
 	_begin()
 
 func stop() -> void:
+	# nobody stays inside the booth, whatever the turn was doing: every animal
+	# of the photo is on the street again (also one that was still on his way)
+	for id in S.get("dieren", []):
+		World.verstop(str(id), false)
+	for id in _binnen:
+		World.verstop(id, false)
+	_binnen.clear()
+	_gaat_in.clear()
+	_vast = {}
 	if ctx != null:
 		if not S.is_empty():
 			ctx.data()["stand"] = S
@@ -215,9 +251,9 @@ func _bewaar() -> void:
 # ------------------------------------------------------------ de beurt
 
 ## The screen first, then the card.  Choosing needs nobody at the booth: the
-## card is there at once.  The sum waits until every animal on the photo stands
-## at the booth (owner, 2026-09-23: "Zorg dat de minigame pas begint wanneer
-## het dier er is").
+## card is there at once.  The sum waits until every animal on the photo sits
+## inside the booth (owner, 2026-09-23: "Zorg dat de minigame pas begint
+## wanneer het dier er is").
 func _begin() -> void:
 	_scherm_neer()
 	for i in _dieren().size():
@@ -228,13 +264,63 @@ func _begin() -> void:
 	_kaart_neer()
 	_teken()
 
-## Animal `i` of the photo walks to its place at the booth.  Nobody waits for
-## this walk; `_naar_de_som` does.
+## Animal `i` of the photo walks to its place at the booth and steps in there
+## (`_stap_in`) — unless he is inside already or on his way in.  Nobody waits
+## for this; `_naar_de_som` does.
 func _stuur(i: int) -> void:
 	var id := str(_dieren()[i])
-	if World.dier(id) == null:
+	if World.dier(id) == null or _binnen.has(id) or _gaat_in.has(id):
 		return
-	ctx.wacht_op(id, PLEKKEN[i])
+	_stap_in(id, PLEKKEN[i])
+
+## At his place in front of the booth he looks at it, and a moment later he
+## steps in through the curtain.  Should something take him away in that
+## moment, he walks back and tries again.
+func _stap_in(id: String, plek: Vector2) -> void:
+	_gaat_in[id] = true
+	while actief and _mag_in(id):
+		if not await ctx.wacht_op(id, plek):
+			break
+		if not actief or not _mag_in(id):
+			break
+		World.pose(id, "kijk", 5)
+		if not await na(STAP_IN_S):
+			return
+		if not _mag_in(id):
+			break
+		if _bij_het_hokje(id, plek):
+			_in_het_hokje(id)
+			break
+	_gaat_in.erase(id)
+
+## May `id` still step in: the turn chooses or asks the money, nobody was sent
+## out, he is on the photo and not inside yet.
+func _mag_in(id: String) -> bool:
+	return not S.is_empty() and _stap() in ["kies", "som"] and int(S.get("weg", 0)) == 0 \
+		and _dieren().has(id) and not _binnen.has(id)
+
+## Still at his place in front of the booth: in this room, not travelling, as
+## near as `ctx.wacht_op` counts "there".  Standing still is not asked: the
+## look (5 think ticks) may just have run out into an idle step, and the step
+## in stops that where he is (`World.verstop`).
+func _bij_het_hokje(id: String, plek: Vector2) -> bool:
+	var d = World.dier(id)
+	return d != null and d.kamer == KAMER and str(d.reis_doel).is_empty() \
+		and (d.route as Array).is_empty() \
+		and Vector2(d.x, d.z).distance_to(plek) <= SpelCtx.WACHT_MARGE
+
+## In through the curtain: a swish, he is gone from the street, a few teal
+## sparkles at the curtain — and only then the screen shows him inside (it
+## lets him come in itself).
+func _in_het_hokje(id: String) -> void:
+	ctx.snd.zwiep()
+	World.verstop(id, true)
+	ctx.wereld.spetter(KAMER, GORDIJN.x, GORDIJN.y, GORDIJN_N, ArtDecorWinkels.HOKJE_GORDIJN)
+	_binnen.append(id)
+	var sch := _scherm()
+	if sch != null:
+		sch.dieren = sch.dieren + [id]
+	_meld()
 
 func kies_dier(id: String) -> void:
 	_kies_dier(id)
@@ -267,7 +353,7 @@ func _klaar_gekozen() -> void:
 		return
 	_naar_de_som()
 
-## The money question, as soon as everybody stands at the booth.  Until then
+## The money question, as soon as everybody sits inside the booth.  Until then
 ## there is no card: the hotel shows who is still on the way (`komt eraan`).
 func _naar_de_som() -> void:
 	S["stap"] = "som"
@@ -278,14 +364,21 @@ func _naar_de_som() -> void:
 	_kaart_sleutel = ""
 	_scherm_neer()
 	_teken()
-	var dieren := _dieren().duplicate()
-	for i in dieren.size():
-		if not await ctx.wacht_op(str(dieren[i]), PLEKKEN[i]):
-			if actief:
+	# whoever is not inside yet walks there and steps in ...
+	for i in _dieren().size():
+		_stuur(i)
+	# ... and the question waits until they all are
+	while not _allemaal_binnen():
+		if not await na(SpelCtx.WACHT_TIK):
+			return
+		if S.is_empty() or _stap() != "som" or int(S.get("weg", 0)) == 1:
+			return
+		for id in _dieren():
+			if World.dier(str(id)) == null:
 				ctx.sluit.call_deferred()      # an animal is gone
-			return
-		if not actief or S.is_empty() or _stap() != "som":
-			return
+				return
+		for i in _dieren().size():
+			_stuur(i)                          # one whose walk in ended is sent again
 	if not await na(SOM_S * 0.5):
 		return
 	if S.is_empty() or _stap() != "som" or int(S.get("weg", 0)) == 1:
@@ -294,8 +387,19 @@ func _naar_de_som() -> void:
 	_teken()
 	_houd_bij_het_hokje()
 
+## Does everybody on the photo sit inside the booth?
+func _allemaal_binnen() -> bool:
+	for id in _dieren():
+		if not _binnen.has(str(id)):
+			return false
+	return true
+
 ## The animals stay at the booth for the whole turn (a waiting guest starts to
-## wander after a while, world.md §2.6) — unless they were sent out.
+## wander after a while, world.md §2.6) — unless they were sent out.  One who
+## sits inside is left alone: hidden, he stands still in there.  One the game
+## still has inside whom something else showed again (a new day:
+## `World.zet_dag`) is walked back to his place and steps in again there,
+## unseen — the photo is never taken with him standing outside.
 func _houd_bij_het_hokje() -> void:
 	var tel := 0
 	while actief and not S.is_empty():
@@ -310,13 +414,18 @@ func _houd_bij_het_hokje() -> void:
 			var d = World.dier(id)
 			if d == null or d.kamer != KAMER or not (d.route as Array).is_empty():
 				continue
-			if d.staat in ["sip", "blij", "eet", "slaap", "pose"]:
+			if World.verstopt(id):
 				continue
 			var plek: Vector2 = PLEKKEN[i]
+			var thuis: bool = absf(d.x - plek.x) + absf(d.z - plek.y) <= 2.0
+			if _binnen.has(id) and thuis and (d.punten as Array).is_empty():
+				World.verstop(id, true)
+				continue
+			if d.staat in ["sip", "blij", "eet", "slaap", "pose"]:
+				continue
 			var doel := plek
 			if not (d.punten as Array).is_empty():
 				doel = d.punten[(d.punten as Array).size() - 1]
-			var thuis: bool = absf(d.x - plek.x) + absf(d.z - plek.y) <= 2.0
 			if doel.distance_to(plek) > 2.0 or (not thuis and d.staat != "loop") \
 					or (thuis and d.staat == "wacht" and tel % 8 == 0):
 				ctx.wereld.ga(id, plek.x, plek.y, "wacht")
@@ -325,7 +434,7 @@ func antwoord(n: int) -> void:
 	_antwoord(n, _kaart)
 
 ## One tap on an amount.  Wrong: out of the booth (see the header).  Right: the
-## coins drop in, a moment later the flash, and the photo.
+## coins drop in, the countdown, the flash, and the photo.
 func _antwoord(n: int, k) -> void:
 	if S.is_empty() or O.is_empty() or _stap() != "som" or int(S.get("weg", 0)) == 1:
 		return
@@ -340,34 +449,59 @@ func _antwoord(n: int, k) -> void:
 	_bewaar()
 	_klaar()
 
-## Paid: the flash, the photo, the star.  Then the game closes by itself.
+## Paid: the star, then the screen counts down 3, 2, 1 with a tick for every
+## digit, the shutter clicks and flashes, the photo develops, and the animals
+## come out of the booth, happy.  Then the game closes by itself.
 func _klaar() -> void:
 	ctx.state.tel(int(S["missers"]) == 0, Time.get_ticks_msec() - _t0)
 	if int(S["ster"]) == 0:
 		S["ster"] = 1
 		ctx.taak_klaar("foto", {"sterren": 1})
 	_bewaar()
-	if not await na(KLIK_S):
-		return
-	if S.is_empty() or _stap() != "af":
-		return
-	ctx.snd.klik()
+	for n in [3, 2, 1]:
+		var sch := _scherm()
+		if sch != null:
+			sch.tel(n)
+		ctx.snd.tik()
+		_meld()
+		if not await na(TEL_S):
+			return
+		if S.is_empty() or _stap() != "af":
+			return
 	_scherm_neer()
-	var s := Hits.spot(SCHERM_ID)
-	if s != null and is_instance_valid(s.knoop) and s.knoop is FotoScherm:
-		(s.knoop as FotoScherm).klik()
+	var scherm := _scherm()
+	if scherm != null:
+		scherm.tel(0)
+	ctx.snd.klik()
+	if scherm != null:
+		scherm.klik()
 	ctx.wereld.spetter(KAMER, HOKJE_X - 3.0, HOKJE_Z + 8.0, 10, Color("#FFF6D6"), true, 20.0)
 	ctx.snd.hoera()
 	_kaart_neer()
-	for id in _dieren():
-		if World.dier(str(id)) != null:
-			ctx.wereld.set_mood(str(id), "bouncy")
+	_teken()
+	if not await na(ONTWIKKEL_S):
+		return
+	if S.is_empty() or _stap() != "af":
+		return
+	ctx.snd.tover()
+	_kom_naar_buiten()
 	_teken()
 	if not await na(AF_S):
 		return
 	if S.is_empty() or _stap() != "af":
 		return
 	ctx.sluit()
+
+## Out of the booth with the photo: every animal on the street again, one
+## swish for the whole group, and they bounce for joy (`set_mood` sets the
+## cheer itself; a pose before it would be overwritten in the same call).
+func _kom_naar_buiten() -> void:
+	for id in _dieren():
+		if World.dier(str(id)) != null:
+			World.verstop(str(id), false)
+			ctx.wereld.set_mood(str(id), "bouncy")
+	_binnen.clear()
+	ctx.snd.zwiep()
 
 ## A wrong amount: out of the booth, slowly (see the header).  The step stays
 ## where it was, so the same question waits when they come back.
@@ -382,6 +516,14 @@ func _weggestuurd() -> void:
 		_kaart.weg()
 		_kaart = null
 	_kaart_sleutel = ""
+	# out of the booth first: the screen lets them go, and they stand on the
+	# street again before they sulk and walk away
+	var sch := _scherm()
+	if sch != null:
+		sch.vertrek()
+	for id in _dieren():
+		World.verstop(str(id), false)
+	_binnen.clear()
 	var dieren := _dieren().duplicate()
 	if dieren.is_empty() or World.dier(str(dieren[0])) == null:
 		ctx.sluit.call_deferred()
@@ -510,51 +652,92 @@ func _teken() -> void:
 	if not actief or ctx == null or S.is_empty() or O.is_empty():
 		return
 	if _stap() == "af":
+		# the 😍 hangs on the first animal once he is out of the booth again
 		var dieren := _dieren()
-		if not dieren.is_empty() and World.dier(str(dieren[0])) != null:
+		if not dieren.is_empty() and World.dier(str(dieren[0])) != null \
+				and not World.verstopt(str(dieren[0])):
 			ctx.ui.wolk({"id": BLIJ_ID, "kamer": KAMER, "volg": _volg_dier(str(dieren[0])),
 				"hoog": 46.0, "icoon": "😍", "tekst": Beurt.T_BLIJ, "klas": "goed", "prio": 12})
 	ctx.wereld.vuil()
 	_meld()
 
-## What the screen shows now.
-func scherm_params() -> Dictionary:
-	var dieren: Array = []
-	for id in _dieren():
-		var g: Dictionary = ctx.state.gast_van(str(id))
-		dieren.append({"kind": str(g.get("kind", "hond")),
-			"acc": World.accessoires(str(id)) if World.dier(str(id)) != null else g.get("accessoires", [])})
-	return {"dieren": dieren, "prijs": _prijs(), "foto": _stap() == "af"}
-
 ## The booth's screen large and straight on (`FotoScherm`), from the first card
 ## until the game closes, in the free space above the animals at the booth or
-## below them — never over them: a wrong amount is only their sad faces.
+## below them — never over them: a wrong amount is only their sad faces.  It
+## gets the price here; the animals it gets one by one as they step in
+## (`_in_het_hokje`), the countdown and the shutter from `_klaar`.
 func _scherm_neer() -> void:
-	var p := scherm_params()
-	var s := Hits.spot(SCHERM_ID)
-	if s != null and is_instance_valid(s.knoop) and s.knoop is FotoScherm:
-		(s.knoop as FotoScherm).zet(p)
+	var sch := _scherm()
+	if sch != null:
+		sch.zet(_prijs())
 		return
 	var scherm := FotoScherm.new()
 	scherm.meet = _scherm_maat
-	scherm.zet(p)
+	scherm.zet(_prijs())
+	if not _binnen.is_empty():
+		scherm.dieren = _binnen.duplicate()
 	ctx.hotspots.maak({"id": SCHERM_ID, "kind": "eigen", "knoop": scherm, "kamer": KAMER,
 		"x": HOKJE_X, "z": HOKJE_Z, "y": 40.0, "op": "midden",
 		"geen_vlak": true, "vast": true, "prio": 20, "volg": _volg_scherm()})
 
+## The booth's screen while the game has it, or null.
+func _scherm() -> FotoScherm:
+	var s := Hits.spot(SCHERM_ID)
+	if s != null and is_instance_valid(s.knoop) and s.knoop is FotoScherm:
+		return s.knoop as FotoScherm
+	return null
+
 ## Every placement: the screen stands in the middle of its band, close to the
-## animals — just over their heads, or just under their feet.  `Hits` clamps
-## it into the frame after that.
+## animals — just over their heads, or just under their feet
+## (`_scherm_stand`).  `Hits` clamps it into the frame after that.
 func _volg_scherm() -> Callable:
 	return func() -> Dictionary:
-		var band := _scherm_band()
-		var vak: Rect2 = band["rect"]
-		var maat := _scherm_maat()
-		if vak.size.x <= 0.0 or maat.y <= 0.0:
+		var st := _scherm_stand()
+		if (st["rect"] as Rect2).size.x <= 0.0 or (st["maat"] as Vector2).y <= 0.0:
 			return {}
-		var y: float = (vak.end.y - maat.y * 0.5) if bool(band["boven"]) \
-			else (vak.position.y + maat.y * 0.5)
-		return _punt_op(Vector2(vak.get_center().x, y))
+		return _punt_op(st["midden"])
+
+## The size `Hits` puts the screen down at (`FotoScherm.meet`).
+func _scherm_maat() -> Vector2:
+	return _scherm_stand()["maat"]
+
+## Where the screen goes and how large it is: `{rect, boven, maat, midden}` —
+## its band (`_scherm_band`), on which side of the animals that is, its size,
+## and the frame point its middle goes on.  As large as the band allows: at
+## most `SCHERM_MAX` wide, never narrower than `SCHERM_MIN` (its price tags
+## stay readable) unless the band itself is, and NEVER HIGHER than the band:
+## on a phone on its side (740x360) the band above the animals is 115 high,
+## lower than the smallest screen at its own shape (136), so the screen's
+## picture gets wider for its height instead (`FotoScherm._indeling`).  While
+## the money question is on screen this is written down, and from then on the
+## size, the side and the place hold (`_vast`) — the place as long as it still
+## lies in the band.
+func _scherm_stand() -> Dictionary:
+	var kader := World.kader_rect().size
+	var vraag := _stap() == "som" and int(S.get("weg", 0)) == 0 and _kaart != null
+	var vast := not vraag and not _vast.is_empty() \
+		and (_vast["kader"] as Vector2).is_equal_approx(kader)
+	var band := _scherm_band(_vast["boven"] if vast else null)
+	var vak: Rect2 = band["rect"]
+	var boven := bool(band["boven"])
+	var maat: Vector2
+	if vast:
+		var m: Vector2 = _vast["maat"]
+		maat = Vector2(minf(m.x, vak.size.x), minf(m.y, vak.size.y))
+	else:
+		var breed := minf(vak.size.x * 0.92, vak.size.y * 0.96 / FotoScherm.maat_bij(1.0).y)
+		breed = minf(clampf(breed, SCHERM_MIN, SCHERM_MAX), vak.size.x)
+		maat = FotoScherm.maat_bij(floorf(breed))
+		maat.y = minf(maat.y, floorf(vak.size.y))
+	var midden := Vector2(vak.get_center().x,
+		(vak.end.y - maat.y * 0.5) if boven else (vak.position.y + maat.y * 0.5))
+	if vast:
+		var was: Vector2 = _vast["midden"]
+		if vak.grow(0.5).encloses(Rect2(was - maat * 0.5, maat)):
+			midden = was
+	elif vraag:
+		_vast = {"kader": kader, "maat": maat, "boven": boven, "midden": midden}
+	return {"rect": vak, "boven": boven, "maat": maat, "midden": midden}
 
 ## The world point (in this room, at some height) that `World.mik_punt` puts
 ## on the screen point `doel` — the projection is affine, so three probes give
@@ -581,10 +764,11 @@ func _scherm_vrij() -> Rect2:
 		Vector2(maxf(0.0, kader.x - 2.0 * float(Hits.RAND)), maxf(0.0, onder - boven)))
 
 ## The band the screen goes in: the larger of the free space above the animals
-## at the booth and the free space below them.  On a tablet that is above them
-## (over the back wall); on a phone held upright, where the room is a strip
-## across the middle, below them.  `{rect, boven}`.
-func _scherm_band() -> Dictionary:
+## at the booth and the free space below them — or the side `kant` (true:
+## above) when that is fixed (`_vast`).  On a tablet that is above them (over
+## the back wall); on a phone held upright, where the room is a strip across
+## the middle, below them.  `{rect, boven}`.
+func _scherm_band(kant: Variant = null) -> Dictionary:
 	var vrij := _scherm_vrij()
 	var groep := _groep_rect()
 	if groep.size.x <= 0.0:
@@ -595,9 +779,8 @@ func _scherm_band() -> Dictionary:
 	var onder_y := groep.end.y + gat
 	var onder := Rect2(Vector2(vrij.position.x, onder_y),
 		Vector2(vrij.size.x, maxf(0.0, vrij.end.y - onder_y)))
-	if onder.size.y > boven.size.y:
-		return {"rect": onder, "boven": false}
-	return {"rect": boven, "boven": true}
+	var kies_boven: bool = bool(kant) if kant != null else onder.size.y <= boven.size.y
+	return {"rect": boven if kies_boven else onder, "boven": kies_boven}
 
 ## Where the animals at the booth are on the screen: all four places, whoever
 ## is chosen yet, so the screen does not move while the photo fills up.  An
@@ -616,15 +799,6 @@ func _groep_rect() -> Rect2:
 				r = r.expand(q)
 	return r
 
-## As large as its band allows, at most as wide as the frame.
-func _scherm_maat() -> Vector2:
-	var vak: Rect2 = _scherm_band()["rect"]
-	var n := maxi(2, _dieren().size())
-	var een := FotoScherm.maat_bij(100.0, n)
-	var breed := minf(vak.size.x * 0.92, vak.size.y * 0.96 * 100.0 / een.y)
-	breed = clampf(breed, SCHERM_MIN, SCHERM_MAX)
-	return FotoScherm.maat_bij(floorf(breed), n)
-
 func _volg_dier(id: String) -> Callable:
 	return func() -> Dictionary:
 		var d = World.dier(id)
@@ -641,6 +815,17 @@ func stand() -> Dictionary:
 func opzet() -> Dictionary:
 	return O.duplicate(true)
 
+## The `[probe] foto …` line `_meld` prints (and the tests read): the turn, who
+## sits inside the booth (`binnen`), the digit of the countdown on the screen
+## (`tel`, 0 = none) and whether the photo is taken (`foto`).
+func probe_regel() -> String:
+	var sch := _scherm()
+	return "[probe] foto stap=%s band=%d prijs=%d dieren=%s goed=%d weg=%d missers=%d ster=%d binnen=%s tel=%d foto=%d" % [
+		_stap(), int(S.get("band", 0)), _prijs(), ",".join(PackedStringArray(_dieren())), _goed(),
+		int(S.get("weg", 0)), int(S.get("missers", 0)), int(S.get("ster", 0)),
+		",".join(PackedStringArray(_binnen)), sch.tel_getal if sch != null else 0,
+		1 if sch != null and sch.foto else 0]
+
 ## Machine-readable lines for `tools/kiek.js` / `speel.js`, web export only.
 func _meld() -> void:
 	if not OS.has_feature("web"):
@@ -649,9 +834,7 @@ func _meld() -> void:
 	await get_tree().process_frame
 	if not actief or S.is_empty() or O.is_empty():
 		return
-	print("[probe] foto stap=", _stap(), " band=", int(S["band"]), " prijs=", _prijs(),
-		" dieren=", ",".join(PackedStringArray(_dieren())), " goed=", _goed(),
-		" weg=", int(S.get("weg", 0)), " missers=", int(S["missers"]), " ster=", int(S["ster"]))
+	print(probe_regel())
 	for id in Hits.debug().keys():
 		if not str(id).begins_with("ft_"):
 			continue

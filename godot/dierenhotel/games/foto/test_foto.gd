@@ -18,6 +18,9 @@ const Spel := preload("res://games/foto/spel.gd")
 
 const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024), Vector2i(360, 740),
 	Vector2i(740, 360)]
+## On top of every wait for the game's own clock: a slow runner (CI) may hand
+## the game its frames late, and the test must not overtake it.
+const MARGE := 0.5
 
 var _laag: Control = null
 var _bewaard: Dictionary = {}
@@ -151,7 +154,7 @@ func _kies_er(aantal: int) -> Array[String]:
 		_druk("Kd_" + vrij[0])
 	if _strook().has("Kklaar"):
 		_druk("Kklaar")
-	await _wacht(Spel.SOM_S + 0.3)
+	await _wacht(Spel.SOM_S + MARGE)
 	return gekozen
 
 func _foute_keuze(goed: int) -> String:
@@ -277,24 +280,30 @@ func test_een_beurt_per_band() -> void:
 		if aantal < mini(n, Beurt.MAX_DIEREN):
 			waar(_strook().has("Kklaar"), "band %d: vanaf twee dieren mag het: Klaar" % band)
 			_druk("Kklaar")
+		# on the screen only once they step into the booth
+		sch = _scherm()
+		if sch != null:
+			gelijk(sch.dieren.size(), 0, "band %d: nog niemand in het hokje" % band)
+		gelijk(str(_stand().get("dieren", [])), str(gekozen), "band %d: de keuze is bewaard" % band)
+		await _wacht(Spel.SOM_S + MARGE)
+		gelijk(str(_stand().get("stap", "")), "som", "band %d: nu het geld" % band)
 		sch = _scherm()
 		if sch != null:
 			gelijk(sch.dieren.size(), aantal, "band %d: %d dieren op het scherm" % [band, aantal])
 			gelijk(sch.vakken, aantal, "band %d: een vakje per dier" % band)
-		gelijk(str(_stand().get("dieren", [])), str(gekozen), "band %d: de keuze is bewaard" % band)
-		await _wacht(Spel.SOM_S + 0.3)
-		gelijk(str(_stand().get("stap", "")), "som", "band %d: nu het geld" % band)
 		for i in gekozen.size():
 			var dier = World.dier(gekozen[i])
 			var plek: Vector2 = Spel.PLEKKEN[i]
 			waar(dier != null and dier.kamer == KAMER and Vector2(dier.x, dier.z).distance_to(plek) <= 3.0,
 				"band %d: %s staat bij het hokje" % [band, gekozen[i]])
+			waar(World.verstopt(gekozen[i]), "band %d: %s zit in het hokje" % [band, gekozen[i]])
 		gelijk(_kaart_tekst("Kolom/Regel"), "💶 " + Beurt.T_SOM, "band %d: hoeveel geld erin moet" % band)
 		gelijk(_kaart_tekst("Kolom/Rij/Som"), Beurt.som(aantal, prijs, band), "band %d: de som" % band)
 		var goed := aantal * prijs
 		gelijk(_strook().size(), 4, "band %d: vier bedragen" % band)
 		waar(_strook().has("Kn%d" % goed), "band %d: het goede bedrag staat erbij (%s)" % [band, str(_strook())])
-		# the flash comes KLIK_S later, so listen to the band itself until then
+		# the shutter comes after the countdown (3 × TEL_S), so listen to the
+		# band itself until then
 		var gehoord: Array[String] = []
 		var hoor := func(naam: String) -> void: gehoord.append(naam)
 		var was := [Snd._wakker, Snd._uit]
@@ -304,7 +313,7 @@ func test_een_beurt_per_band() -> void:
 		_druk("Kn%d" % goed)
 		gelijk(str(_stand().get("stap", "")), "af", "band %d: betaald" % band)
 		gelijk(int(State.s["sterren"]), sterren + 1, "band %d: één ster voor het meedoen" % band)
-		await _wacht(Spel.KLIK_S + 0.2)
+		await _wacht(3.0 * Spel.TEL_S + MARGE)
 		Snd.gespeeld.disconnect(hoor)
 		Snd._wakker = bool(was[0])
 		Snd._uit = bool(was[1])
@@ -343,16 +352,27 @@ func test_verkeerd_geld_stuurt_ze_weg() -> void:
 	waar(Games.start(SPEL), "het hokje start")
 	var gekozen := await _kies_er(3)
 	gelijk(str(_stand().get("stap", "")), "som", "nu het geld")
+	for id in gekozen:
+		waar(World.verstopt(id), "%s zit in het hokje" % id)
 	var voor := _strook()
 	var goed := 3 * Beurt.prijs(4, 4, 2)
 	var fout_k := _foute_keuze(goed)
 	waar(not fout_k.is_empty(), "er staat een verkeerd bedrag op de strook")
-	var was_wakker: bool = Snd._wakker
-	Snd._wakker = true
-	var gehoord_voor := Snd.gehoord().size()
+	# straight from the signal: `Snd.gehoord()` keeps only the last 32 sounds,
+	# and in the whole suite it is full long before this
+	var nu_gehoord: Array[String] = []
+	var was := _luister_aan(nu_gehoord)
 	_druk(fout_k)
-	var nu_gehoord := Snd.gehoord().slice(gehoord_voor)
-	Snd._wakker = was_wakker
+	_luister_uit(was)
+	# out of the booth first, before they sulk and walk away
+	for i in gekozen.size():
+		var d = World.dier(gekozen[i])
+		waar(not World.verstopt(gekozen[i]), "%s komt eerst het hokje uit" % gekozen[i])
+		waar(World.dieren(KAMER).has(d), "%s staat weer in de winkelstraat" % gekozen[i])
+		waar(d != null and Vector2(d.x, d.z).distance_to(Spel.PLEKKEN[i]) <= 3.0,
+			"%s staat nog voor het hokje" % gekozen[i])
+	var sch := _scherm()
+	waar(sch != null and sch.dieren.is_empty(), "het scherm laat ze gaan")
 	var eigen := "%s_sip" % Snd.soort_van(gekozen[0])
 	waar(nu_gehoord.has(eigen), "het eerste dier zegt het met zijn eigen sip geluidje (%s)" % str(nu_gehoord))
 	waar(_knoop(KAART) == null and _knoop(STROOK) == null, "de kaart en de strook zijn meteen weg")
@@ -377,7 +397,7 @@ func test_verkeerd_geld_stuurt_ze_weg() -> void:
 	Games.hersteek()
 	waar(Hits.spot("spel_foto") != null, "de knop van het fotohokje is er weer")
 	waar(Games.start(SPEL), "terug naar het hokje")
-	await _wacht(Spel.SOM_S + 0.3)
+	await _wacht(Spel.SOM_S + MARGE)
 	gelijk(int(_stand().get("weg", 1)), 0, "ze zijn er weer")
 	gelijk(str(_stand().get("dieren", [])), str(gekozen), "dezelfde dieren")
 	gelijk(str(_stand().get("stap", "")), "som", "dezelfde vraag")
@@ -385,6 +405,7 @@ func test_verkeerd_geld_stuurt_ze_weg() -> void:
 	for i in gekozen.size():
 		var d = World.dier(gekozen[i])
 		waar(d != null and Vector2(d.x, d.z).distance_to(Spel.PLEKKEN[i]) <= 3.0, "%s staat weer bij het hokje" % gekozen[i])
+		waar(World.verstopt(gekozen[i]), "%s zit weer in het hokje" % gekozen[i])
 	_druk("Kn%d" % goed)
 	gelijk(str(_stand().get("stap", "")), "af", "nu goed betaald")
 	gelijk(int(State.s["sterren"]), sterren + 1, "de ster komt voor het meedoen")
@@ -403,8 +424,9 @@ func test_herladen_hervat_de_beurt() -> void:
 	waar(Games.start(SPEL), "opnieuw gestart")
 	gelijk(str(_stand().get("stap", "")), "kies", "verder met kiezen")
 	waar(not _dieren_op_de_strook().has(eerste), "wie al gekozen was, staat niet meer op de strook")
+	await _wacht(Spel.STAP_IN_S + MARGE)
 	var sch := _scherm()
-	waar(sch != null and sch.dieren.size() == 1, "en staat al op het scherm")
+	waar(sch != null and sch.dieren.size() == 1, "en staat weer op het scherm, in het hokje")
 	var st: Dictionary = State.spel_data(SPEL)["stand"]
 	st["missers"] = 0.0
 	st["N"] = 4.0
@@ -424,8 +446,214 @@ func test_te_weinig_gasten() -> void:
 	_wereld(2, 0, 2, 1)
 	waar(Games.start(SPEL), "het spel start")
 	waar(_knoop(LEEG) != null, "het wolkje zegt dat er te weinig gasten zijn")
-	await _wacht(Spel.LEEG_S + 0.3)
+	await _wacht(Spel.LEEG_S + MARGE)
 	gelijk(Games.actief(), "", "en het spel sluit zichzelf")
+	_af()
+
+# ---------------------------------------------------------- in het hokje
+
+## Listen to the band itself (the suite runs it asleep): every sound that
+## starts lands in `uit`, until `_luister_uit`.  The throttles of the world
+## sounds asked for here are cleared, so an earlier test cannot swallow them.
+func _luister_aan(uit: Array[String]) -> Dictionary:
+	var hoor := func(naam: String) -> void: uit.append(naam)
+	var was := {"wakker": Snd._wakker, "uit": Snd._uit, "hoor": hoor}
+	Snd._wakker = true
+	Snd._uit = false
+	for naam in ["zwiep", "klik"]:
+		Snd._laatst.erase(naam)
+	Snd.gespeeld.connect(hoor)
+	return was
+
+func _luister_uit(was: Dictionary) -> void:
+	Snd.gespeeld.disconnect(was["hoor"])
+	Snd._wakker = bool(was["wakker"])
+	Snd._uit = bool(was["uit"])
+
+## One `naam=waarde` field of a probe line ("" when it is empty or missing).
+func _probe_veld(regel: String, naam: String) -> String:
+	for deel in regel.split(" "):
+		if deel.begins_with(naam + "="):
+			return deel.trim_prefix(naam + "=")
+	return ""
+
+## Chosen, the animal walks to its place, looks at the booth and steps in
+## through the curtain with a swish: gone from the street — the arcade no
+## longer lists it, so nothing of it is drawn and no button steps aside for it
+## — and on the booth's screen.  The probe line says who is inside.
+func test_een_dier_stapt_het_hokje_in() -> void:
+	_op()
+	_wereld(4, 4)
+	waar(Games.start(SPEL), "het spel start")
+	var gehoord: Array[String] = []
+	var was := _luister_aan(gehoord)
+	var eerste := _dieren_op_de_strook()[0]
+	_druk("Kd_" + eerste)
+	var d = World.dier(eerste)
+	waar(d != null and d.kamer == KAMER and Vector2(d.x, d.z).distance_to(Spel.PLEKKEN[0]) <= 3.0,
+		"het dier staat bij het hokje")
+	waar(not World.verstopt(eerste), "eerst staat het nog voor het hokje")
+	var sch := _scherm()
+	waar(sch != null and sch.dieren.is_empty(), "en staat het nog niet op het scherm")
+	await _wacht(Spel.STAP_IN_S + MARGE)
+	_luister_uit(was)
+	waar(World.verstopt(eerste), "dan stapt het het hokje in")
+	waar(not World.dieren(KAMER).has(World.dier(eerste)), "de winkelstraat laat het niet meer zien")
+	waar(World.dier(eerste) != null and World.dier(eerste).kamer == KAMER, "maar het is er nog wel")
+	waar(gehoord.has("zwiep"), "met een zwiep door het gordijn (%s)" % str(gehoord))
+	sch = _scherm()
+	waar(sch != null and str(sch.dieren) == str([eerste]), "het scherm laat het binnen zien")
+	waar(sch != null and sch.binnen().has(eerste), "en het is helemaal binnen")
+	gelijk(str(_stand().get("stap", "")), "kies", "er wordt nog gekozen")
+	var spel := _spel()
+	var regel: String = spel.probe_regel() if spel != null else ""
+	waar(regel.begins_with("[probe] foto ") and regel.contains(" binnen=%s " % eerste)
+		and regel.contains(" tel=0") and regel.contains(" foto=0"), "de probe-regel: %s" % regel)
+	_af()
+
+## The right amount: the screen counts down 3, 2, 1 with a tick for every
+## digit and then the shutter clicks — in that order — and the photo is taken
+## while they are still inside; the photo develops, and they come out of the
+## booth, happy, with 😍.  Then the game closes by itself.
+func test_aftellen_klik_en_weer_naar_buiten() -> void:
+	_op()
+	_wereld(4, 4)
+	waar(Games.start(SPEL), "het spel start")
+	var gekozen := await _kies_er(2)
+	gelijk(str(_stand().get("stap", "")), "som", "nu het geld")
+	for id in gekozen:
+		waar(World.verstopt(id), "%s zit in het hokje" % id)
+	var goed := 2 * Beurt.prijs(4, 4, 2)
+	var gehoord: Array[String] = []
+	var was := _luister_aan(gehoord)
+	_druk("Kn%d" % goed)
+	var sch := _scherm()
+	gelijk(sch.tel_getal if sch != null else -1, 3, "meteen een 3 op het scherm")
+	var spel := _spel()
+	var regel: String = spel.probe_regel() if spel != null else ""
+	waar(regel.contains(" tel=3") and regel.contains(" foto=0"), "de probe-regel telt mee: %s" % regel)
+	# the shutter at 3 × TEL_S, out of the booth ONTWIKKEL_S later: in between,
+	# with MARGE on either side
+	await _wacht(3.0 * Spel.TEL_S + MARGE)
+	sch = _scherm()
+	waar(sch != null and sch.foto, "de foto is genomen")
+	gelijk(sch.tel_getal if sch != null else -1, 0, "na het aftellen staat er geen cijfer meer")
+	var na_munt := gehoord.slice(maxi(0, gehoord.find("munt")))
+	var tik_klik := na_munt.filter(func(naam: String) -> bool: return naam == "tik" or naam == "klik")
+	waar(gehoord.has("munt"), "het geld valt erin (%s)" % str(gehoord))
+	gelijk(str(tik_klik), str(["tik", "tik", "tik", "klik"]), "drie tikken, dan de sluiter (%s)" % str(gehoord))
+	for id in gekozen:
+		waar(World.verstopt(id), "%s zit nog in het hokje als de foto genomen wordt" % id)
+	regel = spel.probe_regel() if spel != null else ""
+	waar(regel.contains(" tel=0") and regel.contains(" foto=1"), "de probe-regel ziet de foto: %s" % regel)
+	var binnen := _probe_veld(regel, "binnen").split(",")
+	binnen.sort()
+	var verwacht := PackedStringArray(gekozen)
+	verwacht.sort()
+	gelijk(binnen, verwacht, "de probe-regel zegt wie er binnen zit: %s" % regel)
+	await _wacht(Spel.ONTWIKKEL_S + MARGE)
+	_luister_uit(was)
+	waar(gehoord.has("tover"), "de foto is klaar (%s)" % str(gehoord))
+	for id in gekozen:
+		var d = World.dier(id)
+		waar(not World.verstopt(id), "%s komt weer naar buiten" % id)
+		waar(World.dieren(KAMER).has(d), "%s staat weer in de winkelstraat" % id)
+		waar(d != null and (str(d.staat) == "blij" or str(d.pose) in ["blijA", "blijB"]),
+			"%s is blij (%s, %s)" % [id, str(d.staat) if d != null else "", str(d.pose) if d != null else ""])
+	waar(_knoop("ft_blij") != null, "met 😍 mooi!")
+	regel = spel.probe_regel() if spel != null and is_instance_valid(spel) else ""
+	gelijk(_probe_veld(regel, "binnen"), "", "buiten zit er niemand meer binnen: %s" % regel)
+	gelijk(Games.actief(), SPEL, "het spel loopt nog even")
+	await _wacht(Spel.AF_S + MARGE)
+	gelijk(Games.actief(), "", "en dan sluit het vanzelf")
+	_af()
+
+## Whatever stops the game, nobody stays inside the booth — and one who was
+## just about to step in does not step in after it.
+func test_stoppen_haalt_iedereen_uit_het_hokje() -> void:
+	_op()
+	_wereld(4, 4)
+	waar(Games.start(SPEL), "het spel start")
+	var gekozen := await _kies_er(3)
+	for id in gekozen:
+		waar(World.verstopt(id), "%s zit in het hokje" % id)
+	Games.stop()
+	for id in gekozen:
+		waar(not World.verstopt(id), "%s staat na het stoppen weer buiten" % id)
+		waar(World.dieren(KAMER).has(World.dier(id)), "%s is weer te zien" % id)
+	State.s["dag"] = 3                 # a new photo
+	waar(Games.start(SPEL), "opnieuw")
+	var eerste := _dieren_op_de_strook()[0]
+	_druk("Kd_" + eerste)
+	Games.stop()
+	await _wacht(Spel.STAP_IN_S + MARGE)
+	waar(not World.verstopt(eerste), "wie bijna instapte, stapt na het stoppen niet meer in")
+	_af()
+
+## While the money question waits the animals sit inside.  One the hotel
+## shows again (a new day: `World.zet_dag`) steps back in where he stands,
+## unseen — the photo is never taken with him outside — and one who sits
+## inside is left alone, wherever he stands: nobody walks him anywhere.
+func test_wie_binnen_zit_blijft_binnen() -> void:
+	_op()
+	_wereld(4, 4)
+	waar(Games.start(SPEL), "het spel start")
+	var gekozen := await _kies_er(2)
+	gelijk(str(_stand().get("stap", "")), "som", "nu het geld")
+	for id in gekozen:
+		waar(World.verstopt(id), "%s zit in het hokje" % id)
+	# the first: shown by the hotel while he stands at his place
+	World.zet_dag(int(State.s["dag"]))
+	waar(not World.verstopt(gekozen[0]), "de nieuwe dag haalt iedereen tevoorschijn")
+	# the second: hidden again, but put somewhere else in the arcade
+	World.verstop(gekozen[1], true)
+	var plek: Vector2 = Spel.PLEKKEN[1]
+	var ergens := Vector2(plek.x - 20.0, plek.y + 30.0)
+	World.zet(gekozen[1], KAMER, ergens.x, ergens.y)
+	waar(World.verstopt(gekozen[1]), "verzet in dezelfde kamer: nog verstopt")
+	await _wacht(2.0 * Spel.BLIJF_S + MARGE)
+	gelijk(Games.actief(), SPEL, "het spel loopt nog")
+	waar(World.verstopt(gekozen[0]), "%s stapt weer in, zonder dat iemand het ziet" % gekozen[0])
+	var d = World.dier(gekozen[0])
+	waar(d != null and Vector2(d.x, d.z).distance_to(Spel.PLEKKEN[0]) <= 3.0, "%s op zijn plek voor het hokje" % gekozen[0])
+	var e = World.dier(gekozen[1])
+	waar(World.verstopt(gekozen[1]), "%s blijft verstopt" % gekozen[1])
+	waar(e != null and Vector2(e.x, e.z).distance_to(ergens) < 0.5,
+		"en niemand stuurt hem ergens heen (%s)" % (str(Vector2(e.x, e.z)) if e != null else "-"))
+	var sch := _scherm()
+	waar(sch != null and sch.dieren.size() == 2, "het scherm heeft ze nog allebei")
+	gelijk(_kaart_tekst("Kolom/Regel"), "💶 " + Beurt.T_SOM, "de vraag staat er nog")
+	_af()
+
+## A reload while the money is asked: everybody walks back, steps in again
+## and is on the screen again — and only then the same question comes back.
+func test_herladen_bij_het_geld_stapt_iedereen_weer_in() -> void:
+	_op()
+	_wereld(4, 4)
+	waar(Games.start(SPEL), "het spel start")
+	var gekozen := await _kies_er(3)
+	gelijk(str(_stand().get("stap", "")), "som", "bij het geld")
+	var voor := _strook()
+	Games.stop()
+	waar(Games.start(SPEL), "opnieuw gestart")
+	gelijk(str(_stand().get("stap", "")), "som", "nog steeds het geld")
+	waar(_knoop(KAART) == null, "de vraag wacht tot ze weer binnen zitten")
+	var sch := _scherm()
+	waar(sch != null and sch.dieren.is_empty(), "het scherm begint leeg")
+	await _wacht(Spel.SOM_S + MARGE)
+	for i in gekozen.size():
+		var d = World.dier(gekozen[i])
+		waar(World.verstopt(gekozen[i]), "%s zit weer in het hokje" % gekozen[i])
+		waar(d != null and Vector2(d.x, d.z).distance_to(Spel.PLEKKEN[i]) <= 3.0,
+			"%s op zijn plek voor het hokje" % gekozen[i])
+	sch = _scherm()
+	var op_scherm: Array = sch.dieren.duplicate() if sch != null else []
+	op_scherm.sort()
+	var verwacht: Array = gekozen.duplicate()
+	verwacht.sort()
+	gelijk(str(op_scherm), str(verwacht), "ze staan allemaal weer op het scherm")
+	gelijk(_kaart_tekst("Kolom/Regel"), "💶 " + Beurt.T_SOM, "de vraag staat er weer")
+	gelijk(str(_strook()), str(voor), "met dezelfde vier bedragen")
 	_af()
 
 # ------------------------------------------------------------- het hokje
@@ -491,10 +719,15 @@ func _voet_van(stuk: Dictionary) -> Rect2:
 
 # ------------------------------------------------------- op vier schermen
 
-## The real shell on the four screens, choosing and paying: every element of
-## the game is inside the frame and finds a real place, the big screen stands
-## clear of the card and its strip, and the animals at the booth are not
-## hidden behind it.
+## The real shell on the four screens, choosing, paying and paying wrong: every
+## element of the game is inside the frame and finds a real place; the big
+## screen lies inside the frame and above the maths bar, clear of the card and
+## its strip and of the places of the animals at the booth — also on a phone on
+## its side, where the band over them is lower than the smallest screen — with
+## price tags as large as on the smallest screen at least.  Once the money
+## question is up it keeps its size: a wrong amount lets the maths bar go and
+## the room grows, and the screen does not grow along (and the animals that
+## come out are never behind it).
 func test_op_vier_schermen() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	var scherm_terug = Ui.get("_scherm")
@@ -520,26 +753,27 @@ func test_op_vier_schermen() -> void:
 			await boom.process_frame
 		var kader: Control = shell.get_node("Scherm/Kolom/Middenrij/Kaderdoos/Kader")
 		_keur(kader.size, "%s kiezen" % str(maat))
+		_keur_scherm("%s kiezen" % str(maat))
 		var gekozen := await _kies_er(3)
 		for _f in 4:
 			await boom.process_frame
 		_keur(kader.size, "%s betalen" % str(maat))
 		gelijk(_strook().size(), 4, "%s: vier bedragen op de strook" % str(maat))
-		var dbg := Hits.debug()
-		waar(dbg.has(SCHERM), "%s: het scherm van het hokje staat er" % str(maat))
-		if dbg.has(SCHERM):
-			var b: Rect2 = dbg[SCHERM]["rect"]
-			for id in gekozen:
-				var dier := World.vlak_van_dier(id)
-				if dier.size.x > 0.0:
-					waar(not b.has_point(dier.get_center()),
-						"%s: %s staat niet achter het scherm (%s, %s)" % [str(maat), id, str(b), str(dier)])
-			for id in [KAART, STROOK]:
-				if dbg.has(id):
-					var andere: Rect2 = dbg[id]["rect"]
-					var snij := b.intersection(andere)
-					waar(snij.size.x <= 0.5 or snij.size.y <= 0.5,
-						"%s: het scherm ligt niet over %s (%s, %s)" % [str(maat), id, str(b), str(andere)])
+		var b := _keur_scherm("%s betalen" % str(maat))
+		# a wrong amount: the card goes, the maths bar lets go, they come out
+		_druk(_foute_keuze(3 * Beurt.prijs(4, 4, 2)))
+		for _f in 4:
+			await boom.process_frame
+		gelijk(Games.actief(), SPEL, "%s: ze moeten nog weglopen" % str(maat))
+		var na := _keur_scherm("%s fout" % str(maat))
+		waar(na.size.is_equal_approx(b.size),
+			"%s: het scherm houdt zijn maat (%s -> %s)" % [str(maat), str(b.size), str(na.size)])
+		for id in gekozen:
+			var dier := World.vlak_van_dier(id)
+			waar(dier.size.x > 0.0, "%s: %s staat weer in beeld" % [str(maat), id])
+			var snij := na.intersection(dier)
+			waar(snij.size.x <= 0.5 or snij.size.y <= 0.5,
+				"%s: %s staat niet achter het scherm (%s, %s)" % [str(maat), id, str(na), str(dier)])
 		Games.stop()
 		Ui.naamplaten_leeg()
 		Hits.wis_alles()
@@ -550,6 +784,46 @@ func test_op_vier_schermen() -> void:
 	Ui.set("_scherm", scherm_terug)
 	Ui.zet_rust_modus(rust_voor)
 	Games.hersteek()
+
+## The booth's screen on this frame: inside it and above the maths bar, clear
+## of the card and its strip and of the four places at the booth (an animal is
+## about 28 voxels long, 16 deep and 26 high), with price tags no smaller than
+## on the smallest screen.  Its rectangle.
+func _keur_scherm(wat: String) -> Rect2:
+	var dbg := Hits.debug()
+	waar(dbg.has(SCHERM), "%s: het scherm van het hokje staat er" % wat)
+	if not dbg.has(SCHERM):
+		return Rect2()
+	var b: Rect2 = dbg[SCHERM]["rect"]
+	var kader := World.kader_rect().size
+	waar(b.position.x >= -0.01 and b.position.y >= -0.01 and b.end.x <= kader.x + 0.01
+		and b.end.y <= kader.y + 0.01, "%s: het scherm in het kader (%s)" % [wat, str(b)])
+	if Ui.balk_aan():
+		waar(b.end.y <= Ui.balk_rect().position.y + 0.5,
+			"%s: het scherm boven de rekenbalk (%s, %s)" % [wat, str(b), str(Ui.balk_rect())])
+	for id in [KAART, STROOK]:
+		if dbg.has(id):
+			var andere: Rect2 = dbg[id]["rect"]
+			var snij := b.intersection(andere)
+			waar(snij.size.x <= 0.5 or snij.size.y <= 0.5,
+				"%s: het scherm ligt niet over %s (%s, %s)" % [wat, id, str(b), str(andere)])
+	var plekken := Rect2()
+	var eerste := true
+	for p in Spel.PLEKKEN:
+		for hoek in [Vector3(-14, 0, -8), Vector3(14, 0, -8), Vector3(-14, 0, 8),
+				Vector3(14, 0, 8), Vector3(-14, 26, 0), Vector3(14, 26, 0)]:
+			var q: Vector2 = World.mik_punt(p.x + hoek.x, p.y + hoek.z, hoek.y)
+			plekken = Rect2(q, Vector2.ZERO) if eerste else plekken.expand(q)
+			eerste = false
+	var over := b.intersection(plekken)
+	waar(over.size.x <= 0.5 or over.size.y <= 0.5,
+		"%s: het scherm ligt niet over de plekken van de dieren (%s, %s)" % [wat, str(b), str(plekken)])
+	var sch := _scherm()
+	var kaartje: Rect2 = sch.prijs_rect(0) if sch != null else Rect2()
+	if kaartje.size.x > 0.0:
+		waar(kaartje.size.y >= FotoScherm.LABEL * Spel.SCHERM_MIN - 0.01,
+			"%s: de prijskaartjes blijven leesbaar (%.1f hoog)" % [wat, kaartje.size.y])
+	return b
 
 ## Every spot of the game: inside the frame, never `krap`, and a real tap target.
 func _keur(kader: Vector2, wat: String) -> void:

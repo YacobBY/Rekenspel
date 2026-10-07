@@ -287,3 +287,88 @@ main at e8c9bd2, working tree clean. Lead seat: Fable 5.1 (auto-invocation appli
 - 2026-09-11 G-meubels DONE_WITH_CONCERNS (worker-max, branch worktree-agent-adb3851bf90fd3684 @ aa69909): spel.gd (overview sheet, paying in the world with coins as drag source, placing on the voxel grid with the travelling box; Sommen.Meubels + buidel/splits; furniture via World API), modellen.gd, 20 tests; suite 227/0, export 0 ERROR, browser full turn bands 3/4/5 on iPad and phone (band 5 placed a bed, cap 7 → 8). Found and fixed itself: ↩ U+21A9 and ＋ U+FF0B are not in the font subset (tofu in the export; now « and +, with a glyph test); catalogue overflowed the sheet at 360 wide. Lead decision on the ticket/spec contradiction: the spec wins, the planbord solver is not surfaced in meubels (architecture §13 Q-X1-6); my ticket line was wrong. Deviations accepted: drag-to-door dropped; 🔄/📦 buttons on the world page because blad_open is modal; words beside pictograms; payment card left of the till on frames < 400 high. Gaps for I2: Rooms.meubel_zet returns id for a slot but meubel for decor; Ui.zet_scherm zero; font subset lacks U+21A9/U+FF0B (decide: add glyphs or document the allowed set); suite time 15 → 40 s with four shell viewports per game.
 - 2026-09-11 fonly mode (owner: "/fonly continue") after the Opus session limit killed nine agents (reviewers hinkel/zwembad/sleutels/meubels never started; workers was/bedden/voerkar/tobbe and the wekker fix stopped mid-work). The lead finished the run itself: audited the four uncommitted worktrees (was 226/0, bedden 225/0, voerkar 222/0, tobbe 223/2 = the hotel morgen cross-cut, no test file), committed them and the wekker gong fix (233/0), merged all ten game branches into main (a48f0cc), integrated: desk avoidance only for cards/clouds (sleutels hook row was torn by the V1-F1 desk reservation), foreign game icons hide on frames under 450 units while a game runs (meubels card vs sleutels icon), Proef.alleen_spellen()/herstel_spellen() so hotel and board tests describe the hotel they mean; I2 items closed: card width on phones (BREED_KLEIN → frame width − 24), hand badge "☝", Snd.klok(force) with the wekker workaround removed, Callable taak.prio, somkaart order + volg, Ui.vergeet_scherm, Hits geen_vlak, meubel_zet id, shell disconnects thema_veranderd on exit, ?opslag=<base64url JSON> probe hook (proven: seeded day-6 save offered as "verder"), tobbe headless suite (8 tests, lead), glyph test over every string literal (found ↩ and → in no bundled font → 🔄 and ▸; fonts rebuilt), runner DH_TEST_FILTER. Suite 386/0 (95 s), export 40.9 MB, shell probe 7/7 on ipad-land, ipad-port, android 1280×800, telefoon 360×740, 740×360 (with --knop bel); wekker driver bands 3/4/5 iPad + phone OK on the final export. Attempted and reverted: a two-column 80-unit rail for whole words on landscape phones (segfault in the kraam shell tests during fast shell create/free; the three-column rail stays and cuts long words mid-word on landscape phones). Known: headless shell at 296×314 segfaults (pre-existing, no such device); generic probe kaart step fails at 740×360 when it taps prikbord first (explicit --knop bel passes); suite time 95 s. Commits 60ff4ba, 4fb5b40, f53e97d, 9f79bff. Verification status: wave 1 blind-verified (V1 FAIL → V1-F1 fixed, re-verified by the lead's probes only); wave 2 reviewed by fanout-reviewer for kraam (LOOKS_GOOD) and wekker (FIX_FIRST → fixed); hinkel, zwembad, sleutels, meubels, was, bedden, voerkar, tobbe are self-reviewed by suite + drivers, NOT blind-verified. Worktrees removed. Pages: not pushed (gh not logged in; owner action).
 - 2026-09-11 RUN CLOSED at 9f79bff (see HANDOFF.md).
+
+# Fanout Ledger — Fotohokje: camera-view of the inside of the booth (2026-10-06)
+BASELINE: 8123d05 | untracked only: ANALYSIS.md MINIGAMES-RESEARCH.md tools/export.sh.bak | 2026-10-06
+Lead seat: Claude Fable 5.1 (Fable family → auto-invoked). Mode: Full (Agent tool + real shell). Crew pin: claude-opus-5-5 (7 agent files).
+Owner request (verbatim, Dutch): "Pull de laatste versie van de code. Ik vindt het fotohokje nog niet echt goed uitgewerkt de dieren staan allmeaal naast elkaar op de foto kan het echt in het hokje geanimeerd worden van een camera hokje PoV met alle dieren die erin zitten of iets dergelijks?"
+## Plan
+S1 | wave 0 | scout | games/foto flow, screen, maths, tests, spec quotes
+S2 | wave 0 | scout | Art.dier plates, poses, style switch, game-owned Controls, sounds, test helpers
+W1 | wave 1 | implement | games/foto/scherm.gd rewrite (camera viewfinder, crowd layout, idle/entry/exit animation, countdown, flash, developing polaroid) + new games/foto/test_foto_scherm.gd; main checkout
+W2 | wave 1 | implement | world side + flow: World.verstop (hide/show a guest), spel.gd step-in/come-out/countdown orchestration/reload/stop, test_foto.gd + tests/test_world.gd; own worktree, delivers a patch (scherm.gd excluded)
+I1 | wave 2 | integrate | lead merges W2's patch onto main after W1; full suite; reviewer + verifier on the merged tree
+## Routing
+S1, S2 → fanout-scout (xhigh): read-only reconnaissance, one per subsystem.
+W1 → fanout-worker-max: drawing/layout/animation of a crowd of plates inside a Control with four states and reduced-motion/headless branches — subtle visual work.
+W2 → fanout-worker-max: cross-module (autoload/world.gd + spel.gd lifecycle: arrival, reload, stop, supersede, evening round) with a contract to code against before W1 lands.
+Decomposition note: the screen contract (tel/klik/vertrek/tik/binnen) is fixed by the lead in both tickets so the two write sets stay disjoint; W2 may stub the contract in its worktree only.
+## Interview
+No questions asked: AGENTS.md "Deciding for yourself" rule (owner often away; pick the recommended option and record it). Assumptions recorded under Decisions once the design is fixed.
+## Tasks
+S1 | ACCEPTED | read-only | agent a7475bac808e8a53f
+S2 | ACCEPTED | read-only | agent a930047afceedfaac
+W1 | VERIFIED (V1 PASS_WITH_NOTES) + B1 polish done | games/foto/scherm.gd, games/foto/test_foto_scherm.gd(+.uid) | (see Attempts)
+W2 | VERIFIED (V1 PASS_WITH_NOTES) | games/foto/spel.gd, games/foto/test_foto.gd, autoload/world.gd, scenes/dier.gd, tests/test_world.gd → patch .fanout/scratch/w2-foto-wereld.diff | (see Attempts)
+## Attempts
+S1 | 1 | fanout-scout | r1 | DONE | — | brief in session | 2026-10-06
+S2 | 1 | fanout-scout | r1 | DONE_WITH_CONCERNS (two inferences marked) | — | brief in session | 2026-10-06
+W1 | 1 | fanout-worker-max | r1 | REPORTED DONE_WITH_CONCERNS (5:3 picture, zet() accepts int or old dict, maat_bij(breed,_n), beeld_rect() added, headless instant only in-tree; first runs wrote to /tmp defaults) | foto 21/0, full 777/0 (733 s), export OK, 3 mutations red→green | tmp/speel/w1-2d, w1-4d, w1-tel1, w1-weg, w1-telefoon | 2026-10-07 01:05
+I1 | 1 | lead | — | W2 patch applied on main over W1's tree; DH_TEST_FILTER=foto 25/0 | tmp/log/i1-foto.log; full suite running → tmp/log/i1-suite.log (job b2e13mms7) | — | 2026-10-07 01:10
+R1 | 1 | fanout-reviewer | r1 | FIX_FIRST: (1 medium) 740×360 phone: maat_bij(180) = 135.7 px tall vs 115 px band, spel.gd never caps height; (2-6 low) klik() during walk-out wiped by _vertrek/g.weg; vertrek() after klik() no slide (_stand returns frozen spot); redraw every frame; waiting animal keeps old row in `van`; tel(0) leaves _juich on; (7) one test reads privates, facing/back-row/no-tags untested; (8) PLEKKEN[1] unused, old dict zet()/{kind,acc} callers gone | — | 2026-10-07 01:18
+R2 | 1 | fanout-reviewer | r1 | LOOKS_GOOD, lows: morgen/evening reis can show a guest while the game still has him inside (re-hide in _houd_bij_het_hokje); room-change clear is lazy (next tick); blijA overwritten by mood bouncy; World.spetter vs ctx.wereld.spetter; _scherm_maat computes n that maat_bij ignores; no test for skipping hidden in _houd_bij or State.lees() clearing; countdown waits 0.2 s margin | — | 2026-10-07 01:19
+F1 | 1 | fanout-worker-max | r1 | REPORTED DONE_WITH_CONCERNS: all 13 applied (height cap via _scherm_stand + wider picture before shrinking; klik clears walk-out; _stand checks weg before foto; redraw only if beweegt(); van row update; _juich = n==1; getters stand_van/teken_volgorde, prijs_rect empty on photo; zet(int) only; re-hide in _houd_bij; _verstop_kamer at 5 room writes; MARGE 0.5; _vast freezes size/side/place from the money card) | foto 32/0, test_world 39/0, full 790/0 (758 s), 3 expected errors; 13 mutation logs red | tmp/speel/f1-ipad, f1-tel-b, tmp/kiek/f1-tel | 2026-10-07 02:17
+V1 | 2 | fanout-verifier | r1 | PASS_WITH_NOTES: A–G all PASS (suite 790/0 758 s, 3 expected errors; export played iPad/740×360/360×740, 2 and 4 animals, right and wrong amount; probe lines binnen=/tel=/foto= confirm step-in, countdown, polaroid, come-out; same question after a miss). Notes: countdown badge covers the middle back-row animal (fully on 740×360); name plate floats when an animal walks behind the screen (pre-existing placement) and after a miss on 360×740; re-entry order differs after a miss (harmless); flash/"1" not caught on a screenshot; pre-existing rekenbalk.gd UID warning | tmp/log/v1-suite.log, tmp/speel/v1-* | 2026-10-07 02:47
+D1 | 2 | fanout-worker-high | r1 | DONE_WITH_CONCERNS: PLAN.md bullet at line 1582 (25 lines), games-d.md §5a rewritten (+57/−13); notes: code comments date the quote 2026-10-06, test_foto_scherm has 17 tests, old "groen gordijn" wording left in the hokje paragraph | — | PLAN.md, .fanout/specs/godot/games-d.md | 2026-10-07 02:29
+B1 | 3 | fanout-worker-high | r1 | DONE_WITH_CONCERNS: badge top-right, radius 0.15 + inset 0.02 (0.17 still touched the puppy by 2.56 px on the 180-wide screen), badge_rect() getter, top-right bracket hidden while a digit shows, pixel-level test test_aftellen_in_de_hoek; pop-in 1.3× briefly pokes onto the frame | foto 33/0, full 791/0 (760 s, 3 expected errors), export OK after the suite | tmp/speel/b1-ipad, b1-tel; lead looked at both | 2026-10-07 03:12
+RUN CLOSED 2026-10-07 03:15 — final tree uncommitted on main (owner did not ask for a commit): autoload/world.gd, games/foto/{scherm,spel,test_foto}.gd, games/foto/test_foto_scherm.gd(+uid) new, tests/test_world.gd, PLAN.md, .fanout/specs/godot/games-d.md, .fanout/ledger.md. Last full suite 791/0 on this exact tree (B1), export current. Crew tokens ≈ 2.3 M vs lead far below — ratio target met.
+I1 | 1 | lead | — | full suite on merged tree: 783 goed, 0 fout, 750 s, exit 0, 3 expected engine errors only | tmp/log/i1-suite.log | — | 2026-10-07 01:21
+W2 | 1 | fanout-worker-max | r1 | REPORTED DONE_WITH_CONCERNS (verstop via World.dieren(kamer) exclusion, kamer.gd frees the node; auto-clear on reis/room change/weg/zet_dag/State.veranderd; AF_S 3.5; ending 6.3 s vs 5.7 s; spec games-d §5a not updated) | worktree: foto 14/0, test_world 39/0, full 772/0 exit 0 | .fanout/scratch/w2-foto-wereld.diff (1019 lines, 4 files, git apply --check OK on main) | 2026-10-07 00:45
+## Decisions
+- Design chosen by the lead (owner away; AGENTS.md "decide and continue"): the screen becomes the booth camera's viewfinder (booth interior, curtain left, bench, corner brackets); animals enter one by one through the curtain, crowd in two rows (front large, back higher/smaller, noses toward the centre), idle-animate (bob, blink, wag); price tag per animal under its spot stays (owner's binding wish); after the right amount a 3-2-1 countdown with a big digit, cheer on 1, flash, the polaroid develops. World side: an arrived animal steps into the curtain (hidden, `zwiep`), comes out again after the photo or when sent away or on stop. Alternatives not taken: keep animals visible in front of the booth (inconsistent with "erin zitten"); a straight-on front view (no such pose exists, would need new art).
+- Fix wave F1 = ONE ticket for both findings lists (rule says one per workstream; here both workstreams are merged on one tree, R1's medium finding lives in W2's spel.gd, and two concurrent suite runs in one checkout are unsafe). Seat: fanout-worker-max (layout maths + state machine + lifecycle).
+- R1 decisions: accept the in-tree-only headless rule (Hits.maak adds the screen to the tree at once); DROP the old dictionary form of zet()/{kind,acc} entries (no caller left).
+- No new sounds (a 14th world sound breaks test_snd_wereld's count); countdown uses `tik`, shutter `klik`, curtain `zwiep`, develop `tover`.
+- Export rebuilt before any edit (tmp/log/export-before.log, 0 errors) to screenshot the current booth: tmp/kiek/voor, tmp/speel/voor1, tmp/speel/voor2.
+## Scratch
+tmp/kiek/voor/ tmp/speel/voor1/ tmp/speel/voor2/ tmp/log/
+
+# Fanout Ledger — Uitbreiding: vier kamers, twee dieren, accessoires, kamerdecoratie (2026-10-07, 20-minute window, then pause)
+BASELINE: 8123d05 (worktrees branch from HEAD; the uncommitted fotohokje work stays in the main checkout) | 2026-10-07 03:20
+Owner request (verbatim): "Verzin nog vier kamers met activiteiten en maak nog twee extra dieren. En nog extra accessoires om te kopen bij de kraapjes voor decoratie. En eventueel ook accessoires om in de kamers te zetten of de kamers te decoreren. Gebruik 7 Fable agents voor dit werk. gedurende de komende 20 minuten en pauzeer het daarna"
+## Plan
+U1 | wave 1 | design+implement | room `bakkerij` (etage 1) + game `koekjes` | own worktree
+U2 | wave 1 | design+implement | room `muziekkamer` (etage 3) + game `band` | own worktree
+U3 | wave 1 | design+implement | room `dakterras` (etage 4, top, outdoor) + game `sterren` | own worktree
+U4 | wave 1 | design+implement | room `postkamer` (etage 0) + game `post` | own worktree
+U5 | wave 1 | design+implement | two new guest kinds `vos` and `varken` (art/gasten.gd builders, icons, names, sounds, State) | own worktree
+U6 | wave 1 | design+implement | new wardrobe pieces for the stalls (hoeden/sjaals/schoenen/souvenirs/luxe) | own worktree
+U7 | wave 1 | design+implement | buyable room decoration in the meubelboek + models + slots | own worktree
+## Routing
+All seven → fanout-worker with model override `fable` (OWNER'S EXPLICIT INSTRUCTION "Gebruik 7 Fable agents" overrides the skill's Opus pin for this run). Time box 20 min wall-clock, then TaskStop; each agent keeps a stand file `.fanout/scratch/uitbreiding/<id>.md` inside its worktree for resumption.
+## Interview
+None (20-minute box; AGENTS.md decide-and-continue). Assumptions: themes and floors chosen by the lead (above); new animals vos + varken (quadrupeds map onto the 15 poses); no full suite/export inside the window; nothing committed.
+## Tasks
+U1–U7 | DISPATCHED 03:21 | see Plan | agent ids in Attempts
+## Attempts
+U1 bakkerij    | 1 | fanout-worker@fable | r1 | dispatched 14:00 | agent a63294b4c22b7dae1 | worktree .claude/worktrees/agent-a63294b4c22b7dae1
+U2 muziekkamer | 1 | fanout-worker@fable | r1 | dispatched 14:00 | agent a7e4cfe3263b85c4d | worktree .claude/worktrees/agent-a7e4cfe3263b85c4d
+U3 dakterras   | 1 | fanout-worker@fable | r1 | dispatched 14:00 | agent a53cfc1f058f8dd49 | worktree .claude/worktrees/agent-a53cfc1f058f8dd49
+U4 postkamer   | 1 | fanout-worker@fable | r1 | dispatched 14:00 | agent a5ac5a2ee3fb5015d | worktree .claude/worktrees/agent-a5ac5a2ee3fb5015d
+U5 dieren      | 1 | fanout-worker@fable | r1 | dispatched 14:00 | agent af4a5a0c45a68e987 | worktree .claude/worktrees/agent-af4a5a0c45a68e987
+U6 accessoires | 1 | fanout-worker@fable | r1 | dispatched 14:00 | agent a6527f4b272e10744 | worktree .claude/worktrees/agent-a6527f4b272e10744
+U7 kamerdecor  | 1 | fanout-worker@fable | r1 | dispatched 14:00 | agent a93b409999b7d2289 | worktree .claude/worktrees/agent-a93b409999b7d2289
+PAUSED 14:22 on the owner's instruction ("4 minutes remaining then stop"). All seven reported DONE_WITH_CONCERNS inside the box, each with a stand file in its worktree (.fanout/scratch/uitbreiding/U<n>-*.md) and only filtered tests run:
+U1 bakkerij: room + decor_bakkerij + games/koekjes (stub) — koekjes 8/0, test_rooms 28/0
+U2 muziekkamer: room + decor_muziek + games/band (stub) — band 6/0, test_rooms 28/0; no music glyph in the fonts
+U3 dakterras: etage 4 + speelzaal trap.op + decor_dak + games/sterren (stub, SterrenKijker) — sterren 6/0, test_rooms 28/0, test_trap 10/0
+U4 postkamer: room (receptie 2nd door) + decor_post + games/post (stub) — post 9/0, test_rooms 28/0, test_plattegrond 2/2 RED (5 ground-floor cells)
+U5 dieren: vos + varken builders, icons, voices (aliases), pool Vlam/Knor, 14 new pixel goldens — test_art 23/0, test_pixelstijl 11/0; font not rebuilt (🦊🐷)
+U6 accessoires: 11 wardrobe pieces + stall catalogues + rotation — winkel 9/2 RED (waar_<nieuw> display models need art/decor_winkels.gd; one 360×740 strip width)
+U7 kamerdecoratie: decor_versiering (9 models) + 9 Rooms.MEUBEL entries + 🩷 Decoratie tab in the meubelboek — meubels 30/0, test_rooms 28/0, test_opslag 19/0
+Known merge work: five worktrees append to autoload/rooms.gd and tests/test_rooms.gd; U5 and U6 both edit art/gasten.gd (different regions); every room needs one line in art/decor.gd::_extra(); test_kamerbalk hard-codes 12 chips; test_plattegrond 4 ground-floor cells. Nothing merged, nothing committed, no full suite run.
+Owner's mid-run amendment (14:12): sub-agents allowed (Opus 5.5 xhigh and Fable) — not used: the running seats had no Agent tool and the stop came before a second wave.
+## Decisions
+- Worktrees branch from 8123d05, so the four room agents all add to autoload/rooms.gd independently; merge is the lead's job after the pause.
+## Scratch
+.claude/worktrees/agent-*/.fanout/scratch/uitbreiding/*.md

@@ -929,3 +929,182 @@ func test_lopen_gaat_om_het_bad_heen() -> void:
 	waar(water.has_point(Vector2(d.x, d.z)), "een zwemmer zwemt wel het water in")
 	World.weg("t_droog")
 	_na_afloop()
+
+# ---------------------------------------------------------------- verstoppen
+
+## `World.verstop` (the photo booth, owner 2026-10-06): a hidden guest stays a
+## guest where he is, but his room no longer lists him — so nothing draws him
+## and no button steps aside for him — and he waits there instead of
+## wandering off, without a sparkle.  He is seen again when he is shown, when
+## he sets off to another room or lands in one (at once: moved out and back
+## before the next think tick he is not hidden again), when he leaves the
+## hotel, at a new day and when a hotel is begun or read.  An unknown guest:
+## false.
+func test_verstoppen_en_weer_tevoorschijn() -> void:
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(false)
+	var dag_voor: int = World._zaad_dag
+	World.naar("receptie")
+	var d := World.zet(T, "receptie", 40.0, 40.0, {"kind": "hond", "naam": "Boef"})
+	waar(not World.verstopt(T), "eerst gewoon te zien")
+	waar(World.dieren("receptie").has(d), "in de lijst van de kamer")
+	gelijk(World.verstop("bestaat-niet", true), false, "een onbekend dier verstoppen: false")
+	gelijk(World.verstop("bestaat-niet", false), false, "een onbekend dier tevoorschijn halen: false")
+	waar(not World.verstopt("bestaat-niet"), "een onbekend dier is nooit verstopt")
+	# hidden halfway through a walk: he stops where he is and waits there
+	World.ga(T, 90.0, 80.0)
+	for _i in 4:
+		World._tik()
+	waar(not d.punten.is_empty(), "hij was onderweg")
+	waar(World.verstop(T, true), "verstoppen lukt")
+	waar(World.verstopt(T), "nu is hij verstopt")
+	waar(not World.dieren("receptie").has(d), "de kamer laat hem niet meer zien")
+	waar(World.dieren().has(d), "maar hij is nog een gast van het hotel")
+	waar(World.dier(T) == d, "en dier() vindt hem")
+	gelijk(d.kamer, "receptie", "in zijn eigen kamer")
+	waar(d.punten.is_empty() and d.staat == "wacht", "zijn wandeling is gestopt: hij wacht (%s)" % d.staat)
+	var plek := d.plek()
+	World.mood(T, "bouncy")
+	for _i in 600:
+		World._tik()
+	gelijk(d.plek(), plek, "verstopt zet hij in 40 s geen stap, ook niet blij")
+	waar(World.verstopt(T), "hij is nog steeds verstopt")
+	var deeltjes := World.deeltjes().size()
+	World._pluis(d, 3, ArtEffect.STER_KL[0], true)
+	gelijk(World.deeltjes().size(), deeltjes, "verstopt maakt hij geen sterretjes")
+	waar(World.verstop(T, false), "tevoorschijn halen lukt")
+	waar(not World.verstopt(T), "hij is weer te zien")
+	waar(World.dieren("receptie").has(d), "de kamer laat hem weer zien")
+	deeltjes = World.deeltjes().size()
+	World._pluis(d, 3, ArtEffect.STER_KL[0], true)
+	gelijk(World.deeltjes().size(), deeltjes + 3, "te zien wel")
+	var liep := false
+	for _i in 600:
+		World._tik()
+		if d.plek() != plek:
+			liep = true
+	waar(liep, "te zien gaat hij in die tijd wel wandelen")
+	# off to another room: at once out of hiding, seen walking to the door
+	World.zet(T, "receptie", 40.0, 40.0)
+	World.verstop(T, true)
+	waar(not World.reis(T, "tuin").is_empty(), "op reis naar de tuin")
+	waar(not World.verstopt(T), "op reis is hij meteen weer te zien")
+	waar(World.dieren("receptie").has(d), "lopend naar de deur")
+	var t := 0
+	while d.kamer != "tuin" and t < 900:
+		World._tik()
+		t += 1
+	gelijk(d.kamer, "tuin", "hij komt in de tuin aan")
+	World.zet(T, "receptie", 40.0, 40.0)
+	waar(not World.verstopt(T), "en terug in de receptie is hij niet weer verstopt")
+	# moved to another room some other way: out of hiding, also when he comes back
+	World.verstop(T, true)
+	World.zet(T, "tuin", 40.0, 40.0)
+	waar(not World.verstopt(T), "in een andere kamer is hij niet verstopt")
+	World._tik()
+	World.zet(T, "receptie", 40.0, 40.0)
+	waar(not World.verstopt(T), "en terug evenmin")
+	# ... also out and back before the next think tick: the moment his room
+	# was written he came out of hiding, so coming back does not hide him
+	World.verstop(T, true)
+	World.zet(T, "tuin", 40.0, 40.0)
+	World.zet(T, "receptie", 40.0, 40.0)
+	waar(not World.verstopt(T), "heen en terug binnen één tik: niet weer verstopt")
+	# a sleeper stays asleep, hidden or not
+	Rooms.herstel()
+	World.zet(T, "kamer1", 40.0, 40.0)
+	waar(World.slaap(T, "kamer1", "bed1"), "hij gaat slapen")
+	World.verstop(T, true)
+	waar(World.verstopt(T) and World.slaapt(T), "verstopt slaapt hij door")
+	World.verstop(T, false)
+	World.zet(T, "receptie", 40.0, 40.0)
+	# put to bed in another room at once (reduced motion) and straight back:
+	# the bed's room was written, so he is not hidden again either
+	Ui.zet_rust_modus(true)
+	World.verstop(T, true)
+	waar(World.slaap(T, "kamer1", "bed1"), "in één keer in bed in kamer1")
+	World.zet(T, "receptie", 40.0, 40.0)
+	waar(not World.verstopt(T), "via een bed in een andere kamer: niet weer verstopt")
+	Ui.zet_rust_modus(false)
+	# a new day, a new or read hotel, leaving the hotel: everybody out
+	World.verstop(T, true)
+	World.zet_dag(dag_voor + 1)
+	waar(not World.verstopt(T), "een nieuwe dag: weer te zien")
+	World.zet_dag(dag_voor)
+	World.verstop(T, true)
+	var bewaard: Dictionary = State.s.duplicate(true)
+	State.nieuw_spel()
+	waar(not World.verstopt(T), "een nieuw hotel: weer te zien")
+	State.s = bewaard
+	# a hotel read from the save (`State.lees`): the save this writes is the
+	# one it reads back, and it is gone again afterwards if it was not there
+	var gekozen_voor = State.get("_start_keuze")
+	var pad: String = State.pad_van(State.hotel)
+	var was_er := FileAccess.file_exists(pad)
+	State.start_gekozen()
+	World.verstop(T, true)
+	waar(World.verstopt(T), "weer verstopt")
+	waar(State.lees(), "het hotel is gelezen")
+	waar(not World.verstopt(T), "een gelezen hotel: weer te zien")
+	State.s = bewaard
+	State.set("_start_keuze", gekozen_voor)
+	if not was_er:
+		var dir := DirAccess.open("user://")
+		if dir != null:
+			dir.remove(pad.get_file())
+	World.verstop(T, true)
+	World.weg(T)
+	waar(not World.verstopt(T), "weg uit het hotel: niet meer verstopt")
+	World.zet(T, "receptie", 40.0, 40.0, {"kind": "hond"})
+	waar(not World.verstopt(T), "wie terugkomt, is gewoon te zien")
+	Ui.zet_rust_modus(rust_voor)
+	_na_afloop()
+
+## On the real shell a hidden guest is gone from the glass: no guest in the
+## room scene, no name plate, no box the hotspot layer steps aside for — and
+## all of it is back when he is shown again.
+func test_verstopt_staat_er_niets_van_hem_in_beeld() -> void:
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var boom := Engine.get_main_loop() as SceneTree
+	var vp := SubViewport.new()
+	vp.size = Vector2i(1024, 768)
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	boom.root.add_child(vp)
+	var shell := (load("res://scenes/main.tscn") as PackedScene).instantiate()
+	shell.set_meta("geen_start", true)     # never touch the save from a test
+	vp.add_child(shell)
+	for _f in 4:
+		await boom.process_frame
+	State.nieuw_spel()
+	Hotel.start()
+	World.naar("receptie")
+	World.zet(T, "receptie", 40.0, 70.0, {"kind": "hond", "naam": "Boef"})
+	for _f in 4:
+		await boom.process_frame
+	var kamer = World.get("_kamerscene")
+	waar(kamer != null and kamer.dier_beeld(T) != null, "de gast staat in de kamer")
+	waar(Ui.naamplaat_van(T) != null, "met zijn naamplaat")
+	var vakken: int = Hits._dieren_vak.size()
+	waar(vakken >= 1, "de knoppenlaag kent zijn vlak (%d)" % vakken)
+	waar(World.verstop(T, true), "verstopt")
+	for _f in 3:
+		await boom.process_frame
+	waar(kamer != null and kamer.dier_beeld(T) == null, "geen beeld meer van hem in de kamer")
+	waar(Ui.naamplaat_van(T) == null, "en geen naamplaat")
+	gelijk(Hits._dieren_vak.size(), vakken - 1, "de knoppenlaag houdt geen plaats voor hem vrij")
+	waar(World.verstop(T, false), "weer te zien")
+	for _f in 3:
+		await boom.process_frame
+	var beeld = kamer.dier_beeld(T) if kamer != null else null
+	waar(beeld != null and (beeld as CanvasItem).visible, "zijn beeld staat er weer")
+	waar(Ui.naamplaat_van(T) != null, "met zijn naamplaat")
+	gelijk(Hits._dieren_vak.size(), vakken, "en de knoppenlaag rekent weer met hem")
+	World.weg(T)
+	Ui.blad_dicht()
+	Ui.naamplaten_leeg()
+	Hits.wis_alles()
+	vp.queue_free()
+	await boom.process_frame
+	Ui.registreer_lagen(null, null, null)
+	State.s = bewaard
+	_na_afloop()

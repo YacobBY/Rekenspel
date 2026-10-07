@@ -183,6 +183,8 @@ func _ready() -> void:
 	_kamer_nu = "receptie" if Rooms.bestaat("receptie") else ""
 	_bouw_dingen()
 	_luister_naar_tabblad()
+	# a hotel begun or read: nobody is hidden in it (`verstop`)
+	State.veranderd.connect(_toon_alle)
 
 ## Hidden tab: the think tick stops completely and the clock restarts on
 ## return — it never catches up three heartbeats (world.md §6.6).
@@ -918,6 +920,7 @@ func zet(id: String, kamer: String, x: float = NAN, z: float = NAN,
 	_zaai(d)
 	if Rooms.bestaat(kamer):
 		d.kamer = kamer
+		_verstop_kamer(d)
 	if is_nan(x) or is_nan(z):
 		var r := Rooms.get_kamer(d.kamer)
 		if r != null and not r.plekken.is_empty():
@@ -968,6 +971,9 @@ func zet_dag(dag: int) -> void:
 	_rnd.seed = JsGetal.u32(dag * 2654435761)
 	for d in _dieren.values():
 		_zaai(d)
+	# a new day (and every start of the hotel, `Hotel.herstel_wereld`): whoever
+	# was hidden somewhere is out again (`verstop`)
+	_toon_alle()
 
 func _model_bij(d: Dier) -> void:
 	d.model = gast_model(d.kind)
@@ -977,11 +983,19 @@ func _model_bij(d: Dier) -> void:
 func dier(id: String) -> Dier:
 	return _dieren.get(id)
 
+## The guests in check-in order: every guest of the hotel, or the ones in room
+## `kamer`.  A guest hidden in that room (`verstop`: inside the photo booth) is
+## not in the room's list — the list the room scene draws its guests, their
+## shadows and name plates from, the overlay hangs a 💤 on and `Hits` keeps
+## its buttons clear of.  `dier(id)` and the list of the whole hotel still have
+## him.
 func dieren(kamer: String = "") -> Array:
 	var uit: Array = []
 	for id in _volgorde:
 		var d: Dier = _dieren[id]
 		if kamer == "" or d.kamer == kamer:
+			if kamer != "" and _verstopt.has(id) and verstopt(id):
+				continue
 			uit.append(d)
 	return uit
 
@@ -992,6 +1006,7 @@ func weg(id: String) -> void:
 	_breek(d, false)
 	_dieren.erase(id)
 	_volgorde.erase(id)
+	_verstopt.erase(id)       # gone from the hotel: out of hiding as well
 	vuil()
 
 ## Bring the world in line with the save: every guest in its own room, sleepers
@@ -1242,6 +1257,8 @@ func reis(id: String, kamer: String, o: Dictionary = {}) -> Array:
 	if route.size() < 2:
 		return []
 	_breek(d, false)
+	# off to another room: out of hiding at once, seen walking to the door
+	_verstopt.erase(id)
 	d.route = route.slice(1)
 	d.reis_doel = kamer
 	d.reis_deuren = d.route.size()
@@ -1310,6 +1327,7 @@ func slaap(id: String, kamer: String, slot: String) -> bool:
 		d.slaap_doel = slot
 		d.slaap_kamer = kamer
 		d.kamer = kamer
+		_verstop_kamer(d)
 		_in_bed(d)
 		vuil()
 		return true
@@ -1331,6 +1349,7 @@ func _in_bed(d: Dier) -> void:
 		return
 	var bed: Dictionary = r.slots[d.slaap_doel]
 	d.kamer = d.slaap_kamer
+	_verstop_kamer(d)
 	_zet_plek(d, Vector2(bed["x"], bed["z"]))
 	d.hoogte = MATRAS
 	d.lift = -MATRAS * Art.HG
@@ -1409,6 +1428,7 @@ func eet_bij(id: String, kamer_id: String, x: float, z: float, bak: Vector2) -> 
 	if rust():
 		_breek(d, false)
 		d.kamer = kamer_id
+		_verstop_kamer(d)
 		_zet_plek(d, Vector2(x, z))
 		d.hoogte = 0.0
 		d.lift = 0.0
@@ -1697,6 +1717,7 @@ func _tik() -> void:
 			_fijn_tik(d)
 	_bakjes_kauwen()
 	_deeltjes_tik()
+	_verstop_tik()
 
 ## world.md §2.9 — off screen: keep the route, one step per tick, straight to
 ## the target.  No poses, no particles, no drawing.
@@ -2350,6 +2371,7 @@ func _stap_door_deur(d: Dier) -> void:
 	var vorige := d.kamer
 	var naar: String = d.route.pop_front()
 	d.kamer = naar
+	_verstop_kamer(d)
 	d.reis_klaar += 1
 	if naar == d.reis_doel:
 		d.reis_doel = ""            # in view: the bubble may go
@@ -2468,6 +2490,8 @@ func _iso_afstand(a: Vector2, b: Vector2) -> float:
 func _pluis(d: Dier, n: int, kl: Color, omhoog: bool) -> void:
 	if rust():
 		return
+	if _verstopt.has(d.id) and verstopt(d.id):
+		return                # hidden (`verstop`): nothing of him is seen
 	var basis := Vector2((d.x - d.z) * Art.S, (d.x + d.z) * (Art.S / 2.0))
 	basis.y -= 14.0 if omhoog else 4.0
 	for q in ArtEffect.pluis(n, basis.x, basis.y, kl, omhoog, _rnd):
@@ -2489,3 +2513,82 @@ func spetter(kamer: String, x: float, z: float, n: int, kl: Color, omhoog := tru
 
 func _deeltjes_tik() -> void:
 	ArtEffect.pluis_stap(_deeltjes)
+
+# ------------------------------------------------------------ verstoppen
+##
+## A guest hidden INSIDE something (owner, 2026-10-06, the photo booth of the
+## arcade: "kan het echt in het hokje geanimeerd worden van een camera hokje
+## PoV met alle dieren die erin zitten").  He stays a guest where he was —
+## `dier(id)` finds him, his room, his place and his save do not change — but
+## the room does not show him: `dieren(kamer)` leaves him out, and that list is
+## what the room scene draws (the guest, his ground shadow, his name plate),
+## what the overlay hangs a 💤 on and what `Hits` keeps its buttons clear of,
+## so no button steps aside for him either.  His sparkles and crumbs stay away
+## too (`_pluis`).  He waits where he stood: the order he was on stops
+## (`blijf`), and his idle clock does not run out while he is hidden, so he
+## never wanders off unseen.  A sleeper keeps sleeping.
+##
+## He is seen again by himself when he leaves the room — `reis` (the moment he
+## sets off, so he is seen walking to the door) or any other change of room,
+## the moment his room is written (`_verstop_kamer`), so moved out and back
+## within one think tick he is not hidden again —
+## when he leaves the hotel (`weg`), at a new day and at every start of the
+## hotel (`zet_dag`, from `Hotel.morgen()` and `Hotel.herstel_wereld()`), and
+## when a hotel is begun or read (`State.veranderd`).  A game that hides
+## guests shows them again in its own `stop()`.
+
+var _verstopt: Dictionary = {}     ## guest id -> the room he is hidden in
+
+## Hide guest `id` in the room he is in (`ja`), or show him again.  False for
+## an unknown guest.
+func verstop(id: String, ja: bool) -> bool:
+	var d: Dier = _dieren.get(id)
+	if d == null:
+		_verstopt.erase(id)
+		return false
+	if not ja:
+		if _verstopt.has(id):
+			_verstopt.erase(id)
+			vuil()
+		return true
+	if not verstopt(id) and d.staat != "slaap":
+		blijf(id, "wacht")
+	_verstopt[id] = d.kamer
+	vuil()
+	return true
+
+## Is guest `id` hidden right now?  False for an unknown guest.
+func verstopt(id: String) -> bool:
+	var d: Dier = _dieren.get(id)
+	return d != null and _verstopt.has(id) and str(_verstopt[id]) == d.kamer
+
+## A guest's room was just written (`zet`, `slaap`, `_in_bed`, the bowl in
+## reduced motion, a step through a door): hidden in another room than this
+## one, he is out of hiding at once.
+func _verstop_kamer(d: Dier) -> void:
+	if _verstopt.has(d.id) and str(_verstopt[d.id]) != d.kamer:
+		_verstopt.erase(d.id)
+		vuil()
+
+## Everybody out of hiding.
+func _toon_alle() -> void:
+	if _verstopt.is_empty():
+		return
+	_verstopt.clear()
+	vuil()
+
+## Once per think tick, after the animals: the one still hidden keeps waiting
+## — his idle clock is held above zero, so `_kies` never sends him wandering.
+## A hidden guest who is gone, or whose room changed without going through
+## `_verstop_kamer`, is out of hiding for good here as well (a safety net:
+## every place in this file that writes a room clears it at once).
+func _verstop_tik() -> void:
+	if _verstopt.is_empty():
+		return
+	for id in _verstopt.keys():
+		var d: Dier = _dieren.get(id)
+		if d == null or d.kamer != str(_verstopt[id]):
+			_verstopt.erase(id)
+			vuil()
+			continue
+		d.tikken = maxi(d.tikken, 2)
