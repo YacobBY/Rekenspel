@@ -2,18 +2,22 @@ extends RefCounted
 class_name ArtDecorVersiering
 
 ## Koopbare kamerdecoratie 🩷 (eigenaar, 2026-10-07: "En eventueel ook accessoires
-## om in de kamers te zetten of de kamers te decoreren").  Negen kleine
-## vloerstukken die het meubelboek (`games/meubels`) verkoopt naast de zes
-## meubels uit `Sommen.Meubels.WINKEL`: een kussen, bloemen, een ballonslinger,
-## een vloerkleed, een lamp, een schilderij op een ezel, een nachtkastje, een
+## om in de kamers te zetten of de kamers te decoreren").  Negen kleine stukken
+## die het meubelboek (`games/meubels`) op zijn tab 🩷 Decoratie verkoopt naast de
+## zes meubels uit `Sommen.Meubels.WINKEL`: een kussen, bloemen, een
+## ballonslinger, een bankje, een lamp, een schilderij, een klokkastje, een
 ## speelkist en een aquarium.  Zelfde bouwstenen en palet als de rest van het
 ## hotel (art-sound-rules.md §8, docs/ART-STIJL.md).
 ##
+## Acht staan op de vloer, verankerd op (0, 0, 0), y omhoog.  Het SCHILDERIJ
+## hangt aan de muur: het is gebouwd zoals de wandstukken van
+## `ArtDecorSlaapkamer` — tegen de achterwand z = 0, z naar het kind toe — en
+## `Rooms.meubel_zet` hangt het met `ver` op `Rooms.WAND_Y`; aan de linkerwand
+## krijgt het `rot` 1 (een echte kwartslag, `World.plaat`).
+##
 ## De namen dragen het voorvoegsel `versier_`, zodat ze nooit botsen met een
-## ander wereldmodel.  Aangemeld bij `ArtDecor._extra()` (integratie I1a,
-## 2026-10-07): `Art` registreert ze bij het opstarten als beschermde
-## wereldmodellen, net als elk ander meubel; de luie aanmelding in
-## `Rooms.meubel_zet` is weg.
+## ander wereldmodel; `ArtDecor._extra()` meldt dit bestand aan als beschermd
+## wereldmodel, net als de andere themabestanden.
 
 const HOUT := ArtDecor.HOUT
 const HOUT_D := ArtDecor.HOUT_D
@@ -33,7 +37,9 @@ const GEEL := Color("#FFE8A3")
 const GLAS := Color("#CFE9EE")
 const WATER := Color("#A9D8E6")
 const VIS := Color("#F0975A")
-const MAAN := Color("#F2C14E")
+const MAAN := Color("#FFE27A")
+const NACHT := Color("#7E9CD6")
+const GOUD_L := Color("#F7D77E")
 
 const NAMEN: Array[String] = ["versier_kussen", "versier_bloemen", "versier_slinger",
 	"versier_bankje", "versier_lamp", "versier_schilderij", "versier_kastje",
@@ -84,22 +90,25 @@ static func lamp(_p := {}) -> Array:
 	ArtVorm.ell(v, 0, 22, 0, 5.0, 4.0, 5.0, GEEL, {"e": 2.6, "ymin": 19})
 	return v
 
-## Een schilderij op een ezel; `motief` kiest de vlek: maan (geel, standaard —
-## het pictogram in het boek is 🌙), bloem (roze) of ster (lila).
-static func schilderij(p := {}) -> Array:
+## Een schilderij voor de muur: een gouden lijst met een nachtlucht, een gele
+## maan en twee sterretjes (het pictogram in het boek is 🌙).  Gebouwd tegen de
+## achterwand z = 0, 15 breed en 13 hoog; `Rooms.meubel_zet` hangt het op.
+static func schilderij(_p := {}) -> Array:
 	var v: Array = []
-	var kleur := MAAN
-	match str(p.get("motief", "maan")):
-		"bloem":
-			kleur = ROZE
-		"ster":
-			kleur = LILA
-	ArtVorm.bx(v, -6, 0, 2, 1, 20, 1, HOUT_D)      # poten
-	ArtVorm.bx(v, 6, 0, 2, 1, 20, 1, HOUT_D)
-	ArtVorm.bx(v, 0, 0, -3, 1, 18, 1, HOUT_D)
-	ArtVorm.bx(v, -7, 6, 1, 15, 12, 1, HOUT)       # lijst
-	ArtVorm.bx(v, -6, 7, 2, 13, 10, 1, PAPIER)     # doek
-	ArtVorm.ell(v, 0, 12, 2.5, 3.5, 3.0, 1.0, kleur, {"e": 2.2})
+	ArtVorm.bx(v, -7, 0, 0, 15, 13, 2, GOUD)        # lijst
+	ArtVorm.bx(v, -6, 1, 1, 13, 11, 2, NACHT)       # doek
+	ArtVorm.verf(v, -7, 7, 12, 12, 0, 2, GOUD_L)    # licht op de bovenrand
+	for p in v:                                      # de maan: een sikkel
+		if int(p["z"]) != 2:
+			continue
+		var x := float(p["x"])
+		var y := float(p["y"])
+		var in_maan := (x + 1.5) * (x + 1.5) + (y - 6.5) * (y - 6.5) <= 12.5
+		var in_hap := (x - 0.2) * (x - 0.2) + (y - 7.6) * (y - 7.6) <= 9.0
+		if in_maan and not in_hap:
+			p["k"] = MAAN
+	ArtVorm.verf(v, 3, 3, 9, 9, 2, 2, PAPIER)       # twee sterretjes
+	ArtVorm.verf(v, 4, 4, 4, 4, 2, 2, PAPIER)
 	return v
 
 ## Een nachtkastje: houten blokje met een la en een gouden knopje.
@@ -143,19 +152,3 @@ static func tabel() -> Dictionary:
 		"versier_kist": Callable(ArtDecorVersiering, "kist"),
 		"versier_aquarium": Callable(ArtDecorVersiering, "aquarium"),
 	}
-
-## Meld elk model bij `Art` aan dat er nog niet is.  Sinds de modellen in
-## `ArtDecor._extra()` staan, heeft `Art` ze al bij het opstarten (beschermd:
-## `Art.registreer_model` zou ze weigeren met een enginefout), dus dit doet
-## dan niets; het blijft voor wie het nog aanroept.
-static func registreer() -> void:
-	var t := tabel()
-	for naam in NAMEN:
-		if not Art.heeft_model(naam):
-			Art.registreer_model(naam, t[naam])
-
-static func geregistreerd() -> bool:
-	for naam in NAMEN:
-		if not Art.heeft_model(naam):
-			return false
-	return true

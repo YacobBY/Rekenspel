@@ -141,6 +141,38 @@ const TRAP_AF_SCHEMER := 0.7
 const TRAP_PAAL := 8.0                    ## the banister stands this high over a step
 const TRAP_DIEPTE := -80.0                ## how far down the dark of a flight going down runs
 
+## The roof under the stars (`Kamer.nacht`, the dakterras, U3 2026-10-07; owner:
+## "Verzin nog vier kamers met activiteiten").  The sky is dark blue, a little
+## lighter low down; wood and plaster take NACHT_* of the night's blue, the
+## guests and the furniture keep their own colours and stand out against it.
+const NACHT_HOOG := Color("#101A3A")       ## the sky at the top of the view
+const NACHT_LAAG := Color("#34427C")       ## ... and at the bottom
+const NACHT_STER := Color("#FFF6D5")
+const NACHT_STER_GEEL := Color("#FFE28A")
+const NACHT_MAAN := Color("#FFEDB0")
+const NACHT_BLAUW := Color("#1A2350")      ## what the night lays over wood and plaster
+const NACHT_DEK := 0.24                    ## the deck takes this much of it
+const NACHT_HUIS := 0.30                   ## the stairhouse and its stairs
+const NACHT_TOREN := 0.46                  ## the tower's walls under the deck
+const NACHT_RAAM := Color("#FFD27A")       ## a lit window down the tower
+const NACHT_RAAM_UIT := Color("#28305C")   ## ... and one that is dark
+const NACHT_RAND := Color("#E4DACB")       ## the stone edge of the deck
+const NACHT_STERREN := 90                  ## pinpoint stars over the view
+const NACHT_ZAAD := 41017
+const MAAN := Vector3(0.12, 0.13, 9.0)     ## the moon: x, y of the view, radius (voxel-px)
+const RELING_PAAL := Color("#3B4256")      ## the railing's posts and lower rail
+const RELING_HOUT := Color("#9A7550")      ## ... and its handrail
+const RELING_HOOG := 11.0
+const RELING_STAP := 6.0
+const TRAPHUIS_RAND := 8.0                 ## the stairhouse is this much wider than its opening, per side
+const TRAPHUIS_DIEP := 16.0
+const TRAPHUIS_HOOG := 40.0
+const TOREN_DIEP := 150.0                  ## the tower's walls run this far down into the dark
+const TOREN_ETAGE := 30.0                  ## a floor of the tower, for its rows of windows
+const LAMPJES := [Color("#FFD166"), Color("#FF8FA3"), Color("#7BE0AD"), Color("#9AD0FF")]
+const LAMPJE_STAP := 5.0                   ## a bulb every this many voxels along a string
+const DRAAD := Color("#1B1F2C")
+
 ## The pixel style (docs/ART-STIJL.md): the outline along the front edges of the
 ## floor and the top of the walls, as dark as a plate's (`Art.P_OMLIJN`).
 const RAND_VLOER := Color("#84765F")
@@ -153,6 +185,8 @@ var _vignet: ImageTexture = null
 ## texture, which the node's own scale (g) blows up without smoothing.
 var _beeld: ImageTexture = null
 var _beeld_bij := Vector2.ZERO    ## voxel-px of the texture's top-left pixel
+## The stars of the night sky (`nachtsterren()`), made once.
+var _sterren: Array = []
 
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -163,6 +197,8 @@ func _draw() -> void:
 		return
 	if _mesh == null or _kamer != r.id:
 		_bouw(r)
+	if r.nacht:
+		_teken_nachtlucht()
 	if Art.pixel() and _beeld != null:
 		draw_texture(_beeld, _beeld_bij)
 	else:
@@ -190,11 +226,14 @@ func _bouw(r: Rooms.Kamer) -> void:
 	var v := PackedVector2Array()
 	var k := PackedColorArray()
 	var i := PackedInt32Array()
-	_vloer(r, v, k, i)
-	if r.wand > 0:
-		_wanden(r, v, k, i)
-	if not r.gevel.is_empty():
-		_gevel(r, v, k, i)
+	if r.nacht:
+		_nachtdak(r, v, k, i)
+	else:
+		_vloer(r, v, k, i)
+		if r.wand > 0:
+			_wanden(r, v, k, i)
+		if not r.gevel.is_empty():
+			_gevel(r, v, k, i)
 	_beeld = null
 	if Art.pixel():
 		if not r.erf:
@@ -961,3 +1000,279 @@ func _maak_vignet() -> ImageTexture:
 			var a: float = clampf((d - 0.35) / 0.65, 0.0, 1.0) * VIGNET.a
 			img.set_pixel(x, y, Color(VIGNET.r, VIGNET.g, VIGNET.b, a))
 	return ImageTexture.create_from_image(img)
+
+# --------------------------------------------------- het dak onder de sterren
+
+## The night sky over the WHOLE view (`Kamer.nacht`), under the mesh: dark blue
+## going a little lighter towards the bottom, pinpoint stars, a few that
+## sparkle, and a crescent moon with a soft glow.  It hangs on the view, not on
+## the room — the sky is far away: the room slides, the sky stays.
+func _teken_nachtlucht() -> void:
+	var zicht := get_viewport_rect()
+	var inv := get_global_transform().affine_inverse()
+	var s: float = maxf(0.001, scale.x)
+	var o: Vector2 = inv * zicht.position
+	var m: Vector2 = zicht.size / s
+	draw_polygon(PackedVector2Array([o, o + Vector2(m.x, 0.0), o + m, o + Vector2(0.0, m.y)]),
+		PackedColorArray([NACHT_HOOG, NACHT_HOOG, NACHT_LAAG, NACHT_LAAG]))
+	for st in nachtsterren():
+		var ster: Vector3 = st
+		var p: Vector2 = o + Vector2(ster.x * m.x, ster.y * m.y)
+		var h: float = ster.z
+		if h >= 1.2:
+			# a big one sparkles: two thin diamonds across each other
+			draw_colored_polygon(PackedVector2Array([p + Vector2(0.0, -h * 2.2),
+				p + Vector2(h * 0.4, 0.0), p + Vector2(0.0, h * 2.2), p + Vector2(-h * 0.4, 0.0)]),
+				NACHT_STER_GEEL)
+			draw_colored_polygon(PackedVector2Array([p + Vector2(-h * 2.2, 0.0),
+				p + Vector2(0.0, -h * 0.4), p + Vector2(h * 2.2, 0.0), p + Vector2(0.0, h * 0.4)]),
+				NACHT_STER_GEEL)
+		else:
+			draw_rect(Rect2(p - Vector2(h, h) * 0.5, Vector2(h, h)),
+				Color(NACHT_STER, 0.5 + 0.5 * h / 1.2))
+	var mc: Vector2 = o + Vector2(MAAN.x * m.x, MAAN.y * m.y)
+	var mr: float = MAAN.z
+	for j in 3:
+		draw_circle(mc, mr * (1.5 + 0.4 * float(j)), Color(NACHT_MAAN, 0.06))
+	draw_circle(mc, mr, NACHT_MAAN)
+	# the crescent: the sky's own colour takes a bite out of the full moon
+	draw_circle(mc + Vector2(mr * 0.45, -mr * 0.25), mr * 0.82, NACHT_HOOG.lerp(NACHT_LAAG, MAAN.y))
+
+## The stars of the night sky as (x, y) fractions of the view and a size in
+## voxel-px, from a fixed seed: more of them high up, a few big ones.
+func nachtsterren() -> Array:
+	if not _sterren.is_empty():
+		return _sterren
+	var rng := RandomNumberGenerator.new()
+	rng.seed = NACHT_ZAAD
+	for j in NACHT_STERREN:
+		var x := rng.randf()
+		var y := pow(rng.randf(), 1.5) * 0.92
+		var groot := rng.randf() < 0.09
+		_sterren.append(Vector3(x, y, rng.randf_range(1.25, 1.6) if groot else rng.randf_range(0.5, 1.0)))
+	return _sterren
+
+## The colour `kl` in the night: `f` of the night's blue over it, its alpha kept.
+static func _nacht(kl: Color, f: float) -> Color:
+	return Color(kl.lerp(NACHT_BLAUW, f), kl.a)
+
+## The roof terrace (`Kamer.nacht`), drawn instead of a lawn or two walls: the
+## tower's outer walls under the deck with lit windows, the plank deck with a
+## stone edge on its two front sides, the railing along the two back edges (the
+## sky shows through it), a stairhouse round every flight with the stairs every
+## floor has in it (`_trap`), and strings of lights from the stairhouse to the
+## corners.  The sky itself is not in the mesh (`_teken_nachtlucht`).
+func _nachtdak(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
+		i: PackedInt32Array) -> void:
+	var w := float(r.w)
+	var d := float(r.d)
+	_nacht_toren(r, v, k, i)
+	var x := 0
+	while x < r.w:
+		var z := 0
+		while z < r.d:
+			var x1 := mini(x + 4, r.w)
+			var z1 := mini(z + 4, r.d)
+			_vlak(v, k, i, [_proj(x, z), _proj(x1, z), _proj(x1, z1), _proj(x, z1)],
+				_nacht(Rooms.vloer_kleur(r, x, z), NACHT_DEK))
+			z += 4
+		x += 4
+	# the low stone edge on the two front sides of the deck: its face and its top
+	var rand := _nacht(NACHT_RAND, NACHT_DEK)
+	var rand_d := rand.darkened(0.12)
+	_vlak(v, k, i, [_proj(0, d, 0), _proj(w, d, 0), _proj(w, d, 1.5), _proj(0, d, 1.5)], rand_d)
+	_vlak(v, k, i, [_proj(w, 0, 0), _proj(w, d, 0), _proj(w, d, 1.5), _proj(w, 0, 1.5)], rand)
+	_vlak(v, k, i, [_proj(0, d - 1.5, 1.5), _proj(w, d - 1.5, 1.5), _proj(w, d, 1.5),
+		_proj(0, d, 1.5)], rand.lightened(0.1))
+	_vlak(v, k, i, [_proj(w - 1.5, 0, 1.5), _proj(w, 0, 1.5), _proj(w, d, 1.5),
+		_proj(w - 1.5, d, 1.5)], rand.lightened(0.1))
+	# the railing on the two back edges, open where a stairhouse stands
+	var open_z: Array = []
+	var open_x: Array = []
+	for richting in Rooms.trap_richtingen(r.id):
+		var dr: Dictionary = r.trap[richting]
+		var span := Vector2(float(dr["at"]) - TRAPHUIS_RAND,
+			float(dr["at"]) + float(dr["breed"]) + TRAPHUIS_RAND)
+		if str(dr.get("wand", "z")) == "z":
+			open_z.append(span)
+		else:
+			open_x.append(span)
+	_reling(w, true, open_z, v, k, i)
+	_reling(d, false, open_x, v, k, i)
+	for richting in Rooms.trap_richtingen(r.id):
+		_traphuis(r.trap[richting], v, k, i)
+	var van := k.size()
+	_trap(r, v, k, i)
+	for j in range(van, k.size()):
+		k[j] = _nacht(k[j], NACHT_HUIS * 0.6)
+	# the strings of lights: from each stairhouse's top corners down to the
+	# corners of the railing, and one along the left railing
+	var paal := RELING_HOOG
+	for richting in Rooms.trap_richtingen(r.id):
+		var dr: Dictionary = r.trap[richting]
+		if str(dr.get("wand", "z")) != "z":
+			continue
+		var a := float(dr["at"]) - TRAPHUIS_RAND
+		var b := float(dr["at"]) + float(dr["breed"]) + TRAPHUIS_RAND
+		var top := TRAPHUIS_HOOG - 3.0
+		_lampjes(Vector3(a, top, 0.0), Vector3(0.5, paal, 0.0), 5.0, v, k, i)
+		_lampjes(Vector3(b, top, 0.0), Vector3(w - 0.5, paal, 0.0), 5.0, v, k, i)
+	_lampjes(Vector3(0.0, paal, 0.5), Vector3(0.0, paal, d - 0.5), 6.0, v, k, i)
+
+## Under the deck: the tower's two outer walls, going down into the dark, with
+## a row of windows for every floor below — most of them lit — and a band of
+## stone along the top.  The walls fade into the night's blue at the bottom.
+func _nacht_toren(r: Rooms.Kamer, v: PackedVector2Array, k: PackedColorArray,
+		i: PackedInt32Array) -> void:
+	var w := float(r.w)
+	var d := float(r.d)
+	var diep := -TOREN_DIEP
+	var a0 := _nacht(W_L, NACHT_TOREN)
+	var b0 := _nacht(W_R, NACHT_TOREN)
+	_vlak_kl(v, k, i, [_proj(0, d, 0), _proj(w, d, 0), _proj(w, d, diep), _proj(0, d, diep)],
+		[a0, a0, NACHT_LAAG, NACHT_LAAG])
+	_vlak_kl(v, k, i, [_proj(w, 0, 0), _proj(w, d, 0), _proj(w, d, diep), _proj(w, 0, diep)],
+		[b0, b0, NACHT_LAAG, NACHT_LAAG])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = NACHT_ZAAD + 7
+	var etage := 0
+	var y1 := -8.0
+	while y1 - 12.0 > diep * 0.75:
+		var y0 := y1 - 12.0
+		var weg := float(etage) * 0.28
+		var t := 8.0
+		while t + 7.0 <= w - 4.0:
+			var kl: Color = NACHT_RAAM if rng.randf() < 0.78 else NACHT_RAAM_UIT
+			_vlak(v, k, i, [_proj(t, d, y1), _proj(t + 7.0, d, y1), _proj(t + 7.0, d, y0),
+				_proj(t, d, y0)], kl.lerp(NACHT_LAAG, weg).darkened(0.08))
+			t += 18.0
+		t = 8.0
+		while t + 7.0 <= d - 4.0:
+			var kl: Color = NACHT_RAAM if rng.randf() < 0.78 else NACHT_RAAM_UIT
+			_vlak(v, k, i, [_proj(w, t, y1), _proj(w, t + 7.0, y1), _proj(w, t + 7.0, y0),
+				_proj(w, t, y0)], kl.lerp(NACHT_LAAG, weg))
+			t += 18.0
+		y1 -= TOREN_ETAGE
+		etage += 1
+	var band := _nacht(NACHT_RAND, NACHT_TOREN * 0.7)
+	_vlak(v, k, i, [_proj(0, d, 0), _proj(w, d, 0), _proj(w, d, -3.0), _proj(0, d, -3.0)],
+		band.darkened(0.12))
+	_vlak(v, k, i, [_proj(w, 0, 0), _proj(w, d, 0), _proj(w, d, -3.0), _proj(w, 0, -3.0)], band)
+
+## A railing along one back edge, `lang` voxels: along x on z = 0 (`langs_z`)
+## or along z on x = 0.  A low stone curb, a post every RELING_STAP, a thin
+## lower rail and a wooden handrail; open over every span in `open` (where a
+## stairhouse stands).  Between the posts the sky shows.
+func _reling(lang: float, langs_z: bool, open: Array, v: PackedVector2Array,
+		k: PackedColorArray, i: PackedInt32Array) -> void:
+	var p := func(t: float, y: float) -> Vector2:
+		return _proj(t, 0, y) if langs_z else _proj(0, t, y)
+	var stukken: Array = [Vector2(0.0, lang)]
+	for o in open:
+		var gat: Vector2 = o
+		var rest: Array = []
+		for st in stukken:
+			var s: Vector2 = st
+			if gat.y <= s.x or gat.x >= s.y:
+				rest.append(s)
+				continue
+			if gat.x > s.x:
+				rest.append(Vector2(s.x, gat.x))
+			if gat.y < s.y:
+				rest.append(Vector2(gat.y, s.y))
+		stukken = rest
+	var steen := _nacht(NACHT_RAND, NACHT_DEK).darkened(0.1 if langs_z else 0.0)
+	var paal := RELING_PAAL
+	var hout := _nacht(RELING_HOUT, NACHT_DEK * 0.5)
+	for st in stukken:
+		var s: Vector2 = st
+		if s.y - s.x < 1.0:
+			continue
+		_vlak(v, k, i, [p.call(s.x, 0.0), p.call(s.y, 0.0), p.call(s.y, 2.0), p.call(s.x, 2.0)], steen)
+		var t := s.x
+		while t <= s.y - 1.0 + 0.01:
+			_vlak(v, k, i, [p.call(t, 2.0), p.call(t + 1.0, 2.0), p.call(t + 1.0, RELING_HOOG),
+				p.call(t, RELING_HOOG)], paal)
+			t += RELING_STAP
+		var eind := s.y - 1.0
+		if fmod(eind - s.x, RELING_STAP) > 0.5:
+			_vlak(v, k, i, [p.call(eind, 2.0), p.call(s.y, 2.0), p.call(s.y, RELING_HOOG),
+				p.call(eind, RELING_HOOG)], paal)
+		_vlak(v, k, i, [p.call(s.x, 6.0), p.call(s.y, 6.0), p.call(s.y, 6.8), p.call(s.x, 6.8)], paal)
+		_vlak(v, k, i, [p.call(s.x, RELING_HOOG - 1.4), p.call(s.y, RELING_HOOG - 1.4),
+			p.call(s.y, RELING_HOOG), p.call(s.x, RELING_HOOG)], hout)
+
+## The stairhouse round the flight `dr` ({wand, at, breed}): a plaster box
+## TRAPHUIS_RAND wider than the opening on each side, TRAPHUIS_DIEP deep behind
+## the edge and TRAPHUIS_HOOG high, with a plinth, a flat roof that sticks out a
+## voxel and the shadow it throws on the deck.  Its face with the opening is in
+## the line of the railing; the opening itself is `_trap`'s.
+func _traphuis(dr: Dictionary, v: PackedVector2Array, k: PackedColorArray,
+		i: PackedInt32Array) -> void:
+	var langs_z := str(dr.get("wand", "z")) == "z"
+	var a := float(dr["at"]) - TRAPHUIS_RAND
+	var b := float(dr["at"]) + float(dr["breed"]) + TRAPHUIS_RAND
+	var h := TRAPHUIS_HOOG
+	var t := TRAPHUIS_DIEP
+	var pw := func(s: float, diep: float, y: float) -> Vector2:
+		return _proj(s, -diep, y) if langs_z else _proj(-diep, s, y)
+	var voor := _nacht(W_L if langs_z else W_R, NACHT_HUIS)
+	var eind := _nacht(W_R if langs_z else W_L, NACHT_HUIS)
+	var plint := _nacht(W_PLINT, NACHT_HUIS)
+	# the end that faces the room's open side, then the face with the opening
+	_vlak(v, k, i, [pw.call(b, 0.0, 0.0), pw.call(b, t, 0.0), pw.call(b, t, h), pw.call(b, 0.0, h)], eind)
+	_vlak(v, k, i, [pw.call(b, 0.0, 0.0), pw.call(b, t, 0.0), pw.call(b, t, 3.0), pw.call(b, 0.0, 3.0)], plint)
+	_vlak(v, k, i, [pw.call(a, 0.0, 0.0), pw.call(b, 0.0, 0.0), pw.call(b, 0.0, h), pw.call(a, 0.0, h)], voor)
+	_vlak(v, k, i, [pw.call(a, 0.0, 0.0), pw.call(b, 0.0, 0.0), pw.call(b, 0.0, 3.0), pw.call(a, 0.0, 3.0)], plint)
+	# the flat roof, a voxel over every side, and its edge
+	var o := 1.2
+	var dak := _nacht(W_TOP, NACHT_HUIS)
+	var dakrand := _nacht(HOUT_D, NACHT_HUIS)
+	_vlak(v, k, i, [pw.call(a - o, -o, h - 1.6), pw.call(b + o, -o, h - 1.6), pw.call(b + o, -o, h),
+		pw.call(a - o, -o, h)], dakrand)
+	_vlak(v, k, i, [pw.call(b + o, -o, h - 1.6), pw.call(b + o, t + o, h - 1.6), pw.call(b + o, t + o, h),
+		pw.call(b + o, -o, h)], dakrand.darkened(0.1))
+	_vlak(v, k, i, [pw.call(a - o, -o, h), pw.call(b + o, -o, h), pw.call(b + o, t + o, h),
+		pw.call(a - o, t + o, h)], dak)
+	# its shadow on the deck
+	var vloer := func(s: float, z: float) -> Vector2:
+		return _proj(s, z) if langs_z else _proj(z, s)
+	_vlak(v, k, i, [vloer.call(a, 0.0), vloer.call(b, 0.0), vloer.call(b, SCHADUW_BREED),
+		vloer.call(a, SCHADUW_BREED)], WAND_SCHADUW)
+
+## A string of lights from `p0` to `p1` (x, y, z in voxels) that sags `zak`
+## voxels in the middle: a thin dark wire and a bulb every LAMPJE_STAP, each
+## bulb with a soft halo of its own colour — the lights are on.
+func _lampjes(p0: Vector3, p1: Vector3, zak: float, v: PackedVector2Array,
+		k: PackedColorArray, i: PackedInt32Array) -> void:
+	var lang := Vector2(p1.x - p0.x, p1.z - p0.z).length()
+	var n := maxi(2, int(ceil(lang / 2.0)))
+	var punt := func(t: float) -> Vector2:
+		var q := p0.lerp(p1, t)
+		return _proj(q.x, q.z, q.y - zak * sin(PI * t))
+	var vorig: Vector2 = punt.call(0.0)
+	for j in range(1, n + 1):
+		var nu: Vector2 = punt.call(float(j) / float(n))
+		var dwars := (nu - vorig).orthogonal().normalized() * 0.35
+		_vlak(v, k, i, [vorig - dwars, nu - dwars, nu + dwars, vorig + dwars], DRAAD)
+		vorig = nu
+	var lampen := maxi(2, int(floor(lang / LAMPJE_STAP)))
+	for j in range(1, lampen):
+		var t := float(j) / float(lampen)
+		var m: Vector2 = punt.call(t) + Vector2(0.0, 1.6)
+		var kl: Color = LAMPJES[j % LAMPJES.size()]
+		_rond(v, k, i, m, 3.4, Color(kl, 0.22))
+		_rond(v, k, i, m, 1.5, kl.lightened(0.25))
+
+## A filled circle of SCREEN points (voxel-px), as a fan of `n` triangles.
+func _rond(v: PackedVector2Array, k: PackedColorArray, i: PackedInt32Array, mid: Vector2,
+		straal: float, kl: Color, n: int = 10) -> void:
+	var b := v.size()
+	v.append(mid)
+	k.append(kl)
+	for j in n:
+		var hoek := TAU * float(j) / float(n)
+		v.append(mid + Vector2(cos(hoek), sin(hoek) * 0.85) * straal)
+		k.append(kl)
+	for j in n:
+		i.append_array([b, b + 1 + j, b + 1 + (j + 1) % n])

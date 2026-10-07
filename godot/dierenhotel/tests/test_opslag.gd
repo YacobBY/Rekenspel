@@ -822,3 +822,47 @@ func test_open_in_de_plaats_van_het_lopende_hotel() -> void:
 	gelijk(_tekst(1), een, "hotel 1 is heel")
 	gelijk(_tekst(3), drie, "hotel 3 is heel")
 	await _af()
+
+# ------------------------------------------------- koopbare decoratie (U7)
+
+## Bought room decoration survives a reload through the hotel's own file: a
+## picture on the wall and a chest on the floor come back in the same room on
+## the same spot — the picture still hanging — with the older plant beside
+## them.  No new save field: a decoration piece is a `meubels` record.
+func test_kamerdecoratie_overleeft_de_opslag() -> void:
+	_onthoud()
+	State.nieuw_spel()
+	Rooms.herstel()
+	var plant := Rooms.meubel_zet("kamer1", "plant")
+	var kist := Rooms.meubel_zet("kamer1", "kist")
+	var schilderij := Rooms.meubel_zet("kamer2", "schilderij")
+	waar(not plant.is_empty() and not kist.is_empty() and not schilderij.is_empty(),
+		"een plant, een speelkist en een schilderij staan er")
+	Hotel.bewaar_inrichting()
+	gelijk((State.s["meubels"] as Array).size(), 3, "drie meubel-regels in de opslag")
+	State.hotel = 2
+	State.start_gekozen()
+	waar(_tekst(2).contains("schilderij"), "het schilderij staat in het bestand van hotel 2")
+	# herladen zoals bij het opstarten: het bestand, dan de inrichting (die
+	# begint zelf bij de lege basiskamers, `Rooms.herstel`)
+	State.s = State.standaard()
+	waar(State.lees(), "hotel 2 wordt weer gelezen")
+	gelijk((State.s["meubels"] as Array).size(), 3, "met zijn drie meubel-regels")
+	Hotel.herstel_inrichting()
+	for oud in [plant, kist, schilderij]:
+		var terug: Array = Rooms.meubels(str(oud["kamer"])).filter(
+			func(m): return str(m["id"]) == str(oud["id"]))
+		gelijk(terug.size(), 1, "%s is terug in %s" % [oud["type"], oud["kamer"]])
+		if terug.size() == 1:
+			gelijk(str(terug[0]["type"]), str(oud["type"]), "als %s" % oud["type"])
+			gelijk(Vector2(float(terug[0]["x"]), float(terug[0]["z"])),
+				Vector2(float(oud["x"]), float(oud["z"])), "%s op dezelfde plek" % oud["type"])
+	var hangt: Array = Rooms.get_kamer("kamer2").decor.filter(
+		func(d): return str(d.get("meubel", "")) == str(schilderij["id"]))
+	gelijk(hangt.size(), 1, "het schilderij is weer decor van kamer 2")
+	if hangt.size() == 1:
+		waar(bool(hangt[0].get("ver", false)), "en hangt aan de muur")
+		gelijk(int(hangt[0].get("rot", -1)), int(schilderij["rot"]), "naar dezelfde kant")
+	gelijk(int(State.s["meubelNr"]), Rooms.nr_stand(), "de meubelteller loopt door")
+	Rooms.herstel()
+	await _af()

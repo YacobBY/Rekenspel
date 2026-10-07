@@ -993,12 +993,14 @@ func test_de_kas_is_een_glazen_kas_achter_het_hotel() -> void:
 	# every other room but the shops (their customers' spots, 2026-09-24) and
 	# the playroom (the easel of `spiegel`, 2026-09-25 — its floor is checked in
 	# `test_spiegel.gd::test_de_rustende_ezel`): no `mijd`, so nothing moved there
-	# … and the music room (U2, 2026-10-07: the stage of `band`, its drum and
-	# xylophone are the game's resting props)
+	# … and the four rooms of 2026-10-07, each round its game's resting props:
+	# the bakery (the oven and the table of `koekjes`, checked in
+	# `test_koekjes.gd`), the music room (the stage of `band`), the roof terrace
+	# (the telescope of `sterren`, checked in `test_sterren.gd`) and the
+	# postkamer (the shelf, the counter and the cart of `post`)
 	for id in Rooms.lijst():
-		# and the postkamer (U4, 2026-10-07): the sorting shelf and the stamp counter
-		if id != "kas" and id != "winkels" and id != "speelzaal" and id != "muziekkamer" \
-				and id != "postkamer":
+		if id != "kas" and id != "winkels" and id != "speelzaal" and id != "bakkerij" \
+				and id != "muziekkamer" and id != "dakterras" and id != "postkamer":
 			gelijk(Rooms.get_kamer(id).mijd.size(), 0, "%s houdt al zijn vloer" % id)
 
 ## A gate's rectangle is the gate in the fence line, not the door line behind
@@ -1058,3 +1060,152 @@ func test_het_hotel_is_een_toren() -> void:
 				waar(Rooms.via_trap(van, naar), "%s -> %s gaat met de trap" % [van, naar])
 	gelijk(Rooms.etage_teken(-1), "K", "de kelder heet K in de toren")
 	gelijk(Rooms.etage_teken(2), "2", "een verdieping heet naar haar nummer")
+
+# ------------------------------------------------- koopbare decoratie (U7)
+#
+# Owner, 2026-10-07: "En eventueel ook accessoires om in de kamers te zetten of
+# de kamers te decoreren."  The meubelboek sells nine pieces; eight stand on a
+# free floor cell like the plant, the picture hangs on a free WALL place.
+
+const DECORATIE := ["kussen", "bloemen", "slinger", "bankje", "lamp", "schilderij",
+	"kastje", "kist", "aquarium"]
+const DECORATIE_KAMERS := ["kamer1", "kamer2", "gang", "speelzaal"]
+
+## Every wall place hangs ON a wall of an indoor room — the back wall at z = 1
+## or the left wall at x = 1, the whole picture inside the wall — and never in
+## or beside a door, a flight of stairs or the front door, nor on a fixed wall
+## piece.  Outdoors and in the glass kas there are none.  The bedrooms and the
+## playroom have room for a picture; the corridor has none (its two walls carry
+## three doors, both flights and three posters and racks).
+func test_wandplekken_hangen_aan_de_muur() -> void:
+	Rooms.herstel()
+	for id in Rooms.lijst():
+		var r := Rooms.get_kamer(id)
+		var plekken := Rooms.wandplekken(id)
+		if r.erf or r.glas:
+			gelijk(plekken.size(), 0, "%s heeft geen muur voor een schilderij" % id)
+			continue
+		waar(r.wand >= Rooms.WAND_Y + Rooms.WAND_HOOG, "%s: het schilderij past onder het plafond" % id)
+		for p in plekken:
+			var wand := str(p["wand"])
+			var a: float = float(p["x"]) if wand == "z" else float(p["z"])
+			if wand == "z":
+				gelijk(float(p["z"]), 1.0, "%s %s hangt aan de achterwand" % [id, p["id"]])
+			else:
+				gelijk(float(p["x"]), 1.0, "%s %s hangt aan de linkerwand" % [id, p["id"]])
+			var lengte: float = float(r.w if wand == "z" else r.d)
+			waar(a - Rooms.WAND_HALF >= 0.0 and a + Rooms.WAND_HALF <= lengte,
+				"%s %s: het hele schilderij hangt op de muur" % [id, p["id"]])
+			var gaten: Array = r.deuren.duplicate()
+			for richting in r.trap:
+				gaten.append(r.trap[richting])
+			if not r.ingang.is_empty():
+				gaten.append(r.ingang)
+			for g in gaten:
+				if str(g["wand"]) != wand:
+					continue
+				var g0 := float(g["at"])
+				var g1 := g0 + float(g["breed"])
+				waar(a + Rooms.WAND_HALF <= g0 - 2.0 or a - Rooms.WAND_HALF >= g1 + 2.0,
+					"%s %s: niet in of tegen een opening (%s..%s)" % [id, p["id"], g0, g1])
+			for stuk in r.decor:
+				if not bool(stuk.get("ver", false)):
+					continue
+				var op_z := float(stuk["z"]) <= 3.0
+				if (wand == "z") != op_z:
+					continue
+				var v := Rooms.voet(str(stuk["n"]), int(stuk.get("rot", 0)))
+				var b0: float = float(stuk["x"]) + v.position.x if op_z else float(stuk["z"]) + v.position.y
+				var b1: float = float(stuk["x"]) + v.end.x if op_z else float(stuk["z"]) + v.end.y
+				waar(a + Rooms.WAND_HALF <= b0 or a - Rooms.WAND_HALF >= b1,
+					"%s %s: niet over %s heen" % [id, p["id"], stuk["n"]])
+	for id in ["kamer1", "kamer2", "speelzaal"]:
+		waar(not Rooms.wandplekken(id).is_empty(), "%s heeft plek voor een schilderij" % id)
+	gelijk(Rooms.wandplekken("gang").size(), 0, "de gang heeft geen vrije muur")
+	gelijk(Rooms.vrije_wandplekken("kamer1").size(), Rooms.wandplekken("kamer1").size(),
+		"zonder gekochte schilderijen is elke wandplek vrij")
+
+## Each of the nine pieces, alone in kamer 1, kamer 2, the corridor and the
+## playroom, lands on the kind of place it belongs on: the picture on a wall
+## place, hanging (`ver`, `WAND_Y`, turned to its wall) and keeping no floor;
+## the others on a floor cell of the room, standing.  Where the room has no
+## wall place the picture is not put anywhere else: {}.
+func test_decoratie_staat_op_zijn_soort_plek() -> void:
+	for kamer in DECORATIE_KAMERS:
+		for type in DECORATIE:
+			Rooms.herstel()
+			var r := Rooms.get_kamer(kamer)
+			var cellen: Array = r.vrij.duplicate(true)
+			var plekken := Rooms.wandplekken(kamer)
+			var m := Rooms.meubel_zet(kamer, type)
+			var wat := "%s in %s" % [type, kamer]
+			if Rooms.plek_soort(type) == "wand":
+				if plekken.is_empty():
+					waar(m.is_empty(), "%s: geen wandplek, dus nergens" % wat)
+					continue
+				waar(not m.is_empty(), "%s hangt" % wat)
+				if m.is_empty():
+					continue
+				var op := false
+				for p in plekken:
+					if float(p["x"]) == float(m["x"]) and float(p["z"]) == float(m["z"]):
+						op = true
+						gelijk(int(m["rot"]), 1 if str(p["wand"]) == "x" else 0,
+							"%s: naar zijn muur gedraaid" % wat)
+				waar(op, "%s hangt op een wandplek (%s, %s)" % [wat, m["x"], m["z"]])
+				waar(bool(m.get("ver", false)) and bool(m.get("aan_wand", false)),
+					"%s hangt in de laag achter alles" % wat)
+				gelijk(float(m.get("y", 0.0)), float(Rooms.WAND_Y), "%s op wandhoogte" % wat)
+				gelijk(r.vrij.size(), cellen.size(), "%s houdt geen vloervak bezet" % wat)
+				for h in Rooms.hindernissen(kamer):
+					waar(str(h.get("model", "")) != "versier_schilderij",
+						"%s is geen hindernis" % wat)
+			else:
+				waar(not m.is_empty(), "%s staat" % wat)
+				if m.is_empty():
+					continue
+				waar(not bool(m.get("ver", false)) and float(m.get("y", 0.0)) == 0.0,
+					"%s staat op de vloer" % wat)
+				# the floor it took was free floor (the rule of the plant)
+				waar(Rooms.meubel_weg(str(m["id"])), "%s gaat weer weg" % wat)
+				waar(Rooms.vrij_vak(kamer, float(m["x"]), float(m["z"])),
+					"%s stond op vrije vloer (%s, %s)" % [wat, m["x"], m["z"]])
+				# and on a ✨ cell of the room (what the meubelboek offers) it
+				# lands exactly there
+				var cel: Dictionary = {}
+				for c in r.vrij:
+					if Rooms.vrij_vak(kamer, float(c["x"]), float(c["z"])):
+						cel = c
+						break
+				waar(not cel.is_empty(), "%s heeft een vrij vloervak" % kamer)
+				if cel.is_empty():
+					continue
+				var op := Rooms.meubel_zet(kamer, type, float(cel["x"]), float(cel["z"]))
+				gelijk(Vector2(float(op.get("x", -1.0)), float(op.get("z", -1.0))),
+					Vector2(float(cel["x"]), float(cel["z"])), "%s staat op het vloervak" % wat)
+	Rooms.herstel()
+
+## Pictures fill a wall without overlapping, the next one gets {} when every
+## wall place is taken, and a floor piece may still stand in front of one.
+## Taking a picture down frees its place again.
+func test_een_volle_muur_neemt_niets_meer() -> void:
+	Rooms.herstel()
+	var gehangen: Array = []
+	for _i in 20:
+		var m := Rooms.meubel_zet("kamer2", "schilderij")
+		if m.is_empty():
+			break
+		for oud in gehangen:
+			if (float(oud["z"]) <= 3.0) == (float(m["z"]) <= 3.0):
+				var a: float = float(oud["x"]) + float(oud["z"])
+				var b: float = float(m["x"]) + float(m["z"])
+				waar(absf(a - b) >= 2.0 * Rooms.WAND_HALF,
+					"twee schilderijen hangen niet over elkaar (%s, %s)" % [oud["id"], m["id"]])
+		gehangen.append(m)
+	waar(gehangen.size() >= 2, "kamer 2 heeft plek voor meer schilderijen (%d)" % gehangen.size())
+	gelijk(Rooms.vrije_wandplekken("kamer2").size(), 0, "dan is elke wandplek bezet")
+	waar(Rooms.meubel_zet("kamer2", "schilderij").is_empty(), "en een volgend hangt nergens")
+	waar(not Rooms.meubel_zet("kamer2", "lamp").is_empty(), "een lamp staat er nog wel bij")
+	waar(Rooms.meubel_weg(str(gehangen[0]["id"])), "een schilderij gaat weer van de muur")
+	gelijk(Rooms.vrije_wandplekken("kamer2").size() > 0, true, "en zijn plek is weer vrij")
+	Rooms.herstel()

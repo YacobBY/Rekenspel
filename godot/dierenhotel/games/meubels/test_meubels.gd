@@ -1224,34 +1224,51 @@ func test_boek_past_op_elk_scherm() -> void:
 		for _f in 3:
 			await boom.process_frame
 		var scherm := Vector2(maat)
-		# Onder de 400 eenheden hoogte past een catalogus van zes kaartjes
-		# nergens meer: dan rolt het blad, en dat is precies waar `UiBlad` zijn
-		# ScrollContainer voor heeft.  Daarboven moet alles gewoon in beeld staan.
-		var moet_passen := scherm.y >= 400.0
-		var gekeurd := 0
-		for knop in _blad_knoppen():
-			gekeurd += 1
-			var r := knop.get_global_rect()
-			if moet_passen:
-				waar(r.position.y >= -0.01 and r.end.y <= scherm.y + 0.01
-					and r.position.x >= -0.01 and r.end.x <= scherm.x + 0.01,
-					"%s: bladknop %s staat in beeld (%s van %s)"
-						% [str(maat), knop.name, str(r), str(scherm)])
-			waar(r.size.x >= 44.0 and r.size.y >= 44.0,
-				"%s: bladknop %s is een tikdoel (%s)" % [str(maat), knop.name, str(r.size)])
-		if not moet_passen:
-			# dan moet het vel zelf wel in beeld staan en te rollen zijn
-			var vel := _blad_vel()
-			waar(vel != null, "%s: het vel staat er" % str(maat))
-			if vel != null:
-				waar(Rect2(Vector2.ZERO, scherm).encloses(vel.get_global_rect()),
-					"%s: het vel staat in beeld (%s)" % [str(maat), str(vel.get_global_rect())])
-			waar(_blad_rol() != null, "%s: en het blad rolt" % str(maat))
-		for naam in ["Kk_plant", "Kk_badkuip", "Kafrekenen", "Kleeg", "Kdicht"]:
-			waar(_blad_knop(naam) != null, "%s: %s staat in het boek" % [str(maat), naam])
-		waar(gekeurd >= 9, "%s: %d knoppen in het boek gekeurd" % [str(maat), gekeurd])
+		_keur_blad_past(maat, scherm, ["Kk_plant", "Kk_badkuip", "Kafrekenen", "Kleeg", "Kdicht"])
+		# de tab 🩷 Decoratie (U7): alle negen stukken, met hetzelfde lijstje
+		# erop, staan op hetzelfde scherm net zo goed in beeld
+		waar(_blad_tik("Ktab_decoratie"), "%s: naar de decoratiepagina" % str(maat))
+		for _f in 3:
+			await boom.process_frame
+		var namen: Array = ["Kafrekenen", "Kleeg", "Kdicht"]
+		for w in Spel.VERSIERING_KAMER:
+			namen.append("Kk_%s" % str(w["type"]))
+		gelijk(Spel.VERSIERING_KAMER.size(), 9, "negen decoratiestukken in het boek")
+		_keur_blad_past(maat, scherm, namen)
+		waar(_blad_knop("Kk_plant") == null, "%s: geen meubel op de decoratiepagina" % str(maat))
 		await _hotel_af(h)
 	State.s = bewaard
+
+## Elke knop van het open blad in beeld (vanaf 400 eenheden hoogte; daaronder
+## rolt het vel en moet het vel zelf in beeld staan), elke knop een tikdoel, en
+## `namen` staan er allemaal.
+func _keur_blad_past(maat: Vector2i, scherm: Vector2, namen: Array) -> void:
+	# Onder de 400 eenheden hoogte past een catalogus van zes kaartjes
+	# nergens meer: dan rolt het blad, en dat is precies waar `UiBlad` zijn
+	# ScrollContainer voor heeft.  Daarboven moet alles gewoon in beeld staan.
+	var moet_passen := scherm.y >= 400.0
+	var gekeurd := 0
+	for knop in _blad_knoppen():
+		gekeurd += 1
+		var r := knop.get_global_rect()
+		if moet_passen:
+			waar(r.position.y >= -0.01 and r.end.y <= scherm.y + 0.01
+				and r.position.x >= -0.01 and r.end.x <= scherm.x + 0.01,
+				"%s: bladknop %s staat in beeld (%s van %s)"
+					% [str(maat), knop.name, str(r), str(scherm)])
+		waar(r.size.x >= 44.0 and r.size.y >= 44.0,
+			"%s: bladknop %s is een tikdoel (%s)" % [str(maat), knop.name, str(r.size)])
+	if not moet_passen:
+		# dan moet het vel zelf wel in beeld staan en te rollen zijn
+		var vel := _blad_vel()
+		waar(vel != null, "%s: het vel staat er" % str(maat))
+		if vel != null:
+			waar(Rect2(Vector2.ZERO, scherm).encloses(vel.get_global_rect()),
+				"%s: het vel staat in beeld (%s)" % [str(maat), str(vel.get_global_rect())])
+		waar(_blad_rol() != null, "%s: en het blad rolt" % str(maat))
+	for naam in namen:
+		waar(_blad_knop(naam) != null, "%s: %s staat in het boek" % [str(maat), naam])
+	waar(gekeurd >= 9, "%s: %d knoppen in het boek gekeurd" % [str(maat), gekeurd])
 
 func _blad_vel() -> Control:
 	return _blad_deel("Midden/Blad")
@@ -1364,13 +1381,16 @@ func _keur_dekking(wat: String, kader: Vector2) -> void:
 # ==================================================================================
 
 ## Elk decoratiestuk heeft een pictogram dat rendert, een prijs binnen het bereik
-## van de bevroren winkel (1..8), een plek in `Rooms.DECORATIE` en een model dat
-## zonder enginefout bakt.  De zes meubels uit de kern staan onaangeroerd vooraan.
+## van de bevroren winkel (1..8), een plek in `Rooms.DECORATIE` met een plekssoort
+## (vloer of wand) en een beschermd wereldmodel (`ArtDecor._extra()`) dat zonder
+## enginefout bakt.  De zes meubels uit de kern staan onaangeroerd vooraan.
 func test_kamerdecoratie_catalogus() -> void:
 	gelijk(Sommen.Meubels.WINKEL.size(), 6, "de kern verkoopt nog steeds zes meubels")
+	gelijk(World.meubeltypen().size(), 6, "en de wereld kent nog steeds zes meubeltypen")
 	var extra: Array = Spel.VERSIERING_KAMER
-	waar(extra.size() >= 8, "minstens acht decoratiestukken (%d)" % extra.size())
+	gelijk(extra.size(), 9, "negen decoratiestukken")
 	var gezien := {}
+	var soorten := {}
 	for w in extra:
 		var type := str(w["type"])
 		waar(not gezien.has(type), "%s komt één keer voor" % type)
@@ -1381,59 +1401,76 @@ func test_kamerdecoratie_catalogus() -> void:
 		var icoon := str(w["icoon"])
 		waar(Ui.mist_tekens(icoon).is_empty(), "%s: pictogram %s rendert (mist %s)"
 			% [type, icoon, str(Ui.mist_tekens(icoon))])
-		# (integration I1a: the decoration has its own table next to the six
-		# pieces of the frozen shop, `Rooms.DECORATIE`; `Rooms.meubel_soort`
-		# reads both)
-		waar(Rooms.DECORATIE.has(type), "%s staat in Rooms.DECORATIE" % type)
-		waar(not Rooms.MEUBEL.has(type), "%s is geen van de zes meubels" % type)
-		var soort := Rooms.meubel_soort(type)
-		if not soort.is_empty():
-			gelijk(str(soort["soort"]), "decor", "%s is decor" % type)
-			waar(ArtDecorVersiering.NAMEN.has(str(soort["model"])),
-				"%s heeft een model in decor_versiering.gd" % type)
+		waar(Rooms.DECORATIE.has(type) and not Rooms.MEUBEL.has(type),
+			"%s staat in Rooms.DECORATIE, niet tussen de zes meubels" % type)
+		waar(Rooms.koopbaar(type), "Rooms.meubel_zet neemt %s aan" % type)
+		if Rooms.DECORATIE.has(type):
+			gelijk(str(Rooms.DECORATIE[type]["soort"]), "decor", "%s is decor" % type)
+			var model := str(Rooms.DECORATIE[type]["model"])
+			waar(ArtDecorVersiering.NAMEN.has(model), "%s heeft een model in decor_versiering.gd" % type)
+			waar(Art.is_wereldmodel(model), "%s is een beschermd wereldmodel" % model)
+			var plek := Rooms.plek_soort(type)
+			waar(plek in ["vloer", "wand"], "%s: plekssoort %s" % [type, plek])
+			soorten[plek] = true
 		var naam := str(w["naam"])
 		waar(naam.split(" ").size() <= 2, "%s: naam van hooguit twee woorden" % type)
 		gelijk(int(Spel._artikel(type).get("prijs", -1)), prijs, "_artikel kent %s" % type)
-	ArtDecorVersiering.registreer()
+	waar(soorten.has("vloer") and soorten.has("wand"), "er is iets voor de vloer en voor de muur")
+	# de enige nieuwe zin is de titel van de tab; hij volgt HOTEL.md §9
+	for zin in [Spel.T_DECORATIE, "🩷 Decoratie"]:
+		gelijk(str(Ui.mist_tekens(zin)), "[]", 'elk teken van "%s" rendert' % zin)
+		waar(zin.split(" ").size() <= 8 and zin.length() <= 40,
+			'"%s": hooguit 8 woorden en 40 tekens' % zin)
+	gelijk(Rooms.plek_soort("schilderij"), "wand", "het schilderij hangt aan de muur")
+	gelijk(Rooms.plek_soort("plant"), "vloer", "de plant van de kern staat op de vloer")
+	waar(ArtDecor.alle_namen().has("versier_aquarium"), "ArtDecor kent de decoratie")
 	for naam in ArtDecorVersiering.NAMEN:
 		waar(Art.heeft_model(naam), "%s is aangemeld" % naam)
 		waar(not Art.model(naam).is_empty(), "%s heeft voxels" % naam)
 		waar(Art.plaat(naam, 2) != null, "%s bakt" % naam)
-	waar(not Art.model("versier_schilderij", {"motief": "maan"}).is_empty(), "het motief maan bakt")
+		waar(World.plaat(naam, 2, {}, 1) != null, "%s bakt een kwartslag gedraaid" % naam)
 
-## Koop → save → herlaad: het stuk staat terug in dezelfde kamer op dezelfde plek,
-## en de oude meubels eromheen ook (geen nieuw save-veld: een decoratiestuk is
-## een meubel-regel).
+## Koop → save → herlaad: een vloerstuk en een wandstuk staan terug in dezelfde
+## kamer op dezelfde plek, en de oude meubels eromheen ook (geen nieuw
+## save-veld: een decoratiestuk is een meubel-regel).
 func test_kamerdecoratie_overleeft_een_herlaad() -> void:
 	await _op(Vector2(1000, 648), 3, 12)
 	var plant := Rooms.meubel_zet("kamer1", "plant")
 	waar(not plant.is_empty(), "een oude plant staat in kamer 1")
-	var kleed := Rooms.meubel_zet("kamer1", "bankje", 30.0, 30.0)
-	waar(not kleed.is_empty(), "het kleed staat in kamer 1")
+	var bankje := Rooms.meubel_zet("kamer1", "bankje", 30.0, 30.0)
+	waar(not bankje.is_empty(), "het bankje staat in kamer 1")
+	var schilderij := Rooms.meubel_zet("kamer2", "schilderij")
+	waar(not schilderij.is_empty(), "het schilderij hangt in kamer 2")
 	var lamp := Rooms.meubel_zet("speelzaal", "lamp")
 	waar(not lamp.is_empty(), "de lamp staat in de speelzaal")
-	waar(Art.heeft_model("versier_bankje"), "het model is aangemeld door meubel_zet")
 	Hotel.bewaar_inrichting()
 	var tekst := JSON.stringify(State.s)
 	Rooms.herstel()
 	gelijk(Rooms.meubels("kamer1").size(), 0, "na herstel is kamer 1 leeg")
 	State.s = JSON.parse_string(tekst)
 	Hotel.herstel_inrichting()
-	var terug: Array = Rooms.meubels("kamer1").filter(func(m): return str(m["type"]) == "bankje")
-	gelijk(terug.size(), 1, "het kleed is terug in kamer 1")
-	if terug.size() == 1:
-		gelijk(str(terug[0]["id"]), str(kleed["id"]), "met dezelfde id")
-		gelijk(Vector2(float(terug[0]["x"]), float(terug[0]["z"])),
-			Vector2(float(kleed["x"]), float(kleed["z"])), "op dezelfde plek")
+	for oud in [bankje, schilderij, lamp]:
+		var terug: Array = Rooms.meubels(str(oud["kamer"])).filter(
+			func(m): return str(m["id"]) == str(oud["id"]))
+		gelijk(terug.size(), 1, "%s is terug in %s" % [oud["type"], oud["kamer"]])
+		if terug.size() == 1:
+			gelijk(Vector2(float(terug[0]["x"]), float(terug[0]["z"])),
+				Vector2(float(oud["x"]), float(oud["z"])), "%s op dezelfde plek" % oud["type"])
+			gelijk(str(terug[0]["type"]), str(oud["type"]), "en hetzelfde stuk")
 	gelijk(Rooms.meubels("kamer1").filter(func(m): return str(m["type"]) == "plant").size(), 1,
 		"de oude plant is er ook nog")
-	gelijk(Rooms.meubels("speelzaal").filter(func(m): return str(m["type"]) == "lamp").size(), 1,
-		"de lamp staat weer in de speelzaal")
-	waar(Rooms.gebruikte_modellen().has("versier_bankje"), "de kamer vraagt het kleedmodel")
+	var hangt: Array = Rooms.get_kamer("kamer2").decor.filter(
+		func(d): return str(d.get("meubel", "")) == str(schilderij["id"]))
+	gelijk(hangt.size(), 1, "het schilderij is decor van kamer 2")
+	if hangt.size() == 1:
+		waar(bool(hangt[0].get("ver", false)), "het hangt in de laag achter alles (ver)")
+		gelijk(float(hangt[0].get("y", 0.0)), float(Rooms.WAND_Y), "op wandhoogte")
+	waar(Rooms.gebruikte_modellen().has("versier_bankje"), "de kamer vraagt het bankmodel")
+	waar(Rooms.gebruikte_modellen().has("versier_schilderij"), "en het schilderijmodel")
 	_af()
 
-## In het boek staan de decoratiestukken ÁCHTER de zes meubels, met dezelfde
-## knop en dezelfde zin als een meubel.
+## In het boek staan de decoratiestukken op hun eigen tab, met dezelfde knop en
+## dezelfde zin als een meubel; alle negen staan in beeld op 1000×648.
 func test_kamerdecoratie_staat_achterin_het_boek() -> void:
 	await _op(Vector2(1000, 648), 3, 12)
 	waar(Games.start("meubels"), "het spel start")
@@ -1459,3 +1496,96 @@ func test_kamerdecoratie_staat_achterin_het_boek() -> void:
 				"%s staat in beeld op 1000×648 (%s)" % [str(w["type"]), str(r)])
 	_af()
 
+## Door het spel, in kamer 1, kamer 2, de gang en de speelzaal: de ✨-vakjes van
+## een lamp zijn vrije vloervakken, die van een schilderij wandplekken op de
+## hoogte waar het komt te hangen; één tik zet elk op zijn soort plek.  In de
+## gang (geen vrije muur) toont de doos geen vakje maar `🚫 bezet`, en het
+## schilderij blijft in de doos — niets wordt ergens anders neergezet.
+func test_kamerdecoratie_vakjes_per_soort() -> void:
+	for kamer in ["kamer1", "kamer2", "gang", "speelzaal"]:
+		await _op(Vector2(1000, 648), 3, 12)
+		State.spel_data("meubels")["wacht"] = {"nog": ["lamp", "schilderij"]}
+		waar(Games.start("meubels"), "%s: het spel start op de plaatsstap" % kamer)
+		await _tel_frames(3)
+		World.naar(kamer)
+		await _tel_frames(3)
+		gelijk(World.kamer_nu(), kamer, "de doos is mee naar %s" % kamer)
+		# de lamp: vloervakken
+		var vakken := _vakken()
+		waar(not vakken.is_empty(), "%s: de lamp heeft vakjes" % kamer)
+		for id in vakken:
+			var s := Hits.spot(id)
+			waar(Rooms.vrij_vak(kamer, s.x, s.z) and s.y == 0.0,
+				"%s: %s is een vrij vloervak (%s, %s)" % [kamer, id, s.x, s.z])
+		if not vakken.is_empty():
+			waar(_tik(_eerste_vak()), "%s: de lamp neerzetten" % kamer)
+		await _tel_frames(2)
+		var lampen: Array = Rooms.meubels(kamer).filter(func(m): return str(m["type"]) == "lamp")
+		gelijk(lampen.size(), 1, "%s: de lamp staat" % kamer)
+		gelijk(str(_spel().call("_nog")), '["schilderij"]', "%s: het schilderij is aan de beurt" % kamer)
+		# het schilderij: wandplekken, of niets als de muur vol is
+		vakken = _vakken()
+		if Rooms.vrije_wandplekken(kamer).is_empty():
+			gelijk(vakken.size(), 0, "%s: geen vakje voor een schilderij" % kamer)
+			waar(_er_is("mb_bezet"), "%s: de doos zegt 🚫 bezet" % kamer)
+			gelijk(_wolk_deel("mb_bezet", "tekst"), Spel.T_BEZET, "%s: met het bestaande woord" % kamer)
+		else:
+			waar(not vakken.is_empty(), "%s: het schilderij heeft vakjes" % kamer)
+			var muur := Rooms.vrije_wandplekken(kamer)
+			for id in vakken:
+				var s := Hits.spot(id)
+				var op := false
+				for p in muur:
+					if float(p["x"]) == s.x and float(p["z"]) == s.z:
+						op = true
+				waar(op, "%s: %s ligt op een wandplek (%s, %s)" % [kamer, id, s.x, s.z])
+				gelijk(s.y, float(Rooms.WAND_Y) + Rooms.WAND_HOOG / 2.0, "%s: %s op schilderijhoogte" % [kamer, id])
+			if not vakken.is_empty():
+				waar(_tik(_eerste_vak()), "%s: het schilderij ophangen" % kamer)
+			await _tel_frames(2)
+			var hangt: Array = Rooms.get_kamer(kamer).decor.filter(
+				func(d): return str(d.get("type", "")) == "schilderij" and d.has("meubel"))
+			gelijk(hangt.size(), 1, "%s: het schilderij hangt" % kamer)
+			if hangt.size() == 1:
+				waar(bool(hangt[0].get("ver", false)), "%s: aan de muur" % kamer)
+			gelijk(str(_spel().call("_nog")), "[]", "%s: de doos is leeg" % kamer)
+		_af()
+
+## Een kamer kiezen = erheen lopen (games-a.md §5.7).  Zolang een spel loopt
+## haalt `Hits` de hotelknoppen weg, dus de plaatsstap leent de deurbordjes van
+## de kamer waar je bent: één tik op `Gang` en dan op `Kamer 2`, en de doos met
+## de lamp staat in kamer 2 met de vakjes van kamer 2.  Na het neerzetten gaan
+## de bordjes terug naar het hotel.
+func test_kamerdecoratie_de_doos_loopt_mee_door_de_deur() -> void:
+	await _op(Vector2(1000, 648), 3, 12)
+	State.spel_data("meubels")["wacht"] = {"nog": ["lamp"]}
+	waar(Games.start("meubels"), "het spel start op de plaatsstap")
+	await _tel_frames(3)
+	gelijk(World.kamer_nu(), "kamer1", "de doos begint in kamer 1")
+	var deur = Hits.spot("deur_kamer1_gang")
+	waar(deur != null and str(deur.geleend_door) == "meubels", "het deurbordje naar de gang is geleend")
+	waar(_tik("deur_kamer1_gang"), "tik op het deurbordje")
+	await _wacht(0.6)
+	await _tel_frames(3)
+	gelijk(World.kamer_nu(), "gang", "de camera en de doos zijn in de gang")
+	var verder = Hits.spot("deur_gang_kamer2")
+	waar(verder != null and str(verder.geleend_door) == "meubels", "ook in de gang zijn de bordjes geleend")
+	waar(_tik("deur_gang_kamer2"), "tik op het bordje naar kamer 2")
+	await _wacht(0.6)
+	await _tel_frames(3)
+	gelijk(World.kamer_nu(), "kamer2", "nu in kamer 2")
+	var vakken := _vakken()
+	waar(not vakken.is_empty(), "kamer 2 heeft vakjes voor de lamp")
+	for id in vakken:
+		waar(id.begins_with("mbvak_kamer2_"), "%s hoort bij kamer 2" % id)
+	if not vakken.is_empty():
+		waar(_tik(_eerste_vak()), "de lamp neerzetten")
+	await _tel_frames(3)
+	gelijk(Rooms.meubels("kamer2").filter(func(m): return str(m["type"]) == "lamp").size(), 1,
+		"de lamp staat in kamer 2")
+	gelijk(Rooms.meubels("kamer1").filter(func(m): return str(m["type"]) == "lamp").size(), 0,
+		"en niet in kamer 1")
+	await _tel_frames(2)
+	var terug = Hits.spot("deur_kamer2_gang")
+	waar(terug == null or str(terug.geleend_door).is_empty(), "na het neerzetten is het bordje weer van het hotel")
+	_af()

@@ -40,21 +40,24 @@ const MEUBEL := {
 ## `{id, type, kamer, x, z, rot}` in `State.s["meubels"]` — but kept in its own
 ## table: `MEUBEL` stays the six pieces of the frozen shop
 ## (`Sommen.Meubels.WINKEL`, `World.meubeltypen()`).  `meubel_soort()` reads
-## both.  The models are world models (`ArtDecor._extra()`).
+## both.  The models are world models (`ArtDecor._extra()`).  `plek` says where
+## a piece goes: "vloer" on a free floor cell like the plant, "wand" on a free
+## WALL place (`wandplekken`, the picture).
 const DECORATIE := {
-	"kussen": {"soort": "decor", "model": "versier_kussen", "naam": "kussen"},
-	"bloemen": {"soort": "decor", "model": "versier_bloemen", "naam": "bloemen"},
-	"slinger": {"soort": "decor", "model": "versier_slinger", "naam": "slinger"},
-	"bankje": {"soort": "decor", "model": "versier_bankje", "naam": "bankje"},
-	"lamp": {"soort": "decor", "model": "versier_lamp", "naam": "lamp"},
-	"schilderij": {"soort": "decor", "model": "versier_schilderij", "naam": "schilderij"},
-	"kastje": {"soort": "decor", "model": "versier_kastje", "naam": "nachtkastje"},
-	"kist": {"soort": "decor", "model": "versier_kist", "naam": "speelkist"},
-	"aquarium": {"soort": "decor", "model": "versier_aquarium", "naam": "aquarium"},
+	"kussen": {"soort": "decor", "model": "versier_kussen", "naam": "kussen", "plek": "vloer"},
+	"bloemen": {"soort": "decor", "model": "versier_bloemen", "naam": "bloemen", "plek": "vloer"},
+	"slinger": {"soort": "decor", "model": "versier_slinger", "naam": "slinger", "plek": "vloer"},
+	"bankje": {"soort": "decor", "model": "versier_bankje", "naam": "bankje", "plek": "vloer"},
+	"lamp": {"soort": "decor", "model": "versier_lamp", "naam": "lamp", "plek": "vloer"},
+	"schilderij": {"soort": "decor", "model": "versier_schilderij", "naam": "schilderij",
+		"plek": "wand"},
+	"kastje": {"soort": "decor", "model": "versier_kastje", "naam": "nachtkastje", "plek": "vloer"},
+	"kist": {"soort": "decor", "model": "versier_kist", "naam": "speelkist", "plek": "vloer"},
+	"aquarium": {"soort": "decor", "model": "versier_aquarium", "naam": "aquarium", "plek": "vloer"},
 }
 
 ## What a type of furniture or decoration is (`MEUBEL`, then `DECORATIE`):
-## `{soort, model, naam}`, or `{}` for a type nobody can buy.
+## `{soort, model, naam[, plek]}`, or `{}` for a type nobody can buy.
 static func meubel_soort(type: String) -> Dictionary:
 	if MEUBEL.has(type):
 		return MEUBEL[type]
@@ -94,6 +97,12 @@ class Kamer extends RefCounted:
 	## bars over it instead of plaster (`scenes/vloer.gd`); a door INTO such a
 	## room gets a white frame, like a door that leads outside.
 	var glas := false
+	## Under the night sky (the dakterras, U3 2026-10-07): `scenes/vloer.gd`
+	## draws a dark-blue sky with stars and a moon over the whole view, the
+	## deck as a bounded floor with the tower's lit windows under it, a railing
+	## along the back edges and a stairhouse round every flight, with strings
+	## of lights — instead of a lawn or two walls.  `wand` sizes the stairhouse.
+	var nacht := false
 	## Floor rectangles {x0, x1, z0, z1} kept free of wander places and of bought
 	## furniture: where a game's own table or scale stands (its resting props,
 	## world.md §5.1), so a guest does not stroll into it and the furniture book
@@ -495,6 +504,8 @@ func _cel_vrij(r: Kamer, x: int, z: int) -> bool:
 	if _in_mijd(r, x, z, 3.0):
 		return false
 	for stuk in r.decor:
+		if _hangt(stuk):
+			continue                 # a bought picture on the wall keeps no floor
 		if absf(stuk["x"] - x) + absf(stuk["z"] - z) < 18.0:
 			return false
 	for id in r.slots:
@@ -675,6 +686,8 @@ func _bezet(r: Kamer, x: float, z: float) -> bool:
 	if _op_een_bed(r, x, z, MEUBEL_BED_RAND):
 		return true
 	for stuk in r.decor:
+		if _hangt(stuk):
+			continue
 		if absf(stuk["x"] - x) + absf(stuk["z"] - z) < 15.0:
 			return true
 	for naar in r.deur_punten:
@@ -842,8 +855,18 @@ func meubel_zet(kamer_id: String, type: String, x: float = NAN, z: float = NAN,
 	if r == null or soort.is_empty():
 		return {}
 	_onthoud_basis()
+	var aan_wand := plek_soort(type) == "wand"
 	var op_raster: bool = soort["soort"] == "bed" and not r.bedden.is_empty()
-	if op_raster:
+	if aan_wand:
+		# a picture hangs on the free wall place nearest to (x, z) — the first
+		# one when no point is given — turned to its wall; none free: {}
+		var wp := _naar_wandplek(r, x, z)
+		if wp.is_empty():
+			return {}
+		x = float(wp["x"])
+		z = float(wp["z"])
+		rot = 1 if str(wp["wand"]) == "x" else 0
+	elif op_raster:
 		var vrij := vrije_bedplekken(kamer_id)
 		if vrij.is_empty():
 			return {}
@@ -861,13 +884,14 @@ func meubel_zet(kamer_id: String, type: String, x: float = NAN, z: float = NAN,
 	elif is_nan(x) or is_nan(z):
 		x = r.w / 2.0
 		z = r.d / 2.0
-	if not op_raster and (x < 4 or z < 4 or x > r.w - 4 or z > r.d - 4 or _bezet(r, x, z)):
+	var op_vloer := not op_raster and not aan_wand
+	if op_vloer and (x < 4 or z < 4 or x > r.w - 4 or z > r.d - 4 or _bezet(r, x, z)):
 		var vak := _naar_raster(r, x, z)
 		if vak.is_empty():
 			return {}
 		x = vak["x"]
 		z = vak["z"]
-	if not op_raster and _bezet(r, x, z):
+	if op_vloer and _bezet(r, x, z):
 		return {}
 	if not id.is_empty() and _id_bestaat(id):
 		id = ""                       # a save that names one piece twice: a new id
@@ -883,6 +907,11 @@ func meubel_zet(kamer_id: String, type: String, x: float = NAN, z: float = NAN,
 	if soort["soort"] == "decor":
 		uit = {"id": id, "n": soort["model"], "x": x, "z": z, "meubel": id, "type": type,
 			"kamer": kamer_id, "rot": rot}
+		if aan_wand:
+			# drawn in the layer behind everything, like every wall piece
+			uit["y"] = float(WAND_Y)
+			uit["ver"] = true
+			uit["aan_wand"] = true
 		r.decor.append(uit)
 	else:
 		var draai := (rot % 2) == 1
@@ -893,6 +922,183 @@ func meubel_zet(kamer_id: String, type: String, x: float = NAN, z: float = NAN,
 	bouw_af(r)
 	kamers_veranderd.emit()
 	return uit.duplicate()
+
+# ------------------------------------------------------------- de muur (U7)
+##
+## Bought decoration that HANGS (owner, 2026-10-07: "accessoires om in de kamers
+## te zetten of de kamers te decoreren"): the picture, `DECORATIE[type].plek` =
+## "wand".  An indoor room shows two walls, the back wall z = 0 and the left wall
+## x = 0; every `WAND_STAP` voxels along them is a wall place, except where a
+## door, a flight of stairs, the front door, the desk, a fixed wall piece or
+## something tall in front of the wall is.  A piece hangs `WAND_Y` above the
+## floor with `ver` (the layer behind everything, `scenes/kamer.gd`) and
+## `aan_wand`: it is no obstacle, keeps no floor cell and no floor spot bezet.
+## Outdoors (no walls) and in the glass kas there are no wall places.
+
+const WAND_Y := 28             ## the bottom of a hanging piece, voxels above the floor
+const WAND_HOOG := 13          ## ... and how tall it is (`versier_schilderij`)
+const WAND_STAP := 12          ## wall places lie 12 voxels apart
+const WAND_HALF := 8.0         ## a hanging piece is 15 wide: 8 to each side
+const WAND_LUCHT := 4.0        ## air between it and the next piece on the wall
+const WAND_DEUR := 6.0         ## ... and beside a door or stair opening
+const WAND_BALIE := 30.0       ## the desk with its bell and till, counted as this tall
+const WAND_MIJD := 40.0        ## a game's table or easel (`Kamer.mijd`), counted as this tall
+
+## Where a bought piece of `type` goes: "vloer" (a free floor cell) or "wand".
+func plek_soort(type: String) -> String:
+	return str(meubel_soort(type).get("plek", "vloer"))
+
+## Can a child buy a piece of `type`: one of the six of `MEUBEL` or a piece of
+## room decoration (`DECORATIE`)?
+func koopbaar(type: String) -> bool:
+	return not meubel_soort(type).is_empty()
+
+## A bought piece that hangs on a wall?
+static func _hangt(stuk: Dictionary) -> bool:
+	return bool(stuk.get("aan_wand", false))
+
+## Every wall place of the room that its FIXED things leave open, back wall
+## first: [{id, x, z, wand}] — `wand` "z" on the back wall (the piece at z = 1),
+## "x" on the left wall (x = 1).  Bought pieces do not count here.
+func wandplekken(kamer_id: String) -> Array:
+	var r := get_kamer(kamer_id)
+	var uit: Array = []
+	if r == null or r.erf or r.glas or r.wand < WAND_Y + WAND_HOOG + 4:
+		return uit
+	for wand in ["z", "x"]:
+		var lengte: int = r.w if wand == "z" else r.d
+		var a := WAND_STAP
+		while a <= lengte - WAND_STAP:
+			if _wand_open(r, wand, float(a)):
+				uit.append({"id": "w%s%d" % [wand, a], "wand": wand,
+					"x": float(a) if wand == "z" else 1.0,
+					"z": 1.0 if wand == "z" else float(a)})
+			a += WAND_STAP
+	return uit
+
+## The wall places no bought piece hangs on yet.
+func vrije_wandplekken(kamer_id: String) -> Array:
+	var r := get_kamer(kamer_id)
+	var uit: Array = []
+	if r == null:
+		return uit
+	for p in wandplekken(kamer_id):
+		if _wandplek_vrij(r, p):
+			uit.append(p)
+	return uit
+
+func _wandplek_vrij(r: Kamer, p: Dictionary) -> bool:
+	var wand := str(p["wand"])
+	var a: float = float(p["x"]) if wand == "z" else float(p["z"])
+	for stuk in r.decor:
+		if not _hangt(stuk):
+			continue
+		var op_z := float(stuk["z"]) <= 3.0
+		if (wand == "z") != op_z:
+			continue                 # it hangs on the other wall
+		var b: float = float(stuk["x"]) if op_z else float(stuk["z"])
+		if absf(a - b) < 2.0 * WAND_HALF + WAND_LUCHT:
+			return false
+	return true
+
+## The free wall place nearest to (x, z); the first free one when no point is
+## given; {} when every wall place is taken.
+func _naar_wandplek(r: Kamer, x: float, z: float) -> Dictionary:
+	var vrij := vrije_wandplekken(r.id)
+	if vrij.is_empty():
+		return {}
+	if is_nan(x) or is_nan(z):
+		return vrij[0]
+	var beste: Dictionary = vrij[0]
+	var beste_af := INF
+	for p in vrij:
+		var af: float = absf(float(p["x"]) - x) + absf(float(p["z"]) - z)
+		if af < beste_af:
+			beste_af = af
+			beste = p
+	return beste
+
+## Is the stretch of `wand` around `a` (along the wall) open for a picture?
+## Not in or beside an opening, not on a fixed wall piece, and not behind
+## something that stands in front of the wall and is tall enough to hide it in
+## the isometric view: a thing whose nearest side is `d` voxels off the wall
+## hides a picture at `WAND_Y` when its top is above `d + WAND_Y - 2`, over the
+## stretch of the screen it covers (`x - z` for the back wall, `z - x` for the
+## left one).
+func _wand_open(r: Kamer, wand: String, a: float) -> bool:
+	var lo := a - WAND_HALF
+	var hi := a + WAND_HALF
+	var gaten: Array = []
+	for dr in r.deuren:
+		gaten.append(dr)
+	for richting in r.trap:
+		gaten.append(r.trap[richting])
+	if not r.ingang.is_empty():
+		gaten.append(r.ingang)
+	for g in gaten:
+		if str(g.get("wand", "")) != wand:
+			continue
+		var g0 := float(g["at"]) - WAND_DEUR
+		var g1 := float(g["at"]) + float(g["breed"]) + WAND_DEUR
+		if hi > g0 and lo < g1:
+			return false
+	for stuk in r.decor:
+		if _hangt(stuk) or bool(stuk.get("pol", false)) or bool(stuk.get("hek", false)):
+			continue
+		var v := voet(str(stuk["n"]), int(stuk.get("rot", 0)))
+		var sx := float(stuk["x"])
+		var sz := float(stuk["z"])
+		if bool(stuk.get("ver", false)):
+			# a fixed wall piece: on this wall, over this stretch
+			var op_z := sz <= 3.0
+			if (wand == "z") != op_z:
+				continue
+			var b0: float = (sx + v.position.x) if op_z else (sz + v.position.y)
+			var b1: float = (sx + v.end.x) if op_z else (sz + v.end.y)
+			if hi + WAND_LUCHT > b0 and lo - WAND_LUCHT < b1:
+				return false
+			continue
+		var vlak := Rect2(v.position + Vector2(sx, sz), v.size)
+		var top := float(stuk.get("y", 0.0)) + float(_top(str(stuk["n"])))
+		if _verbergt(wand, lo, hi, vlak, top):
+			return false
+	for m in r.mijd:
+		var vlak := Rect2(float(m["x0"]), float(m["z0"]),
+			float(m["x1"]) - float(m["x0"]), float(m["z1"]) - float(m["z0"]))
+		if _verbergt(wand, lo, hi, vlak, WAND_MIJD):
+			return false
+	if not r.balie.is_empty():
+		var vlak := Rect2(float(r.balie["x0"]), 0.0,
+			float(r.balie["x1"]) - float(r.balie["x0"]), float(r.balie["z1"]))
+		if _verbergt(wand, lo, hi, vlak, WAND_BALIE):
+			return false
+	return true
+
+## Does a thing on floor rectangle `vlak` (x, z), `top` voxels tall, hide a
+## picture hanging on `wand` between `lo` and `hi`?
+static func _verbergt(wand: String, lo: float, hi: float, vlak: Rect2, top: float) -> bool:
+	var langs0: float = vlak.position.x if wand == "z" else vlak.position.y
+	var langs1: float = vlak.end.x if wand == "z" else vlak.end.y
+	var dwars0: float = vlak.position.y if wand == "z" else vlak.position.x
+	var dwars1: float = vlak.end.y if wand == "z" else vlak.end.x
+	var d := maxf(0.0, dwars0)
+	if top <= d + float(WAND_Y) - 2.0:
+		return false
+	# the stretch of the screen it covers, along the wall's own axis
+	return langs1 - dwars0 > lo - 2.0 and langs0 - dwars1 < hi
+
+## The height of a model, its highest voxel + 1; cached like `voet`.
+var _toppen: Dictionary = {}
+
+func _top(model: String) -> int:
+	if _toppen.has(model):
+		return int(_toppen[model])
+	var top := 0
+	if not model.is_empty() and Art.heeft_model(model):
+		for p in Art.model(model):
+			top = maxi(top, int(p["y"]) + 1)
+	_toppen[model] = top
+	return top
 
 ## Is `id` already a slot or a bought piece somewhere in the hotel?
 func _id_bestaat(id: String) -> bool:
@@ -1499,24 +1705,26 @@ func _bouw_kamers() -> void:
 			{"n": "bloembak", "x": 90, "z": 104}]})
 	# De bakkerij (2026-10-07, owner: "Verzin nog vier kamers met activiteiten";
 	# .fanout/scratch/uitbreiding/U1-bakkerij.md).  Floor 1, behind the kitchen:
-	# one run along the back wall (the oven — `ArtDecorBakkerij.bakoven`, the
-	# thing key "oven" — the counter and the shelf with the pot board above
-	# it), a flour sack
-	# by the left wall, the work table in the near right corner where the
-	# baking trays of `koekjes` lie, a window in the back wall.  A plank floor:
-	# through the kitchen door you must see a floor the kitchen does not have
-	# (`test_elke_deur_laat_zien_waar_hij_heen_gaat`).  No `mijd`: only the
-	# kas, the shops and the playroom reserve floor
-	# (`test_de_kas_is_een_glazen_kas_achter_het_hotel`); the game's tray is
-	# its own decor and goes with it.  Appended LAST on purpose: every room
-	# index before it stays what it was.
+	# along the back wall the counter and the shelf with the pot board above
+	# it, the cupboard and a window; a flour sack by the left wall, a small
+	# table in the near right corner.  The stone oven (back wall, left) and the
+	# big baker's table (the middle of the floor) are the game `koekjes`'s own
+	# things — its resting props while nobody plays (`definitie().rust`) and
+	# its decor during a turn — so `mijd` keeps their floor free: no wander
+	# place and no bought furniture under them (the kas, the shops and the
+	# playroom do the same; `test_de_kas_is_een_glazen_kas_achter_het_hotel`).
+	# The game's entry is anchored to the counter, the nearest fixed piece.  A
+	# plank floor: through the kitchen door you must see a floor the kitchen
+	# does not have (`test_elke_deur_laat_zien_waar_hij_heen_gaat`).  Appended
+	# LAST on purpose: every room index before it stays what it was.
 	_kamer({"id": "bakkerij", "naam": "Bakkerij", "icoon": "🍪", "w": 114, "d": 100,
 		"wand": 56, "vloer": "hout", "loop": 1.5, "etage": 1,
 		"deuren": [{"naar": "keuken", "wand": "x", "at": 72, "breed": 12}],
-		# the oven is the bakery's own `bakoven` (26 x 18, centred on its
-		# point): at z 10 its back stands against the back wall
-		"decor": [{"n": "bakoven", "x": 30, "z": 10, "sleutel": "oven"},
-			{"n": "aanrecht", "x": 56, "z": 6}, {"n": "kast", "x": 84, "z": 6},
+		# the oven of `koekjes` (x 17..43 with its top, z 1..20 with its sill)
+		# and its table (`ArtDecorBakkerij.BANK_W` × `BANK_D` round (56, 50))
+		"mijd": [{"x0": 17, "x1": 43, "z0": 0, "z1": 20},
+			{"x0": 33, "x1": 79, "z0": 31, "z1": 69}],
+		"decor": [{"n": "aanrecht", "x": 56, "z": 6}, {"n": "kast", "x": 84, "z": 6},
 			{"n": "pottenplank", "x": 56, "z": 2, "y": 18, "ver": true},
 			{"n": "raam", "x": 104, "z": 1, "y": 25, "ver": true},
 			{"n": "zak", "x": 14, "z": 24},
@@ -1551,50 +1759,59 @@ func _bouw_kamers() -> void:
 			{"n": "wimpel", "x": 70, "z": 1, "ver": true}]})
 	# U3, 2026-10-07 (owner: "Verzin nog vier kamers met activiteiten"): het
 	# dakterras 🌙, the roof of the tower and its new TOP floor (4), over the
-	# playroom.  Outdoors like the garden (`erf`: no walls, the yard fence is
-	# the railing), a wooden deck, the night sky over it where the stars of
-	# `games/sterren` (Sterren tellen) hang in dot patterns.  The only wall
-	# piece is the stairhouse at the back with the flight DOWN to the
-	# speelzaal; `wand` sizes that frame.  Zone `sterren` keeps the front-right
-	# corner (the telescope and the patch of sky it looks at) free of bought
-	# furniture.  The deck's pieces and their places are
-	# `ArtDecorDak.PLAATSING` (art/decor_dak.gd, registered in
-	# `ArtDecor._extra()`): the telescope, two deck chairs, the string lights
-	# on the stairhouse wall and a piece of railing.
+	# playroom, at night (`nacht`: `scenes/vloer.gd` draws the dark-blue sky
+	# with its stars and moon, the plank deck with the tower's lit windows
+	# under it, a railing along the two back edges, the stairhouse round the
+	# flight DOWN to the speelzaal, and strings of lights).  Outdoors (`erf`:
+	# the wider margin of a lawn).  `wand` only sizes the stairhouse.
+	# The furniture is the world's own: lanterns in two corners, flower boxes
+	# on the railing either side of the stairhouse, a bench and a plant along
+	# the left railing and the cushions in the front-left corner, to lie on and
+	# look up.  The front-right corner (`mijd`, zone `sterren`) belongs to
+	# `games/sterren` (Sterren tellen): its telescope stands there as a resting
+	# prop (`definitie().rust`), and the animal of the turn stands beside it.
 	_kamer({"id": "dakterras", "naam": "Dakterras", "icoon": "🌙",
 		"w": 114, "d": 100, "wand": 56, "vloer": "hout", "loop": 1.5,
-		"erf": true, "etage": 4,
+		"erf": true, "nacht": true, "etage": 4,
 		"trap": {"af": {"wand": "z", "at": 51, "breed": 12}},
-		"zones": {"sterren": {"x0": 70, "x1": 104, "z0": 70, "z1": 96}},
-		"decor": ArtDecorDak.PLAATSING.duplicate(true)})
+		"zones": {"sterren": {"x0": 78, "x1": 112, "z0": 60, "z1": 98}},
+		"mijd": [{"x0": 78, "x1": 112, "z0": 60, "z1": 98}],
+		"decor": [
+			{"n": "lantaarn", "x": 8, "z": 8},
+			{"n": "bloembak", "x": 24, "z": 5},
+			{"n": "bloembak", "x": 94, "z": 5},
+			{"n": "lantaarn", "x": 108, "z": 10},
+			{"n": "bankjez", "x": 7, "z": 44},
+			{"n": "plant", "x": 8, "z": 70},
+			{"n": "kussenhoek", "x": 16, "z": 84}]})
 	# De postkamer (U4, 2026-10-07; owner: "Verzin nog vier kamers met
 	# activiteiten"): a small room on the ground floor, behind the glass house
 	# (U4 put it behind the lobby; the lobby has no room for a fifth opening on
-	# a phone, see the kas's door).  The sorting shelf with the numbered
-	# pigeonholes stands along the back wall (z = 0), the stamp counter with
-	# the parcel scale along the left wall (x = 0) in front of the door; both
-	# are `mijd` so no guest strolls into the game's props.  Door back to the
-	# kas in the left wall.  A plank floor: through the kas's door you must see
-	# a floor the tiled kas does not have
-	# (`test_rooms.gd::test_elke_deur_laat_zien_waar_hij_heen_gaat`).  Static
-	# decor: the room's own `ArtDecorPost` models (registered in
-	# `ArtDecor._extra()`) — the shelf where the game puts its own during a
-	# turn (40, 8), the stamp counter in its `mijd` by the left wall, the
-	# parcel scale at the end of the shelf
-	# (see .fanout/scratch/uitbreiding/U4-postkamer.md).
-	# icon: the letter 💌 of the hotel's own post (the top bar's letter count);
-	# U4's 📮 is not in the bundled fonts and drew as a box with its code
-	# (`Ui.mist_tekens`, seen in the export 2026-10-07)
+	# a phone, see the kas's door — integration I1a).  The sorting shelf with
+	# the numbered pigeonholes stands along the back wall (z = 0), the stamp
+	# counter with the parcel scale along the left wall (x = 0) in front of the
+	# door, the mail cart in the middle; all three are `mijd` so no guest
+	# strolls into the game's props (they are the resting props and the turn's
+	# own decor of `games/post`, models in `art/decor_post.gd`, integration
+	# I1b: no fixed copies of them as well).  Door back to the kas in the left
+	# wall.  A plank floor: through the kas's door you must see a floor the
+	# tiled kas does not have
+	# (`test_rooms.gd::test_elke_deur_laat_zien_waar_hij_heen_gaat`).  The
+	# icon is 💌, the hotel's own post pictogram: 📮 is not in the bundled
+	# font subset (`fonts/tekens.txt`, `Ui.mist_tekens`).
 	_kamer({"id": "postkamer", "naam": "Postkamer", "icoon": "💌", "w": 96, "d": 88,
 		"wand": 44, "vloer": "hout", "loop": 1.25, "etage": 0,
 		"kijk": Vector2(48, 44),
-		"mijd": [{"x0": 8, "x1": 72, "z0": 0, "z1": 16},
-			{"x0": 0, "x1": 16, "z0": 20, "z1": 48}],
+		"mijd": [{"x0": 6, "x1": 90, "z0": 0, "z1": 14},
+			{"x0": 0, "x1": 16, "z0": 19, "z1": 49},
+			{"x0": 30, "x1": 52, "z0": 37, "z1": 51}],
 		"deuren": [{"naar": "kas", "wand": "x", "at": 60, "breed": 12}],
+		# the clock hangs on the wall over the shelf's right end; a post sack
+		# and the plant stand on the right, out of the cart's column
 		"decor": [
-			{"n": "vakkenkast", "x": 40, "z": 8},
-			{"n": "zegelbalie", "x": 8, "z": 34},
-			{"n": "pakketweegschaal", "x": 84, "z": 10}]})
+			{"n": "klok", "x": 84, "z": 1, "y": 30, "ver": true},
+			{"n": "zak", "x": 86, "z": 40},
+			{"n": "plant", "x": 90, "z": 66}]})
 	_bouw_tuin(_kamers["tuin"])
 	_bouw_zwembad(_kamers["zwembad"])
 	for id in _volgorde:
@@ -1621,6 +1838,7 @@ func _kamer(o: Dictionary) -> void:
 	r.balie = o.get("balie", {})
 	r.vrij_z0 = int(o.get("vrij_z0", 0))
 	r.glas = bool(o.get("glas", false))
+	r.nacht = bool(o.get("nacht", false))
 	r.mijd = o.get("mijd", [])
 	r.dek = o.get("dek", {})
 	r.zones = o.get("zones", {})

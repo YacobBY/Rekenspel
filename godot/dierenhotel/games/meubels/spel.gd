@@ -33,7 +33,10 @@ extends MiniGame
 ##  * Slepen naar een DEUR bestaat niet meer.  Godots sleepcontract vergelijkt
 ##    één naam (`_can_drop_data`), dus een lading past bij één soort doel; de
 ##    deurknoppen van het hotel blijven gewoon staan en één tik loopt de doos
-##    achter je aan (`volg`).
+##    achter je aan (`volg`).  Sinds `Hits` de hotelknoppen weghaalt zolang een
+##    spel loopt, LEENT de plaatsstap de deur- en trapbordjes van de kamer waar
+##    je bent (`_leen_deuren`, zoals de voerkar), met hun eigen tik: zo kies je
+##    de kamer voor je meubel of je schilderij door erheen te lopen (U7).
 
 const MODELLEN := preload("res://games/meubels/modellen.gd")
 
@@ -111,13 +114,19 @@ var _vak_offset := 0
 var _blad_stil := false      ## een blad dat IK dichtdoe mag geen view omzetten
 var _verbonden := false
 var _t0 := 0
+var _deuren_geleend := false  ## de deur- en trapbordjes zijn nu van de plaatsstap
 
 ## Koopbare kamerdecoratie (eigenaar 2026-10-07: "accessoires om in de kamers te
-## zetten of de kamers te decoreren").  Zelfde vorm als `Sommen.Meubels.WINKEL`
-## en ÁCHTER die zes in het boek; de prijzen blijven binnen 1..8, het bereik dat
+## zetten of de kamers te decoreren").  Zelfde vorm als `Sommen.Meubels.WINKEL`,
+## op een eigen tab 🩷 Decoratie; de prijzen blijven binnen 1..8, het bereik dat
 ## de bevroren kern al maakt, dus kassa en som veranderen niet.  De types staan
 ## in `Rooms.DECORATIE` (soort decor, modellen in `art/decor_versiering.gd`) en
-## lopen dezelfde weg: kopen → betalen → één tik op een vrij vakje in je kamer.
+## lopen dezelfde weg: kopen → betalen → één tik op een vrij ✨-vakje in je
+## kamer.  Het schilderij hangt aan de MUUR (`Rooms.plek_soort` = "wand", zijn
+## vakjes zijn `Rooms.vrije_wandplekken`), de rest staat op de vloer.
+## Pictogrammen: alleen glyphs uit `fonts/tekens.txt` (🖼 🐠 🕯 🟪 zitten nog
+## niet in de gebundelde fonts); het schilderij toont zijn motief (de maan), het
+## kastje draagt een klokje, het aquarium is water (💦).
 const VERSIERING_KAMER := [
 	{"type": "kussen", "icoon": "🩷", "naam": "kussen", "prijs": 1, "plus": ""},
 	{"type": "bloemen", "icoon": "🌸", "naam": "bloemen", "prijs": 2, "plus": ""},
@@ -127,12 +136,8 @@ const VERSIERING_KAMER := [
 	{"type": "schilderij", "icoon": "🌙", "naam": "schilderij", "prijs": 4, "plus": ""},
 	{"type": "kastje", "icoon": "🕐", "naam": "klokkastje", "prijs": 4, "plus": ""},
 	{"type": "kist", "icoon": "🧸", "naam": "speelkist", "prijs": 5, "plus": ""},
+	{"type": "aquarium", "icoon": "💦", "naam": "aquarium", "prijs": 6, "plus": ""},
 ]
-## Acht kaartjes: twee rijen van vier op het laagste tabletkader (1000×648);
-## een negende (het aquarium, model en `Rooms.DECORATIE` staan klaar) valt daar
-## onder het blad.  Pictogrammen: alleen glyphs uit `fonts/tekens.txt`
-## (🖼 🐠 🕯 🟪 zitten niet in de gebundelde fonts); het schilderij toont zijn
-## motief (de maan), het kastje draagt een klokje.
 
 # =============================================================== registratie
 
@@ -545,7 +550,8 @@ func _boek_teken() -> void:
 	if _tab == "versiering":
 		_blad_versiering(q, inhoud)
 	elif _tab == "decoratie":
-		_blad_meubels(inhoud, VERSIERING_KAMER, "Decoratie")   # eigen blad: het meubelblad blijft 6 kaartjes
+		# eigen blad met kleinere kaartjes: het meubelblad blijft zes kaartjes
+		_blad_meubels(inhoud, VERSIERING_KAMER, "Decoratie", true)
 	else:
 		_blad_meubels(inhoud)
 	_blad_open(inhoud)
@@ -569,8 +575,12 @@ func _blad_breed() -> float:
 func _blad_smal() -> bool:
 	return _blad_breed() < 400.0
 
+## `compact` (de decoratiepagina, negen stukken): het pictogram en de prijs
+## staan naast elkaar boven de knop, in een lager kaartje — zo passen er vijf op
+## een rij van het tabletblad (twee rijen) en drie rijen op een telefoon, waar
+## het meubelblad met zijn zes gewone kaartjes ook past.
 func _blad_meubels(inhoud: Array[Control], bron: Array = Sommen.Meubels.WINKEL,
-		rooster_naam: String = "Winkel") -> void:
+		rooster_naam: String = "Winkel", compact := false) -> void:
 	if _blad_smal():
 		_lijst_rij(inhoud)
 	var rooster := HFlowContainer.new()
@@ -585,6 +595,16 @@ func _blad_meubels(inhoud: Array[Control], bron: Array = Sommen.Meubels.WINKEL,
 		var delen: Array[Control] = [
 			_icoon_label(str(w["icoon"])),
 			_chip(_eur(prijs), UiThema.PERZIK)]
+		if compact:
+			var kop := HBoxContainer.new()
+			kop.name = "Kop"
+			kop.alignment = BoxContainer.ALIGNMENT_CENTER
+			kop.add_theme_constant_override("separation", 2)
+			kop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			for c in delen:
+				c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+				kop.add_child(c)
+			delen = [kop]
 		if not str(w.get("plus", "")).is_empty():
 			delen.append(_chip(str(w["plus"]), UiThema.MUNT))
 		if maxi_lijst > 1:
@@ -600,7 +620,7 @@ func _blad_meubels(inhoud: Array[Control], bron: Array = Sommen.Meubels.WINKEL,
 			delen.append(_knop("k_%s" % type, "🛒" if kan else "💛",
 				"%s kopen, %d euro" % [str(w["naam"]), prijs],
 				func() -> void: _koop([type])))
-		rooster.add_child(_kaartje(delen))
+		rooster.add_child(_kaartje(delen, compact))
 	inhoud.append(rooster)
 	if not _blad_smal():
 		_lijst_rij(inhoud)
@@ -732,12 +752,12 @@ func _icoon_label(icoon: String, klein := false) -> Label:
 		_maat("icoon_keuze") if klein else _maat("icoon_bron"))
 	return l
 
-func _kaartje(delen: Array[Control]) -> PanelContainer:
+func _kaartje(delen: Array[Control], compact := false) -> PanelContainer:
 	var p := PanelContainer.new()
 	p.name = "Kaartje"
-	p.custom_minimum_size = Vector2(88 if _blad_smal() else 104, 0)
+	p.custom_minimum_size = Vector2(0 if compact else (88 if _blad_smal() else 104), 0)
 	p.add_theme_stylebox_override("panel",
-		UiThema.vulling(UiThema.vlak(UiThema.BG2, 16, 2, UiThema.WIT), 6, 8))
+		UiThema.vulling(UiThema.vlak(UiThema.BG2, 16, 2, UiThema.WIT), 6, 4 if compact else 8))
 	var kolom := VBoxContainer.new()
 	kolom.name = "Kolom"
 	kolom.add_theme_constant_override("separation", 4)
@@ -886,8 +906,13 @@ func _mijn_meubel_knoppen() -> void:
 					"x": x + 8.0, "z": z - 8.0, "y": 14.0,
 					"icoon": "🔄", "label": W_DRAAIEN, "titel": T_DRAAIEN, "prio": 8,
 					"aan": func(_s) -> void: _draai(id, kamer_id, x, z)})
+			# een schilderij hangt aan de muur: het knopje naast het lijstje
+			var aan_wand := Rooms.plek_soort(type) == "wand"
+			var op_z := z <= 3.0
 			ctx.hotspots.maak({"id": "mbop_%s" % id, "kamer": kamer_id,
-				"x": x - 8.0, "z": z + 8.0, "y": 14.0,
+				"x": (x - 10.0 if op_z else x + 2.0) if aan_wand else x - 8.0,
+				"z": (z + 2.0 if op_z else z + 10.0) if aan_wand else z + 8.0,
+				"y": float(Rooms.WAND_Y) + Rooms.WAND_HOOG / 2.0 if aan_wand else 14.0,
 				"icoon": "📦", "label": W_OPPAKKEN,
 				"titel": "%s oppakken" % _naam_van(type), "prio": 8,
 				"aan": func(_s) -> void: _pak_op(id, type, kamer_id, x, z)})
@@ -1395,6 +1420,39 @@ func _na_betaald() -> void:
 # BLADZIJDE 3 — NEERZETTEN OP HET VOXELRASTER (games-a.md §5.7)
 # ==================================================================================
 
+## Zolang de doos rondgaat zijn de deur- en trapbordjes van de kamer waar je
+## bent even van dit spel: `Hits` laat een geleende hotelknop staan terwijl een
+## spel loopt, en hij doet wat hij altijd doet (de camera loopt door de deur,
+## `_op_kamer` tekent de vakjes van de nieuwe kamer en de doos loopt mee).
+## `Hotel.render()` bouwt die knoppen bij elke kamerwissel opnieuw, dus het
+## lenen wordt elk beeld bevestigd — net als bij de voerkar.  Buiten de
+## plaatsstap gaan ze terug.
+func _process(_dt: float) -> void:
+	if not actief:
+		return
+	if _view == "plaats":
+		_leen_deuren()
+	elif _deuren_geleend:
+		ctx.hotspots.laat()
+		_deuren_geleend = false
+
+func _leen_deuren() -> void:
+	var nu := World.kamer_nu()
+	var r := Rooms.get_kamer(nu)
+	if r == null:
+		return
+	var ids: Array[String] = []
+	for dr in r.deuren:
+		ids.append("deur_%s_%s" % [nu, str(dr.get("naar", ""))])
+	for richting in Rooms.trap_richtingen(nu):
+		ids.append(Hotel.trap_knop_id(nu, richting))
+	for id in ids:
+		var s = Hits.spot(id)              # Hits.Spot: een binnenklasse, ongetypeerd
+		if s != null and str(s.geleend_door).is_empty():
+			var eigen: Callable = s.aan
+			if eigen.is_valid() and ctx.hotspots.pak(id, eigen):
+				_deuren_geleend = true
+
 func _plaats() -> void:
 	_view = "plaats"
 	_bet = {}
@@ -1410,8 +1468,16 @@ func _plaats() -> void:
 			if not Rooms.vrije_bedplekken(k).is_empty():
 				_thuis = k
 				break
+	# een schilderij hangt aan de muur: naar een kamer met een vrije wandplek
+	var aan_wand := Rooms.plek_soort(str(_nog()[0])) == "wand"
+	if aan_wand and Rooms.vrije_wandplekken(_thuis).is_empty():
+		for k in Rooms.lijst():
+			if k != "receptie" and not Rooms.vrije_wandplekken(k).is_empty():
+				_thuis = k                 # inrichten doe je in een kamer
+				break
 	if ctx.wereld.actief() == "receptie" \
-			or (str(_nog()[0]) == "bed" and Rooms.vrije_bedplekken(ctx.wereld.actief()).is_empty()):
+			or (str(_nog()[0]) == "bed" and Rooms.vrije_bedplekken(ctx.wereld.actief()).is_empty()) \
+			or (aan_wand and Rooms.vrije_wandplekken(ctx.wereld.actief()).is_empty()):
 		Hotel.naar_kamer(_thuis)
 	_plaats_teken()
 
@@ -1441,6 +1507,9 @@ func _plaats_teken() -> void:
 			var p := _doos_plek(k)
 			return {"x": p["x"], "z": p["z"], "y": 16.0, "kamer": k},
 		"tik": func(_s) -> void:
+			if _vakjes(World.kamer_nu(), str(_nog()[0]) if not _nog().is_empty() else "").is_empty():
+				_geen_plek(World.kamer_nu())
+				return
 			var p := _doos_plek(World.kamer_nu())
 			_wolk({"kamer": World.kamer_nu(), "x": p["x"], "z": p["z"]},
 				{"id": "mb_tip", "icoon": "✨", "tekst": T_SLEEP,
@@ -1457,7 +1526,7 @@ func _plaats_teken() -> void:
 		var vx := float(v["x"])
 		var vz := float(v["z"])
 		ctx.hotspots.maak({"id": "mbvak_%s_%s" % [nu, str(v["id"])], "kamer": nu,
-			"x": vx, "z": vz, "y": 0.0,
+			"x": vx, "z": vz, "y": float(v.get("y", 0.0)),
 			"icoon": "✨", "label": W_HIER, "titel": T_HIER, "prio": 9,
 			"kind": "drop", "drop": "mbdoos", "klas": "hotgame",
 			"data": {"kamer": nu, "x": vx, "z": vz},
@@ -1468,15 +1537,30 @@ func _plaats_teken() -> void:
 		var v: Dictionary = alle[(_vak_offset + vak_max) % alle.size()]
 		var aantal := alle.size()
 		ctx.hotspots.maak({"id": "mb_meer", "kamer": nu,
-			"x": float(v["x"]), "z": float(v["z"]), "y": 0.0,
+			"x": float(v["x"]), "z": float(v["z"]), "y": float(v.get("y", 0.0)),
 			"icoon": "▸", "label": W_MEER, "klas": "hotwolk", "prio": 8,
 			"titel": T_MEER,
 			"aan": func(_s) -> void:
 				_vak_offset = (_vak_offset + vak_max) % aantal
 				ctx.snd.tik()
 				_plaats_teken()})
+	if alle.is_empty():
+		# geen plek van die soort in deze ruimte (een schilderij in de tuin, of
+		# elke muur al vol): dat zegt de doos meteen, met het bestaande woord,
+		# en de doos loopt mee naar een kamer waar het wel kan
+		_geen_plek(nu)
 	ctx.wereld.vuil()
 	_meld_plaats(nu, alle.size())
+
+## `🚫 bezet` boven de doos: in deze ruimte is geen vakje voor wat erin zit.
+## Zonder geluid — er is niets misgegaan, je bent alleen in de verkeerde kamer.
+func _geen_plek(kamer_id: String) -> void:
+	var dp := _doos_plek(kamer_id)
+	_wolk({"kamer": kamer_id, "x": dp["x"], "z": dp["z"]},
+		{"id": "mb_bezet", "icoon": "🚫", "tekst": T_BEZET, "klas": "hulp",
+		"hoog": 30.0, "prio": 11})
+	ctx.wereld.vuil()
+	_wolk_straks("mb_bezet", 2.4)
 
 func _meld_plaats(kamer_id: String, vakken: int) -> void:
 	if not await na(0.1) or _view != "plaats":
@@ -1516,6 +1600,21 @@ func _vakjes(kamer_id: String, type := "") -> Array:
 			var v: Vector2 = p
 			bedden.append({"id": "bed%d_%d" % [int(v.x), int(v.y)], "x": v.x, "z": v.y})
 		return bedden
+	if Rooms.plek_soort(type) == "wand":
+		# een schilderij: alleen de vrije plekken op de MUUR, het ✨ op de hoogte
+		# waar het komt te hangen, netjes uit elkaar
+		var muur: Array = []
+		for p in Rooms.vrije_wandplekken(kamer_id):
+			var ver := true
+			for q in muur:
+				if absf(float(q["x"]) - float(p["x"])) \
+						+ absf(float(q["z"]) - float(p["z"])) < VAK_AF:
+					ver = false
+					break
+			if ver:
+				muur.append({"id": str(p["id"]), "x": float(p["x"]), "z": float(p["z"]),
+					"y": float(Rooms.WAND_Y) + Rooms.WAND_HOOG / 2.0})
+		return muur
 	var dx := float(r.w) / 2.0
 	var dz := float(r.d) / 2.0
 	for naar in r.deur_punten:
