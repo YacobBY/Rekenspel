@@ -760,6 +760,9 @@ func antwoord2(keus: String) -> void:
 		return
 	var goed := Sommen.vergelijk(int(v["dagen"]), int(v["nieuw"]), int(v["voorraad"]))
 	if keus == goed:
+		# a right answer on a strip of words: the rekenwacht pays the maths back
+		# (a number strip does that itself, in `Ui`)
+		Reken.goed(CHECKIN)
 		v["stap"] = 3
 		paint_checkin()
 		Snd.ja()

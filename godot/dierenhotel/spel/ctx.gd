@@ -51,6 +51,13 @@ func taak_klaar(taak_naam: String = "", o: Dictionary = {}) -> void:
 func sluit() -> void:
 	Games.stop()
 
+## A right answer the rekenwacht cannot see by itself (`Reken.goed`): a
+## `keuzes` card, a graded drag or placement.  NOT for a `goed: n` number
+## strip — `Ui` pays that one back already.  Safe without a running game: it
+## only pays back the maths counted since the last right answer.
+func reken_goed() -> void:
+	Reken.goed(id)
+
 # ----------------------------------------------------- het dier van de beurt
 
 ## The animal you play with (owner, 2026-09-23: "een methode om te wisselen met

@@ -113,6 +113,14 @@ func _draai_bestand(pad: String) -> void:
 			_mis("%s.%s" % [pad.get_file(), naam], "kan geen exemplaar maken", [])
 			continue
 		proef.set("_runner", self)
+		# The rekenwacht (`autoload/reken.gd`) keeps its budget across hotels on
+		# purpose — so across tests too.  Every test starts where a fresh tablet
+		# starts: a full budget, no clock, no moment, no file (`Reken.voor_test`).
+		# A test that taps more free buttons in a row than one budget holds says
+		# so with `Proef.rekenwacht_uit()`; this turns the gate back on.
+		var reken := root.get_node_or_null(^"Reken")
+		if reken != null and reken.has_method("voor_test"):
+			reken.call("voor_test")
 		var voor := _teller.aantal
 		_teller.neem()
 		# `await` is mandatory here, also for a test without one.  A test method

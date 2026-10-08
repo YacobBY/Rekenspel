@@ -21,6 +21,11 @@ var _paneel: PanelContainer
 var _kolom: VBoxContainer
 var _rol: ScrollContainer
 var sluitbaar := true
+var _systeem := false    ## the start sheet: its taps are not counted (`bouw`)
+
+## Where a tap on this sheet comes from, for the rekenwacht.
+func _bron(id: String) -> String:
+	return ("systeem:" if _systeem else "blad:") + id
 
 func bouw(o: Dictionary, mt: Dictionary, kader: Vector2) -> void:
 	# `set_anchors_preset` moves the ANCHORS and recomputes the offsets so the
@@ -30,6 +35,13 @@ func bouw(o: Dictionary, mt: Dictionary, kader: Vector2) -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	sluitbaar = bool(o.get("sluitbaar", true))
+	# The rekenwacht counts a sheet's buttons and the tap beside it as free
+	# taps — never refused: a sheet can always be closed.  The start sheet and
+	# its questions (the hotels, `UiHotelkeuze`) are no play at all.
+	_systeem = false
+	for c in o.get("inhoud", []):
+		if c is UiHotelkeuze:
+			_systeem = true
 
 	var waas := ColorRect.new()
 	waas.name = "Waas"
@@ -38,6 +50,7 @@ func bouw(o: Dictionary, mt: Dictionary, kader: Vector2) -> void:
 	waas.mouse_filter = Control.MOUSE_FILTER_STOP
 	waas.gui_input.connect(func(ev: InputEvent) -> void:
 		if sluitbaar and ev is InputEventMouseButton and (ev as InputEventMouseButton).pressed:
+			Reken.laat_door("spel", _bron("waas"))
 			Ui.blad_dicht())
 	add_child(waas)
 
@@ -163,7 +176,9 @@ func bouw(o: Dictionary, mt: Dictionary, kader: Vector2) -> void:
 				b.custom_minimum_size.x = breed - 2 * VULLING
 			var aan: Callable = kn.get("aan", Callable())
 			var dicht := bool(kn.get("dicht", true))
+			var bron := _bron(str(kn.get("id", kn.get("tekst", ""))))
 			b.pressed.connect(func() -> void:
+				Reken.laat_door("spel", bron, b)
 				Snd.tik()
 				if dicht:
 					Ui.blad_dicht()

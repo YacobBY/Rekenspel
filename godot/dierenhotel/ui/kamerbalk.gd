@@ -79,6 +79,7 @@ var _rij_rolt := false
 var _maten: Dictionary = {}
 var _raster: GridContainer = null
 var _verstopt := false        ## a sum is being answered: the chips step aside
+var _gedimd := false          ## the rekenwacht shut the gate: the chips dim (`dim`)
 ## A finger is swiping the row (`scroll_started` .. `scroll_ended`): the chip it
 ## lifts off from is not a tap (owner, 2026-09-24: "Op mobile kan ik de map
 ## shortcuts niet swipen onderaan het scherm").
@@ -300,6 +301,10 @@ func _chip(id: String, icoon: String, naam: String, titel: String,
 			return            # a chip that stepped aside does nothing
 		if _veegt:
 			return            # the end of a swipe, not a tap
+		# a room is a free tap: the rekenwacht counts it, and while the child
+		# owes a sum it refuses it (the chip shakes, nothing else happens)
+		if not Reken.laat_door("spel", "chip:" + (id if id != "" else "kaart"), b):
+			return
 		Snd.tik()
 		if id == "":
 			kaart_gevraagd.emit()
@@ -375,9 +380,28 @@ func _toon_huidige() -> void:
 ## does not count), and one question over the few open cards costs nothing.
 func _process(_delta: float) -> void:
 	verstop(Ui.som_in_beeld())
+	dim(Reken.dimt())
 
 func verstopt() -> bool:
 	return _verstopt
+
+## The rekenwacht shut the gate (`Reken.dimt`): the chips stay where they are
+## and still take a tap — which shakes the chip and says "first a sum" — but
+## they dim, so the big ➕ button is what stands out.  A sum on screen hides
+## them altogether (`verstop`), which wins.
+func dim(aan: bool) -> void:
+	if aan == _gedimd:
+		return
+	_gedimd = aan
+	_vervaag_naar(_alfa())
+
+func gedimd() -> bool:
+	return _gedimd
+
+func _alfa() -> float:
+	if _verstopt:
+		return 0.0
+	return Reken.DIM if _gedimd else 1.0
 
 func _op_veeg_begin() -> void:
 	_veegt = true
@@ -409,7 +433,7 @@ func verstop(aan: bool) -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 	else:
 		mouse_filter = _muis
-	_vervaag_naar(0.0 if aan else 1.0)
+	_vervaag_naar(_alfa())
 	verstopt_veranderd.emit(aan)
 
 func _zet_chip(b: Button, aan: bool) -> void:

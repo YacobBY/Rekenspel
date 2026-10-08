@@ -272,12 +272,13 @@ func _intro_klaar(hoe: String) -> void:
 ## Build (or rebuild at a new text size) the chrome and the room bar.
 func _bouw_chroom() -> void:
 	chroom.bouw(Ui.maten)
-	chroom.munt_badge.pressed.connect(_kassa)
-	chroom.brief_badge.pressed.connect(_brievenmuur)
-	chroom.geluid_knop.pressed.connect(_geluid)
-	chroom.prikbord_knop.pressed.connect(Hotel.bord_open)
-	chroom.avond_knop.pressed.connect(Hotel.avondronde)
-	chroom.hotels_knop.pressed.connect(_hotels)
+	# every chrome button is a free tap for the rekenwacht (`_poort`)
+	chroom.munt_badge.pressed.connect(_poort.bind(chroom.munt_badge, _kassa))
+	chroom.brief_badge.pressed.connect(_poort.bind(chroom.brief_badge, _brievenmuur))
+	chroom.geluid_knop.pressed.connect(_poort.bind(chroom.geluid_knop, _geluid))
+	chroom.prikbord_knop.pressed.connect(_poort.bind(chroom.prikbord_knop, Hotel.bord_open))
+	chroom.avond_knop.pressed.connect(_poort.bind(chroom.avond_knop, Hotel.avondronde))
+	chroom.hotels_knop.pressed.connect(_poort.bind(chroom.hotels_knop, _hotels))
 	kamerbalk.bouw(Ui.maten)
 	if not kamerbalk.kamer_gekozen.is_connected(_naar_kamer):
 		kamerbalk.kamer_gekozen.connect(_naar_kamer)
@@ -287,6 +288,13 @@ func _bouw_chroom() -> void:
 
 func _naar_kamer(id: String) -> void:
 	Hotel.naar_kamer(id)
+
+## A chrome button through the rekenwacht (`Reken`, 2026-10-09): counted as a
+## free tap, and refused while the child owes a sum (sound on/off and the
+## evening with a bill to settle excepted) — then it shakes and nothing opens.
+func _poort(knop: Control, doe: Callable) -> void:
+	if Reken.laat_door("spel", "chroom:" + str(knop.name), knop):
+		doe.call()
 
 ## A sum came up or went (owner, 2026-09-24): the room chips and the door
 ## signs stepped aside or came back.  One line, so a browser probe knows why
@@ -314,8 +322,18 @@ func _bouw_spelbalk() -> void:
 	if spelbalk == null or _spel_titel.is_empty():
 		return
 	spelbalk.bouw(str(_spel_titel["icoon"]), str(_spel_titel["titel"]), Ui.maten, Ui.tap_maat(),
-		Games.stop, _compact, Games.wissel_speler)
+		_terug, _compact, _wissel)
 	_zet_speler_knop()
+
+## `⬅ Terug` and the animal of the turn: taps of the game, counted by the
+## rekenwacht and never refused — a game can always be left.
+func _terug() -> void:
+	Reken.laat_door("spel", "spelbalk:terug", spelbalk.terug_knop if spelbalk != null else null)
+	Games.stop()
+
+func _wissel() -> void:
+	Reken.laat_door("spel", "spelbalk:speler")
+	Games.wissel_speler()
 
 func spel_balk_aan() -> bool:
 	return spelbalk != null and not _spel_titel.is_empty()
@@ -406,6 +424,9 @@ func _toren(titel: String, hint: String) -> void:
 	var kaart := UiPlattegrond.new()
 	kaart.bouw(Ui.maten)
 	kaart.kamer_gekozen.connect(func(id: String) -> void:
+		# a room on the map is a free tap; refused, the map closes on the ➕
+		if not Reken.laat_door("spel", "toren:" + id, kaart.knop_van(id)):
+			return
 		Ui.blad_dicht()
 		Hotel.naar_kamer(id))
 	Ui.blad_open({"titel": titel, "hint": hint,
@@ -569,10 +590,14 @@ func _veilige_randen() -> Rect2:
 ## No sound before the first real input — that satisfies the browser autoplay
 ## policy without the one-sample-buffer trick (architecture.md §8).
 func _input(event: InputEvent) -> void:
-	if _geluid_klaar:
-		return
 	var raak := event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed
 	raak = raak or (event is InputEventMouseButton and (event as InputEventMouseButton).pressed)
+	# every press keeps the rekenwacht's clock running: it only counts play time
+	# while somebody plays (`Reken.ACTIEF_S`)
+	if raak:
+		Reken.wakker()
+	if _geluid_klaar:
+		return
 	if raak:
 		_geluid_klaar = true
 		Snd.ontgrendel()

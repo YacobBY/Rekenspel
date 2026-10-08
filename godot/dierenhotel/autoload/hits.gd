@@ -103,6 +103,14 @@ class Spot extends RefCounted:
 	var eigen_aan: Callable           ## and this is what it did before
 	var laag := Laag.HOTEL
 	var zichtbaar := true
+	## The rekenwacht (`Reken`, 2026-10-09): `reken: true` — a tap or a drop
+	## here is maths (a drop target of a sorting game); `vrij: true` — an
+	## in-game free action, refused once the free budget is out even while its
+	## game runs.  Everything else is "spel".
+	var reken := false
+	var vrij := false
+	var eigen_reken := false          ## what a borrowed button was before (`leen`)
+	var eigen_vrij := false
 
 # ------------------------------------------------------------------- API
 
@@ -140,11 +148,18 @@ func maak(o: Dictionary) -> String:
 	s.data = o.get("data", {})
 	s.val = o.get("val", Callable())
 	s.tik_vlak = bool(o.get("tik_vlak", false))
+	s.reken = bool(o.get("reken", false))
+	s.vrij = bool(o.get("vrij", false))
 	s.knoop = Ui.maak_knop(s.kind, o)
 	# Always connected, also when the hotspot has no handler yet: that is what
 	# lets a game BORROW one of the hotel's buttons (`ctx.hotspots.pak`).
+	# The rekenwacht counts every tap here, once, and a refused one (a free tap
+	# while the child owes the hotel a sum) does nothing at all: no click, no
+	# `hotspot_getikt`, no handler — `Reken` shakes the button and says why.
 	if s.knoop is BaseButton:
 		(s.knoop as BaseButton).pressed.connect(func() -> void:
+			if not Reken.laat_door_spot(s):
+				return
 			Snd.tik()
 			hotspot_getikt.emit(s.id)
 			if s.aan.is_valid():
@@ -155,7 +170,7 @@ func maak(o: Dictionary) -> String:
 		s.vangvlak.name = "V" + id
 		s.vangvlak.drop = s.drop
 		s.vangvlak.data = s.data
-		s.vangvlak.val = s.val
+		s.vangvlak.val = _drop_poort(s)
 		s.vangvlak.knop = s.knoop as BaseButton if s.tik_vlak else null
 		Ui.vanglaag.add_child(s.vangvlak)
 	_spots[id] = s
@@ -183,6 +198,22 @@ func wis_eigenaar(door: String) -> void:
 		if s.door == door:
 			weg(id)
 
+## A drop is a child interaction too: the catch area calls this instead of the
+## game's handler, so the rekenwacht counts it (and may refuse it) first.  It
+## reads `s.val` when the drop lands, so `zet_drop` needs no second step.
+func _drop_poort(s: Spot) -> Callable:
+	return func(lading: Variant, data: Variant) -> void:
+		if not Reken.laat_door_spot(s, true):
+			return
+		if s.val.is_valid():
+			Ui.roep(s.val, [lading, data])
+
+## The rectangle a hotspot was placed at in the last pass, `Rect2()` when it
+## was not placed (another room, culled, gone).  `debug()` without the copy.
+func rect_van(id: String) -> Rect2:
+	var l: Dictionary = _laatste.get(id, {})
+	return l.get("rect", Rect2())
+
 # --------------------------------------------------------------- lenen
 
 ## `ctx.hotspots.pak(id, fn)` — a game borrows one of the hotel's own buttons
@@ -195,6 +226,10 @@ func leen(id: String, door: String, fn: Callable) -> bool:
 	s.geleend_door = door
 	s.eigen_aan = s.aan
 	s.aan = fn
+	# the game may mark its borrowed button as maths (`spot.reken = true`, a
+	# bowl that takes its biscuits); the hotel gets it back as it lent it
+	s.eigen_reken = s.reken
+	s.eigen_vrij = s.vrij
 	return true
 
 func geef_terug(door: String) -> void:
@@ -204,6 +239,8 @@ func geef_terug(door: String) -> void:
 			s.aan = s.eigen_aan
 			s.eigen_aan = Callable()
 			s.geleend_door = ""
+			s.reken = s.eigen_reken
+			s.vrij = s.eigen_vrij
 
 # --------------------------------------------------------------- slepen
 
@@ -315,7 +352,7 @@ func zet_drop(id: String, drop: String, val: Callable, data: Dictionary = {}) ->
 		return false
 	s.vangvlak.drop = s.drop
 	s.vangvlak.data = s.data
-	s.vangvlak.val = s.val
+	s.vangvlak.val = _drop_poort(s)
 	s.vangvlak.knop = s.knoop as BaseButton if s.tik_vlak else null
 	var rect := Rect2()
 	if _laatste.has(id):
@@ -394,6 +431,8 @@ func plaats() -> void:
 	_kaart_vrij.clear()
 	_kaart_vrij.append_array(World.vlakken_van_balie())
 	var som_nu := Ui.som_in_beeld()     # asked once per pass (door signs, below)
+	# the rekenwacht has shut the gate: the ways out of the room dim (below)
+	var dim_nu := Reken.dimt()
 	var lijstje: Array[Spot] = []
 	for id in _volgorde.duplicate():
 		var s: Spot = _spots[id]
@@ -551,6 +590,13 @@ func plaats() -> void:
 			"deurplek": uit.get("deurplek", ""),
 		}
 		_zet_vangvlak(s, rect)
+		# During a rekenmoment (`Reken.dimt`) the door and stair signs the hotel
+		# owns dim, like the room bar: they still take a tap, which shakes them
+		# and says "first a sum".  A sign a game borrowed is that game's tool.
+		if s.klas.contains("hotdeur"):
+			var alfa := Reken.DIM if dim_nu and s.geleend_door == "" else 1.0
+			if not is_equal_approx(s.knoop.modulate.a, alfa):
+				s.knoop.modulate.a = alfa
 
 ## Stay put (owner, 2026-09-14: opening the board reshuffled half the buttons).
 ## A band-placed element keeps last frame's rectangle when its aim point has

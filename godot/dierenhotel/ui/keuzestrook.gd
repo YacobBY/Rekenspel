@@ -162,6 +162,11 @@ func _vul(rij: HBoxContainer, keuzes: Array, kort: bool, mt: Dictionary) -> void
 			b.pressed.connect(func() -> void:
 				if op_slot:
 					return
+				# the rekenwacht counts the answer: maths on a maths card (wrong
+				# ones too — the child is doing maths), else a free tap.  An
+				# answer is never refused.
+				Reken.laat_door("reken" if Ui.kaart_rekent(_kaart) else "spel",
+					"strook:" + _kaart_id(), b)
 				Snd.tik()
 				Ui.roep(kies, [id, _kaart]))
 		rij.add_child(b)
@@ -169,6 +174,11 @@ func _vul(rij: HBoxContainer, keuzes: Array, kort: bool, mt: Dictionary) -> void
 	if op_slot:
 		# a strip rebuilt while locked stays locked
 		slot(true)
+
+## The id of the card this strip answers, for the rekenwacht's `bron`.
+func _kaart_id() -> String:
+	var k = _kaart
+	return str(k.id) if k != null and "id" in k else ""
 
 ## The bar's own button stylebox set: the `Keuzeknop` look with a small
 ## content margin, so a wide money strip stays inside its block.  The hover

@@ -786,8 +786,15 @@ func prikbord_blad(kaarten: Array, berichten: Array, kies: Callable, stil := fal
 	var b := blad_open({"titel": UiTekst.PRIKBORD, "hint": "" if leeg else UiTekst.BORD_HINT,
 		"inhoud": [bord], "knoppen": [{"id": "sluit", "tekst": UiTekst.SLUITEN}],
 		"stil": stil})
-	bord.taak_gekozen.connect(func(q: Dictionary) -> void: kies.call(q))
-	bord.leeg_getikt.connect(blad_dicht)
+	# a card is a tap the rekenwacht counts; while the child owes a sum only a
+	# card that leads straight to maths goes (`Reken`), any other one closes
+	# the board on the big ➕ button
+	bord.taak_gekozen.connect(func(q: Dictionary) -> void:
+		if Reken.laat_door("spel", "taak:" + str(q.get("actie", ""))):
+			kies.call(q))
+	bord.leeg_getikt.connect(func() -> void:
+		Reken.laat_door("spel", "blad:leeg")
+		blad_dicht())
 	return b
 
 # ------------------------------------------------------ wereldprimitieven
@@ -991,6 +998,11 @@ func _getal_keuzes(id: String, goed: int, kaart: Kaart, o: Dictionary) -> Array:
 					# `Snd.zacht()` (S5 step 3) — and shows no help after a
 					# mistake, in any game (owner 2026-09-24).
 					misser(k, k.dier)
+				else:
+					# ... and so is the right one, for the rekenwacht: the
+					# maths since its last pay-back buys free play back.  A game
+					# does not call `ctx.reken_goed()` for a number strip.
+					Reken.goed(id)
 				roep(k.on_ok, [n, k])})
 	return uit
 
@@ -1303,6 +1315,20 @@ class Kaart extends RefCounted:
 
 func kaart_van(id: String) -> Kaart:
 	return _kaarten.get(id)
+
+## Is a tap on this card's strip maths (the rekenwacht)?  The same rule as
+## `is_som` without the room: the card asks a number (`goed`), says it is a
+## maths question (`reken: true`), or carries a sum line ("3 × 7",
+## "€8 − €6 =").  A card with only word choices and no sum line — the
+## check-in's room question, the paskamer's outfit — is not.
+func kaart_rekent(k) -> bool:
+	if k == null or not (k is Kaart):
+		return false
+	var kaart := k as Kaart
+	if kaart.getal_vraag:
+		return true
+	var kn := kaart._knoop()
+	return kn != null and not kn.som_tekst().strip_edges().is_empty()
 
 # -------------------------------------------------------------- naamplaten
 

@@ -46,6 +46,8 @@ func definitie() -> Dictionary:
 		"hotspot": {"obj": SPIEGEL, "icoon": "🪞", "label": "Paskamer", "hoog": 34},
 		"unlock": func(n: int, _band: int) -> bool: return n >= 1,
 		"kan": kan,
+		# dressing up is free play, no maths: the rekenwacht treats it as such
+		"vrij": true,
 	}
 
 ## Everyone with a bed, the ones with something in their wardrobe first.

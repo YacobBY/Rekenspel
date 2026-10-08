@@ -65,6 +65,15 @@ func herstel_spellen() -> void:
 	_spellen_weg.clear()
 	_scenes_weg.clear()
 
+## The rekenwacht off for the rest of this test (`autoload/reken.gd`).  Only
+## for a test about something else that must tap more free buttons in a row
+## than one free budget holds (`Reken.BUDGET_MAX`); the runner starts the next
+## test with the gate on and a full budget again (`Reken.voor_test`).
+func rekenwacht_uit() -> void:
+	var reken = Engine.get_main_loop().root.get_node_or_null(^"Reken")
+	if reken != null:
+		reken.zet_wacht(false)
+
 func verwacht_fout(aantal := 1, waarom := "") -> void:
 	_verwacht += aantal
 	if waarom != "":

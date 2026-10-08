@@ -192,6 +192,24 @@ const TERUG_TITEL := "Terug naar het hotel"
 const SPELER_WISSEL := "🔄"
 const SPELER_TITEL := "Speel met een ander dier"
 
+# ------------------------------------------------------------ de rekenwacht
+## Owner, 2026-10-09: "Zorg wel dat rekenen altijd een prioriteit wordt en dat
+## kinderen niet lang kunnen spelen zonder te rekenen" (`autoload/reken.gd`).
+## While the child owes the hotel a sum, one big button says what to do and a
+## free tap answers with a see-through bubble — friendly, nothing taken away.
+## The design asked for an abacus (U+1F9EE); it is not in `fonts/Emoji.ttf`, so the
+## gate wears ➕, which the intro already gives to the sums.
+const REKEN_ICOON := "➕"
+const REKEN_KNOP := "Rekenen"
+const REKEN_TITEL := "Doe eerst een som"
+const REKEN_EERST := "Eerst even rekenen!"
+## The quick sum: the biscuits the gate lays on the floor, counted.
+const REKEN_TEL_ICOON := "🍪"
+const REKEN_TEL := "Hoeveel koekjes zie je?"
+const REKEN_GOED := "Goed geteld! 🎉"
+## ... and its last rung, a room without free floor: a plain sum.
+const REKEN_SAMEN := "Hoeveel is het samen?"
+
 ## The label of the animal button.  The pictogram is the hotel's own
 ## (`Hotel.DIER_ICOON`, the one its "komt eraan" bubbles wear).  In the rail
 ## beside the frame the name goes on a line of its own under the two pictures,

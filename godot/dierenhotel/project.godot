@@ -25,6 +25,7 @@ State="*res://autoload/state.gd"
 Econ="*res://autoload/econ.gd"
 Games="*res://autoload/games.gd"
 Hotel="*res://autoload/hotel.gd"
+Reken="*res://autoload/reken.gd"
 
 [display]
 
