@@ -906,3 +906,125 @@ func test_een_paar_is_een_ding_buiten_de_schoenenkraam() -> void:
 								waar(not str(zin[1]).contains("×"),
 									"%s %s: geen keer-som op de kaart (%s)" % [winkel, naam, str(zin[1])])
 	waar(paren > 0, "er zijn paren buiten de schoenenkraam (%d)" % paren)
+
+# ------------------------------------------- de toonbank van een dichte kraam
+
+## The band `_wereld` gets for `n` guests (`kunnen` 5 lifts the adaptive cap).
+func _band_bij(n: int) -> int:
+	return maxi(3, mini(Sommen.band_van_n(n), 6))
+
+## What a counter holds now: [[model, x, z, hoog], ...] for the ids `fmt % i`.
+func _toonbank(fmt: String, wie: String) -> Array:
+	var uit: Array = []
+	for i in 6:
+		var p := World.decor_plek(fmt % i, KAMER)
+		if p.is_empty():
+			continue
+		waar(str(p.get("door", "")) == wie, "%s staat er van %s (%s)" % [fmt % i, wie, str(p.get("door", ""))])
+		uit.append([str(p["model"]), float(p["x"]), float(p["z"]), float(p["hoog"])])
+	return uit
+
+## W5a (2026-10-08): a CLOSED stall shows on its counter exactly the goods it
+## sells when it opens — one choice (`Beurt.te_koop`) over the same day and N —
+## not the first three of its list (the eleven goods of 2026-10-07 only came
+## round once the stall was open).  For day 1..7 × N 1..8 × every stall: the
+## counter at rest, put down by the registry itself (`Games.hersteek`), holds
+## the goods the opened stall (`Games.start`) puts on it, on the same spots;
+## every good of every stall comes round on some closed counter; and every
+## good shown has its `waar_<naam>` model, which bakes without an engine error.
+func test_de_dichte_toonbank_toont_de_waren_van_vandaag() -> void:
+	_op()
+	var gezien := {}
+	for winkel in WINKELS:
+		gezien[winkel] = {}
+	var anders := 0
+	for dag in range(1, 8):
+		for n in range(1, 9):
+			_wereld(n, _band_bij(n), dag)
+			Games.hersteek()
+			for winkel in WINKELS:
+				var rust := _toonbank("rust_" + winkel + "_%d", "rust:" + winkel)
+				var w := _winkel(winkel)
+				gelijk(rust.size(), int(w.get("toon", 3)),
+					"%s dag %d N %d: de dichte toonbank is vol" % [winkel, dag, n])
+				if not Games.start(winkel):
+					fout("%s dag %d N %d: de kraam gaat niet open" % [winkel, dag, n])
+					continue
+				var open := _toonbank("wk_w%d", winkel)
+				gelijk(rust, open, "%s dag %d N %d: dicht staat er wat open te koop is" % [winkel, dag, n])
+				Games.stop()
+				var eerste: Array = Beurt.WAREN[winkel].slice(0, 3)
+				var namen: Array = []
+				for stuk in rust:
+					var naam := str(stuk[0]).trim_prefix("waar_")
+					namen.append(naam)
+					gezien[winkel][naam] = true
+				if namen != eerste:
+					anders += 1
+				gelijk(_toonbank("rust_" + winkel + "_%d", "rust:" + winkel).size(), rust.size(),
+					"%s dag %d N %d: dicht weer, de waren staan er weer" % [winkel, dag, n])
+	for winkel in WINKELS:
+		gelijk((gezien[winkel] as Dictionary).size(), (Beurt.WAREN[winkel] as Array).size(),
+			"elk ding van %s komt op de dichte toonbank (%s)" % [winkel, str(gezien[winkel].keys())])
+		for naam in gezien[winkel]:
+			var model := "waar_" + str(naam)
+			waar(Art.heeft_model(model), "%s bestaat" % model)
+			waar(Art.plaat(model, 2) != null and Art.plaat(model, 4) != null, "%s bakt" % model)
+	waar(anders > 0, "niet elke dag de eerste drie (%d keer anders)" % anders)
+	_af()
+
+## The counters follow the hotel without a game: a new morning (`Hotel.morgen`)
+## and a guest more (the render after a check-in) put the goods of the new day
+## and the new N on the closed counters — the hook is `Hotel.bord_veranderd`
+## after every render, which `Games` already listened to.  A counter that did
+## not change is not put down again (every `World.decor` redraws the room).
+func test_de_toonbank_volgt_de_dag_en_de_gasten() -> void:
+	_op()
+	_wereld(4, 4, 2)
+	Games.hersteek()
+	var verwacht := func(winkel: String) -> Array:
+		var o := Beurt.opzet(winkel, State.n_gasten(), State.band(), int(State.s["dag"]))
+		var uit: Array = []
+		for w in Beurt.te_koop(o, [], int(_winkel(winkel).get("toon", 3))):
+			uit.append("waar_" + str(w["naam"]))
+		return uit
+	var modellen := func(winkel: String) -> Array:
+		var uit: Array = []
+		for stuk in _toonbank("rust_" + winkel + "_%d", "rust:" + winkel):
+			uit.append(stuk[0])
+		return uit
+	var gisteren := {}
+	for winkel in WINKELS:
+		gelijk(modellen.call(winkel), verwacht.call(winkel), "%s dag 2: de waren van vandaag" % winkel)
+		gisteren[winkel] = modellen.call(winkel)
+	# nothing changed: hersteek puts nothing down again
+	var versie := World.decor_versie()
+	Games.hersteek()
+	gelijk(World.decor_versie(), versie, "niets veranderd: niets opnieuw neergezet")
+	Hotel.morgen()
+	gelijk(int(State.s["dag"]), 3, "het is dag 3")
+	var nieuw := 0
+	for winkel in WINKELS:
+		gelijk(modellen.call(winkel), verwacht.call(winkel), "%s na de morgen: de waren van dag 3" % winkel)
+		if modellen.call(winkel) != gisteren[winkel]:
+			nieuw += 1
+	waar(nieuw > 0, "de morgen zet andere waren op de toonbank (%d kramen)" % nieuw)
+	# one guest more, as after a check-in: the hotel renders, the counters follow
+	var gasten: Array = State.s["gasten"]
+	var g: Dictionary = State.gasten_pool()[gasten.size()]
+	g["kamer"] = ""
+	g["bed"] = ""
+	g["waar"] = "receptie"
+	gasten.append(g)
+	World.sync(gasten)
+	var vijf := {}
+	for winkel in WINKELS:
+		vijf[winkel] = modellen.call(winkel)
+	Hotel.render()
+	nieuw = 0
+	for winkel in WINKELS:
+		gelijk(modellen.call(winkel), verwacht.call(winkel), "%s met %d gasten: de waren van N %d" % [winkel, State.n_gasten(), State.n_gasten()])
+		if modellen.call(winkel) != vijf[winkel]:
+			nieuw += 1
+	waar(nieuw > 0, "een gast erbij zet andere waren op de toonbank (%d kramen)" % nieuw)
+	_af()

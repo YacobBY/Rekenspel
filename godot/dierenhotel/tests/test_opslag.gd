@@ -219,6 +219,41 @@ func test_hotel_1_is_de_oude_opslag() -> void:
 	gelijk(_tekst(1), tekst, "lezen veranderde het bestand niet")
 	await _af()
 
+## A hotel saved before Vlam and Knor (2026-10-07) meets them anyway: reading it
+## puts them in its waiting list (Vlam the 4th guest, Knor the 7th), reading
+## leaves the file as it was, the next save writes them down, and that file
+## reads back the same.  Hotel 2 here: every slot passes the same gate.
+func test_een_oud_hotel_krijgt_vlam_en_knor() -> void:
+	_onthoud()
+	State.nieuw_spel()
+	var oud: Array = State.gasten_pool().filter(
+		func(g): return not State.NIEUWE_GASTEN.has(str(g["id"])))
+	State.s["dag"] = 6
+	State.s["gasten"] = oud.slice(0, 3)
+	State.s["wachtlijst"] = oud.slice(3)
+	var tekst := JSON.stringify({"v": 1, "s": State.s})
+	var f := FileAccess.open(State.pad_van(2), FileAccess.WRITE)
+	f.store_string(tekst)
+	f.close()
+	gelijk(int(State.samenvatting(2)["gasten"]), 3, "hotel 2 heeft drie gasten")
+	State.hotel = 2
+	State.s = State.standaard()
+	waar(State.lees(), "het oude hotel wordt gelezen")
+	var ids: Array = []
+	for g in State.s["wachtlijst"]:
+		ids.append(str(g["id"]))
+	gelijk(ids, ["vlam", "gerrit", "pip", "knor", "vlok", "stamp", "bikkel", "pluis"],
+		"Vlam is de vierde gast en Knor de zevende")
+	gelijk(_tekst(2), tekst, "lezen veranderde het bestand niet")
+	var gelezen := JSON.stringify(State.s)
+	State.start_gekozen()
+	waar(_tekst(2).contains("\"vlam\"") and _tekst(2).contains("\"knor\""),
+		"de volgende bewaar schrijft ze in het bestand")
+	State.s = State.standaard()
+	waar(State.lees(), "en dat bestand wordt weer gelezen")
+	gelijk(JSON.stringify(State.s), gelezen, "met precies dezelfde wachtlijst")
+	await _af()
+
 ## Hotel 2 in its own file, read back whole; hotel 1 is not touched by it.
 func test_een_hotel_rondrit_raakt_hotel_1_niet() -> void:
 	_onthoud()

@@ -102,16 +102,31 @@ function laadChromium() {
 
 // ---------------------------------------------------------------- de opslag
 // Zelfde vorm als tools/kiek.js: één save, `kamerNu` zet de camera in de kamer.
-// De volgorde van State.gasten_pool(): Vlam de vos 4e en Knor het varken 7e
-// (2026-10-07), dus `--gasten 7` zet ze allebei neer.
+// De hele State.gasten_pool() (autoload/state.gd), in zijn volgorde: Vlam de vos
+// 4e en Knor het varken 7e (2026-10-07), dus `--gasten 7` zet ze allebei neer.
+// Houd deze kopie gelijk met state.gd (en met die in tools/kiek.js).
+// [id, naam, kind, soort, scoops, act, mins]
 const POOL = [
-  ['boef', 'Boef', 'hond', 'puppy', 2], ['muis', 'Muis', 'poes', 'poes', 1],
-  ['wolkje', 'Wolkje', 'konijn', 'konijn', 1], ['vlam', 'Vlam', 'vos', 'vos', 2],
-  ['gerrit', 'Gerrit', 'gans', 'gans', 2], ['pip', 'Pip', 'hond', 'puppy', 3],
-  ['knor', 'Knor', 'varken', 'varken', 3], ['vlok', 'Vlok', 'poes', 'poes', 2],
-  ['stamp', 'Stampertje', 'konijn', 'konijn', 1],
+  ['boef', 'Boef', 'hond', 'puppy', 2, 'Wandeling', 30], ['muis', 'Muis', 'poes', 'poes', 1, 'Spelen', 15],
+  ['wolkje', 'Wolkje', 'konijn', 'konijn', 1, 'Bad', 15], ['vlam', 'Vlam', 'vos', 'vos', 2, 'Wandeling', 30],
+  ['gerrit', 'Gerrit', 'gans', 'gans', 2, 'Plonzen', 15], ['pip', 'Pip', 'hond', 'puppy', 3, 'Wandeling', 30],
+  ['knor', 'Knor', 'varken', 'varken', 3, 'Bad', 15], ['vlok', 'Vlok', 'poes', 'poes', 2, 'Spelen', 15],
+  ['stamp', 'Stampertje', 'konijn', 'konijn', 1, 'Bad', 15],
+  ['bikkel', 'Bikkel', 'hond', 'puppy', 2, 'Wandeling', 30], ['pluis', 'Pluis', 'poes', 'poes', 1, 'Spelen', 15],
 ];
 const BEDDEN = [['kamer1', 'bed1'], ['kamer1', 'bed2'], ['kamer2', 'bed1'], ['kamer2', 'bed2']];
+// De wachtlijst na de eerste `n` gasten: de rest van de pool, in zijn volgorde en
+// in de vorm van State.mk_gast, zodat de bel de (n+1)e gast van de pool haalt
+// (`--gasten 3 --doe bel` brengt Vlam).  Tot 2026-10-08 was hij leeg: het spel
+// vulde hem dan weer vanaf Boef en de bel bracht een tweede Boef.
+function wachtlijstNa(n) {
+  return POOL.slice(n).map(([id, naam, kind, soort, scoops, act, mins]) => ({
+    id, naam, name: naam, kind, soort, scoops, act, mins,
+    kamer: '', bed: '', waar: 'receptie',
+    nachten: 2, geslapen: 0, prijs: 1, behoefte: 'kamer',
+    dagIn: 1, accessoires: [], aai: 3,
+  }));
+}
 // Een gast na de vier vaste bedden krijgt een eigen bed: een gekocht bed in de
 // save (`meubels`).  Waar het staat maakt niet uit: het spel zet elk bed van een
 // slaapkamer op de eerstvolgende vrije bedplek (Rooms.meubel_zet).  Tot
@@ -142,7 +157,7 @@ function maakOpslag() {
   }
   const s = {
     dag: opt.dag, ronde: 'vrij', munten: 4, sterren: 0, band: opt.band, kunnen,
-    signaal: [], gasten, wachtlijst: [], famIdx: 0,
+    signaal: [], gasten, wachtlijst: wachtlijstNa(n), famIdx: 0,
     meubels, meubelNr: meubels.length, taken: [], brieven: [],
     scoops: 40, levering: 4, snoeppot: 0,
     kar: null, spel: {}, gezien: {},

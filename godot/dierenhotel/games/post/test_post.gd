@@ -91,6 +91,14 @@ func _wereld(n: int, band: int, dag := 2, met_bed := -1) -> Array:
 		gelijk(State.band(), band, "de band is %d bij %d gasten" % [band, n])
 	return uit
 
+## Every guest asleep in his own bed upstairs, whatever an earlier test did
+## with him (`World.sync` keeps a guest where he stands).  Reduced motion: at
+## once.
+func _boven(gasten: Array) -> void:
+	for g in gasten:
+		if not str(g.get("bed", "")).is_empty():
+			World.slaap(str(g["id"]), str(g["kamer"]), str(g["bed"]))
+
 func _knoop(id: String) -> Control:
 	var s := Hits.spot(id)
 	return null if s == null or not is_instance_valid(s.knoop) else s.knoop
@@ -400,26 +408,50 @@ func test_de_modellen_bakken() -> void:
 
 # ------------------------------------------------------------ een hele beurt
 
-## Groep 4, the whole turn by finger: the shelf with its four plates, the
-## address on the cart, one miss, every letter into its hole, the star, the
-## board card ticked, and the game closes itself.
+## Groep 4, the whole turn by finger: the card and the first letter at once,
+## while the postbode is still on his way from his room upstairs (W5e: the
+## first play waited 14–24 s for him); he arrives in his own time and joins;
+## the shelf with its four plates, the address on the cart, one miss, every
+## letter into its hole, the star, the board card ticked, his cheer, and the
+## game closes itself.
 func test_een_beurt_in_groep_4() -> void:
 	_op()
 	var gasten := _wereld(4, 4)
 	var sterren := int(State.s["sterren"])
 	var signaal := (State.s["signaal"] as Array).size()
+	# real walking for the start: everybody sleeps upstairs in kamer 1 and 2
+	_boven(gasten)
+	Ui.zet_rust_modus(false)
+	var t0 := Time.get_ticks_msec()
 	waar(Games.start(SPEL), "het spel start")
 	var o := Beurt.maak(4, 4, 2, 0)
 	gelijk(str(_opzet().get("brieven", [])), str(o["brieven"]), "de stapel van vandaag")
 	gelijk(_stand().get("stap", ""), "sorteer", "er wordt gesorteerd")
 	gelijk(Games.speler(), str(_stand().get("gast", "")), "de spelbalk weet wie de postbode is")
 	waar(not str(_stand().get("gast", "")).is_empty(), "er is een postbode")
-	# the postbode stands at the cart (reduced motion: the walk is a teleport)
 	var gast := str(_stand().get("gast", ""))
 	var d = World.dier(gast)
+	# the question is there in the same frame as the tap; he is not
+	waar(_knoop(KAART) != null and _knoop(STROOK) != null, "de vraag en de strook staan er meteen")
+	waar(Time.get_ticks_msec() - t0 < 1000, "binnen een seconde (%d ms)" % (Time.get_ticks_msec() - t0))
+	gelijk(_kaart_tekst("Kolom/Rij/Som"), str(o["brieven"][0]["tekst"]), "met de eerste brief")
+	waar(d != null and d.kamer != KAMER and str(d.reis_doel) == KAMER,
+		"terwijl de postbode nog onderweg is (%s → %s)" % [str(d.kamer) if d != null else "-",
+			str(d.reis_doel) if d != null else "-"])
+	# the game does not wait for him: no "komt eraan" with 👀 Volg, the camera
+	# stays with the card in the postkamer
+	waar(not Games.verwacht_dier(gast), "het spel wacht niet op hem")
+	Hotel.volg(gast)
+	gelijk(Hotel.volgt(), "", "Volg loopt niet met hem mee")
+	gelijk(World.kamer_nu(), KAMER, "de camera blijft in de postkamer")
+	# he joins in his own time (reduced motion from here: the next look of
+	# the turn puts him at the cart)
+	Ui.zet_rust_modus(true)
+	await _wacht(Spel.KOM_TIK * 2.0 + 0.1)
 	waar(d != null and d.kamer == KAMER, "de postbode is in de postkamer")
 	if d != null:
 		waar(absf(d.x - Spel.GAST_X) + absf(d.z - Spel.GAST_Z) <= 3.0, "bij de kar (%.0f, %.0f)" % [d.x, d.z])
+	gelijk(int(_stand().get("i", -1)), 0, "en de eerste brief ligt er nog")
 	# the shelf, the counter and the cart stand there; the resting ones went
 	for id in [KAST, KAR, BALIE]:
 		waar(not World.decor_plek(id, KAMER).is_empty(), "%s staat in de postkamer" % id)
@@ -494,6 +526,7 @@ func test_een_beurt_in_groep_4() -> void:
 	gelijk(totaal, 4, "alle vier de brieven liggen in de kast")
 	waar(_knoop(ADRES) == null, "geen adres meer")
 	waar(gasten.size() == 4, "vier gasten")
+	waar(d != null and str(d.staat) == "blij", "de postbode juicht mee (%s)" % (str(d.staat) if d != null else "-"))
 	await _wacht(Spel.AF_S + 0.3)
 	gelijk(Games.actief(), "", "het spel sluit zichzelf")
 	waar(not World.decor_plek(RUST_KAR, KAMER).is_empty(), "en de rustende kar staat er weer")
@@ -577,6 +610,105 @@ func test_zonder_postbode() -> void:
 	await _wacht_mispauze()
 	await _sorteer_alles()
 	gelijk(_stand().get("stap", ""), "af", "gesorteerd, ook alleen")
+	_af()
+
+## The postbode never comes (W5e): the child sorts the whole pile while he is
+## still on his way from upstairs — nothing waits for him, a miss shows its
+## bubble at the card and does not stop him two rooms away, a reload brings
+## the same letter back at once — and the turn ends exactly as it does with
+## him: the star, the adaptive signal, and the game closes itself.  He is not
+## made to cheer in a room nobody looks at.
+func test_de_postbode_komt_nooit_aan() -> void:
+	_op()
+	_boven(_wereld(4, 4))
+	var sterren := int(State.s["sterren"])
+	var signaal := (State.s["signaal"] as Array).size()
+	Ui.zet_rust_modus(false)
+	waar(Games.start(SPEL), "het spel start")
+	var o := Beurt.maak(4, 4, 2, 0)
+	var gast := str(_stand().get("gast", ""))
+	var d = World.dier(gast)
+	waar(d != null and d.kamer != KAMER and str(d.reis_doel) == KAMER, "de postbode komt van boven")
+	waar(_knoop(KAART) != null, "de vraag staat er meteen")
+	var br := _brief()
+	_kies(_fout_vak(int(br["vak"])))
+	waar(mis_wolk(KAART), "een misser: 🔄 Nog een keer bij de kaart")
+	waar(not is_sip(gast), "het dier verderop wordt niet stilgezet")
+	waar(d != null and str(d.reis_doel) == KAMER, "hij loopt gewoon door")
+	await _wacht_mispauze()
+	_kies(int(br["vak"]))
+	await _wacht_brief()
+	gelijk(int(_stand().get("i", -1)), 1, "de eerste brief ligt in zijn vakje")
+	# a reload while he walks: the same letter at once, the same postbode, who
+	# keeps walking (he is not sent off again from where he is)
+	Games.stop()
+	waar(Games.start(SPEL), "opnieuw gestart")
+	gelijk(int(_stand().get("i", -1)), 1, "verder bij de tweede brief")
+	gelijk(_kaart_tekst("Kolom/Rij/Som"), str(o["brieven"][1]["tekst"]), "die meteen op de kaart staat")
+	gelijk(str(_stand().get("gast", "")), gast, "dezelfde postbode")
+	waar(d != null and d.kamer != KAMER and str(d.reis_doel) == KAMER, "die nog steeds onderweg is")
+	await _sorteer_alles()
+	gelijk(_stand().get("stap", ""), "af", "alle post is gesorteerd, zonder hem")
+	waar(d != null and d.kamer != KAMER, "terwijl hij nog onderweg is (%s)" % (str(d.kamer) if d != null else "-"))
+	gelijk(int(State.s["sterren"]), sterren + 1, "één ster voor het meedoen")
+	gelijk((State.s["signaal"] as Array).size(), signaal + 1, "het adaptieve signaal kreeg één beurt")
+	gelijk(int((State.s["signaal"] as Array).back()["g"]), 0, "met een misser: niet in één keer goed")
+	waar(d != null and str(d.staat) != "blij", "geen gejuich in een kamer waar niemand kijkt")
+	await _wacht(Spel.AF_S + 0.3)
+	gelijk(Games.actief(), "", "het spel sluit zichzelf")
+	_af()
+
+## The postbode leaves the hotel on his way (W5e): the post stays and the
+## child sorts on alone — nobody on the game bar, a miss shows its bubble at
+## the card, and the turn ends.
+func test_de_postbode_vertrekt_onderweg() -> void:
+	_op()
+	_boven(_wereld(4, 4))
+	Ui.zet_rust_modus(false)
+	waar(Games.start(SPEL), "het spel start")
+	var gast := str(_stand().get("gast", ""))
+	waar(not gast.is_empty(), "er is een postbode")
+	# he checks out: gone from the guest book and from the world
+	State.s["gasten"] = (State.s["gasten"] as Array).filter(
+		func(g) -> bool: return str(g.get("id", "")) != gast)
+	World.weg(gast)
+	await _wacht(Spel.KOM_TIK * 2.0 + 0.1)
+	gelijk(str(_stand().get("gast", "x")), "", "zonder postbode verder")
+	gelijk(Games.speler(), "", "niemand op de spelbalk")
+	gelijk(int(_stand().get("i", -1)), 0, "dezelfde brief")
+	waar(_knoop(KAART) != null, "de vraag blijft staan")
+	_kies(_fout_vak(int(_brief()["vak"])))
+	waar(mis_wolk(KAART), "de misser wordt gezien bij de kaart")
+	await _wacht_mispauze()
+	await _sorteer_alles()
+	gelijk(_stand().get("stap", ""), "af", "gesorteerd, ook alleen")
+	_af()
+	# the world back in step with the guest book for whatever runs next
+	World.sync(State.s["gasten"])
+
+## The nearest guest with a bed carries the post (W5e): one in the postkamer
+## itself first, then the kas next door, before anyone upstairs — so his walk
+## is short.  Equally near ones take turns with the day, as before.
+func test_de_dichtstbijzijnde_gast_brengt_de_post() -> void:
+	_op()
+	var gasten := _wereld(4, 4)
+	_boven(gasten)
+	var ids: Array[String] = []
+	for g in gasten:
+		ids.append(str(g["id"]))
+	waar(Spel.deuren_tot_kar(ids[0]) >= 4.0, "van boven is het ver (%.0f deuren)" % Spel.deuren_tot_kar(ids[0]))
+	World.reis(ids[2], "kas")
+	gelijk(Spel.deuren_tot_kar(ids[2]), 1.0, "uit de kas is het één deur")
+	waar(Games.start(SPEL), "het spel start")
+	gelijk(str(_stand().get("gast", "")), ids[2], "de gast in de kas brengt de post")
+	Games.stop()
+	# a new hotel state: one in the kas, one in the postkamer itself
+	_boven(_wereld(4, 4))
+	World.reis(ids[1], "kas")
+	World.reis(ids[3], KAMER)
+	gelijk(Spel.deuren_tot_kar(ids[3]), 0.0, "in de postkamer: geen deur")
+	waar(Games.start(SPEL), "het spel start opnieuw")
+	gelijk(str(_stand().get("gast", "")), ids[3], "de gast die er al is brengt de post")
 	_af()
 
 ## A reload in the middle of a turn picks up where the child was: the second
@@ -759,9 +891,11 @@ func test_op_vier_schermen() -> void:
 			await boom.process_frame
 		var kader: Control = shell.get_node("Scherm/Kolom/Middenrij/Kaderdoos/Kader")
 		_keur(kader.size, "%s vraag" % str(maat))
-		# the plates stand over their holes on a tablet; on a phone the shelf is
-		# too small for four of them and the strip carries the numbers alone
-		_platen_op_volgorde("%s" % str(maat), maat.x >= 700 and maat.y >= 700)
+		# the big plates stand over their holes on a tablet and a desktop; on a
+		# phone, both ways round, the small ones do (W5e: the portrait phone
+		# showed no plates at all, only the strip had the numbers)
+		var vorm: String = Spel.VORM_GROOT if maat.x >= 700 and maat.y >= 700 else Spel.VORM_KLEIN
+		_platen_op_volgorde("%s" % str(maat), vorm)
 		if maat.y >= 400:
 			gelijk(Ui.balk_kaart(), KAART, "%s: de vraag staat in de rekenbalk" % str(maat))
 		# every hole button: the long words, or on a narrow frame the pictogram
@@ -778,6 +912,7 @@ func test_op_vier_schermen() -> void:
 		for _f in 3:
 			await boom.process_frame
 		_keur(kader.size, "%s misser" % str(maat))
+		_platen_op_volgorde("%s misser" % str(maat), vorm)
 		gelijk(_kaart_tekst("Kolom/Hulp"), "", "%s: geen hulpregel op de kaart" % str(maat))
 		await _wacht_mispauze()
 		_kies(int(br["vak"]))
@@ -785,6 +920,7 @@ func test_op_vier_schermen() -> void:
 		for _f in 3:
 			await boom.process_frame
 		_keur(kader.size, "%s tweede brief" % str(maat))
+		_platen_op_volgorde("%s tweede brief" % str(maat), vorm)
 		Games.stop()
 		Ui.naamplaten_leeg()
 		Hits.wis_alles()
@@ -835,24 +971,46 @@ func _keur(kader: Vector2, wat: String) -> void:
 	# on top of that where the frame has room for them
 	waar(eigen >= 3, "%s: het spel staat op het scherm (%d)" % [wat, eigen])
 
-## The four plates: all four or none (`moet`: a tablet must show them), each
-## right over its own hole (its middle on the hole's projected middle), left
-## to right in the shelf's order, never on top of each other, and never moved
-## off its hole by the band grid.
-func _platen_op_volgorde(wat: String, moet: bool) -> void:
+## The four plates of set `vorm` (the big ones on a tablet, the small ones on a
+## phone; never both sets, never a part of one): each right over its own hole
+## (its middle on the hole's projected middle, its foot on the hole's board),
+## left to right in the shelf's order, never on top of each other, never on
+## the card or its strip, never moved off its hole by the band grid — and
+## readable: the hole's own words, at no less than the hotel's smallest text.
+func _platen_op_volgorde(wat: String, vorm: String) -> void:
 	var dbg := Hits.debug()
-	var er := 0
+	var groot := 0
+	var klein := 0
 	for j in 4:
-		if dbg.has("po_vak%d" % j):
-			er += 1
-	waar(er == 0 or er == 4, "%s: alle vier de bordjes of geen (%d)" % [wat, er])
-	if moet:
-		gelijk(er, 4, "%s: op een tablet staan de vier bordjes boven de vakjes" % wat)
+		groot += 1 if dbg.has(Spel.VAK_TAG % j) else 0
+		klein += 1 if dbg.has(Spel.VAK_KLEIN % j) else 0
+	waar(groot == 0 or klein == 0, "%s: nooit beide soorten bordjes (%d groot, %d klein)" % [wat, groot, klein])
+	var spel := _spel()
+	if spel != null:
+		gelijk(spel.plaat_vorm(), vorm, "%s: welke bordjes passen" % wat)
+	var sjabloon: String = Spel.VAK_KLEIN if vorm == Spel.VORM_KLEIN else Spel.VAK_TAG
+	var er := klein if vorm == Spel.VORM_KLEIN else groot
+	gelijk(er, 4, "%s: de vier bordjes (%s) staan boven de vakjes" % [wat, vorm])
 	if er == 0:
 		return
+	var vakken: Array = _opzet().get("vakjes", [])
 	var vorige := Rect2()
 	for j in 4:
-		var id := "po_vak%d" % j
+		var id := sjabloon % j
+		if dbg.has(id):
+			var r0: Rect2 = dbg[id]["rect"]
+			for ander in [KAART, STROOK]:
+				if dbg.has(ander):
+					var snij0 := r0.intersection(dbg[ander]["rect"])
+					waar(snij0.size.x <= 0.0 or snij0.size.y <= 0.0,
+						"%s: bordje %d ligt niet op %s" % [wat, j, ander])
+			var t := _knoop(id) as Label
+			waar(t != null and t.visible, "%s: bordje %d is te zien" % [wat, j])
+			if t != null and j < vakken.size():
+				var woorden: String = Beurt.kort(vakken[j]) if vorm == Spel.VORM_KLEIN else Beurt.plaat(vakken[j])
+				gelijk(t.text, woorden, "%s: bordje %d zegt wat zijn knop zegt" % [wat, j])
+				waar(t.get_theme_font_size("font_size") >= UiThema.VLOER,
+					"%s: bordje %d is leesbaar (%d px)" % [wat, j, t.get_theme_font_size("font_size")])
 		waar(dbg.has(id), "%s: bordje %d staat er" % [wat, j])
 		if not dbg.has(id):
 			continue
@@ -861,7 +1019,6 @@ func _platen_op_volgorde(wat: String, moet: bool) -> void:
 		var mik := World.mik_punt(p.x, p.y, 0.0)
 		waar(absf(r.get_center().x - mik.x) <= 2.0,
 			"%s: bordje %d hangt recht boven zijn vakje (%.0f vs %.0f)" % [wat, j, r.get_center().x, mik.x])
-		var spel := _spel()
 		if spel != null:
 			var gat: Rect2 = spel.vak_vlak(j)
 			waar(r.end.y <= gat.position.y + gat.size.y * 0.1 + 1.0 and r.end.y >= gat.position.y - 1.0,

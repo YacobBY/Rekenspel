@@ -101,16 +101,31 @@ function laadChromium() {
 // ---------------------------------------------------------------- de opslag
 // The same shape .fanout/scratch/godot-g-zwembad/probe-zwembad.js proved
 // against the real build: one save, `kamerNu` puts the camera in the room.
-// The order of State.gasten_pool(): Vlam the fox 4th and Knor the pig 7th
-// (2026-10-07), so `--gasten 7` seeds both.
+// The whole State.gasten_pool() (autoload/state.gd), in its order: Vlam the fox
+// 4th and Knor the pig 7th (2026-10-07), so `--gasten 7` seeds both.  Keep this
+// copy in step with state.gd (and with the one in tools/speel.js).
+// [id, naam, kind, soort, scoops, act, mins]
 const POOL = [
-  ['boef', 'Boef', 'hond', 'puppy', 2], ['muis', 'Muis', 'poes', 'poes', 1],
-  ['wolkje', 'Wolkje', 'konijn', 'konijn', 1], ['vlam', 'Vlam', 'vos', 'vos', 2],
-  ['gerrit', 'Gerrit', 'gans', 'gans', 2], ['pip', 'Pip', 'hond', 'puppy', 3],
-  ['knor', 'Knor', 'varken', 'varken', 3], ['vlok', 'Vlok', 'poes', 'poes', 2],
-  ['stamp', 'Stampertje', 'konijn', 'konijn', 1],
+  ['boef', 'Boef', 'hond', 'puppy', 2, 'Wandeling', 30], ['muis', 'Muis', 'poes', 'poes', 1, 'Spelen', 15],
+  ['wolkje', 'Wolkje', 'konijn', 'konijn', 1, 'Bad', 15], ['vlam', 'Vlam', 'vos', 'vos', 2, 'Wandeling', 30],
+  ['gerrit', 'Gerrit', 'gans', 'gans', 2, 'Plonzen', 15], ['pip', 'Pip', 'hond', 'puppy', 3, 'Wandeling', 30],
+  ['knor', 'Knor', 'varken', 'varken', 3, 'Bad', 15], ['vlok', 'Vlok', 'poes', 'poes', 2, 'Spelen', 15],
+  ['stamp', 'Stampertje', 'konijn', 'konijn', 1, 'Bad', 15],
+  ['bikkel', 'Bikkel', 'hond', 'puppy', 2, 'Wandeling', 30], ['pluis', 'Pluis', 'poes', 'poes', 1, 'Spelen', 15],
 ];
 const BEDDEN = [['kamer1', 'bed1'], ['kamer1', 'bed2'], ['kamer2', 'bed1'], ['kamer2', 'bed2']];
+// The waiting list after the first `n` guests: the rest of the pool, in its
+// order and in the shape of State.mk_gast, so the bell brings the pool's
+// (n+1)th guest (`--gasten 3`, then the bell: Vlam).  Until 2026-10-08 it was
+// empty: the game refilled it from Boef and the bell brought a second Boef.
+function wachtlijstNa(n) {
+  return POOL.slice(n).map(([id, naam, kind, soort, scoops, act, mins]) => ({
+    id, naam, name: naam, kind, soort, scoops, act, mins,
+    kamer: '', bed: '', waar: 'receptie',
+    nachten: 2, geslapen: 0, prijs: 1, behoefte: 'kamer',
+    dagIn: 1, accessoires: [], aai: 3,
+  }));
+}
 // `--kleding`: what each guest wears (ArtGasten.KLEDING, one piece per slot)
 const KLEDING = [
   ['pet', 'sjaaltje', 'gympjes'], ['strohoed', 'parels'], ['strik', 'sokjes'],
@@ -155,7 +170,7 @@ function maakOpslag() {
   }
   const s = {
     dag: opt.dag, ronde: 'vrij', munten: 4, sterren: 0, band: opt.band, kunnen,
-    signaal: [], gasten, wachtlijst: [], famIdx: 0,
+    signaal: [], gasten, wachtlijst: wachtlijstNa(n), famIdx: 0,
     meubels, meubelNr: meubels.length, taken: [], brieven: [],
     scoops: 40, levering: 4, snoeppot: 0,
     kar: null, spel: {}, gezien: {},
@@ -171,6 +186,7 @@ function maakHotel(n) {
   doc.s.dag = doc.s.dag + 6 * (n - 1);
   doc.s.sterren = doc.s.sterren + 7 * (n - 1);
   doc.s.gasten = doc.s.gasten.slice(0, Math.max(0, doc.s.gasten.length - (n - 1)));
+  doc.s.wachtlijst = wachtlijstNa(doc.s.gasten.length);
   return JSON.stringify(doc);
 }
 const base64url = (s) => Buffer.from(s, 'utf8').toString('base64')

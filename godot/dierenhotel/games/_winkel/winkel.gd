@@ -84,19 +84,19 @@ func definitie() -> Dictionary:
 		return false
 	# At rest the goods stand on the counter too (owner, 2026-09-23: "Dan hangt
 	# elk spel aan iets wat je echt ziet"): a stall with nothing on it is not a
-	# shop.  The registry puts them down while no game runs.
-	var rust: Array = []
-	var namen: Array = Beurt.WAREN.get(str(w.get("id", "")), [])
-	var plekken: Array = w.get("plekken", [])
-	for i in mini(namen.size(), plekken.size()):
-		var p: Vector2 = Vector2(float(w.get("x", 0.0)), float(w.get("z", 0.0))) + (plekken[i] as Vector2)
-		rust.append({"id": "rust_%s_%d" % [str(w.get("id", "")), i],
-			"model": "waar_" + str(namen[i]), "x": p.x, "z": p.y, "y": float(w.get("top", 10.0))})
+	# shop.  The registry puts them down while no game runs: TODAY's goods
+	# (`rust_nu`, read at every `Games.hersteek`, W5a 2026-10-08), exactly what
+	# the stall sells when it opens; `rust` is that counter on the first morning
+	# (day 1, one guest), the plain list the registry falls back on.
+	var rust: Array = rust_van(w, 1, 1, 3)
+	var rust_nu := func() -> Array:
+		return WinkelSpel.rust_vandaag(w)
 	var def := {
 		"naam": str(w.get("naam", name)),
 		"kamer": KAMER,
 		"stub": false,
 		"rust": rust,
+		"rust_nu": rust_nu,
 		"hotspot": {"obj": str(w.get("decor", "")), "icoon": str(w.get("icoon", "🛍️")),
 			"label": str(w.get("label", "")), "hoog": float(w.get("knop_hoog", 30.0))},
 		"unlock": func(n: int, _band: int) -> bool: return n >= 1,
@@ -105,6 +105,33 @@ func definitie() -> Dictionary:
 	if not str(w.get("wens", "")).is_empty():
 		def["wens"] = str(w["wens"])
 	return def
+
+## The counter at rest of shop `w` (a `winkel()`) on day `dag` with `n` guests
+## in band `band`: one loose decor piece per good of `Beurt.te_koop` over the
+## same `Beurt.opzet` a turn reads (`start`) — for no animal in particular, so
+## nothing is owned — on the spots of `plek_van`, ids `rust_<shop>_<i>`.  A
+## shop without goods (`Beurt.WAREN`) has nothing at rest.
+static func rust_van(w: Dictionary, dag: int, n: int, band: int) -> Array:
+	var id := str(w.get("id", ""))
+	if not Beurt.WAREN.has(id):
+		return []
+	var o := Beurt.opzet(id, n, band, dag)
+	var waren := Beurt.te_koop(o, [], int(w.get("toon", 3)))
+	var uit: Array = []
+	for i in waren.size():
+		var p := plek_van(w, i)
+		uit.append({"id": "rust_%s_%d" % [id, i], "model": "waar_" + str(waren[i]["naam"]),
+			"x": p.x, "z": p.y, "y": float(w.get("top", 10.0))})
+	return uit
+
+## Today's counter at rest: the day, the guests and the band that a turn
+## starting now reads (`start`), so it follows `Hotel.morgen` and every guest
+## who checks in or out.
+static func rust_vandaag(w: Dictionary) -> Array:
+	var s: Dictionary = State.s
+	if not (s.has("gasten") and s.has("kunnen")):
+		return rust_van(w, int(s.get("dag", 1)), 1, 3)      # no hotel yet
+	return rust_van(w, int(s.get("dag", 1)), State.n_gasten(), State.band())
 
 # ------------------------------------------------------------ start / stop
 
@@ -313,26 +340,10 @@ func _houd_bij_de_toonbank() -> void:
 ## three a day: on a phone four price tags side by side found no place).
 ## While choosing it is this list; once a thing is chosen, only that thing, on
 ## the spot where it stood (`S.plek`).
+## The choice itself is `Beurt.te_koop`, the one the counter at rest uses too.
 func _te_koop() -> Array:
 	var eigen: Array = ctx.state.kast_van(_gast_id()) if ctx != null else []
-	var uit: Array = []
-	for w in O.get("waren", []):
-		if not eigen.has(str(w["naam"])):
-			uit.append(w)
-	if uit.is_empty():
-		uit = (O.get("waren", []) as Array).duplicate()
-	var toon := int(_w("toon", 3))
-	if uit.size() > toon + 1:
-		# more than one over (the extra goods of 2026-10-07): turn the list by
-		# the day and the hotel's size, so every thing comes round on the counter
-		var draai := (int(O.get("dag", 1)) + int(O.get("N", 1))) % uit.size()
-		uit = uit.slice(draai) + uit.slice(0, draai)
-		uit = uit.slice(0, toon)
-	elif uit.size() > toon:
-		var weg := (int(O.get("dag", 1)) + int(O.get("N", 1))) % uit.size()
-		uit.remove_at(weg)
-		uit = uit.slice(0, toon)
-	return uit
+	return Beurt.te_koop(O, eigen, int(_w("toon", 3)))
 
 ## The goods on show now, each with the spot it stands on: [[good, spot], ...].
 func _uitstal() -> Array:
@@ -349,8 +360,13 @@ func _uitstal() -> Array:
 
 ## Where good `i` stands on the counter.
 func _plek(i: int) -> Vector2:
-	var plekken: Array = _w("plekken", [])
-	var basis := Vector2(float(_w("x", 0.0)), float(_w("z", 0.0)))
+	return plek_van(winkel(), i)
+
+## Where good `i` stands on the counter of shop `w` (a `winkel()`): static, so
+## the counter at rest puts its goods on the very same spots.
+static func plek_van(w: Dictionary, i: int) -> Vector2:
+	var plekken: Array = w.get("plekken", [])
+	var basis := Vector2(float(w.get("x", 0.0)), float(w.get("z", 0.0)))
 	if i < 0 or i >= plekken.size():
 		return basis
 	return basis + (plekken[i] as Vector2)

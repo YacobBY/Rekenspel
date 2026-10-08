@@ -575,6 +575,28 @@ func test_bel_haalt_de_volgende_gast() -> void:
 	gelijk(State.s["checkin"]["gastId"], "boef", "er staat al iemand")
 	gelijk((State.s["wachtlijst"] as Array).size(), 10, "en er komt niemand bij")
 
+## A hotel saved before Vlam and Knor (2026-10-07), three guests in a bed and
+## the old pool's waiting list: once it is read back, the bell brings Vlam as
+## the 4th guest instead of Gerrit (`State._nieuwe_gasten`).
+func test_een_oud_hotel_belt_vlam_als_vierde() -> void:
+	_voor()
+	_gasten(3)
+	State.s["wachtlijst"] = State.gasten_pool().slice(3).filter(
+		func(g): return not State.NIEUWE_GASTEN.has(str(g["id"])))
+	gelijk(str(State.s["wachtlijst"][0]["id"]), "gerrit", "de oude lijst begint bij Gerrit")
+	waar(State.bewaar(), "het oude hotel is bewaard")
+	State.s = State.standaard()
+	waar(State.lees(), "en weer gelezen")
+	waar(State.plek_voor_gast(), "er is plek voor een gast")
+	Hotel.bel()
+	var v = State.s["checkin"]
+	waar(v != null, "er staat een check-in klaar")
+	if v == null:
+		return
+	gelijk(v["gastId"], "vlam", "de vierde gast is Vlam de vos")
+	gelijk(str(State.s["nieuweGast"]["naam"]), "Vlam", "en hij staat aan de balie")
+	gelijk(str(State.s["wachtlijst"][2]["id"]), "knor", "Knor wordt de zevende")
+
 # --------------------------------------------------------- eten en spelen
 
 func test_spelen_met_de_mand() -> void:

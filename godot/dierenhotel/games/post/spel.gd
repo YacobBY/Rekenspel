@@ -6,9 +6,13 @@ extends MiniGame
 ## achterwand staat de vakkenkast met vier vakjes; boven elk vakje hangt zijn
 ## bordje met de getallen die erin horen ("30 - 39").  De kast is een
 ## GETALLENLIJN in vier stukken.  Een beurt:
-##   1. De postbode van de beurt (een gast met een bed, of het dier dat het
-##      kind op de spelbalk koos) loopt naar de kar.  Zonder gasten met een bed
-##      sorteert het kind de post alleen.
+##   1. De kaart staat er METEEN (W5e, 2026-10-08: de postbode kwam uit kamer 1
+##      via de trap, de lobby, de tuin en de kas — 14 tot 24 s wachten, en een
+##      kind van zes haakt dan af).  De postbode van de beurt (het dier dat het
+##      kind op de spelbalk koos, anders de gast met een bed die het DICHTST
+##      bij de postkamer is) loopt ondertussen in zijn eigen tempo naar de kar
+##      en doet mee zodra hij er is.  Zonder gasten met een bed, of als hij
+##      nooit aankomt, sorteert het kind de post alleen.
 ##   2. Op de bovenste brief staat zijn adres ("📮 34", groep 5 "📮 7 × 8"),
 ##      de kaart vraagt "📮 In welk vakje hoort deze brief?" met het adres op
 ##      de somregel, en de strook heeft precies vier knoppen: de vier vakjes,
@@ -48,7 +52,10 @@ const KAST_ID := "po_kast"
 const KAR_ID := "po_kar"
 const BALIE_ID := "po_balie"
 const ADRES_ID := "po_adres"
-const VAK_TAG := "po_vak%d"
+const VAK_TAG := "po_vak%d"        ## the big plates (tablet, desktop)
+const VAK_KLEIN := "po_vakje%d"    ## the small plates (phone, W5e)
+const VORM_GROOT := "groot"
+const VORM_KLEIN := "klein"
 const RUST_KAST := "rust_po_kast"
 const RUST_KAR := "rust_po_kar"
 const RUST_BALIE := "rust_po_balie"
@@ -75,10 +82,20 @@ const RUST_BRIEVEN := 4
 const KAART_HOOG := 24.0     ## the card's aim over the cart (when it floats)
 const ADRES_HOOG := 18.0     ## the address hangs just over the pile
 const PLAAT_HOOG := float(Modellen.HOOG)
+## The small plates of a phone (`_maak_klein`): text size, side padding, and
+## how tall a digit of Nunito stands, in em (its cap height is 0.705).
+const KLEIN_PUNT := UiThema.VLOER
+const KLEIN_RAND := 4
+const CIJFER_HOOG := 0.72
 
 const SOM_S := 0.6           ## a letter in its hole, then the next one this much later
 const AF_S := 3.4            ## the end card is readable this long before it closes
 const BLIJF_S := 1.5         ## how often the postbode is kept at the cart
+const KOM_TIK := 0.25        ## how often the turn looks whether he is at the cart yet
+const HERSTUUR_S := 1.0      ## a postbode on nobody's way to the cart is sent again after this
+## What a postbode is busy with that a fetch or a keep never breaks: a sulk
+## after a miss, a happy hop, a meal, his bed.
+const DRUK := ["sip", "blij", "eet", "slaap", "pose"]
 
 ## The turn.  Lives in `ctx.data()["stand"]`; every number is read back through
 ## `int()`, because JSON hands them back as floats.
@@ -90,6 +107,7 @@ var _kaart = null            ## Ui.Kaart
 var _kaart_sleutel := ""     ## the step and letter the card on screen was built for
 var _t0 := 0
 var _bezig := false          ## a letter is on its way into its hole
+var _klein_letter: FontVariation = null   ## the small plates' font (`_klein_font`)
 
 # ------------------------------------------------------------- aanmelding
 
@@ -167,7 +185,8 @@ func start(_c: SpelCtx) -> void:
 	_kaart_sleutel = ""
 	_bezig = false
 	# the shelf with its numbered holes and the cart with its pile stand there
-	# at once; the question waits for the postbode (`_begin`)
+	# at once, and so does the question; the postbode walks over meanwhile
+	# (`_begin`)
 	_zet_decor()
 	_zet_platen()
 	State.bewaar()
@@ -203,13 +222,37 @@ func spelers() -> Array:
 			uit.append(str(g.get("id", "")))
 	return uit
 
-## The postbode: the picked animal, else one that moves on with the day.
-static func _kies_postbode(kies: Array, wil: String, n: int, dag: int) -> String:
+## The postbode: the picked animal, else the guest with a bed who is NEAREST to
+## the postkamer — fewest doors to walk: the postkamer itself, then the kas, the
+## garden, the lobby, then upstairs (W5e: the first play fetched him from
+## kamer 1, 14–24 s away).  Equally near ones take turns with the day, as the
+## whole list did before.
+func _kies_postbode(kies: Array, wil: String, n: int, dag: int) -> String:
 	if not wil.is_empty():
 		return wil
 	if kies.is_empty():
 		return ""
-	return str(kies[posmod(dag + n, kies.size())])
+	var beste := ""
+	var beste_deuren := INF
+	for k in kies.size():
+		var id := str(kies[posmod(dag + n + k, kies.size())])
+		var deuren := deuren_tot_kar(id)
+		if deuren < beste_deuren:
+			beste = id
+			beste_deuren = deuren
+	# nobody can walk there: the turn of the day's animal, as before
+	return beste if not beste.is_empty() else str(kies[posmod(dag + n, kies.size())])
+
+## How many doors (stairs included) `gast_id` walks to reach the postkamer:
+## 0 when he is in it, INF when he is not in the world or has no way there.
+static func deuren_tot_kar(gast_id: String) -> float:
+	var d = World.dier(gast_id)
+	if d == null:
+		return INF
+	if str(d.kamer) == KAMER:
+		return 0.0
+	var pad: Array = Rooms.pad(str(d.kamer), KAMER)
+	return INF if pad.size() < 2 else float(pad.size() - 1)
 
 func _nieuwe_stand(gast: String, n: int, band: int, dag: int, ronde: int) -> Dictionary:
 	return {"gast": gast, "dag": dag, "N": n, "band": band, "ronde": ronde,
@@ -243,24 +286,22 @@ func _bewaar() -> void:
 
 # --------------------------------------------------------- de postbode halen
 
-## The postbode first, then the first letter (owner, 2026-09-23: "Zorg dat de
-## minigame pas begint wanneer het dier er is").  The shelf and the cart stand
-## there at once; the card comes the moment the postbode stands at the cart —
-## after a walk down the stairs and through the lobby, with the hotel's "komt
-## eraan" bubble and its `👀 Volg` while he is on his way.  Without an animal
-## (nobody has a bed yet, or he left the hotel on the way) the child sorts the
-## post alone: a miss then shows its bubble at the card (`Ui.misser`).
+## The first letter at once, the postbode in his own time (W5e, 2026-10-08).
+## The first play fetched him from kamer 1 — down the corridor and the stairs,
+## through the lobby, the garden and the kas — and the card waited 14–24 s for
+## him: a six-year-old gives up before the post has even started.  So this
+## game departs from the owner's rule of 2026-09-23 ("Zorg dat de minigame pas
+## begint wanneer het dier er is", `ctx.wacht_op`): its sum is the letter and
+## the shelf, which stand there at once, not the animal.  The card comes at
+## once, and the postbode — the NEAREST guest with a bed (`_kies_postbode`) —
+## walks to the cart meanwhile and joins when he is there.  The game does not
+## wait for him (no `ctx.wacht_op`, so no `Games.verwacht`): the hotel's "komt
+## eraan" bubble with its `👀 Volg` steps aside like every hotel button while
+## the game runs, and the camera stays in the postkamer with the card.  Without
+## an animal in the room (nobody has a bed yet, he left the hotel on the way,
+## or he is still walking) a miss shows its bubble at the card (`Ui.misser`);
+## the turn ends the same way.
 func _begin() -> void:
-	var gast := _gast_id()
-	if not gast.is_empty():
-		if not await ctx.wacht_op(gast, Vector2(GAST_X, GAST_Z)):
-			if not actief or S.is_empty():
-				return
-			S["gast"] = ""
-			ctx.speelt("")
-			_bewaar()
-		if not actief or S.is_empty() or O.is_empty():
-			return
 	# a pile that ran out without its end (cannot happen through `_kies`, which
 	# finishes in the same step it takes the last letter) is finished now
 	if _stap() == "sorteer" and _brief().is_empty():
@@ -268,33 +309,110 @@ func _begin() -> void:
 		return
 	_kaart_neer()
 	_teken()
-	if not _gast_id().is_empty():
-		_houd_bij_de_kar()
+	_haal_postbode()
 
-## The postbode stays at the cart for the whole turn: a waiting guest starts to
-## wander after sixteen seconds (world.md §2.6).  Every BLIJF_S he is sent back
-## to his spot when he is not there and not busy (a sulk after a miss, a happy
-## hop at the end).  The shape of oogst's `_houd_bij_de_tafel`.
-func _houd_bij_de_kar() -> void:
+## The postbode walks to the cart and then stays there for the whole turn.
+## Nobody awaits this: the card never waits for him.
+##   * On his way: every KOM_TIK the turn looks whether he stands at his place
+##     (`ctx.is_er`).  A walk that something else took over is sent again after
+##     HERSTUUR_S — never a sulk, a meal or a bed (`DRUK`); reduced motion
+##     sends him at once, as `ctx.wacht_op` does.
+##   * At the cart: a waiting guest starts to wander after sixteen seconds
+##     (world.md §2.6), so every BLIJF_S he is sent back to his spot when he is
+##     not there and not busy — the shape of oogst's `_houd_bij_de_tafel`.
+##   * Gone from the hotel: the child sorts on alone (`_zonder_postbode`).
+##   * The pile sorted before he came: he is not fetched any further.
+func _haal_postbode() -> void:
+	var gast := _gast_id()
+	if gast.is_empty():
+		return
+	if World.dier(gast) == null:
+		_zonder_postbode()
+		return
+	var plek := Vector2(GAST_X, GAST_Z)
+	_stuur_postbode(gast)
+	var er: bool = ctx.is_er(gast, plek)
+	if er:
+		ctx.wereld.blijf(gast, "wacht")
+	var los := 0.0
 	var tel := 0
-	while actief and not S.is_empty():
-		if not await na(BLIJF_S):
+	while actief and not S.is_empty() and _gast_id() == gast:
+		if not await na(BLIJF_S if er else KOM_TIK):
 			return
-		if S.is_empty() or _gast_id().is_empty():
+		if S.is_empty() or _gast_id() != gast:
 			return
-		var d = World.dier(_gast_id())
-		if d == null or d.kamer != KAMER or not d.route.is_empty():
+		var d = World.dier(gast)
+		if d == null:
+			_zonder_postbode()
+			return
+		if not er:
+			if _stap() != "sorteer":
+				return
+			if ctx.is_er(gast, plek):
+				er = true
+				ctx.wereld.blijf(gast, "wacht")
+				print("[probe] post postbode=er gast=", gast, " i=", int(S["i"]))
+				continue
+			if str(d.staat) in DRUK:
+				los = 0.0
+				continue
+			los = 0.0 if _komt_eraan(d) else los + KOM_TIK
+			if World.rust() or los >= HERSTUUR_S:
+				los = 0.0
+				_stuur_postbode(gast)
 			continue
-		if d.staat in ["sip", "blij", "eet", "slaap", "pose"]:
+		if d.kamer != KAMER or not d.route.is_empty():
+			continue
+		if str(d.staat) in DRUK:
 			continue
 		tel += 1
-		var doel := Vector2(GAST_X, GAST_Z)
+		var doel := plek
 		if not d.punten.is_empty():
 			doel = d.punten[d.punten.size() - 1]
 		var thuis: bool = absf(d.x - GAST_X) + absf(d.z - GAST_Z) <= 2.0
-		if doel.distance_to(Vector2(GAST_X, GAST_Z)) > 2.0 or (not thuis and d.staat != "loop") \
+		if doel.distance_to(plek) > 2.0 or (not thuis and d.staat != "loop") \
 				or (thuis and d.staat == "wacht" and tel % 8 == 0):
-			ctx.wereld.ga(_gast_id(), GAST_X, GAST_Z, "wacht")
+			ctx.wereld.ga(gast, GAST_X, GAST_Z, "wacht")
+
+## Send him to his place at the cart — through the doors with `World.reis`,
+## inside the room with `World.ga` — unless he stands there or is on his way.
+## The save says where he is going (`waar`), as `ctx.wacht_op` writes it.
+func _stuur_postbode(gast: String) -> void:
+	var d = World.dier(gast)
+	if d == null or ctx.is_er(gast, Vector2(GAST_X, GAST_Z)) \
+			or (_komt_eraan(d) and not World.rust()):
+		return
+	if str(d.kamer) != KAMER:
+		ctx.wereld.reis(gast, KAMER, {"x": GAST_X, "z": GAST_Z, "na": "wacht"})
+		var g: Dictionary = ctx.state.gast_van(gast)
+		if not g.is_empty():
+			g["waar"] = KAMER
+		d = World.dier(gast)
+		# reduced motion walks the doors at once and leaves the last leg
+		if d == null or str(d.kamer) != KAMER or not World.rust():
+			return
+	ctx.wereld.ga(gast, GAST_X, GAST_Z, "wacht")
+
+## On his way to the cart: through the doors into the postkamer, or inside it
+## with the cart's place at the end of his walk.
+func _komt_eraan(d) -> bool:
+	if str(d.kamer) != KAMER:
+		return str(d.reis_doel) == KAMER
+	var punten: Array = d.punten
+	if punten.is_empty():
+		return false
+	var laatste: Vector2 = punten[punten.size() - 1]
+	return laatste.distance_to(Vector2(GAST_X, GAST_Z)) <= SpelCtx.WACHT_MARGE
+
+## He left the hotel on his way (or is not in the world): the post stays and
+## the child sorts on alone; the game bar shows nobody.
+func _zonder_postbode() -> void:
+	if S.is_empty():
+		return
+	S["gast"] = ""
+	ctx.speelt("")
+	_bewaar()
+	print("[probe] post postbode=weg")
 
 # ------------------------------------------------------------------ de kaart
 
@@ -433,8 +551,11 @@ func _klaar() -> void:
 	for j in Beurt.VAKJES:
 		var p := vak_plek(j)
 		ctx.wereld.spetter(KAMER, p.x, p.y - 2.0, 4, Color("#FFD23F"), true, PLAAT_HOOG)
+	# the postbode cheers where the child sees him — in the postkamer; one who
+	# is still on his way is not stopped in a room nobody looks at
 	var id := _gast_id()
-	if not id.is_empty() and World.dier(id) != null:
+	var wie = World.dier(id) if not id.is_empty() else null
+	if wie != null and str(wie.kamer) == KAMER:
 		ctx.wereld.set_mood(id, "bouncy")
 	print("[probe] spel=klaar post missers=", int(S["missers"]), " sterren=", State.s["sterren"])
 	if not await na(AF_S):
@@ -469,13 +590,23 @@ func _zet_decor() -> void:
 ## Every hole's plate, as a number on the board over it (world.md §5.6): they
 ## stay the whole turn, and the strip under the card says the same words.  A
 ## plate's own thing is its hole's opening — `volg` hands Hits that rectangle
-## every frame — so the plate stands on the board right over its hole.  On a
-## frame where four plates cannot stand side by side over their holes (a
-## phone: the whole shelf is 140 units wide there) they stay off the glass,
-## because the band grid would only push them over each other's holes; then
-## the strip, whose buttons stand in the order of the holes, carries the
-## numbers alone.  Asked again in every placement pass, so a camera that is
-## still sliding in, or the maths bar docking, decides nothing for good.
+## every frame — so the plate stands on the board right over its hole.
+##
+## Two sets, one shown at a time (`plaat_vorm`, asked again in every placement
+## pass, so a camera that is still sliding in, the maths bar docking or a
+## phone turned over decides nothing for good):
+##   * the BIG plates "50 - 59" (`VAK_TAG`) where four fit side by side over
+##     their holes — every tablet and desktop frame;
+##   * the SMALL plates "50-59" (`VAK_KLEIN`, W5e 2026-10-08) on a phone, where
+##     the whole shelf is ~140 units wide and a big plate (58 × 25) is wider
+##     than a hole's pitch (33 units) and taller than its step (17): the
+##     hotel's own number tag at the hotel's smallest text, its line box hugging
+##     the digits (14 units), so the four stand in a staircase right over their
+##     holes like the big ones, the same words as the phone's strip buttons;
+##   * none where not even those fit (a frame narrower than any phone the
+##     hotel is made for): the band grid would only push plates over each
+##     other's holes, and the strip — its buttons in the order of the holes —
+##     carries the numbers alone.
 func _zet_platen() -> void:
 	var vakken: Array = O.get("vakjes", [])
 	for j in vakken.size():
@@ -483,25 +614,67 @@ func _zet_platen() -> void:
 		var p := vak_plek(j)
 		ctx.ui.getal_tag({"x": p.x, "z": p.y}, plaat, {"id": VAK_TAG % j, "kamer": KAMER,
 			"y": float(Modellen.BORD), "prio": 6, "titel": "vakje " + plaat,
-			"volg": _volg_vak(j)})
+			"volg": _volg_vak(j, VORM_GROOT)})
+		var klein: String = ctx.ui.getal_tag({"x": p.x, "z": p.y}, Beurt.kort(vakken[j]),
+			{"id": VAK_KLEIN % j, "kamer": KAMER, "y": float(Modellen.BORD), "prio": 6,
+			"titel": "vakje " + plaat, "volg": _volg_vak(j, VORM_KLEIN)})
+		_maak_klein(ctx.hotspots.spot(klein))
 
-## Where plate `j` hangs this frame: over hole `j`, with the hole's opening as
-## its thing — or nowhere (`kamer` ""), when the four do not fit.
-func _volg_vak(j: int) -> Callable:
+## Where plate `j` of set `vorm` hangs this frame: over hole `j`, with the
+## hole's opening as its thing — or nowhere (`kamer` ""), when the other set
+## (or neither) is the one that fits.
+func _volg_vak(j: int, vorm: String) -> Callable:
 	var p := vak_plek(j)
 	return func() -> Dictionary:
-		if not platen_nu():
+		if plaat_vorm() != vorm:
 			return {"x": p.x, "z": p.y, "kamer": ""}
 		return {"x": p.x, "z": p.y, "kamer": KAMER, "vlak": vak_vlak(j)}
 
-## Do the four plates, as big as they are drawn, fit over their holes now?
-func platen_nu() -> bool:
+## Which plates stand over the holes now: VORM_GROOT, VORM_KLEIN or "".
+func plaat_vorm() -> String:
+	if platen_passen(_plaat_maat(VAK_TAG)):
+		return VORM_GROOT
+	if platen_passen(_plaat_maat(VAK_KLEIN)):
+		return VORM_KLEIN
+	return ""
+
+## The size of the biggest plate of one set, as big as it is drawn.
+func _plaat_maat(sjabloon: String) -> Vector2:
 	var maat := Vector2.ZERO
 	for j in Beurt.VAKJES:
-		var s = Hits.spot(VAK_TAG % j)
+		var s = Hits.spot(sjabloon % j)
 		if s != null and is_instance_valid(s.knoop):
 			maat = maat.max((s.knoop as Control).get_combined_minimum_size())
-	return platen_passen(maat)
+	return maat
+
+## A small plate: the hotel's own number tag (`UiGetalTag` — sun yellow, white
+## rim, ink), in bold at the hotel's smallest text (`UiThema.VLOER`, the floor
+## HOTEL.md §9 sets), with a thin rim and a line box that hugs the digits: a
+## label reserves the line of its tallest fallback font (21 px for 12 px text,
+## the emoji font), digits need 9 of it.  Made once when the turn starts; it
+## never changes after that, so `Hits` measures what it draws.
+func _maak_klein(s) -> void:
+	if s == null or not is_instance_valid(s.knoop) or not (s.knoop is Label):
+		return
+	var t := s.knoop as Label
+	t.add_theme_font_override("font", _klein_font())
+	t.add_theme_font_size_override("font_size", KLEIN_PUNT)
+	t.add_theme_stylebox_override("normal",
+		UiThema.vulling(UiThema.vlak(UiThema.ZON, 999, 1, UiThema.WIT), KLEIN_RAND, 1))
+
+## The small plates' font: Nunito bold, its line cut down to the digits with
+## one pixel above them and two under the baseline (digits have no descent).
+func _klein_font() -> Font:
+	if _klein_letter != null:
+		return _klein_letter
+	var basis: Font = load(UiThema.NUNITO_VET)
+	_klein_letter = FontVariation.new()
+	_klein_letter.base_font = basis
+	if basis != null:
+		var cijfer := ceili(CIJFER_HOOG * KLEIN_PUNT)
+		_klein_letter.spacing_top = -maxi(0, roundi(basis.get_ascent(KLEIN_PUNT)) - cijfer - 1)
+		_klein_letter.spacing_bottom = -maxi(0, roundi(basis.get_descent(KLEIN_PUNT)) - 2)
+	return _klein_letter
 
 ## The opening of hole `j` on the screen, in frame units: its front face from
 ## the floor of the hole to the board.

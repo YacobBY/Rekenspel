@@ -141,6 +141,34 @@ static func prijs(winkel: String, b: int, k: int, n: int, r: int) -> int:
 			return lo + (k * n + r) % (hi - lo + 1)
 	return mini(hi, lo + (k * n + r) % (hi - lo + 1))
 
+# ------------------------------------------------------------ de toonbank
+
+## What stands on the counter today — THE one choice, used by the open stall
+## (`WinkelSpel._te_koop`) and by the counter at rest (`WinkelSpel.rust_van`),
+## so the child sees on a closed stall what it sells when opened (W5a,
+## 2026-10-08).  `o` is today's `opzet`; `eigen` what the animal of the turn
+## already owns (the counter at rest has no animal: []); `toon` how many things
+## at most.  Everything the shop has, except what the animal owns — unless it
+## owns it all, then everything again — at most `toon`; with more than one
+## over (the extra goods of 2026-10-07) the list turns by the day and the
+## hotel's size, so every thing comes round on the counter.  Returns the
+## `waren` entries ({naam, prijs}) in counter order.
+static func te_koop(o: Dictionary, eigen: Array, toon: int) -> Array:
+	var uit: Array = []
+	for w in o.get("waren", []):
+		if not eigen.has(str(w["naam"])):
+			uit.append(w)
+	if uit.is_empty():
+		uit = (o.get("waren", []) as Array).duplicate()
+	var draai := (int(o.get("dag", 1)) + int(o.get("N", 1))) % maxi(1, uit.size())
+	if uit.size() > toon + 1:
+		uit = uit.slice(draai) + uit.slice(0, draai)
+		uit = uit.slice(0, toon)
+	elif uit.size() > toon:
+		uit.remove_at(draai)
+		uit = uit.slice(0, toon)
+	return uit
+
 # ------------------------------------------------------------ de stappen
 
 ## The steps of a turn after the choice, in order.

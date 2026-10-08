@@ -82,8 +82,8 @@ static func mk_gast(id: String, naam: String, kind: String, soort: String,
 ## world.md §2.1 — the pool, taken in this order by the bell.  The two kinds of
 ## 2026-10-07 (owner: "maak nog twee extra dieren") come 4th (Vlam the fox) and
 ## 7th (Knor the pig): the hotel holds 8 guests, so at the end of the list they
-## would never be seen.  A save keeps its own waiting list (`wachtlijst`), so a
-## hotel that is already running meets them when that list is refilled.
+## would never be seen.  A save keeps its own waiting list (`wachtlijst`); a
+## hotel saved before them gets them put in it on reading (`_nieuwe_gasten`).
 static func gasten_pool() -> Array:
 	return [
 		mk_gast("boef", "Boef", "hond", "puppy", 2, "Wandeling", 30),
@@ -231,6 +231,7 @@ func ontleed(tekst: String) -> Dictionary:
 		return {}
 	_normaliseer(uit)
 	_repareer(uit)
+	_nieuwe_gasten(uit)
 	if not _vorm_klopt(uit):
 		return {}
 	return uit
@@ -539,6 +540,53 @@ func _vul_wachtlijst(d: Dictionary) -> void:
 		for g in gasten_pool():
 			g["id"] = str(g["id"]) + achter
 			(d["wachtlijst"] as Array).append(g)
+
+## The two kinds of 2026-10-07 and the place (0-based) the pool gives them in
+## the line of arriving guests: Vlam the fox 4th, Knor the pig 7th.
+const NIEUWE_GASTEN := {"vlam": 3, "knor": 6}
+
+## 2026-10-08 — a hotel saved before Vlam and Knor existed keeps its own waiting
+## list, so it would meet them only once that list ran out (eleven guests on).
+## DECISION: `ontleed` puts each of them into the waiting list where the pool
+## has him, counted from the guests the hotel has now (the one at the desk
+## included): Vlam at place 3 − N, so he is the 4th guest, Knor at 6 − N, the
+## 7th — at the front when the hotel is already past that, and never ahead of
+## Vlam.  A hotel that already knows him (in a bed, at the desk, on the waiting
+## list, or gone home with a letter on the wall) is left alone, which also makes
+## a second pass change nothing.  Only `wachtlijst` changes; the file itself is
+## rewritten by the next `bewaar()`, as for every repair.
+func _nieuwe_gasten(d: Dictionary) -> void:
+	var wacht: Array = d["wachtlijst"]
+	var n := (d["gasten"] as Array).size()
+	if d["nieuweGast"] != null:
+		n += 1
+	var vanaf := 0
+	for g in gasten_pool():
+		var id := str(g["id"])
+		if not NIEUWE_GASTEN.has(id) or _kent_gast(d, g):
+			continue
+		var plek := clampi(int(NIEUWE_GASTEN[id]) - n, vanaf, wacht.size())
+		wacht.insert(plek, g)
+		vanaf = plek + 1
+
+## Has this hotel met pool guest `nieuw`?  Same id (also with the `_d<dag>` and
+## `_2` the bell adds), same kind (he is the only one of his kind), or a
+## thank-you letter that names him (`nieuwe_brief`: "… voor <naam> hebt …").
+static func _kent_gast(d: Dictionary, nieuw: Dictionary) -> bool:
+	var id := str(nieuw["id"])
+	var kind := str(nieuw["kind"])
+	var alle: Array = (d["gasten"] as Array) + (d["wachtlijst"] as Array)
+	if d["nieuweGast"] != null:
+		alle.append(d["nieuweGast"])
+	for g in alle:
+		var gid := str(g.get("id", ""))
+		if gid == id or gid.begins_with(id + "_") or str(g.get("kind", "")) == kind:
+			return true
+	var naam := " %s " % str(nieuw["naam"])
+	for b in d["brieven"]:
+		if str(b.get("tekst", "")).contains(naam):
+			return true
+	return false
 
 func zet_geluid(aan: bool) -> void:
 	s["geluid"] = aan

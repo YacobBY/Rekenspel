@@ -393,20 +393,51 @@ func hersteek() -> void:
 ## game: its own decor, and every test that counts it, stays its own.  Put down
 ## or taken away only when that changes, because every `World.decor()` redraws
 ## the room.
+##
+## A game whose props change with the day (`definitie().rust_nu`, a STATIC
+## Callable() -> Array: the stalls show today's goods on their counters, W5a
+## 2026-10-08) has them read again at every `hersteek` — after every render,
+## so after `Hotel.morgen` and every check-in or checkout too — and a piece
+## whose model or spot changed is put down anew.  `rust_nu` keeps the ids of
+## `rust`; only what stands on them may change.
 const RUST := "rust:"
 
 func _zet_rust(id: String, aan: bool) -> void:
 	var def: Dictionary = _defs.get(id, {})
 	var kamer := str(def.get("kamer", ""))
-	for stuk in def.get("rust", []):
+	var volgt := aan and _heeft_rust_nu(def)
+	var lijst: Array = rust_van(id) if volgt else def.get("rust", [])
+	for stuk in lijst:
 		var sid := str((stuk as Dictionary).get("id", ""))
-		var staat := not World.decor_plek(sid, kamer).is_empty()
-		if aan and not staat:
+		var plek := World.decor_plek(sid, kamer)
+		var staat := not plek.is_empty()
+		if aan and (not staat or (volgt and _rust_anders(plek, stuk))):
 			var o: Dictionary = (stuk as Dictionary).duplicate(true)
 			o["door"] = RUST + id
 			World.decor(kamer, o)
 		elif not aan and staat:
 			World.decor_weg(kamer, sid)
+
+## The props game `id` leaves standing now: `definitie().rust_nu` when it has
+## one, else the plain list `rust`.
+func rust_van(id: String) -> Array:
+	var def: Dictionary = _defs.get(id, {})
+	if _heeft_rust_nu(def):
+		var lijst = (def["rust_nu"] as Callable).call()
+		if lijst is Array:
+			return lijst
+	return def.get("rust", [])
+
+static func _heeft_rust_nu(def: Dictionary) -> bool:
+	var fn = def.get("rust_nu", null)
+	return fn is Callable and (fn as Callable).is_valid()
+
+## Does the piece standing there (`World.decor_plek`) differ from the one that
+## should stand there now?
+static func _rust_anders(staat: Dictionary, stuk: Dictionary) -> bool:
+	return str(staat.get("model", "")) != str(stuk.get("model", "")) \
+		or not is_equal_approx(float(staat.get("x", 0.0)), float(stuk.get("x", 0.0))) \
+		or not is_equal_approx(float(staat.get("z", 0.0)), float(stuk.get("z", 0.0)))
 
 ## The object an entry button hangs on: a loose thing first (the trolley, the
 ## desk lamp), then whatever `World.mik` finds (slots, fixed decor, the running

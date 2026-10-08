@@ -252,6 +252,130 @@ func test_lege_wachtlijst_wordt_bijgevuld() -> void:
 	var g2 := State.pak_gast()
 	gelijk(g2["id"], "boef_d4_2", "een botsende id krijgt _2")
 
+## An old hotel as it stands on a tablet today: the pool of before 2026-10-07
+## (no Vlam, no Knor), its first `n` guests in the bedrooms and the rest on the
+## waiting list the save keeps.  Returns a copy of that save.
+func _oude_opslag(n: int) -> Dictionary:
+	State.nieuw_spel()
+	var oud: Array = State.gasten_pool().filter(
+		func(g): return not State.NIEUWE_GASTEN.has(str(g["id"])))
+	gelijk(oud.size(), 9, "de oude pool had negen gasten")
+	var gasten: Array = []
+	for i in n:
+		var g: Dictionary = oud[i]
+		g["kamer"] = "kamer1" if i % 2 == 0 else "kamer2"
+		g["waar"] = g["kamer"]
+		g["behoefte"] = "eten"
+		gasten.append(g)
+	State.s["gasten"] = gasten
+	State.s["wachtlijst"] = oud.slice(n)
+	State.s["dag"] = 4
+	State.s["munten"] = 9
+	State.s["sterren"] = 6
+	return State.s.duplicate(true)
+
+static func _ids(lijst: Array) -> Array:
+	var uit: Array = []
+	for g in lijst:
+		uit.append(str(g["id"]))
+	return uit
+
+static func _leesbaar(s: Dictionary) -> Dictionary:
+	return State.ontleed(JSON.stringify({"v": 1, "s": s}))
+
+## 2026-10-08: reading an old hotel puts Vlam and Knor in its waiting list
+## where the pool has them, counted from the guests it has now — Vlam the 4th
+## guest, Knor the 7th, at the front once the hotel is past that.  Nothing else
+## in the save moves, and a second read changes nothing.
+func test_een_oud_hotel_ontmoet_vlam_en_knor() -> void:
+	var pool := State.gasten_pool()
+	# [guests in the hotel, Vlam's place on the list, Knor's place]
+	for geval in [[0, 3, 6], [3, 0, 3], [5, 0, 1], [8, 0, 1]]:
+		var n: int = geval[0]
+		var oud := _oude_opslag(n)
+		var uit := _leesbaar(oud)
+		waar(not uit.is_empty(), "%d gasten: de oude opslag wordt gelezen" % n)
+		if uit.is_empty():
+			continue
+		var verwacht := oud.duplicate(true)
+		(verwacht["wachtlijst"] as Array).insert(geval[1], pool[3])
+		(verwacht["wachtlijst"] as Array).insert(geval[2], pool[6])
+		gelijk(JSON.stringify(uit), JSON.stringify(verwacht),
+			"%d gasten: alleen Vlam en Knor komen erbij, de rest blijft byte voor byte" % n)
+		gelijk(_ids(uit["gasten"]), _ids(oud["gasten"]), "%d gasten: de gasten blijven" % n)
+		var rij := _ids(uit["gasten"]) + _ids(uit["wachtlijst"])
+		gelijk(rij.count("vlam"), 1, "%d gasten: één Vlam" % n)
+		gelijk(rij.count("knor"), 1, "%d gasten: één Knor" % n)
+		if n <= 3:
+			gelijk(rij.find("vlam"), 3, "%d gasten: Vlam is de vierde gast" % n)
+		else:
+			gelijk(_ids(uit["wachtlijst"])[0], "vlam", "%d gasten: Vlam is de volgende" % n)
+		if n <= 6:
+			gelijk(rij.find("knor"), 6, "%d gasten: Knor is de zevende gast" % n)
+		waar(rij.find("vlam") < rij.find("knor"), "%d gasten: Vlam voor Knor" % n)
+		gelijk(JSON.stringify(_leesbaar(uit)), JSON.stringify(uit),
+			"%d gasten: nog een keer lezen verandert niets" % n)
+	# a hotel that never had a guest gets exactly today's pool
+	gelijk(_ids(_leesbaar(_oude_opslag(0))["wachtlijst"]), _ids(pool),
+		"een leeg oud hotel wacht in de volgorde van de pool")
+	# and the bell follows the list: three in the hotel, Vlam is the next one
+	State.s = _leesbaar(_oude_opslag(3))
+	gelijk(State.pak_gast()["id"], "vlam", "de bel haalt Vlam als vierde")
+	for i in 2:
+		State.pak_gast()
+	gelijk(State.pak_gast()["naam"], "Knor", "en Knor als zevende")
+	# the guest at the desk counts: two in a bed and Wolkje checking in, so
+	# Vlam is the very next one (the 4th) and Knor the 7th
+	var balie := _oude_opslag(2)
+	var wolkje: Dictionary = (balie["wachtlijst"] as Array).pop_front()
+	balie["nieuweGast"] = wolkje
+	balie["checkin"] = {"gastId": "wolkje", "stap": 1}
+	var bij_balie := _leesbaar(balie)
+	gelijk(str(bij_balie.get("nieuweGast", {}).get("id", "")), "wolkje", "Wolkje blijft aan de balie")
+	gelijk(_ids(bij_balie.get("wachtlijst", [])).slice(0, 4), ["vlam", "gerrit", "pip", "knor"],
+		"met een gast aan de balie: Vlam de vierde, Knor de zevende")
+
+## A hotel that already knows them is read byte for byte as it was written:
+## a new hotel, a full one of today's pool (8 guests with Vlam and Knor in a
+## bed), a list refilled on day 3 (`vlam_d3`), Vlam at the desk, and Vlam gone
+## home with a letter on the wall.
+func test_een_hotel_dat_vlam_en_knor_kent_blijft_gelijk() -> void:
+	var gevallen := {}
+	State.nieuw_spel()
+	gevallen["een nieuw hotel"] = State.s.duplicate(true)
+	State.nieuw_spel()
+	var vol := State.gasten_pool()
+	for i in 8:
+		vol[i]["kamer"] = "kamer1" if i < 4 else "kamer2"
+		vol[i]["waar"] = vol[i]["kamer"]
+		vol[i]["behoefte"] = "eten"
+	State.s["gasten"] = vol.slice(0, 8)
+	State.s["wachtlijst"] = vol.slice(8)
+	gevallen["een vol hotel (8 gasten)"] = State.s.duplicate(true)
+	State.nieuw_spel()
+	State.s["dag"] = 3
+	for g in State.s["wachtlijst"]:
+		g["id"] = str(g["id"]) + "_d3"
+	gevallen["een lijst van dag 3"] = State.s.duplicate(true)
+	State.nieuw_spel()
+	var pool := State.gasten_pool()
+	State.s["gasten"] = pool.slice(0, 3)
+	State.s["nieuweGast"] = pool[3]
+	State.s["checkin"] = {"gastId": "vlam", "stap": 1}
+	State.s["wachtlijst"] = pool.slice(4)
+	gevallen["Vlam aan de balie"] = State.s.duplicate(true)
+	State.nieuw_spel()
+	pool = State.gasten_pool()
+	State.s["brieven"] = [State.nieuwe_brief(pool[3])]
+	State.s["gasten"] = [pool[4], pool[5], pool[6]]
+	State.s["wachtlijst"] = pool.slice(7)
+	gevallen["Vlam is al naar huis"] = State.s.duplicate(true)
+	for wat in gevallen.keys():
+		var doc: Dictionary = gevallen[wat]
+		var uit := _leesbaar(doc)
+		waar(not uit.is_empty(), "%s wordt gelezen" % wat)
+		gelijk(JSON.stringify(uit), JSON.stringify(doc), "%s: byte voor byte gelijk" % wat)
+
 func test_dag_verbruik_en_bedden() -> void:
 	_voor()
 	State.s["gasten"] = [
