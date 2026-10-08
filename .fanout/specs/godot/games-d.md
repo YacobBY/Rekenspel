@@ -278,10 +278,12 @@ emoji-subset: 🛍 🧢 👒 🎀 👔 📿 👟 👢 🥿 🕶 💎 🪞 😞.
 
 **2026-10-07.**  Op de kiesstrook staat een ding met het **laatste woord** van zijn naam
 ("🧢 Pet €4", "🥿 Slofjes", "🎾 Goudbal"); geen twee dingen van één kraam delen dat woord
-(`test_elk_strookwoord_is_uniek_per_kraam`, 2026-10-08).  Op de geldstrook staat 💶 alleen nog
-in het lange woord ("💶 €5 + €2"), niet als pictogram: zonder dat passen de vier korte woorden
-("10+5+2+1") naast elkaar op 360×740, voor elk bedrag dat een kraam kan vragen
-(`test_elke_strook_past_op_elk_scherm`); de lange strook op een tablet is ongewijzigd.  Klaar
+(`test_elk_strookwoord_is_uniek_per_kraam`, 2026-10-08).  Op de geldstrook draagt elke knop 💶,
+op elk scherm (pictogram én woord, HOTEL.md §9): naast het geld in het lange woord ("💶 €5 + €2"),
+**boven** het geld in het korte ("💶" / "10+5+2+1", `Beurt.stapel_knop_kort`, zoals de vakjes van
+de post), zodat een knop niet breder is dan zijn getallen en de vier korte knoppen naast elkaar
+passen op 360×740, voor elk bedrag dat een kraam kan vragen (`test_elke_strook_past_op_elk_scherm`,
+die ook toetst dat elke geldknop 💶 draagt); de lange strook op een tablet is ongewijzigd.  Klaar
 met een nieuw stuk: "✅ Boef draagt nu de feestmuts!" — elke naam houdt die zin onder de 40
 tekens.  Nieuw in de emoji-subset (F1): 🦊 🐷 👓 🎾 🩰 🥳 (en de tekens van games-e.md).
 

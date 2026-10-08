@@ -196,7 +196,7 @@ main.py                   PyCharm leftover, ignore
 
 | command | does | time |
 |---|---|---|
-| `tools/test.sh` | whole headless suite, own `user://`, fails on ANY engine ERROR line | ≈ 16 min (875 tests, 2026-10-08) |
+| `tools/test.sh` | whole headless suite, own `user://`, fails on ANY engine ERROR line | ≈ 16 min (878 tests, 2026-10-08) |
 | `DH_TEST_FILTER=zwembad tools/test.sh` | only test files whose name contains the filter | 5–20 s |
 | `tools/import.sh` | headless import pass, gated on ERROR lines | ≈ 20 s |
 | `tools/export.sh` | release web export → `godot/dierenhotel/build/web/` (≈ 41 MB) | ≈ 60 s |
@@ -455,9 +455,11 @@ reading at most `Sommen.Prng`): `_winkel`, `foto`, `spiegel`, `koekjes`, `band`,
 
 - 2026-10-08: the expansion of 2026-10-07 is on `main` — `312f1be` (four rooms +
   room decoration), `d20824f` (the four games playable), `0ee2813` (vos and varken,
-  eleven accessories, 33 emoji) — and NOT pushed (`main` is four commits ahead of
-  `origin/main` = `8123d05`, the fotohokje's `62f08d9` included).  Suite at `0ee2813`:
-  875 goed, 0 fout (≈ 16 min).  Open items: PLAN.md §7 (2026-10-08) and §4 batch 10
+  eleven accessories, 33 emoji), `5210b02` (polish: real pictograms, room sound,
+  goudbal), `e0a1905` (docs) and the fix pass after the blind verification (money
+  buttons keep 💶 on a phone) — and NOT pushed (`main` is seven commits ahead of
+  `origin/main` = `8123d05`, the fotohokje's `62f08d9` included).  Suite after the
+  fix pass: 878 goed, 0 fout (≈ 16 min).  Open items: PLAN.md §7 (2026-10-08) and §4 batch 10
   (`E1`–`E6`); the owner's summary is `docs/STATUS-2026-10-08.md`.
 - (2026-09-16) Everything was on `main` and pushed. GitHub Pages deploy fails until
   the owner sets Settings → Pages → Source = "GitHub Actions" (owner action).

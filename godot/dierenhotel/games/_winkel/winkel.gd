@@ -479,12 +479,14 @@ func _geld_keuzes(s: Dictionary) -> Array:
 	for i in stapels.size():
 		var st: Array = stapels[i]
 		var som := Beurt.tel(st)
-		# the 💶 rides in the long word only (2026-10-07): on a portrait phone
-		# (360×740) four short words "10+5+2+1" fit side by side only without
-		# it, for every amount a stall can ask; the long strip is unchanged
+		# the 💶 rides in BOTH words (2026-10-08, pictogram AND word on every
+		# button): beside the money in the long word ("💶 €5 + €2"), OVER it in
+		# the short one ("💶" / "10+5+2+1", like the post's holes), so a
+		# portrait phone (360×740) still fits four of them side by side for
+		# every amount a stall can ask — the button is as wide as "10+5+2+1"
 		uit.append({"id": "g%d" % som, "icoon": "",
 			"tekst": "%s %s" % [Beurt.ICOON_GELD, Beurt.stapel_tekst(st)],
-			"kort": Beurt.stapel_kort(st),
+			"kort": Beurt.stapel_knop_kort(st),
 			"titel": "betaal %s" % Beurt.stapel_tekst(st),
 			"kies": func(_id, k) -> void: _antwoord(som, k)})
 	return uit

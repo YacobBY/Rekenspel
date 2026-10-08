@@ -10,3 +10,6 @@ tmp/
 # (godot/dierenhotel/.gitignore repeats them for the project on its own)
 .godot/
 godot/dierenhotel/build/web/
+
+# the owner's own backup copy of tools/export.sh (committed by accident in 0ee2813)
+tools/export.sh.bak

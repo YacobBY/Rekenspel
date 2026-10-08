@@ -30,7 +30,9 @@ class_name KoekjesBeurt
 const ZAAD := 90317
 
 ## Het pictogram vóór elke zin op de kaart (de kaart zet het ervoor) en op elk
-## getal van de strook.  🥚 🥣 🥐 staan niet in de lettertypen (`Ui.mist_tekens`).
+## getal van de strook.  🥚 🥣 🥐 staan sinds 2026-10-08 in de lettertypen
+## (`test_ui`); het spel houdt 🍪 op elke kaart, ook die met de eieren, en 🥐
+## is het pictogram van de bakkerij.
 const ICOON := "🍪"
 const ICOON_AF := "✨"
 const ICOON_LEKKER := "😋"

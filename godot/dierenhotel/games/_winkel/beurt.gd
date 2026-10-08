@@ -266,6 +266,12 @@ static func stapel_kort(stapel_: Array) -> String:
 		delen.append(str(int(m)))
 	return "+".join(delen)
 
+## The money button's short word on a phone: the 💶 over the coins
+## ("💶" / "10+5+2+1"), so the button is no wider than its numbers and still
+## carries its pictogram (HOTEL.md §9: pictogram AND word).
+static func stapel_knop_kort(stapel_: Array) -> String:
+	return "%s\n%s" % [ICOON_GELD, stapel_kort(stapel_)]
+
 ## Four ways to pay, exactly one of them the right amount: the fewest coins and
 ## notes for the price, and for a euro less, a euro more and two more (or three
 ## more when there is no euro less) — every one a real handful of money, never

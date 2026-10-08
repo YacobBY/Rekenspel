@@ -285,6 +285,7 @@ func test_betalen_met_echt_geld() -> void:
 	gelijk(Beurt.stapel(7, 3), [5, 2], "€7 = €5 + €2")
 	gelijk(Beurt.stapel(19, 4), [10, 5, 2, 2], "€19 = €10 + €5 + €2 + €2")
 	gelijk(Beurt.stapel_tekst([5, 2]), "€5 + €2", "zo staat het op de knop")
+	gelijk(Beurt.stapel_knop_kort([5, 2]), "💶\n5+2", "op een telefoon: het pictogram boven het geld")
 
 ## Every sentence fits the budget with the longest guest name, and every glyph
 ## is in the bundled fonts.
@@ -642,10 +643,19 @@ func test_elke_strook_past_op_elk_scherm() -> void:
 	var stroken := _alle_stroken()
 	waar(stroken.size() > 40, "genoeg verschillende stroken (%d)" % stroken.size())
 	var geld := 0
+	var kaal: Array[String] = []
 	for sleutel in stroken:
 		if str(stroken[sleutel]["stap"]) == "betaal":
 			geld += 1
+			# pictogram AND word on every money button, the long and the short
+			# strip alike (HOTEL.md §9; red on 2026-10-08: "5+2+1" on a phone)
+			for k in stroken[sleutel]["keuzes"]:
+				for woord in [str(k.get("tekst", "")), str(k.get("kort", k.get("tekst", "")))]:
+					var knop := ("%s %s" % [str(k.get("icoon", "")), woord]).strip_edges()
+					if not knop.contains(Beurt.ICOON_GELD):
+						kaal.append(knop)
 	waar(geld >= 10, "de geldstroken zitten erbij (%d)" % geld)
+	gelijk(kaal.size(), 0, "elke geldknop draagt 💶 (%s)" % str(kaal.slice(0, 4)))
 	var bewaard: Dictionary = State.s.duplicate(true)
 	var scherm_terug = Ui.get("_scherm")
 	var rust_voor := Ui.rust_modus()

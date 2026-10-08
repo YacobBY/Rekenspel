@@ -318,7 +318,7 @@ func test_zelfde_dag_zelfde_vraag() -> void:
 
 ## Every sentence the child reads fits the card rules (HOTEL.md §9) — with its
 ## pictogram in front, as the card shows it — and every character is in the
-## font subset (🥚 🥣 🥐 are not: `Ui.mist_tekens`).
+## font subset (`Ui.mist_tekens`).
 func test_zinnen_volgen_de_tekstregels() -> void:
 	if Ui.thema == null or Ui.thema.default_font == null:
 		Ui._bouw_thema(17)
