@@ -124,19 +124,18 @@ var _deuren_geleend := false  ## de deur- en trapbordjes zijn nu van de plaatsst
 ## lopen dezelfde weg: kopen → betalen → één tik op een vrij ✨-vakje in je
 ## kamer.  Het schilderij hangt aan de MUUR (`Rooms.plek_soort` = "wand", zijn
 ## vakjes zijn `Rooms.vrije_wandplekken`), de rest staat op de vloer.
-## Pictogrammen: alleen glyphs uit `fonts/tekens.txt` (🖼 🐠 🕯 🟪 zitten nog
-## niet in de gebundelde fonts); het schilderij toont zijn motief (de maan), het
-## kastje draagt een klokje, het aquarium is water (💦).
+## Pictogrammen: alleen glyphs uit `fonts/tekens.txt` (🖼 en 🐠 sinds F1);
+## het kastje draagt een klokje.
 const VERSIERING_KAMER := [
 	{"type": "kussen", "icoon": "🩷", "naam": "kussen", "prijs": 1, "plus": ""},
 	{"type": "bloemen", "icoon": "🌸", "naam": "bloemen", "prijs": 2, "plus": ""},
 	{"type": "slinger", "icoon": "🎈", "naam": "slinger", "prijs": 2, "plus": ""},
 	{"type": "bankje", "icoon": "🛋", "naam": "bankje", "prijs": 3, "plus": ""},
 	{"type": "lamp", "icoon": "💡", "naam": "lamp", "prijs": 3, "plus": ""},
-	{"type": "schilderij", "icoon": "🌙", "naam": "schilderij", "prijs": 4, "plus": ""},
+	{"type": "schilderij", "icoon": "🖼", "naam": "schilderij", "prijs": 4, "plus": ""},
 	{"type": "kastje", "icoon": "🕐", "naam": "klokkastje", "prijs": 4, "plus": ""},
 	{"type": "kist", "icoon": "🧸", "naam": "speelkist", "prijs": 5, "plus": ""},
-	{"type": "aquarium", "icoon": "💦", "naam": "aquarium", "prijs": 6, "plus": ""},
+	{"type": "aquarium", "icoon": "🐠", "naam": "aquarium", "prijs": 6, "plus": ""},
 ]
 
 # =============================================================== registratie

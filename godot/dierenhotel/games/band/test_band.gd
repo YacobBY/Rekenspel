@@ -2,7 +2,7 @@ extends Proef
 ## band — De dierenband in de muziekkamer (U2), headless.
 ##
 ## Driven the way a child drives it: an answer is a `pressed` on a button of
-## the real strip under the card, "🔄 Nog een keer luisteren" a `pressed` on
+## the real strip under the card, "🔁 Nog een keer luisteren" a `pressed` on
 ## its hotspot.  The rhythm plays in real time (one `na()` per tick), so the
 ## turns are picked on days with a short rhythm (`_dag_voor`).  The pure turn
 ## logic in `beurt.gd` and the stave (`BandNotenbalk`) on its own clock are
@@ -346,8 +346,7 @@ func test_hetzelfde_zaad_hetzelfde_ritme() -> void:
 	waar(anders, "een andere dag geeft een ander ritme")
 
 ## HOTEL.md §9: every card sentence ≤ 8 words AND ≤ 40 characters, pictogram
-## first, and every glyph in the bundled fonts (no music glyph there yet:
-## the bell and 🔄 stand in for it).
+## first, and every glyph in the bundled fonts (🥁 👂 🔁 🎵 since F1).
 func test_elke_zin_past() -> void:
 	if Ui.thema == null or Ui.thema.default_font == null:
 		Ui._bouw_thema(17)
@@ -362,6 +361,8 @@ func test_elke_zin_past() -> void:
 		var mist: Array[String] = Ui.mist_tekens(p)
 		waar(mist.is_empty(), "het pictogram %s staat in de fonts" % p)
 	waar(Ui.mist_tekens(Rooms.get_kamer(KAMER).icoon).is_empty(), "het kamerpictogram staat in de fonts")
+	waar(Beurt.ICOON_NOG != UiTekst.MIS_ICOON,
+		"de luisterknop lijkt niet op de mokwolk %s Nog een keer" % UiTekst.MIS_ICOON)
 	for n in [1, 4, 8]:
 		for band in [3, 4, 5]:
 			for dag in [2, 3, 5]:
@@ -522,7 +523,7 @@ func test_de_notenbalk_groepeert_de_maten() -> void:
 ## A whole turn in groep 3, the way a child plays it: the animal walks to the
 ## drum, the stave stands there pale, the drum plays — every tick a plop and
 ## one more lit note, in time — then the card.  One wrong number: the animal
-## sulks, the same four numbers, nothing else changes.  🔄 plays the rhythm
+## sulks, the same four numbers, nothing else changes.  🔁 plays the rhythm
 ## again.  The right number: `ja`, the band plays, everyone in the room
 ## cheers, one star, and the game closes itself.
 func test_een_hele_beurt() -> void:
@@ -553,7 +554,7 @@ func test_een_hele_beurt() -> void:
 	gelijk(balk.aantal(), int(o["tikken"]), "een noot per tik")
 	gelijk(balk.aantal_aan(), 0, "nog geen noot aan")
 	waar(_knoop(KAART) == null, "nog geen kaart: eerst luisteren")
-	waar(_knoop(NOG) != null, "🔄 Nog een keer luisteren staat er")
+	waar(_knoop(NOG) != null, "🔁 Nog een keer luisteren staat er")
 	waar(_knoop(LUISTER) != null, "het wolkje zegt: luister en kijk goed")
 	waar(_spel().speelt(), "de trommel speelt")
 	# in time: after the hup and one and a half ticks one or two notes burn
@@ -595,7 +596,7 @@ func test_een_hele_beurt() -> void:
 	await _wacht(Ui.MIS_PAUZE + 0.25)
 	niets_erbij(voor, beeld(SPEL), "band")
 	gelijk(str(_strook()), str(keuzes), "dezelfde vier getallen in dezelfde volgorde")
-	# 🔄: the rhythm again, from the first note
+	# 🔁: the rhythm again, from the first note
 	_gehoord.clear()
 	_tik_knop(NOG)
 	waar(_spel().speelt(), "de trommel speelt opnieuw")
@@ -615,7 +616,7 @@ func test_een_hele_beurt() -> void:
 	gelijk(sig.size(), signaal + 1, "het signaal is één keer gevoed")
 	if sig.size() > signaal:
 		gelijk(int((sig[sig.size() - 1] as Dictionary)["g"]), 0, "niet in één keer goed")
-	waar(_knoop(NOG) == null, "geen 🔄 meer")
+	waar(_knoop(NOG) == null, "geen 🔁 meer")
 	await _wacht(Spel.SOM_S + Spel.TOVER_S + 0.3)
 	waar(_gehoord.has("hoera") and _gehoord.has("tover"), "de band speelt (%s)" % str(_gehoord))
 	var laatst := Snd.gehoord()
@@ -799,7 +800,7 @@ func test_de_rustende_band() -> void:
 		waar(not rust.is_empty(), "%s staat in de muziekkamer als er niet gespeeld wordt" % stuk["id"])
 		gelijk(float(rust.get("x", -1)), float(stuk["x"]), "%s op zijn plek" % stuk["id"])
 	var knop = Hits.spot("spel_band")
-	waar(knop != null, "de knop 🔔 Dierenband staat er")
+	waar(knop != null, "de knop 🥁 Dierenband staat er")
 	if knop != null:
 		gelijk(str(knop.obj), RUST_TROMMEL, "en hangt aan de trommel")
 	waar(Games.start(SPEL), "het spel start")

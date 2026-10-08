@@ -9,8 +9,8 @@ extends MiniGame
 ##   1. De postbode van de beurt (een gast met een bed, of het dier dat het
 ##      kind op de spelbalk koos) loopt naar de kar.  Zonder gasten met een bed
 ##      sorteert het kind de post alleen.
-##   2. Op de bovenste brief staat zijn adres ("💌 34", groep 5 "💌 7 × 8"),
-##      de kaart vraagt "💌 In welk vakje hoort deze brief?" met het adres op
+##   2. Op de bovenste brief staat zijn adres ("📮 34", groep 5 "📮 7 × 8"),
+##      de kaart vraagt "📮 In welk vakje hoort deze brief?" met het adres op
 ##      de somregel, en de strook heeft precies vier knoppen: de vier vakjes,
 ##      in de volgorde van de kast, met dezelfde getallen als hun bordjes.
 ##   3. Goed: de brief gaat door de brievenbus (`Snd.brief`) en ligt in zijn

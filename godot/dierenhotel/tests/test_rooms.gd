@@ -1209,3 +1209,25 @@ func test_een_volle_muur_neemt_niets_meer() -> void:
 	waar(Rooms.meubel_weg(str(gehangen[0]["id"])), "een schilderij gaat weer van de muur")
 	gelijk(Rooms.vrije_wandplekken("kamer2").size() > 0, true, "en zijn plek is weer vrij")
 	Rooms.herstel()
+
+## Every room has its ambience (`Snd.SFEER`), except the three that are quiet on
+## purpose: the corridor and the two bedrooms (test_sfeer).  A room added later
+## fails HERE until it gets a loop or joins the quiet list — and only the five
+## loops that exist may be used: a new buffer is not an ambience entry.
+const STIL := ["gang", "kamer1", "kamer2"]
+const LUSSEN := ["wind", "tiktak", "water", "warm", "speeldoos"]
+
+func test_elke_kamer_heeft_een_sfeer() -> void:
+	for id in Rooms.lijst():
+		var naam := Snd.sfeer_naam(id)
+		if STIL.has(id):
+			gelijk(naam, "", "%s is stil, met opzet" % id)
+			continue
+		waar(not naam.is_empty(), "%s heeft een kamergeluid" % id)
+		waar(naam.is_empty() or LUSSEN.has(naam), "%s speelt een bestaande lus (%s)" % [id, naam])
+	for id in Snd.SFEER.keys():
+		waar(Rooms.bestaat(str(id)), "de sfeer van %s hoort bij een kamer" % id)
+	gelijk(Snd.sfeer_naam("bakkerij"), "warm", "de bakkerij is warm als de keuken")
+	gelijk(Snd.sfeer_naam("muziekkamer"), "speeldoos", "de muziekkamer speelt de speeldoos")
+	gelijk(Snd.sfeer_naam("dakterras"), "wind", "op het dak waait het als in de tuin")
+	gelijk(Snd.sfeer_naam("postkamer"), "tiktak", "de postkamer tikt als de receptie")

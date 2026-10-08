@@ -268,8 +268,8 @@ func test_de_voorbeelden_uit_het_ontwerp() -> void:
 	var paren: Array = Beurt._tafels_in(0, 39)
 	waar(paren.has(Vector2i(3, 4)), "3 × 4 zit in het venster 0..39")
 	waar(not paren.has(Vector2i(7, 8)), "7 × 8 niet")
-	gelijk(Beurt.adres({"tekst": "34"}), "💌 34", "het adres op de bovenste brief")
-	gelijk(Beurt.adres({"tekst": "7 × 8"}), "💌 7 × 8", "ook als keersom")
+	gelijk(Beurt.adres({"tekst": "34"}), "📮 34", "het adres op de bovenste brief")
+	gelijk(Beurt.adres({"tekst": "7 × 8"}), "📮 7 × 8", "ook als keersom")
 	gelijk(str(Beurt.vol([{"vak": 2}, {"vak": 0}, {"vak": 2}], 3)), str([1, 0, 2, 0]),
 		"de vakjes vullen zich met wat er gesorteerd is")
 	gelijk(str(Beurt.vol([{"vak": 2}, {"vak": 0}, {"vak": 2}], 1)), str([0, 0, 1, 0]),
@@ -288,7 +288,7 @@ func test_een_tweede_ronde_is_een_nieuwe_stapel() -> void:
 
 ## Every sentence a child reads fits the budget (HOTEL.md §9: ≤ 8 words AND
 ## ≤ 40 characters with the pictogram in front) and every glyph is in the
-## bundled subset (📮 ✉ 📬 are not — the reason the post uses 💌).
+## bundled subset (📮 since F1; the first draft used 💌 while it was missing).
 func test_elke_zin_past() -> void:
 	if Ui.thema == null or Ui.thema.default_font == null:
 		Ui._bouw_thema(17)
@@ -306,9 +306,8 @@ func test_elke_zin_past() -> void:
 		for vk in Beurt.vakjes(band, 4, 2):
 			gelijk(Ui.mist_tekens(Beurt.ICOON + " " + Beurt.plaat(vk)).size(), 0, "het vakje: %s" % Beurt.plaat(vk))
 	# the glyph trap the first draft walked into: 📮 was not in the subset, so
-	# the post uses 💌.  Only the glyph in USE is pinned here (integration I1b):
-	# the font subset may grow (📮 then becomes a one-line switch in beurt.gd)
-	# without this test turning red.
+	# the post used 💌 until F1 added it.  Only the glyph in USE is pinned here
+	# (integration I1b), so a later switch stays a one-line change in beurt.gd.
 	gelijk(Ui.mist_tekens(Beurt.ICOON).size(), 0, "het pictogram %s bestaat" % Beurt.ICOON)
 
 # --------------------------------------------------------------- aanmelding
@@ -322,7 +321,7 @@ func test_definitie_en_scene() -> void:
 	gelijk(d["kamer"], "postkamer", "het spel staat in de postkamer")
 	waar(not bool(d.get("stub", true)), "geen stub meer: de beurt is rond")
 	gelijk(d["taak"]["id"], "post", "de taakkaart heet post")
-	gelijk(d["hotspot"]["icoon"], "💌", "de knop draagt de brief")
+	gelijk(d["hotspot"]["icoon"], "📮", "de knop draagt de brievenbus")
 	waar((d["unlock"] as Callable).call(1, 3), "open vanaf de eerste gast")
 	waar(not (d["unlock"] as Callable).call(0, 3), "zonder gasten nog niet")
 	spel.free()
@@ -365,7 +364,7 @@ func test_de_kamer_bestaat_en_hangt_aan_de_kas() -> void:
 	gelijk(Rooms.pad("receptie", "postkamer"), ["receptie", "tuin", "kas", "postkamer"],
 		"vanuit de receptie door de tuin en de kas")
 	waar(Rooms.get_kamer("postkamer").trap.is_empty(), "geen trap: die blijft in de trapkamers")
-	gelijk(Rooms.get_kamer("postkamer").icoon, "💌", "de kamer draagt de brief, net als de brievenmuur")
+	gelijk(Rooms.get_kamer("postkamer").icoon, "📮", "de kamer draagt de brievenbus, net als het spel")
 
 func test_de_modellen_bakken() -> void:
 	for naam in ["post_kast", "post_kar", "post_balie"]:

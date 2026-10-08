@@ -5,7 +5,7 @@ extends RefCounted
 ## bevroren; dit bestand leest niets daaruit.
 ##
 ## De vakkenkast is een GETALLENLIJN in vier stukken (de vakjes); de vraag is
-## altijd dezelfde: "💌 In welk vakje hoort deze brief?"  Wat op de brief staat
+## altijd dezelfde: "📮 In welk vakje hoort deze brief?"  Wat op de brief staat
 ## en hoe groot de vakjes zijn, bepaalt de groep:
 ##
 ##   groep 3  getallen tot 20, vakjes van vijf: 1-5 · 6-10 · 11-15 · 16-20;
@@ -24,14 +24,14 @@ extends RefCounted
 # ------------------------------------------------------------------ zinnen
 
 ## Child-facing strings (HOTEL.md §9: ≤ 8 words AND ≤ 40 characters with the
-## pictogram in front).  📮 ✉ 📬 are NOT in the bundled font subset
-## (`fonts/tekens.txt`, `Ui.mist_tekens`); 💌 is — the hotel's own post
+## pictogram in front).  📮 is in the bundled font subset since F1
+## (`fonts/tekens.txt`, `Ui.mist_tekens`); 💌 stays the hotel's own letter
 ## pictogram ("💌 Er is post!", the letter wall).
-const ICOON := "💌"
+const ICOON := "📮"
 const ICOON_AF := "✅"
 const T_KNOP := "Post"                              ## the entry on the cart
 const T_TAAK := "Sorteer de post"                   ## the board card, ≤ 6 words
-const T_VRAAG := "In welk vakje hoort deze brief?"  ## 💌 + 31 = 33 tekens, 7 woorden
+const T_VRAAG := "In welk vakje hoort deze brief?"  ## 📮 + 31 = 33 tekens, 7 woorden
 const T_KEUZE_TITEL := "kies een vakje"
 const T_AF := "Alle post is gesorteerd!"            ## ✅ + 24 = 26 tekens, 5 woorden
 const T_TITEL := "de postkar"
@@ -81,17 +81,17 @@ static func kort(vak: Dictionary) -> String:
 	return "%d-%d" % [int(vak["van"]), int(vak["tot"])]
 
 ## A hole's button on the strip: the post's pictogram and the words of its
-## plate (HOTEL.md §9: pictogram AND word), "💌 30 - 39".
+## plate (HOTEL.md §9: pictogram AND word), "📮 30 - 39".
 static func knop(vak: Dictionary) -> String:
 	return "%s %s" % [ICOON, plaat(vak)]
 
 ## The same button when the strip has to take its short words (a phone): the
 ## pictogram over the numbers, so four of them fit the phone's maths bar
-## (69 units a button there; "💌 30-39" on one line needs about 100).
+## (69 units a button there; "📮 30-39" on one line needs about 100).
 static func knop_kort(vak: Dictionary) -> String:
 	return "%s\n%s" % [ICOON, kort(vak)]
 
-## What the letter on top of the pile shows in the world: "💌 34", "💌 7 × 8".
+## What the letter on top of the pile shows in the world: "📮 34", "📮 7 × 8".
 static func adres(brief_: Dictionary) -> String:
 	return "%s %s" % [ICOON, str(brief_.get("tekst", ""))]
 

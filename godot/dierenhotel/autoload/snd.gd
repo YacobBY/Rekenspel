@@ -147,7 +147,12 @@ const SFEER := {"tuin": "wind", "receptie": "tiktak", "zwembad": "water",
 	# R3: the glass house hums warm like the kitchen — a reused loop, no new one
 	"kas": "warm",
 	# the shopping arcade plays the playroom's music box: a shop with music
-	"winkels": "speeldoos"}
+	"winkels": "speeldoos",
+	# the four rooms of 2026-10-07, each on a loop that is already there (no
+	# new buffer): the bakery warm like the kitchen, the music room the music
+	# box, the roof terrace the garden's wind, the post room the hall clock
+	"bakkerij": "warm", "muziekkamer": "speeldoos", "dakterras": "wind",
+	"postkamer": "tiktak"}
 const SFEER_DUUR := 4.0        ## seconds per loop; every modulation divides it
 const SFEER_TOP := 0.30        ## of MEESTER: the ceiling of any ambience sample
 

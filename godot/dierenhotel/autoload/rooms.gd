@@ -1717,7 +1717,7 @@ func _bouw_kamers() -> void:
 	# plank floor: through the kitchen door you must see a floor the kitchen
 	# does not have (`test_elke_deur_laat_zien_waar_hij_heen_gaat`).  Appended
 	# LAST on purpose: every room index before it stays what it was.
-	_kamer({"id": "bakkerij", "naam": "Bakkerij", "icoon": "🍪", "w": 114, "d": 100,
+	_kamer({"id": "bakkerij", "naam": "Bakkerij", "icoon": "🥐", "w": 114, "d": 100,
 		"wand": 56, "vloer": "hout", "loop": 1.5, "etage": 1,
 		"deuren": [{"naar": "keuken", "wand": "x", "at": 72, "breed": 12}],
 		# the oven of `koekjes` (x 17..43 with its top, z 1..20 with its sill)
@@ -1741,7 +1741,7 @@ func _bouw_kamers() -> void:
 	# stage free of wandering guests and bought furniture.  Design and state:
 	# `.fanout/scratch/uitbreiding/U2-muziekkamer.md`.
 	# icon: the bundled fonts have no 🎵/🥁 yet (`Ui.mist_tekens`), the bell 🔔 they have
-	_kamer({"id": "muziekkamer", "naam": "Muziekkamer", "icoon": "🔔",
+	_kamer({"id": "muziekkamer", "naam": "Muziekkamer", "icoon": "🎵",
 		"w": 100, "d": 90, "wand": 50, "vloer": "hout", "loop": 1.5, "etage": 3,
 		"matten": {"x0": 22, "x1": 78, "z0": 22, "z1": 70,
 			"kl": [Color("#F2C4B0"), Color("#EBB49E")]},
@@ -1799,7 +1799,7 @@ func _bouw_kamers() -> void:
 	# (`test_rooms.gd::test_elke_deur_laat_zien_waar_hij_heen_gaat`).  The
 	# icon is 💌, the hotel's own post pictogram: 📮 is not in the bundled
 	# font subset (`fonts/tekens.txt`, `Ui.mist_tekens`).
-	_kamer({"id": "postkamer", "naam": "Postkamer", "icoon": "💌", "w": 96, "d": 88,
+	_kamer({"id": "postkamer", "naam": "Postkamer", "icoon": "📮", "w": 96, "d": 88,
 		"wand": 44, "vloer": "hout", "loop": 1.25, "etage": 0,
 		"kijk": Vector2(48, 44),
 		"mijd": [{"x0": 6, "x1": 90, "z0": 0, "z1": 14},

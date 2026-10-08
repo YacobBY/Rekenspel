@@ -7,14 +7,14 @@ extends MiniGame
 ##   1. The animal of the turn walks onto the stage, beside the big drum
 ##      (`ctx.wacht_op`).  Over them the stave stands large (`BandNotenbalk`):
 ##      one tile per bar, every note still pale.
-##   2. "🔔 Luister en kijk goed": the drum plays the rhythm.  Every tick is a
+##   2. "👂 Luister en kijk goed": the drum plays the rhythm.  Every tick is a
 ##      `plop` (higher with every tick of the bar), a spark on the drumhead, a
 ##      nod of the animal AND one more lit note on the stave; a `klok` marks
 ##      every bar line.  The lit notes stay lit: with the sound off the child
 ##      counts them — the number lives in the world.
 ##   3. The card asks (`beurt.gd`): how many ticks (groep 3), how many ticks in
 ##      M bars (groep 4/5), how many bars for D ticks (groep 5, even days);
-##      four numbers on the strip.  "🔄 Nog een keer luisteren" plays the
+##      four numbers on the strip.  "🔁 Nog een keer luisteren" plays the
 ##      rhythm again whenever the child wants — it stands there from the
 ##      start, it is not a help that a miss unlocks.
 ##   4. Right: `ja`, the band plays (`hoera`, `tover`, a glow sweeps over the
@@ -62,7 +62,7 @@ const DOOS_X := 6
 const DOOS_Z := 84
 ## Where the animal of the turn stands: on the stage, right of the drum.
 const PLEK := Vector2(74.0, 56.0)
-## Where "🔄 Nog een keer luisteren" aims: in front of the drum.
+## Where "🔁 Nog een keer luisteren" aims: in front of the drum.
 const NOG := Vector2(40.0, 70.0)
 const VONK := Color("#F5D37A")
 
@@ -257,7 +257,7 @@ func _begin() -> void:
 	_houd_bij_de_trommel()
 	_speel_ritme()
 
-## "🔄 Nog een keer luisteren" — the rhythm from the start, as often as the
+## "🔁 Nog een keer luisteren" — the rhythm from the start, as often as the
 ## child likes, also while it plays and while the card asks.
 func nog_eens() -> void:
 	if not actief or S.is_empty() or O.is_empty() or _stap() == "af":
@@ -265,7 +265,7 @@ func nog_eens() -> void:
 	_speel_ritme()
 
 ## The drum plays the bars the stave shows.  A newer rhythm (the child tapped
-## 🔄 again), a right answer and a stop each end this one at its next tick.
+## 🔁 again), a right answer and a stop each end this one at its next tick.
 func _speel_ritme() -> void:
 	if not actief or S.is_empty() or O.is_empty() or _stap() == "af":
 		return
@@ -530,7 +530,7 @@ func _zet_spullen() -> void:
 		ctx.wereld.decor(KAMER, {"id": EIGEN + str(stuk["id"]), "model": str(stuk["model"]),
 			"x": float(stuk["x"]), "z": float(stuk["z"]), "params": {}})
 
-## "🔄 Nog een keer luisteren", in front of the drum.
+## "🔁 Nog een keer luisteren", in front of the drum.
 func _knop_nog() -> void:
 	if Hits.spot(KNOP_NOG) != null:
 		return

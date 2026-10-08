@@ -31,14 +31,14 @@ extends RefCounted
 const ZAAD := 60487
 
 ## Child text, verbatim.  The pictogram is the card's `icoon`.
-## The bundled fonts have NO music glyph (`Ui.mist_tekens`, 2026-10-07: 🥁 🎵
-## 🎶 🎼 🎹 ♪ ♫ 👂 🔁 all missing; 🔔 🔄 🎉 🐾 present), so the bell stands for
-## the band until the font subset grows — OPEN QUESTION in the U2 stand file.
-const ICOON := "🔔"
-const ICOON_LUISTER := "🔔"
-const ICOON_NOG := "🔄"
+## The music glyphs are in the bundled subset since F1 (`fonts/tekens.txt`:
+## 🥁 🎵 🎶 👂 🔁 🎹 🎺).  The replay button carries 🔁, so it no longer looks
+## like the miss bubble "🔄 Nog een keer" (`Ui.misser`).
+const ICOON := "🥁"
+const ICOON_LUISTER := "👂"
+const ICOON_NOG := "🔁"
 const ICOON_AF := "🎉"
-const ICOON_AF2 := "🔔"
+const ICOON_AF2 := "🎵"
 const ICOON_LEEG := "🛏"
 const ICOON_BLIJ := "😍"
 const T_TITEL := "Speel mee in de band"                 ## 5 woorden, 20 tekens (taakkaart)

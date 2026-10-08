@@ -50,6 +50,8 @@ const SJAAL := Color("#F6A957")      ## PAL.gans.e
 const SJAAL_FR := WIT
 const BAL_KL := Color("#F4C8D5")     ## PAL.poes.e
 const BAL_BAND := WIT
+## The pink ball vanishes against the pink pig (I1c): on Knor it is blue.
+const BAL_KL_VARKEN := Color("#6FA8DC")     ## = PET_KL
 
 ## THE WARDROBE (owner, 2026-09-24: "meer aanpassingsmogelijkheden in de
 ## minigames, zoals kleding of andere outfit-opties" — "Maak ze niet te groot
@@ -95,7 +97,7 @@ const KLEDING := {
 	"tiara": {"slot": "hoofd", "icoon": "✨", "naam": "tiara", "lid": "de"},
 	"sterrenbril": {"slot": "ogen", "icoon": "👓", "naam": "sterrenbril", "lid": "de"},
 	"pompoen": {"slot": "speel", "icoon": "🎃", "naam": "pompoen", "lid": "de"},
-	"goudbal": {"slot": "speel", "icoon": "🎾", "naam": "gouden bal", "lid": "de"},
+	"goudbal": {"slot": "speel", "icoon": "🎾", "naam": "goudbal", "lid": "de"},
 }
 const SLOTEN := ["hoofd", "nek", "poten", "ogen", "speel"]
 
@@ -1161,7 +1163,7 @@ static func bouw(kind: String, pose: String, sleutel: String) -> Array:
 	elif buk > 0.0:
 		v = bukken(v, buk)
 	if acc.has("bal"):
-		bal(v, a["hals"])
+		bal(v, a["hals"], BAL_KL_VARKEN if kind == "varken" else BAL_KL)
 	if acc.has("pompoen"):
 		bal(v, a["hals"], POMPOEN, POMPOEN_STEEL)
 	if acc.has("goudbal"):

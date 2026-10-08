@@ -1,5 +1,5 @@
 extends MiniGame
-## sterren — "Sterren tellen" ⭐, the game of the dakterras (U3, 2026-10-07;
+## sterren — "Sterren tellen" 🔭, the game of the dakterras (U3, 2026-10-07;
 ## owner: "Verzin nog vier kamers met activiteiten").
 ##
 ## On the roof of the tower, at night, a telescope stands on the deck.  A turn:

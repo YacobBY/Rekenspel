@@ -22,12 +22,13 @@ extends RefCounted
 const ZAAD := 90317
 
 ## The pictogram of the game: on the card, the entry button and the task card.
-## (🔭 is not in the emoji subset of `fonts/tekens.txt`; ⭐ is.)
-const ICOON := "⭐"
+## (🔭 is in the emoji subset of `fonts/tekens.txt` since F1; ⭐ stays the
+## hotel's reward star.)
+const ICOON := "🔭"
 const T_KNOP := "Sterren tellen"            ## the entry button on the telescope
 const T_TAAK := "Tel de sterren"            ## the task card on the board (≤ 6 words)
 const T_LEEG := "nog geen gasten"           ## the bubble when nobody has a bed yet
-## The card sentences, without the pictogram (the card puts ⭐ in front: with it
+## The card sentences, without the pictogram (the card puts 🔭 in front: with it
 ## every one is ≤ 8 words and ≤ 40 characters, HOTEL.md §9).
 const T_PATROON := "Hoeveel sterren zie je?"
 const T_SAMEN := "Hoeveel sterren zijn het samen?"

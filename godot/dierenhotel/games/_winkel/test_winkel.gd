@@ -594,6 +594,33 @@ func test_de_nieuwe_waren() -> void:
 			gezien[str(w["naam"])] = true
 	gelijk(gezien.size(), 5, "de opzet draagt alle vijf hoeden")
 
+## The strip says a piece by the LAST word of its name (`_kies_keuzes`), so no
+## two pieces of one stall may share that word: "⚽ Bal" stood beside "🎾 Bal"
+## on one day in seven (I1c) until the gold ball became the "goudbal" (its
+## wardrobe id stayed `goudbal`).
+func test_elk_strookwoord_is_uniek_per_kraam() -> void:
+	for winkel in Beurt.WAREN:
+		var woorden := {}
+		for naam in Beurt.WAREN[winkel]:
+			var kl: Dictionary = ArtGasten.KLEDING.get(str(naam), {})
+			var woord: String = str(kl.get("naam", naam)).split(" ")[-1]
+			waar(not woorden.has(woord), "%s: %s en %s heten allebei %s"
+				% [winkel, str(woorden.get(woord, "")), naam, woord])
+			woorden[woord] = naam
+	gelijk(str(ArtGasten.KLEDING["goudbal"]["naam"]), "goudbal", "de gouden bal heet goudbal")
+	gelijk(str(ArtGasten.KLEDING["bal"]["naam"]), "bal", "de bal van de HTML blijft de bal")
+
+## The HTML's pink ball disappears against the pink pig: on Knor it is blue,
+## on every other kind it keeps its pink (the hond's golden plates pin that).
+func test_de_bal_van_het_varken_is_blauw() -> void:
+	for kind in ArtGasten.SOORTEN:
+		var kl: Color = ArtGasten.BAL_KL_VARKEN if kind == "varken" else ArtGasten.BAL_KL
+		var n := 0
+		for vox in ArtGasten.bouw(kind, "rust", "bal"):
+			if vox["k"] == kl:
+				n += 1
+		waar(n > 0, "de bal op de %s heeft zijn kleur (%d voxels)" % [kind, n])
+
 # ------------------------------------------------ elke strook op elk scherm
 
 ## Every strip a stall can put under its card — the choice, the money, the
