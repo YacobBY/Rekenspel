@@ -215,15 +215,30 @@ func test_de_opslag_overleeft_de_sterdag() -> void:
 func test_gastenpool_en_wachtlijst() -> void:
 	_voor()
 	var pool := State.gasten_pool()
-	gelijk(pool.size(), 9, "negen gasten in de pool")
+	# the two kinds of 2026-10-07 came in as the 4th (Vlam the fox) and the 7th
+	# (Knor the pig) guest: the hotel holds 8, so the end of the list is never seen
+	gelijk(pool.size(), 11, "elf gasten in de pool")
 	gelijk(pool[0]["id"], "boef", "eerste gast")
 	gelijk(pool[0]["naam"], "Boef", "naam")
-	gelijk(pool[6]["naam"], "Stampertje", "zevende gast heet Stampertje")
-	gelijk(pool[4]["scoops"], 3, "Pip eet 3 scheppen")
-	gelijk((State.s["wachtlijst"] as Array).size(), 9, "de wachtlijst is gevuld")
+	gelijk(pool[3]["naam"], "Vlam", "vierde gast heet Vlam")
+	gelijk(pool[3]["kind"], "vos", "en is een vos")
+	gelijk(pool[6]["naam"], "Knor", "zevende gast heet Knor")
+	gelijk(pool[6]["kind"], "varken", "en is een varken")
+	gelijk(pool[8]["naam"], "Stampertje", "negende gast heet Stampertje")
+	gelijk(pool[5]["scoops"], 3, "Pip eet 3 scheppen")
+	var ids := []
+	for q in pool:
+		waar(not ids.has(q["id"]), "%s staat er één keer in" % q["id"])
+		ids.append(q["id"])
+		waar(ArtGasten.SOORTEN.has(str(q["kind"])), "%s is een soort met een model" % q["id"])
+		waar(State.LIDWOORD.has(str(q["soort"])), "%s heeft een lidwoord" % q["id"])
+	gelijk((State.s["wachtlijst"] as Array).size(), 11, "de wachtlijst is gevuld")
 	var g := State.pak_gast()
 	gelijk(g["id"], "boef", "de bel pakt ze op volgorde")
-	gelijk((State.s["wachtlijst"] as Array).size(), 8, "eentje van de lijst af")
+	gelijk((State.s["wachtlijst"] as Array).size(), 10, "eentje van de lijst af")
+	for i in 2:
+		State.pak_gast()
+	gelijk(State.pak_gast()["id"], "vlam", "de vierde aan de bel is de vos")
 
 func test_lege_wachtlijst_wordt_bijgevuld() -> void:
 	_voor()

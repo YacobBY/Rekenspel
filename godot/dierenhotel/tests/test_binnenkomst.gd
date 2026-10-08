@@ -14,7 +14,7 @@ const T := "t_binnen"
 const DOEL := Vector2(65, 44)          ## BALIEPLEK(0): in front of the middle of the desk
 ## "A few seconds at most": five, at the world's 15 ticks a second.
 const MAX_TIKKEN := 75
-const SOORTEN := ["hond", "poes", "konijn", "gans"]
+const SOORTEN := ["hond", "poes", "konijn", "gans", "vos", "varken"]
 
 func _na_afloop() -> void:
 	World.weg(T)
@@ -115,6 +115,20 @@ func test_elk_dier_komt_anders_binnen() -> void:
 	waar((gans["poses"] as Array).has("fladderA") and (gans["poses"] as Array).has("fladderB"),
 		"ook al lopend")
 	gelijk(int(gans["sprongen"]), 0, "de gans waggelt, hij springt niet")
+	# the two of 2026-10-07
+	var vos: Dictionary = r["vos"]
+	waar((vos["poses"] as Array).has("snuif") and (vos["poses"] as Array).has("tril"),
+		"de vos spitst zijn oren en snuffelt in de deur")
+	gelijk(int(vos["sprongen"]), 1, "en springt één keer: de muizensprong naar zijn plek")
+	waar(float(vos["hoogst"]) > 5.0, "een echte sprong (top %.1f)" % vos["hoogst"])
+	waar((vos["poses"] as Array).has("kwispelA") and (vos["poses"] as Array).has("kwispelB"),
+		"en zwaait daarna met zijn staart")
+	var varken: Dictionary = r["varken"]
+	waar((varken["poses"] as Array).has("snuif") and (varken["poses"] as Array).has("hap1"),
+		"het varken wroet bij de mat")
+	gelijk(int(varken["sprongen"]), 0, "het varken waggelt, het springt niet")
+	waar((varken["poses"] as Array).has("blijA") and (varken["poses"] as Array).has("blijB"),
+		"en wiebelt blij aan de balie")
 	Ui.zet_rust_modus(was)
 	_na_afloop()
 

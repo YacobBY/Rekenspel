@@ -53,7 +53,7 @@ const LEEG_S := 1.8             ## "nog geen gasten" and then close
 ## The garden zone, as a fallback if `Rooms` ever moves it.
 const ZONE_TERUG := {"x0": 24, "x1": 100, "z0": 34, "z1": 50}
 
-const DIER_ICO := {"puppy": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆"}
+const DIER_ICO := {"puppy": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆", "vos": "🦊", "varken": "🐷"}
 const DIER_ICO_ANDERS := "🐾"
 
 # colours from the same warm palette as the rooms

@@ -13,13 +13,17 @@ const OOG := Color("#5B4840")   ## soft dark brown, never black
 const NEUS := Color("#7E6255")  ## nose / mouth line, one step softer still
 const BAND := Color("#6BC5A4")  ## the dog's collar
 
-const SOORTEN := ["hond", "poes", "konijn", "gans"]
+const SOORTEN := ["hond", "poes", "konijn", "gans", "vos", "varken"]   ## the HTML's four first, then the two of 2026-10-07
 
 const PAL := {
 	"hond": {"b": Color("#EEC194"), "d": Color("#D3996A"), "e": Color("#B4744A"), "l": Color("#FCE8D3")},
 	"poes": {"b": Color("#C9CCDC"), "d": Color("#A0A6C0"), "e": Color("#F4C8D5"), "l": Color("#EDEFF6")},
 	"konijn": {"b": Color("#F5E7EC"), "d": Color("#DCC6D3"), "e": Color("#F5B0C2"), "l": Color("#FFFBF6")},
 	"gans": {"b": Color("#FDF8EA"), "d": Color("#E0D8C2"), "e": Color("#F6A957"), "l": Color("#FFFCF4")},
+	# the two of 2026-10-07 (owner: "maak nog twee extra dieren"): no HTML original,
+	# no golden plate in tests/gouden; the pixel goldens are the game's own
+	"vos": {"b": Color("#EC8752"), "d": Color("#CF6D3E"), "e": Color("#7E4D3C"), "l": Color("#FFF4E8")},
+	"varken": {"b": Color("#F6B8C4"), "d": Color("#E08EA0"), "e": Color("#D97A92"), "l": Color("#FBD9DF")},
 }
 const KOM := {
 	"schaal": Color("#DFC6D6"), "rand": Color("#F8E7F1"),
@@ -34,7 +38,12 @@ const ACC_NAMEN := ["hoedje", "sjaaltje", "bal",
 	"pet", "strohoed", "strik", "kroon",
 	"streepsjaal", "das", "parels",
 	"gympjes", "laarsjes", "sokjes", "slofjes",
-	"zonnebril"]
+	"zonnebril",
+	# the extra goods of 2026-10-07 (owner: "nog extra accessoires om te kopen
+	# bij de kraampjes"), after everything that was there, so no key changes
+	"feestmuts", "bloem", "bandana", "belletjes",
+	"zwemvliezen", "pantoffels", "regenlaarsjes",
+	"tiara", "sterrenbril", "pompoen", "goudbal"]
 const HOED := BAND
 const HOED_LINT := WIT
 const SJAAL := Color("#F6A957")      ## PAL.gans.e
@@ -56,6 +65,8 @@ const BAL_BAND := WIT
 ##   speel  the ball of the HTML, held against the chest.
 ## `naam` and `lid` are what a card says ("de pet", "de gympjes"); `veel` marks
 ## a pair of things — shoes are sold per shoe, one per paw (`poten_van`).
+## Only the shoe stall counts paws: elsewhere a pair (the souvenir stall's
+## flippers and slippers, the luxury slippers) is one thing at one price.
 const KLEDING := {
 	"hoedje": {"slot": "hoofd", "icoon": "🎩", "naam": "hoedje", "lid": "het"},
 	"sjaaltje": {"slot": "nek", "icoon": "🧣", "naam": "sjaaltje", "lid": "het"},
@@ -72,6 +83,19 @@ const KLEDING := {
 	"sokjes": {"slot": "poten", "icoon": "🧦", "naam": "sokjes", "lid": "de", "veel": true},
 	"slofjes": {"slot": "poten", "icoon": "🥿", "naam": "gouden slofjes", "lid": "de", "veel": true},
 	"zonnebril": {"slot": "ogen", "icoon": "🕶️", "naam": "zonnebril", "lid": "de"},
+	# 2026-10-07: more to buy at the stalls.  Every icon is in fonts/tekens.txt;
+	# every name keeps "<gast> draagt nu de <naam>!" under 40 characters.
+	"feestmuts": {"slot": "hoofd", "icoon": "🥳", "naam": "feestmuts", "lid": "de"},
+	"bloem": {"slot": "hoofd", "icoon": "🌸", "naam": "bloem", "lid": "de"},
+	"bandana": {"slot": "nek", "icoon": "💙", "naam": "bandana", "lid": "de"},
+	"belletjes": {"slot": "nek", "icoon": "🔔", "naam": "belletjes", "lid": "de"},
+	"zwemvliezen": {"slot": "poten", "icoon": "🦆", "naam": "zwemvliezen", "lid": "de", "veel": true},
+	"pantoffels": {"slot": "poten", "icoon": "🩰", "naam": "pantoffels", "lid": "de", "veel": true},
+	"regenlaarsjes": {"slot": "poten", "icoon": "💙", "naam": "regenlaarsjes", "lid": "de", "veel": true},
+	"tiara": {"slot": "hoofd", "icoon": "✨", "naam": "tiara", "lid": "de"},
+	"sterrenbril": {"slot": "ogen", "icoon": "👓", "naam": "sterrenbril", "lid": "de"},
+	"pompoen": {"slot": "speel", "icoon": "🎃", "naam": "pompoen", "lid": "de"},
+	"goudbal": {"slot": "speel", "icoon": "🎾", "naam": "gouden bal", "lid": "de"},
 }
 const SLOTEN := ["hoofd", "nek", "poten", "ogen", "speel"]
 
@@ -95,6 +119,23 @@ const LAARS_RAND := Color("#E0B23A")
 const SOK := Color("#F4A6C0")
 const MONTUUR := Color("#4A3B45")
 const GLAS := Color("#5E5470")
+## the goods of 2026-10-07
+const FEEST := Color("#F28BB0")
+const BANDANA := Color("#5B8FD6")
+const ZWEMVLIES := Color("#3FB59B")    ## sea green: orange vanished on the goose's own feet
+const PANTOFFEL := Color("#B98BC4")
+const PANTOFFEL_L := Color("#D9B8E0")
+const REGEN := Color("#4F86C6")
+const REGEN_RAND := Color("#8FBCE8")
+const ZILVER_D := Color("#C4CBD6")
+const SAFFIER := Color("#4F7BE0")
+const STER_GLAS := Color("#BFE3F2")
+const POMPOEN := Color("#F08A3C")
+const POMPOEN_STEEL := Color("#4E8A4A")
+## the tiara: silver a shade darker than white fur on a gold band, so it shows
+## on the rabbit and the goose too (a near-white silver vanished against them)
+const TIARA_KL := Color("#AEB8CC")
+const TIARA_BAND := GOUD_D
 
 ## How many paws a guest stands on — shoes are sold one per paw.
 static func poten_van(kind: String) -> int:
@@ -402,11 +443,109 @@ static func gans(p: Dictionary) -> Array:
 	ogen(v, p, 20 + hx, ky + 4, 5, 10, {"h": 1, "w": 1, "dik": 2})
 	return v
 
+# ------------------------------------------------- de twee van 2026-10-07
+
+## The fox: the dog's skeleton (same paws, neck and head place, so the dog's
+## wardrobe anchors serve it) in orange-red with a white chest, a long pointed
+## muzzle, tall pointed ears with dark tips, dark socks and a bushy tail with a
+## white tip.  No HTML original: no golden plate in `tests/gouden`.
+static func vos(p: Dictionary) -> Array:
+	var C: Dictionary = PAL["vos"]
+	var v: Array = []
+	var hx: int = p["hx"]
+	var hy: int = p["hy"]
+	var tz := -2 if p["staart"] == "l" else (2 if p["staart"] == "r" else 0)
+	var poot := [[5, 3], [5, 9], [13, 3], [13, 9]]
+	var duw := duwen(p["stap"])
+	for i in 4:
+		var px: int = poot[i][0] + int(duw[i]) * 2
+		var py := 1 if int(duw[i]) > 0 else 0
+		var ph := 7 - py
+		ArtVorm.bx(v, px, py, poot[i][1], 3, ph, 4, C["d"])
+		ArtVorm.bx(v, px, py, poot[i][1], 4, 2, 4, C["e"])
+	ArtVorm.ell(v, 10.5, 9.5, 7.5, 6.8, 4.0, 5.4, C["b"], {"e": 3.4, "ymin": 5})
+	ArtVorm.verf(v, 14, 18, 5, 9, 4, 11, C["l"])
+	if p["staart"] == "laag":
+		ArtVorm.bx(v, 2, 6, 6, 3, 3, 4, C["b"])
+		ArtVorm.bx(v, 0, 4, 6, 3, 3, 4, C["b"])
+		ArtVorm.verf(v, 0, 0, 4, 6, 6, 9, C["l"])
+	else:
+		ArtVorm.bx(v, 3, 8, 5 + tz, 3, 4, 4, C["b"])
+		ArtVorm.bx(v, 1, 11, 5 + tz, 3, 4, 4, C["b"])
+		ArtVorm.bx(v, 0, 14, 5 + tz, 3, 3, 4, C["l"])
+	ArtVorm.hals(v, 16, 12, 20 + hx, 15 + hy, 7.5, 2.6, 3.4, C["b"])
+	ArtVorm.ell(v, 22 + hx, 17 + hy, 7.5, 4.4, 4.8, 5.4, C["b"], {"e": 3.2})
+	# the white cheeks under the eyes, the fox's mask
+	ArtVorm.verf(v, 24 + hx, 27 + hx, 12 + hy, 15 + hy, 1, 14, C["l"])
+	# the muzzle tapers to the nose: a white base and a narrower tip
+	ArtVorm.ell(v, 26.8 + hx, 14.6 + hy, 7.5, 2.4, 2.0, 2.6, C["l"], {"e": 2.8})
+	ArtVorm.bx(v, 28 + hx, 14 + hy, 6, 2, 2, 4, C["l"])
+	ArtVorm.verf(v, 29 + hx, 29 + hx, 15 + hy, 15 + hy, 7, 8, NEUS)
+	if p["oor"] == "hang":
+		ArtVorm.bx(v, 19 + hx, 17 + hy, 1, 3, 2, 3, C["d"])
+		ArtVorm.bx(v, 19 + hx, 17 + hy, 11, 3, 2, 3, C["d"])
+	else:
+		var ox := 22 if p["oor"] == "vooruit" else 20
+		var oy := 21 if p["oor"] == "perk" else 20
+		ArtVorm.punt(v, ox + hx, oy + hy, 3, 3, 5, 3, C["b"])
+		ArtVorm.punt(v, ox + hx, oy + hy, 9, 3, 5, 3, C["b"])
+		ArtVorm.verf(v, ox + hx, ox + 2 + hx, oy + 3 + hy, oy + 4 + hy, 3, 5, C["e"])
+		ArtVorm.verf(v, ox + hx, ox + 2 + hx, oy + 3 + hy, oy + 4 + hy, 9, 11, C["e"])
+	mond(v, p, 29 + hx, 14 + hy, 6, 9, C["d"])
+	ogen(v, p, 25 + hx, 18 + hy, 4, 11, {"h": 2, "w": 2, "dik": 2})
+	return v
+
+## The pig: round and low on short legs with dark trotters, a flat snout with
+## two nostrils, floppy ears and a curly tail.  Same paw places as the dog, so
+## `Art.DIER_ANKER` holds; the head sits two voxels lower than the dog's
+## (`ankers`, `_kop_vrij` and `_ogen_van` carry its own numbers).
+static func varken(p: Dictionary) -> Array:
+	var C: Dictionary = PAL["varken"]
+	var v: Array = []
+	var hx: int = p["hx"]
+	var hy: int = p["hy"]
+	var tz := -1 if p["staart"] == "l" else (1 if p["staart"] == "r" else 0)
+	var poot := [[5, 3], [5, 9], [13, 3], [13, 9]]
+	var duw := duwen(p["stap"])
+	for i in 4:
+		var px: int = poot[i][0] + int(duw[i]) * 2
+		var py := 1 if int(duw[i]) > 0 else 0
+		var ph := 6 - py
+		ArtVorm.bx(v, px, py, poot[i][1], 4, ph, 4, C["b"])
+		ArtVorm.bx(v, px, py, poot[i][1], 4, 1, 4, C["d"])
+	ArtVorm.ell(v, 11.0, 9.0, 7.5, 7.6, 5.2, 6.4, C["b"], {"e": 3.2, "ymin": 4})
+	ArtVorm.verf(v, 14, 18, 5, 9, 4, 11, C["l"])
+	var sy := 9 if p["staart"] == "laag" else 11
+	ArtVorm.bx(v, 1, sy, 7 + tz, 2, 1, 2, C["d"])
+	ArtVorm.bx(v, 0, sy + 1, 7 + tz, 1, 2, 2, C["d"])
+	ArtVorm.bx(v, 1, sy + 3, 7 + tz, 2, 1, 2, C["d"])
+	ArtVorm.bx(v, 2, sy + 2, 7 + tz, 1, 1, 2, C["d"])
+	ArtVorm.hals(v, 16, 11, 19 + hx, 13 + hy, 7.5, 3.2, 4.0, C["b"])
+	ArtVorm.ell(v, 22 + hx, 15 + hy, 7.5, 4.4, 4.2, 5.4, C["b"], {"e": 3.2})
+	ArtVorm.bx(v, 26 + hx, 13 + hy, 5, 3, 4, 6, C["e"])
+	ArtVorm.verf(v, 28 + hx, 28 + hx, 15 + hy, 15 + hy, 6, 6, NEUS)
+	ArtVorm.verf(v, 28 + hx, 28 + hx, 15 + hy, 15 + hy, 9, 9, NEUS)
+	var ox := 22 if p["oor"] == "vooruit" else 20
+	var oy := 18
+	if p["oor"] == "perk":
+		oy = 19
+	elif p["oor"] == "hang":
+		oy = 16
+	ArtVorm.punt(v, ox + hx, oy + hy, 1, 3, 3, 3, C["b"])
+	ArtVorm.punt(v, ox + hx, oy + hy, 11, 3, 3, 3, C["b"])
+	ArtVorm.verf(v, ox + 1 + hx, ox + 1 + hx, oy + hy, oy + 1 + hy, 1, 2, C["e"])
+	ArtVorm.verf(v, ox + 1 + hx, ox + 1 + hx, oy + hy, oy + 1 + hy, 12, 13, C["e"])
+	mond(v, p, 28 + hx, 13 + hy, 6, 9, C["d"])
+	ogen(v, p, 25 + hx, 17 + hy, 4, 11, {"h": 2, "w": 2, "dik": 2})
+	return v
+
 static func soort(kind: String, p: Dictionary) -> Array:
 	match kind:
 		"poes": return poes(p)
 		"konijn": return konijn(p)
 		"gans": return gans(p)
+		"vos": return vos(p)
+		"varken": return varken(p)
 		_: return hond(p)
 
 # ------------------------------------------------------------- zitten / liggen
@@ -471,6 +610,9 @@ static func ankers(kind: String, p: Dictionary) -> Dictionary:
 		var ky := 21 + hy
 		return {"kop": [19 + hx, ky + 5.8, 2.8, 3.0],
 			"hals": [14, 13, 19 + hx, ky + 1, 1.9, 2.2, 0.60, 0.9]}
+	if kind == "varken":
+		return {"kop": [22 + hx, 20 + hy, 4.4, 5.4],
+			"hals": [16, 11, 19 + hx, 13 + hy, 3.2, 4.0, 0.45, 1.1]}
 	return {"kop": [22 + hx, 22 + hy, 4.4, 5.6],
 		"hals": [16, 12, 20 + hx, 15 + hy, 2.8, 3.6, 0.45, 1.1]}
 
@@ -668,7 +810,7 @@ static func sjaal_maat(kind: String) -> Dictionary:
 
 ## A ball with a white equator against the chest, fixed to the SKIN of the
 ## already-posed model, so it stays a round ball even lying in bed.
-static func bal(v: Array, h: Array) -> void:
+static func bal(v: Array, h: Array, kl: Color = BAL_KL, band: Color = BAL_BAND) -> void:
 	var sx := JsGetal.rond(h[0])
 	var k := huid(v, sx - 2, sx, -(1 << 30), 1 << 30)
 	if k.is_empty():
@@ -677,7 +819,7 @@ static func bal(v: Array, h: Array) -> void:
 	var cy := JsGetal.rond(k[1] + (k[2] - k[1]) * 0.45)
 	var n0 := v.size()
 	var onder := py_max(v, 0, n0)
-	ArtVorm.ell(v, sx + 1.5, cy, k[0] + 1.4, r, r, r, BAL_KL, {"e": 2.2})
+	ArtVorm.ell(v, sx + 1.5, cy, k[0] + 1.4, r, r, r, kl, {"e": 2.2})
 	# The ball may not sink below the animal: lying down it would stick out
 	# exactly in the strip where a bed passes.
 	var zak := JsGetal.plafond((py_max(v, n0, v.size()) - onder + 1) / float(ArtVorm.HG))
@@ -687,7 +829,7 @@ static func bal(v: Array, h: Array) -> void:
 		cy += zak
 	for i in range(n0, v.size()):
 		if v[i]["y"] == cy:
-			v[i]["k"] = BAL_BAND
+			v[i]["k"] = band
 
 # ----------------------------------------------------------- de garderobe
 
@@ -703,6 +845,8 @@ static func _kop_vrij(kind: String, p: Dictionary) -> int:
 		"gans":
 			var ghy: int = JsGetal.rond(float(p["hy"]) * 2.2) if int(p["hy"]) < 0 else int(p["hy"])
 			return 21 + ghy + 5
+		"varken":
+			return 19 + hy
 	return 20 + hy
 
 ## Where the eyes of this species sit in this pose — the numbers of its
@@ -719,6 +863,8 @@ static func _ogen_van(kind: String, p: Dictionary) -> Array:
 			var ghx := JsGetal.rond(float(p["hx"]) * 2.5)
 			var ghy: int = JsGetal.rond(float(p["hy"]) * 2.2) if int(p["hy"]) < 0 else int(p["hy"])
 			return [20 + ghx, 21 + ghy + 4, 1, 1, 5, 10]
+		"varken":
+			return [25 + hx, 17 + hy, 2, 2, 4, 11]
 	return [25 + hx, 18 + hy, 2, 2, 4, 11]
 
 ## A cap: a low dome on the head, a flat peak over the face and a button on
@@ -758,7 +904,8 @@ static func strik(v: Array, k: Array, y0: int) -> void:
 
 ## A little crown: a gold ring on the head with every other cell a point, and
 ## a ruby at the front.  Smaller than the head, so the ears stay out of it.
-static func kroon(v: Array, k: Array, y0: int) -> void:
+static func kroon(v: Array, k: Array, y0: int, kl: Color = GOUD, kl_d: Color = GOUD_D,
+		steen: Color = ROBIJN) -> void:
 	var cx: float = k[0]
 	var r := maxf(1.5, minf(float(k[2]), float(k[3])) - 1.5)
 	var voor := Vector2i(-(1 << 20), 0)
@@ -767,14 +914,14 @@ static func kroon(v: Array, k: Array, y0: int) -> void:
 			var d := Vector2(float(x) - cx, float(z) - 7.5).length()
 			if d > r + 0.5 or d < r - 0.8:
 				continue
-			v.append({"x": x, "y": y0, "z": z, "k": GOUD_D})
-			v.append({"x": x, "y": y0 + 1, "z": z, "k": GOUD})
+			v.append({"x": x, "y": y0, "z": z, "k": kl_d})
+			v.append({"x": x, "y": y0 + 1, "z": z, "k": kl})
 			if (x + z) % 2 == 0:
-				v.append({"x": x, "y": y0 + 2, "z": z, "k": GOUD})
+				v.append({"x": x, "y": y0 + 2, "z": z, "k": kl})
 			if x > voor.x or (x == voor.x and absf(float(z) - 7.5) < absf(float(voor.y) - 7.5)):
 				voor = Vector2i(x, z)
 	if voor.x > -(1 << 20):
-		v.append({"x": voor.x, "y": y0 + 1, "z": voor.y, "k": ROBIJN})
+		v.append({"x": voor.x, "y": y0 + 1, "z": voor.y, "k": steen})
 
 ## A tie: a knot at the throat and a blade down the chest, one voxel in front
 ## of the skin all the way, so it follows the animal's own shape.  Only skin
@@ -804,21 +951,21 @@ static func das(v: Array, h: Array) -> void:
 ## dog wears its collar, the one stretch of neck the head and the ears do not
 ## hide — a thin ring just off the skin, pearls alternating with gold beads,
 ## so it shows on the white goose as well as on the sand-coloured dog.
-static func parels(v: Array, h: Array) -> void:
+static func parels(v: Array, h: Array, kl: Color = PAREL, kraal: Color = GOUD) -> void:
 	var dak := dak_van(v)
 	var n0 := v.size()
 	ring(v, h[0], h[1], h[2], h[3], 7.5, float(h[4]) + float(h[7]) * 0.8,
-		float(h[5]) + float(h[7]) * 0.8, PAREL, 0.12, 0.7, dak)
+		float(h[5]) + float(h[7]) * 0.8, kl, 0.12, 0.7, dak)
 	for i in range(n0, v.size()):
 		if (int(v[i]["x"]) + int(v[i]["y"]) + int(v[i]["z"])) % 2 == 1:
-			v[i]["k"] = GOUD
+			v[i]["k"] = kraal
 
 ## Shoes only repaint the paws — nothing is added, so the animal keeps its
 ## shape.  Measured from the bottom of every column, so a lifted paw in the
 ## walk wears its shoe too; columns that do not reach the floor (the body,
 ## the tail) are never touched.
 static func schoenen(v: Array, naam: String, kind: String) -> void:
-	var hoog := 1 if naam == "gympjes" or naam == "slofjes" else 3
+	var hoog := 1 if naam in ["gympjes", "slofjes", "zwemvliezen", "pantoffels"] else 3
 	if kind == "konijn":
 		hoog = 1                     # its hind feet sit under the haunch
 	var bodem := {}
@@ -838,12 +985,19 @@ static func schoenen(v: Array, naam: String, kind: String) -> void:
 				p["k"] = GOUD_D if y == 0 else GOUD
 			"laarsjes":
 				p["k"] = LAARS_RAND if y == hoog else LAARS
+			"zwemvliezen":
+				p["k"] = ZWEMVLIES
+			"pantoffels":
+				p["k"] = PANTOFFEL if y == 0 else PANTOFFEL_L
+			"regenlaarsjes":
+				p["k"] = REGEN_RAND if y == hoog else REGEN
 			_:
 				p["k"] = SOK if y % 2 == 0 else WIT
 
 ## Sunglasses: a dark lens over each eye, a rim over and beside it, and a
 ## bridge over the nose — one voxel in front of the face, the eyes' own size.
-static func zonnebril(v: Array, kind: String, p: Dictionary) -> void:
+static func zonnebril(v: Array, kind: String, p: Dictionary, montuur: Color = MONTUUR,
+		glas: Color = GLAS) -> void:
 	var e := _ogen_van(kind, p)
 	var ex: int = e[0]
 	var ey: int = e[1]
@@ -864,13 +1018,55 @@ static func zonnebril(v: Array, kind: String, p: Dictionary) -> void:
 		for y in range(ey, ey + eh + 1):
 			for z in range(int(zs[0]) - 1, int(zs[1]) + 2):
 				var rand: bool = y == ey + eh or z == int(zs[0]) - 1 or z == int(zs[1]) + 1
-				cellen.append([y, z, MONTUUR if rand else GLAS])
+				cellen.append([y, z, montuur if rand else glas])
 	for z in range(z1 + ew + 1, z2 - ew):
-		cellen.append([ey + eh, z, MONTUUR])
+		cellen.append([ey + eh, z, montuur])
 	for c in cellen:
 		var key: int = int(c[0]) * 64 + int(c[1])
 		if voor.has(key):
 			v.append({"x": int(voor[key]) + 1, "y": c[0], "z": c[1], "k": c[2]})
+
+## Little bells (2026-10-07): the pearls' ring in gold with red beads, and a
+## gold bell hanging from its front under the chin — on the dog the ears hide
+## the ring itself, the bell still shows.
+static func belletjes(v: Array, h: Array) -> void:
+	var n0 := v.size()
+	parels(v, h, GOUD, ROBIJN)
+	var voor := {}
+	for i in range(n0, v.size()):
+		var p: Dictionary = v[i]
+		if voor.is_empty() or int(p["x"]) > int(voor["x"]) \
+				or (int(p["x"]) == int(voor["x"]) and int(p["z"]) > int(voor["z"])) \
+				or (int(p["x"]) == int(voor["x"]) and int(p["z"]) == int(voor["z"])
+					and int(p["y"]) < int(voor["y"])):
+			voor = p
+	if voor.is_empty():
+		return
+	var x := int(voor["x"])
+	var y := int(voor["y"])
+	var z := int(voor["z"])
+	v.append({"x": x, "y": y - 1, "z": z, "k": GOUD})
+	v.append({"x": x, "y": y - 1, "z": z - 1, "k": GOUD})
+	v.append({"x": x, "y": y - 2, "z": z, "k": GOUD_D})
+
+## A party hat (2026-10-07): two narrowing discs, pink then white, and a gold
+## pompon on top — three layers, smaller than the head, so the ears stay out.
+static func feestmuts(v: Array, k: Array, y0: int) -> void:
+	var cx: float = k[0]
+	var r := maxf(1.4, minf(float(k[2]), float(k[3])) - 1.6)
+	ArtVorm.ell(v, cx, y0, 7.5, r, 0.6, r, FEEST, {"e": 2.6})
+	ArtVorm.ell(v, cx, y0 + 1, 7.5, maxf(0.9, r - 0.9), 0.6, maxf(0.9, r - 0.9), WIT, {"e": 2.6})
+	ArtVorm.bx(v, JsGetal.rond(cx), y0 + 2, 7, 1, 1, 2, GOUD)
+
+## A flower on the head (2026-10-07): a yellow heart with four pink petals, one
+## layer, in the middle of the crown.
+static func bloem(v: Array, k: Array, y0: int) -> void:
+	var x := JsGetal.rond(float(k[0]))
+	ArtVorm.bx(v, x, y0, 7, 1, 1, 2, GOUD)
+	ArtVorm.bx(v, x - 1, y0, 7, 1, 1, 2, FEEST)
+	ArtVorm.bx(v, x + 1, y0, 7, 1, 1, 2, FEEST)
+	ArtVorm.bx(v, x, y0, 6, 1, 1, 1, FEEST)
+	ArtVorm.bx(v, x, y0, 9, 1, 1, 1, FEEST)
 
 ## The fixed order turns a list into one cache key; unknown names drop out.
 static func acc_sleutel(lijst) -> String:
@@ -919,11 +1115,23 @@ static func bouw(kind: String, pose: String, sleutel: String) -> Array:
 		parels(v, a["hals"])
 	if acc.has("das"):
 		das(v, a["hals"])
-	for naam in ["gympjes", "laarsjes", "sokjes", "slofjes"]:
+	if acc.has("bandana"):
+		var ob := maat.duplicate()
+		ob["kl"] = BANDANA
+		ob["fr"] = BANDANA
+		ob["slip"] = 3
+		ob["breed"] = 2
+		sjaaltje(v, a["hals"], ob)
+	if acc.has("belletjes"):
+		belletjes(v, a["hals"])
+	for naam in ["gympjes", "laarsjes", "sokjes", "slofjes",
+			"zwemvliezen", "pantoffels", "regenlaarsjes"]:
 		if acc.has(naam):
 			schoenen(v, naam, kind)
 	if acc.has("zonnebril"):
 		zonnebril(v, kind, p)
+	if acc.has("sterrenbril"):
+		zonnebril(v, kind, p, GOUD, STER_GLAS)
 	if acc.has("hoedje"):
 		if kind == "gans":
 			hoedje(v, a["kop"], 1, 0.6)
@@ -938,6 +1146,12 @@ static func bouw(kind: String, pose: String, sleutel: String) -> Array:
 		strik(v, a["kop"], hoed_y + 1)
 	if acc.has("kroon"):
 		kroon(v, a["kop"], hoed_y + 1)
+	if acc.has("feestmuts"):
+		feestmuts(v, a["kop"], hoed_y + 1)
+	if acc.has("bloem"):
+		bloem(v, a["kop"], hoed_y + 1)
+	if acc.has("tiara"):
+		kroon(v, a["kop"], hoed_y + 1, TIARA_KL, TIARA_BAND, SAFFIER)
 	# Hat and scarf sit on the animal and sink with the pose; the ball goes on
 	# AFTER, against the skin of the already-squashed model.
 	if p["lig"]:
@@ -948,6 +1162,10 @@ static func bouw(kind: String, pose: String, sleutel: String) -> Array:
 		v = bukken(v, buk)
 	if acc.has("bal"):
 		bal(v, a["hals"])
+	if acc.has("pompoen"):
+		bal(v, a["hals"], POMPOEN, POMPOEN_STEEL)
+	if acc.has("goudbal"):
+		bal(v, a["hals"], GOUD, WIT)
 	return v
 
 # ------------------------------------------------------------------- voerbakje

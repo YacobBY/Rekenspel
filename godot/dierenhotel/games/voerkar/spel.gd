@@ -64,8 +64,8 @@ const SPELERS_MAX := 6
 const SMUL_MS := 2.6                          ## nagenieten, games-a.md §7.6
 const LEEG_MS := 1.8                          ## "nog geen gasten"
 
-const SOORT_ICO := {"puppy": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆"}
-const KIND_ICO := {"hond": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆"}
+const SOORT_ICO := {"puppy": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆", "vos": "🦊", "varken": "🐷"}
+const KIND_ICO := {"hond": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆", "vos": "🦊", "varken": "🐷"}
 const DIER_ONBEKEND := "🐾"
 
 # ------------------------------------------------ kindteksten (F3, §7.7)

@@ -548,10 +548,11 @@ func test_wie_zijn_beurt_niet_afmaakt_maakt_plaats() -> void:
 	ctx.laat_gaan("wolkje")
 	var wolkje = World.dier("wolkje")
 	waar(wolkje.staat == "loop" and not wolkje.punten.is_empty(), "Wolkje loopt weg")
-	# Gerrit was sent somewhere else already (a stop sends him to bed): left alone
-	World.reis("gerrit", "keuken", {"na": "wacht"})
-	ctx.laat_gaan("gerrit")
-	gelijk(str(World.dier("gerrit").reis_doel), "keuken", "Gerrit gaat gewoon waar hij heen ging")
+	# Vlam (the pool's 4th since 2026-10-07) was sent somewhere else already (a
+	# stop sends him to bed): left alone
+	World.reis("vlam", "keuken", {"na": "wacht"})
+	ctx.laat_gaan("vlam")
+	gelijk(str(World.dier("vlam").reis_doel), "keuken", "Vlam gaat gewoon waar hij heen ging")
 	for d in World.dieren():
 		World.weg(d.id)
 	Ui.zet_rust_modus(rust_voor)

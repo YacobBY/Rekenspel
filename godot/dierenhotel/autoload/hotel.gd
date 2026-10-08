@@ -1303,7 +1303,7 @@ func brievenmuur() -> Dictionary:
 # ------------------------------------------------------------- komt eraan
 
 const KOMT := "komt"           ## owner of the "X komt eraan" bubbles
-const DIER_ICOON := {"hond": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆"}
+const DIER_ICOON := {"hond": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆", "vos": "🦊", "varken": "🐷"}
 var _komt: Dictionary = {}     ## guest id -> spot id of its bubble
 
 ## A guest walking in from a room you cannot see — back to the desk, or on his

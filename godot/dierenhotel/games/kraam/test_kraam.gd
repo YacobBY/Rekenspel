@@ -227,8 +227,11 @@ func test_aanmelding() -> void:
 	gelijk(taak.get("id", ""), "souvenir", "taak id")
 	gelijk(taak.get("prio", 0), 1, "taak prio 1")
 	gelijk(taak.get("icoon", ""), "🎁", "taak icoon")
-	# the same three souvenirs as in the garden, each a real wardrobe piece
-	gelijk(Beurt.WAREN[SPEL], ["sjaaltje", "hoedje", "bal"], "sjaaltje, hoedje en bal")
+	# the same three souvenirs as in the garden first, each a real wardrobe
+	# piece; the extra goods of 2026-10-07 after them
+	gelijk(Beurt.WAREN[SPEL].slice(0, 3), ["sjaaltje", "hoedje", "bal"], "sjaaltje, hoedje en bal")
+	gelijk(Beurt.WAREN[SPEL].slice(3), ["pompoen", "goudbal", "zwemvliezen", "pantoffels"],
+		"en daarna de nieuwe souvenirs")
 	for naam in Beurt.WAREN[SPEL]:
 		waar(ArtGasten.KLEDING.has(naam), "%s is een kledingstuk" % naam)
 		waar(Art.heeft_model("waar_" + str(naam)), "%s heeft een uitstalmodel" % naam)
@@ -422,16 +425,21 @@ func test_een_souvenir_kopen_vervult_de_wens() -> void:
 		waar(d != null and d.kamer == KAMER, "hij staat in de winkelstraat")
 		var klant: Vector2 = _winkel()["klant"]
 		waar(d != null and Vector2(d.x, d.z).distance_to(klant) <= 3.0, "aan de toonbank")
+		# three souvenirs on the counter: since 2026-10-07 the stall has seven
+		# and the day turns which three (`WinkelSpel._te_koop`); the first one
 		var keuzes := _keuzes()
-		gelijk(str(keuzes), str(["w_sjaaltje", "w_hoedje", "w_bal"]), "de drie souvenirs")
-		_kies("w_bal")
+		gelijk(keuzes.size(), 3, "groep %d: drie souvenirs (%s)" % [band, str(keuzes)])
+		for k in keuzes:
+			waar(Beurt.WAREN[SPEL].has(k.trim_prefix("w_")), "%s is een souvenir" % k)
+		var ding := keuzes[0].trim_prefix("w_") if not keuzes.is_empty() else "bal"
+		_kies("w_" + ding)
 		await _wacht(0.1)
-		gelijk(str(_stand().get("waar", "")), "bal", "de bal gekozen")
+		gelijk(str(_stand().get("waar", "")), ding, "%s gekozen" % ding)
 		await _speel_goed()
 		gelijk(str(_stand().get("stap", "")), "af", "groep %d: klaar" % band)
 		var id := str(wie["id"])
-		waar(World.accessoires(id).has("bal"), "hij draagt de bal")
-		waar(State.kast_van(id).has("bal"), "en die is van hem")
+		waar(World.accessoires(id).has(ding), "hij draagt %s" % ding)
+		waar(State.kast_van(id).has(ding), "en die is van hem")
 		waar(bool(State.gast_van(id).get("blij", false)), "zijn wens is vervuld")
 		waar(not chip.call(), "er is geen 🎁-taak meer")
 		if op_bord:
@@ -599,7 +607,11 @@ func test_een_oude_opslag_speelt_verder() -> void:
 	gelijk(str(st.get("gast", "")), id, "hetzelfde dier koopt")
 	gelijk(str(st.get("stap", "")), "kies", "hij kiest opnieuw")
 	gelijk(int(st.get("wens", 0)), 1, "voor zijn wens")
-	gelijk(str(_keuzes()), str(["w_sjaaltje", "w_bal"]), "het hoedje heeft hij al: sjaaltje of bal")
+	# the hoedje he has stays off the counter; three of the other six are on
+	# it (the stall has seven since 2026-10-07), the sjaaltje among them today
+	var te_koop := _keuzes()
+	waar(not te_koop.has("w_hoedje") and te_koop.has("w_sjaaltje") and te_koop.size() == 3,
+		"het hoedje heeft hij al: wel het sjaaltje (%s)" % str(te_koop))
 	_kies("w_sjaaltje")
 	await _wacht(0.1)
 	await _speel_goed()

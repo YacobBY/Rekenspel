@@ -31,7 +31,7 @@ extends MiniGame
 const KAMER := "tuin"
 ## `Sommen.Tobbe.HAND` — hoeveel schepjes één tik uit het rek haalt.
 const HAND: Array = [1, 2, 5]
-const DIER_ICO := {"puppy": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆"}
+const DIER_ICO := {"puppy": "🐶", "poes": "🐱", "konijn": "🐰", "gans": "🦆", "vos": "🦊", "varken": "🐷"}
 
 ## Het sop en de droge bodem van de tobbe (art-sound-rules.md §8 kleuren).
 const SOP := Color("#A9D8E6")

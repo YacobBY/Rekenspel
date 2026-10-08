@@ -101,10 +101,13 @@ function laadChromium() {
 // ---------------------------------------------------------------- de opslag
 // The same shape .fanout/scratch/godot-g-zwembad/probe-zwembad.js proved
 // against the real build: one save, `kamerNu` puts the camera in the room.
+// The order of State.gasten_pool(): Vlam the fox 4th and Knor the pig 7th
+// (2026-10-07), so `--gasten 7` seeds both.
 const POOL = [
   ['boef', 'Boef', 'hond', 'puppy', 2], ['muis', 'Muis', 'poes', 'poes', 1],
-  ['wolkje', 'Wolkje', 'konijn', 'konijn', 1], ['gerrit', 'Gerrit', 'gans', 'gans', 2],
-  ['pip', 'Pip', 'hond', 'puppy', 3], ['vlok', 'Vlok', 'poes', 'poes', 2],
+  ['wolkje', 'Wolkje', 'konijn', 'konijn', 1], ['vlam', 'Vlam', 'vos', 'vos', 2],
+  ['gerrit', 'Gerrit', 'gans', 'gans', 2], ['pip', 'Pip', 'hond', 'puppy', 3],
+  ['knor', 'Knor', 'varken', 'varken', 3], ['vlok', 'Vlok', 'poes', 'poes', 2],
   ['stamp', 'Stampertje', 'konijn', 'konijn', 1],
 ];
 const BEDDEN = [['kamer1', 'bed1'], ['kamer1', 'bed2'], ['kamer2', 'bed1'], ['kamer2', 'bed2']];

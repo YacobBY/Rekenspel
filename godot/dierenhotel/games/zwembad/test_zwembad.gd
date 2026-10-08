@@ -183,7 +183,7 @@ func test_aanmelding_en_ontgrendeling() -> void:
 ## his name after the tick (§1.2, `zwemGast(s, true)`).
 func test_taakkaartje_houdt_zijn_naam() -> void:
 	State.nieuw_spel()
-	var g: Dictionary = State.gasten_pool()[6]      # Stampertje, the longest name
+	var g: Dictionary = State.gasten_pool()[8]      # Stampertje, the longest name
 	g["kamer"] = "kamer1"
 	g["bed"] = "bed1"
 	g["behoefte"] = "zwemmen"

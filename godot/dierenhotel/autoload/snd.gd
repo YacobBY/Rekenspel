@@ -647,7 +647,10 @@ const DIER_LENGTE := {
 	"konijn_sip": 0.38, "konijn_blij": 0.38,
 	"gans_sip": 0.50, "gans_blij": 0.40,
 }
-const DIEREN := ["hond", "poes", "konijn", "gans"]   ## = ArtGasten.SOORTEN
+const DIEREN := ["hond", "poes", "konijn", "gans"]   ## = the HTML's four of ArtGasten.SOORTEN
+## The two of 2026-10-07 borrow a voice (no buffer of their own): the fox yips
+## and whimpers like the dog, the pig's grunt is nearest the goose's nasal honk.
+const DIER_STEM := {"vos": "hond", "varken": "gans"}
 const DIER_MS := 400      ## one animal voice per mood within this many ms
 const SLIK_MS := 150      ## a `zacht` this close to an animal's "aww" is swallowed
 const BLIJ_NA := 0.20     ## s after `ja()` before the animal of the turn cheers
@@ -732,13 +735,19 @@ func soort_van(wie: String) -> String:
 		return ""
 	if DIEREN.has(wie):
 		return wie
+	if DIER_STEM.has(wie):
+		return str(DIER_STEM[wie])
 	var d = World.dier(wie)
 	if d != null and DIEREN.has(str(d.kind)):
 		return str(d.kind)
+	if d != null and DIER_STEM.has(str(d.kind)):
+		return str(DIER_STEM[str(d.kind)])
 	if State.s is Dictionary and State.s.has("gasten"):
 		var kind := str(State.gast_van(wie).get("kind", ""))
 		if DIEREN.has(kind):
 			return kind
+		if DIER_STEM.has(kind):
+			return str(DIER_STEM[kind])
 	return ""
 
 ## The sound `dier_sip`/`dier_blij` plays for `wie`.  An unknown kind gets the

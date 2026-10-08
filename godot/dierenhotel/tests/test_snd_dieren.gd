@@ -142,7 +142,12 @@ func _kaart(id: String, goed: int, dier: String):
 func test_elk_dier_heeft_een_sip_en_een_blij_geluidje() -> void:
 	var namen: Array = Snd.dier_namen()
 	gelijk(namen.size(), 8, "vier soorten, twee stemmingen")
-	gelijk(DIEREN, ArtGasten.SOORTEN, "precies de vier soorten gasten")
+	# the HTML's four kinds have a voice of their own; the two of 2026-10-07
+	# borrow one (`Snd.DIER_STEM`), so together they are every kind of guest
+	gelijk(DIEREN, Snd.DIEREN, "vier soorten met een eigen stem")
+	gelijk(DIEREN + Snd.DIER_STEM.keys(), ArtGasten.SOORTEN, "plus de twee die er een lenen: alle soorten")
+	for kind in Snd.DIER_STEM:
+		waar(DIEREN.has(str(Snd.DIER_STEM[kind])), "%s leent de stem van een soort die er een heeft" % kind)
 	for kind in DIEREN:
 		waar(namen.has("%s_sip" % kind), "%s heeft een sip geluidje" % kind)
 		waar(namen.has("%s_blij" % kind), "%s heeft een blij geluidje" % kind)
@@ -222,6 +227,12 @@ func test_soort_en_terugval() -> void:
 	World.zet(GAST, World.kamer_nu(), 20.0, 20.0, {"kind": "gans"})
 	gelijk(Snd.soort_van(GAST), "gans", "een gast-id wordt zijn soort")
 	gelijk(Snd.dier_geluid(GAST, true), "gans_blij", "en klinkt als die soort")
+	# the fox speaks with the dog's voice, the pig with the goose's — as a kind
+	# and as a guest in the world (2026-10-07: no buffers of their own)
+	gelijk(Snd.dier_geluid("vos", false), "hond_sip", "de vos klinkt als de hond")
+	gelijk(Snd.dier_geluid("varken", true), "gans_blij", "het varken klinkt als de gans")
+	World.zet(GAST, World.kamer_nu(), 20.0, 20.0, {"kind": "varken"})
+	gelijk(Snd.dier_geluid(GAST, false), "gans_sip", "ook als gast in de wereld")
 	# an unknown animal gets the neutral pair every game already knows
 	gelijk(Snd.dier_geluid("draak", false), "zacht", "onbekend en sip: zacht")
 	gelijk(Snd.dier_geluid("", true), "ja", "niemand en blij: ja")

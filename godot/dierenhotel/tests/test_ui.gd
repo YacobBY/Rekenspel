@@ -297,6 +297,24 @@ func _schermteksten() -> Array[String]:
 	uit.append("✓")
 	return uit
 
+## The glyphs the new rooms and games need (F1, 2026-10-07: animals, music,
+## bakery, stars, post, accessories, decoration, camera) sit in the colour emoji
+## subset itself, so they render the same on every tablet.  The private-use sign
+## is the control: an empty theme would make `mist_tekens` say yes to anything.
+func test_nieuwe_emoji_staan_in_de_subset() -> void:
+	waar(Ui.thema != null and Ui.thema.default_font != null, "het thema heeft een font")
+	gelijk(str(Ui.mist_tekens("🦊🐷🥁🎵🖼🐠👓⌚")), "[]", "de nieuwe dieren en dingen hebben een glyph")
+	var alle := "🦊🐷🥁🎵🎶👂🔁🎹🎺🥐🥚🥣🧁🍰🔭🌃✨🌠✉️📮📦📬📨👓⌚🏀🎾🩰🥳👑🎀🖼️🐠🕯️🟪🪴🛋📷🎞"
+	gelijk(str(Ui.mist_tekens(alle)), "[]", "elk nieuw pictogram heeft een glyph")
+	gelijk(Ui.mist_tekens(char(0xE000)).size(), 1, "een teken dat er niet is, wordt gemeld")
+	var emo: FontFile = load(UiThema.EMOJI)
+	var mist: Array[String] = []
+	for i in alle.length():
+		var c := alle.unicode_at(i)
+		if c != 0xFE0F and not emo.has_char(c):
+			mist.append(char(c))
+	gelijk(str(mist), "[]", "ze komen uit Emoji.ttf zelf, niet uit een ander font")
+
 # -------------------------------------------------- world.md §5.5 antwoordstrook
 
 ## Press one button of the strip glued under card `id`.

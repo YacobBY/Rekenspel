@@ -556,3 +556,316 @@ func _keur(kader: Vector2, wat: String, spel: String) -> void:
 			continue
 		waar(r.size.x >= 44.0 and r.size.y >= 44.0, "%s: %s is een tikdoel" % [wat, id])
 	waar(eigen >= 2, "%s: het spel staat op het scherm (%d)" % [wat, eigen])
+
+# ------------------------------------------------------- de waren van 2026-10-07
+
+## Every new piece has a slot, stands in a shop's list and in the key order,
+## has an icon the fonts know, and builds and bakes on every kind (the fox and
+## the pig of 2026-10-07 too) without an engine error; the old pieces keep
+## their places, so yesterday's prices hold.
+func test_de_nieuwe_waren() -> void:
+	if Ui.thema == null or Ui.thema.default_font == null:
+		Ui._bouw_thema(17)
+	var nieuw := ["feestmuts", "bloem", "bandana", "belletjes", "zwemvliezen", "pantoffels",
+		"regenlaarsjes", "tiara", "sterrenbril", "pompoen", "goudbal"]
+	var te_koop := {}
+	for winkel in Beurt.WAREN:
+		for naam in Beurt.WAREN[winkel]:
+			te_koop[str(naam)] = winkel
+	for naam in nieuw:
+		var w: Dictionary = ArtGasten.KLEDING.get(naam, {})
+		waar(not w.is_empty(), "%s staat in de garderobe" % naam)
+		waar(ArtGasten.SLOTEN.has(ArtGasten.slot_van(naam)), "%s heeft een slot" % naam)
+		waar(te_koop.has(naam), "%s is ergens te koop" % naam)
+		waar(ArtGasten.ACC_NAMEN.has(naam), "%s zit in de sleutelvolgorde" % naam)
+		gelijk(Ui.mist_tekens(str(w.get("icoon", ""))).size(), 0, "het pictogram van %s bestaat" % naam)
+		for kind in ArtGasten.SOORTEN:
+			var kaal := ArtGasten.bouw(kind, "rust", "")
+			var aan := ArtGasten.bouw(kind, "rust", naam)
+			waar(aan.size() >= kaal.size(), "%s op de %s bouwt" % [naam, kind])
+			var p = Art.dier(kind, "rust", 3, naam)
+			waar(p != null, "%s op de %s bakt" % [naam, kind])
+	gelijk(Beurt.WAREN["hoeden"].slice(0, 3), ["strik", "pet", "strohoed"], "de hoeden van gisteren")
+	gelijk(Beurt.WAREN["luxe"].slice(0, 4), ["zonnebril", "slofjes", "parels", "kroon"], "de luxe van gisteren")
+	var gezien := {}
+	for dag in range(1, 11):
+		var o := Beurt.opzet("hoeden", 2, 3, dag)
+		for w in o["waren"]:
+			gezien[str(w["naam"])] = true
+	gelijk(gezien.size(), 5, "de opzet draagt alle vijf hoeden")
+
+# ------------------------------------------------ elke strook op elk scherm
+
+## Every strip a stall can put under its card — the choice, the money, the
+## numbers — for every shop × groep 3–5 × 1–14 guests × day 1–7 × thing × 4 or
+## 2 paws, on the four ticket screens: each one fits inside the frame.  Every
+## strip is summed from its buttons (each measured once), the sum is checked
+## against the real `UiKeuzes` (`Ui.maak_knop("keuzes")`, which takes the short
+## words when the long ones do not fit), and the widest three per screen are
+## placed for real through `Ui.somkaart` and `Hits`.  Red before 2026-10-07: on the 360-wide phone a money strip of
+## €14..€19 ("💶 10+5+2+1" four times) stuck out of the frame by up to 46 units.
+func test_elke_strook_past_op_elk_scherm() -> void:
+	if Ui.thema == null or Ui.thema.default_font == null:
+		Ui._bouw_thema(17)
+	for f in [Ui.thema.default_font, Ui.thema.get_font("font", "Button"), ThemeDB.fallback_font]:
+		var acht := (f as Font).get_string_size("8", HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+		for c in "0123456789":
+			gelijk((f as Font).get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x, acht,
+				"de cijfers zijn even breed (%s)" % c)
+	var stroken := _alle_stroken()
+	waar(stroken.size() > 40, "genoeg verschillende stroken (%d)" % stroken.size())
+	var geld := 0
+	for sleutel in stroken:
+		if str(stroken[sleutel]["stap"]) == "betaal":
+			geld += 1
+	waar(geld >= 10, "de geldstroken zitten erbij (%d)" % geld)
+	var bewaard: Dictionary = State.s.duplicate(true)
+	var scherm_terug = Ui.get("_scherm")
+	var rust_voor := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	var boom := Engine.get_main_loop() as SceneTree
+	for maat in SCHERMEN:
+		var vp := SubViewport.new()
+		vp.size = maat
+		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		boom.root.add_child(vp)
+		var shell = (load("res://scenes/main.tscn") as PackedScene).instantiate()
+		shell.set_meta("geen_start", true)
+		vp.add_child(shell)
+		for _f in 4:
+			await boom.process_frame
+		_wereld(4, 4)
+		Hotel.start()
+		World.naar(KAMER)
+		State.s["kamerNu"] = KAMER
+		Hotel.render()
+		for _f in 4:
+			await boom.process_frame
+		var kader: Control = shell.get_node("Scherm/Kolom/Middenrij/Kaderdoos/Kader")
+		var breed := kader.size.x
+		# every strip, from the width of its buttons in the themed frame (each
+		# button measured once); where the long words would not fit, the real
+		# strip too, built the way `Hits` gets it (`Ui.maak_knop`, out of the
+		# tree, where `UiKeuzes` picks its words) and then put in the frame
+		var meet := World.kader_rect().size.x
+		var proef = Ui.maak_knop("keuzes", {"keuzes": [{"id": "x", "icoon": "", "tekst": "1"}]})
+		var rand: float = (proef as Control).get_theme_stylebox("panel").get_minimum_size().x
+		var tussen := float((proef.get_node("Rij") as HBoxContainer).get_theme_constant("separation"))
+		proef.free()
+		var knopen := {}
+		var maten: Array = []
+		var te_breed: Array[String] = []
+		var echt := 0
+		for sleutel in stroken:
+			var keuzes: Array = stroken[sleutel]["keuzes"]
+			var m := _strook_maat(keuzes, knopen, kader, rand, tussen)
+			var w := m.y if m.x + 8.0 > meet else m.x
+			var past := m.y + 2.0 * Hits.KRAP <= breed + 0.01
+			if past and m.x + 2.0 * Hits.KRAP > breed + 0.01:
+				# the long words do not fit: the strip must have taken the short
+				# ones where `Hits` gets it from, out of the tree
+				var st = Ui.maak_knop("keuzes", {"keuzes": keuzes})
+				var kort: bool = st.kort_gekozen
+				st.free()
+				echt += 1
+				past = kort
+				w = maxf(w, m.y if kort else m.x)
+			maten.append([w, sleutel, m.y if m.x + 8.0 > meet else m.x])
+			if not past:
+				te_breed.append("%s %s: %d breed (%s)" % [str(stroken[sleutel]["winkel"]),
+					str(stroken[sleutel]["stap"]), int(w), str(sleutel).left(60)])
+		gelijk(te_breed.size(), 0, "%s: elke strook past in %d (%s)" % [str(maat), int(breed),
+			str(te_breed.slice(0, 4))])
+		# the sum of the buttons IS the strip: checked against the real
+		# `UiKeuzes` rebuilt in the frame (`Ui._herzie_maten` does that) on the
+		# widest ten and every 40th
+		maten.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) > float(b[0]))
+		for i in maten.size():
+			if i >= 10 and i % 40 != 0:
+				continue
+			var keuzes: Array = stroken[maten[i][1]]["keuzes"]
+			var st = Ui.maak_knop("keuzes", {"keuzes": keuzes})
+			kader.add_child(st)
+			st.bouw(keuzes, meet, Ui.maten)
+			var w_in: float = (st as Control).get_combined_minimum_size().x
+			kader.remove_child(st)
+			st.free()
+			waar(absf(w_in - float(maten[i][2])) < 0.51,
+				"%s: de som van de knoppen is de strook (%d / %d, %s)" % [str(maat),
+					int(maten[i][2]), int(w_in), str(maten[i][1]).left(50)])
+		# the widest three, placed for real under their card
+		maten.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) > float(b[0]))
+		for i in mini(3, maten.size()):
+			var r: Dictionary = stroken[maten[i][1]]
+			var w := _winkel(str(r["winkel"]))
+			var k = Ui.somkaart({"x": float(w["x"]), "z": float(w["z"]), "kamer": KAMER},
+				str(r["som"]), {"id": KAART, "kamer": KAMER, "hoog": float(w["top"]) + 22.0,
+				"icoon": "💶", "regel": str(r["regel"]), "max": 3, "keuzes": r["keuzes"]})
+			for _f in 4:
+				await boom.process_frame
+			var d: Dictionary = Hits.debug().get(STROOK, {})
+			waar(not d.is_empty(), "%s: de strook staat er (%s)" % [str(maat), str(r["stap"])])
+			if not d.is_empty():
+				var rr: Rect2 = d["rect"]
+				waar(not bool(d["krap"]), "%s: %s vond een echte plek" % [str(maat), str(r["stap"])])
+				waar(rr.position.x >= -0.01 and rr.position.y >= -0.01
+					and rr.end.x <= kader.size.x + 0.01 and rr.end.y <= kader.size.y + 0.01,
+					"%s: de breedste strook (%s %s) staat binnen het kader (%s)" % [str(maat),
+						str(r["winkel"]), str(r["stap"]), str(rr)])
+			if k != null:
+				k.weg()
+			for _f in 2:
+				await boom.process_frame
+		Ui.naamplaten_leeg()
+		Hits.wis_alles()
+		vp.queue_free()
+		await boom.process_frame
+		Ui.registreer_lagen(null, null, null)
+	State.s = bewaard
+	Ui.set("_scherm", scherm_terug)
+	Ui.zet_rust_modus(rust_voor)
+	Games.hersteek()
+
+## The floating strip `UiKeuzes` builds from `keuzes`, in the themed frame:
+## x with the long words, y with the short ones.  `knopen` caches every
+## button's width; `rand` and `tussen` are the strip's own panel margins and
+## button spacing.
+func _strook_maat(keuzes: Array, knopen: Dictionary, kader: Control, rand: float,
+		tussen: float) -> Vector2:
+	var vast := rand + tussen * float(maxi(0, keuzes.size() - 1))
+	var uit := Vector2(vast, vast)
+	for k in keuzes:
+		var icoon := str(k.get("icoon", ""))
+		uit.x += _knop_maat(knopen, kader, ("%s %s" % [icoon, str(k.get("tekst", ""))]).strip_edges())
+		uit.y += _knop_maat(knopen, kader, ("%s %s" % [icoon,
+			str(k.get("kort", k.get("tekst", "")))]).strip_edges())
+	return uit
+
+## The width of one answer button as `UiKeuzes._vul` makes it, in the themed
+## frame.
+func _knop_maat(knopen: Dictionary, kader: Control, tekst: String) -> float:
+	if knopen.has(tekst):
+		return float(knopen[tekst])
+	var b := Button.new()
+	b.theme_type_variation = "Keuzeknop"
+	b.text = tekst
+	b.custom_minimum_size = Vector2(UiThema.HOT, UiThema.HOT)
+	b.add_theme_font_size_override("font_size", int(Ui.maten["wereld"]))
+	b.clip_text = false
+	kader.add_child(b)
+	var w := b.get_combined_minimum_size().x
+	kader.remove_child(b)
+	b.free()
+	knopen[tekst] = w
+	return w
+
+## Every strip a turn can show, by its words (the order of the buttons does not
+## change the width, and neither do the digits, so two strips with the same
+## buttons up to their digits count once):
+##   {sleutel: {winkel, stap, keuzes, regel, som}}
+## The keuzes come from the stall's own functions (`_kies_keuzes`,
+## `_geld_keuzes`, `_getal_keuzes`) on a throwaway instance, so this test reads
+## exactly what the game puts on the strip.  The choice strip twice per day:
+## the goods the counter shows with an empty wardrobe, and the three with the
+## longest words (what an animal that owns the rest is offered).
+func _alle_stroken() -> Dictionary:
+	var uit := {}
+	for winkel in WINKELS:
+		var knoop = Games._scenes[winkel].instantiate()
+		for band in [3, 4, 5]:
+			for n in range(1, 15):
+				for dag in range(1, 8):
+					var o := Beurt.opzet(winkel, n, band, dag)
+					knoop.O = o
+					_neem_strook(uit, winkel, "kies", knoop._kies_keuzes(), Beurt.T_KIES % "Stampertje", "")
+					var lang: Array = (o["waren"] as Array).duplicate()
+					lang.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+						return _woord_lengte(a) > _woord_lengte(b))
+					var o2 := o.duplicate()
+					o2["waren"] = lang.slice(0, 3)
+					knoop.O = o2
+					_neem_strook(uit, winkel, "kies", knoop._kies_keuzes(), Beurt.T_KIES % "Stampertje", "")
+					knoop.O = o
+					for w in o["waren"]:
+						var naam := str(w["naam"])
+						for kind in ["hond", "gans"]:
+							var s := Beurt.sommen(o, naam, kind)
+							for stap in Beurt.stappen(winkel, band):
+								var keuzes: Array = []
+								match str(stap):
+									"betaal":
+										keuzes = knoop._geld_keuzes(s)
+									"som", "half", "terug":
+										keuzes = knoop._getal_keuzes(str(stap), s)
+									_:
+										continue
+								var zin: Array = Beurt.kaart(str(stap), o, naam, s, "Stampertje")
+								_neem_strook(uit, winkel, str(stap), keuzes, str(zin[0]), str(zin[1]))
+		knoop.free()
+	return uit
+
+static func _neem_strook(uit: Dictionary, winkel: String, stap: String, keuzes: Array,
+		regel: String, som: String) -> void:
+	var woorden: Array[String] = []
+	var kaal: Array = []
+	for k in keuzes:
+		woorden.append("%s %s|%s" % [str(k.get("icoon", "")), str(k.get("tekst", "")),
+			str(k.get("kort", ""))])
+		# without its `kies`: the instance it calls back is freed after the count
+		var d: Dictionary = (k as Dictionary).duplicate()
+		d.erase("kies")
+		kaal.append(d)
+	woorden.sort()
+	# digits are tabular in every font of the game (checked in the test), so
+	# two strips that differ only in their digits are as wide as each other
+	var sleutel := " / ".join(woorden)
+	for c in "123456789":
+		sleutel = sleutel.replace(c, "0")
+	if not uit.has(sleutel):
+		uit[sleutel] = {"winkel": winkel, "stap": stap, "keuzes": kaal, "regel": regel,
+			"som": som}
+
+static func _woord_lengte(w: Dictionary) -> int:
+	var kl: Dictionary = ArtGasten.KLEDING.get(str(w["naam"]), {})
+	return str(kl.get("naam", w["naam"])).split(" ")[-1].length() + str(int(w["prijs"])).length()
+
+# ------------------------------------------------- een paar is één ding
+
+## Only the shoe stall counts paws (a shoe each, `poten_van`).  Everywhere else
+## a pair — the souvenir stall's flippers and slippers (2026-10-07), the luxury
+## shop's golden slippers — is ONE thing at ONE price: `veel` is the plural on
+## the card, never a price rule.  So outside the shoe stall a dog (4 paws) and
+## a goose (2) pay exactly the same, and no card asks "how much do 4 cost".
+func test_een_paar_is_een_ding_buiten_de_schoenenkraam() -> void:
+	waar(Beurt.WAREN["kraam"].has("zwemvliezen") and Beurt.WAREN["kraam"].has("pantoffels"),
+		"zwemvliezen en pantoffels liggen bij de souvenirkraam")
+	for naam in ["zwemvliezen", "pantoffels"]:
+		waar(bool(ArtGasten.KLEDING[naam].get("veel", false)), "%s is een paar" % naam)
+	var paren := 0
+	for winkel in WINKELS:
+		for band in [3, 4, 5]:
+			for n in [1, 4, 8]:
+				for dag in [1, 2, 5]:
+					var o := Beurt.opzet(winkel, n, band, dag)
+					for w in o["waren"]:
+						var naam := str(w["naam"])
+						var hond := Beurt.sommen(o, naam, "hond")
+						var gans := Beurt.sommen(o, naam, "gans")
+						if winkel == "schoenen":
+							gelijk(int(hond["som"]), int(hond["prijs"]) * 4,
+								"schoenen %s: vier pootjes, vier keer de prijs" % naam)
+							gelijk(int(gans["som"]), int(gans["prijs"]) * 2,
+								"schoenen %s: de gans twee keer" % naam)
+							continue
+						gelijk(int(hond["totaal"]), int(gans["totaal"]),
+							"%s %s groep %d: elk dier betaalt hetzelfde" % [winkel, naam, band])
+						if winkel == "kraam":
+							gelijk(int(hond["totaal"]), int(w["prijs"]),
+								"kraam %s: één prijs voor het hele ding" % naam)
+						if bool(ArtGasten.KLEDING[naam].get("veel", false)):
+							paren += 1
+							for stap in Beurt.stappen(winkel, band):
+								var zin: Array = Beurt.kaart(str(stap), o, naam, hond, "Pluis")
+								waar(not str(zin[1]).contains("×"),
+									"%s %s: geen keer-som op de kaart (%s)" % [winkel, naam, str(zin[1])])
+	waar(paren > 0, "er zijn paren buiten de schoenenkraam (%d)" % paren)

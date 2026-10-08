@@ -568,11 +568,12 @@ func test_bel_haalt_de_volgende_gast() -> void:
 	gelijk(v["samen"], 0, "nog geen gasten, dus 0 scheppen")
 	gelijk(v["extra"], 2, "Boef eet er 2 bij")
 	waar(State.s["nieuweGast"] != null, "en hij staat aan de balie")
-	gelijk((State.s["wachtlijst"] as Array).size(), 8, "eentje van de lijst af")
+	# eleven in the pool since the fox and the pig of 2026-10-07
+	gelijk((State.s["wachtlijst"] as Array).size(), 10, "eentje van de lijst af")
 	# a second ring does not start a second check-in
 	Hotel.bel()
 	gelijk(State.s["checkin"]["gastId"], "boef", "er staat al iemand")
-	gelijk((State.s["wachtlijst"] as Array).size(), 8, "en er komt niemand bij")
+	gelijk((State.s["wachtlijst"] as Array).size(), 10, "en er komt niemand bij")
 
 # --------------------------------------------------------- eten en spelen
 

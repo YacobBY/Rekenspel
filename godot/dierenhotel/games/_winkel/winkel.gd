@@ -322,7 +322,13 @@ func _te_koop() -> Array:
 	if uit.is_empty():
 		uit = (O.get("waren", []) as Array).duplicate()
 	var toon := int(_w("toon", 3))
-	if uit.size() > toon:
+	if uit.size() > toon + 1:
+		# more than one over (the extra goods of 2026-10-07): turn the list by
+		# the day and the hotel's size, so every thing comes round on the counter
+		var draai := (int(O.get("dag", 1)) + int(O.get("N", 1))) % uit.size()
+		uit = uit.slice(draai) + uit.slice(0, draai)
+		uit = uit.slice(0, toon)
+	elif uit.size() > toon:
 		var weg := (int(O.get("dag", 1)) + int(O.get("N", 1))) % uit.size()
 		uit.remove_at(weg)
 		uit = uit.slice(0, toon)
@@ -473,8 +479,12 @@ func _geld_keuzes(s: Dictionary) -> Array:
 	for i in stapels.size():
 		var st: Array = stapels[i]
 		var som := Beurt.tel(st)
-		uit.append({"id": "g%d" % som, "icoon": Beurt.ICOON_GELD,
-			"tekst": Beurt.stapel_tekst(st), "kort": Beurt.stapel_kort(st),
+		# the 💶 rides in the long word only (2026-10-07): on a portrait phone
+		# (360×740) four short words "10+5+2+1" fit side by side only without
+		# it, for every amount a stall can ask; the long strip is unchanged
+		uit.append({"id": "g%d" % som, "icoon": "",
+			"tekst": "%s %s" % [Beurt.ICOON_GELD, Beurt.stapel_tekst(st)],
+			"kort": Beurt.stapel_kort(st),
 			"titel": "betaal %s" % Beurt.stapel_tekst(st),
 			"kies": func(_id, k) -> void: _antwoord(som, k)})
 	return uit

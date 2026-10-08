@@ -14,6 +14,9 @@ extends SceneTree
 ##
 ## Rows are species (hond, poes, konijn, gans), columns are poses.  Not a test:
 ## nothing is compared, the picture is for a human.
+##
+## `--soorten hond,vos,varken` picks the rows; `--soorten alle` is every kind of
+## `ArtGasten.SOORTEN`, the fox and the pig of 2026-10-07 included.
 
 const SOORTEN := ["hond", "poes", "konijn", "gans"]
 
@@ -25,6 +28,7 @@ func _initialize() -> void:
 	var poses: Array = ["rust", "loopA", "loopB", "blijA", "sip", "zit", "lig", "hap2"]
 	var acc := ""
 	var outfits: Array = []
+	var soorten: Array = SOORTEN.duplicate()
 	var i := 0
 	while i < args.size():
 		var a: String = args[i]
@@ -35,6 +39,9 @@ func _initialize() -> void:
 			"--poses": poses = Array(waarde.split(",")); i += 1
 			"--acc": acc = waarde; i += 1
 			"--outfits": outfits = Array(waarde.split(";")); i += 1
+			"--soorten":
+				soorten = ArtGasten.SOORTEN.duplicate() if waarde == "alle" else Array(waarde.split(","))
+				i += 1
 		i += 1
 	var art = root.get_node("Art")
 	var platen: Array = []
@@ -47,7 +54,7 @@ func _initialize() -> void:
 		for o in outfits:
 			kolommen.append([str(poses[0]), str(o)])
 	poses = kolommen
-	for kind in SOORTEN:
+	for kind in soorten:
 		var rij: Array = []
 		for kol in kolommen:
 			var p = art.dier(kind, str(kol[0]), g, str(kol[1]))
@@ -57,7 +64,7 @@ func _initialize() -> void:
 				cel.y = maxi(cel.y, p.h)
 		platen.append(rij)
 	cel += Vector2i(8, 8)
-	var img := Image.create_empty(cel.x * poses.size(), cel.y * SOORTEN.size(), false,
+	var img := Image.create_empty(cel.x * poses.size(), cel.y * soorten.size(), false,
 		Image.FORMAT_RGBA8)
 	img.fill(Color("#FFF7EC"))
 	for r in platen.size():

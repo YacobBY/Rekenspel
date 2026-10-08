@@ -43,7 +43,8 @@ const MATRAS := 7           ## the top of a mattress, in voxels
 const ZWEM_DIEP := ArtEffect.ZWEM_DIEP   ## a swimmer sinks this many voxels
 const SPRING_TIKKEN := 6    ## ticks in the air per jump, at tempo 1
 const SQUASH := 3           ## ticks flat on the stone after landing
-const SPRING_HOOG := {"hond": 5.0, "poes": 6.0, "konijn": 7.0, "gans": 4.0}
+const SPRING_HOOG := {"hond": 5.0, "poes": 6.0, "konijn": 7.0, "gans": 4.0, "vos": 6.0, "varken": 3.5}
+const ZIJ_VARKEN := 0.9     ## the pig's waddle from side to side (`Dier.zij`; the goose's is 1.6)
 ## The hop onto a bed (owner, 2026-09-23: "een animatie dat het dier op het bed
 ## springt wanneer je een vrij bed kiest"): the hinkel's own arc, a little
 ## slower and this much higher, so the child sees the guest jump in.
@@ -964,6 +965,18 @@ func _zaai(d: Dier) -> void:
 	d.vmax = basis * d.tempo
 	d.stap_lengte = 0.26 if d.kind == "konijn" else (0.60 if d.kind == "gans" else 0.46)
 	d.bob_hoog = 5.0 if d.kind == "konijn" else (1.4 if d.kind == "gans" else 2.1)
+	# the two kinds of 2026-10-07, after the HTML's three so those stay exactly
+	# what they were: the fox trots light, a little longer in the stride and
+	# less bouncy than the puppy; the pig waddles in short steps at the
+	# goose's pace with a small bob (and a little sway, `_loop_beeld`)
+	if d.kind == "vos":
+		d.vmax = 1.4 * d.tempo
+		d.stap_lengte = 0.54
+		d.bob_hoog = 1.6
+	elif d.kind == "varken":
+		d.vmax = 1.0 * d.tempo
+		d.stap_lengte = 0.40
+		d.bob_hoog = 0.9
 
 ## The day seeds every animal; call it from `Hotel.morgen()`.
 func zet_dag(dag: int) -> void:
@@ -1991,12 +2004,16 @@ func _loop_beeld(d: Dier) -> void:
 		d.lift = 0.0
 		d.bob = -absf(sin(d.gang * PI)) * d.bob_hoog * 0.35
 		d.zij = sin(d.gang * PI) * 1.0 if d.kind == "gans" else 0.0
+		if d.kind == "varken":
+			d.zij = sin(d.gang * PI) * ZIJ_VARKEN * 0.6
 		return
 	d.pose = "loopA" if int(d.gang) % 2 == 0 else "loopB"
 	d.hoogte = 0.0                  # whoever walks, walks on the floor
 	d.lift = 0.0
 	d.bob = -absf(sin(d.gang * PI)) * d.bob_hoog
 	d.zij = sin(d.gang * PI) * 1.6 if d.kind == "gans" else 0.0
+	if d.kind == "varken":
+		d.zij = sin(d.gang * PI) * ZIJ_VARKEN
 
 ## Jumping deliberately does not glide: it stops and squashes on every stone.
 func _spring_start(d: Dier) -> void:

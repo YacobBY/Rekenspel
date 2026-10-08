@@ -79,14 +79,20 @@ static func mk_gast(id: String, naam: String, kind: String, soort: String,
 		"dagIn": 1, "accessoires": [], "aai": AAI_MAX,
 	}
 
-## world.md §2.1 — the pool, taken in this order by the bell.
+## world.md §2.1 — the pool, taken in this order by the bell.  The two kinds of
+## 2026-10-07 (owner: "maak nog twee extra dieren") come 4th (Vlam the fox) and
+## 7th (Knor the pig): the hotel holds 8 guests, so at the end of the list they
+## would never be seen.  A save keeps its own waiting list (`wachtlijst`), so a
+## hotel that is already running meets them when that list is refilled.
 static func gasten_pool() -> Array:
 	return [
 		mk_gast("boef", "Boef", "hond", "puppy", 2, "Wandeling", 30),
 		mk_gast("muis", "Muis", "poes", "poes", 1, "Spelen", 15),
 		mk_gast("wolkje", "Wolkje", "konijn", "konijn", 1, "Bad", 15),
+		mk_gast("vlam", "Vlam", "vos", "vos", 2, "Wandeling", 30),
 		mk_gast("gerrit", "Gerrit", "gans", "gans", 2, "Plonzen", 15),
 		mk_gast("pip", "Pip", "hond", "puppy", 3, "Wandeling", 30),
+		mk_gast("knor", "Knor", "varken", "varken", 3, "Bad", 15),
 		mk_gast("vlok", "Vlok", "poes", "poes", 2, "Spelen", 15),
 		mk_gast("stamp", "Stampertje", "konijn", "konijn", 1, "Bad", 15),
 		mk_gast("bikkel", "Bikkel", "hond", "puppy", 2, "Wandeling", 30),
@@ -94,7 +100,7 @@ static func gasten_pool() -> Array:
 	]
 
 const FAMILIES := ["Van Dijk", "De Groot", "Bakker", "Jansen", "Visser", "Mulder"]
-const LIDWOORD := {"puppy": "de", "poes": "de", "gans": "de", "konijn": "het"}
+const LIDWOORD := {"puppy": "de", "poes": "de", "gans": "de", "konijn": "het", "vos": "de", "varken": "het"}
 
 ## world.md §3.2 — icon, long text and place keyword per need.  Frozen table;
 ## the short word next to the icon lives in `Hotel.WENSWOORD`.

@@ -294,7 +294,11 @@ swimming, jumping and `per_stap` walks keep their exact points.  Door signs
 stand on their door opening, or — the whole room at once — just above the
 lintel (`Hits._kies_deurborden`); bubbles without an action are see-through
 speech bubbles with a tail (`UiWolk.richt`).
-Guests: four kinds, fifteen HTML poses (golden plates, never change them) plus
+Guests: six kinds (`ArtGasten.SOORTEN`): the HTML's four (hond, poes, konijn,
+gans) plus `vos` (Vlam, 4th in the pool) and `varken` (Knor, 7th) of 2026-10-07,
+which have no HTML golden plate (only `tests/gouden_pixel/gast_{vos,varken}_*`)
+and borrow a voice (`Snd.DIER_STEM`: vos → hond, varken → gans);
+fifteen HTML poses (golden plates, never change them) plus
 drawn extras in `POSE_EXTRA` (arrival, blink `knipper`, passing step `loopM`,
 wag `kwispelA/B`, sad walk `sjokA/B`); `Dier.beeld` is the drawn frame, `Dier.pose`
 the logical one every test reads.  Wardrobe: `ArtGasten.KLEDING` (slots hoofd,

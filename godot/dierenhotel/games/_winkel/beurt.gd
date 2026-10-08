@@ -31,14 +31,19 @@ const WINKEL_NR := {"hoeden": 1, "sjaals": 2, "schoenen": 3, "luxe": 4, "kraam":
 
 ## Wat elke winkel verkoopt, van goedkoop naar duur (k = 1, 2, 3, 4).
 const WAREN := {
-	"hoeden": ["strik", "pet", "strohoed"],
-	"sjaals": ["das", "sjaaltje", "streepsjaal"],
-	"schoenen": ["sokjes", "gympjes", "laarsjes"],
-	"luxe": ["zonnebril", "slofjes", "parels", "kroon"],
+	# the goods of 2026-10-07 stand LAST in every list (owner: "nog extra
+	# accessoires om te kopen bij de kraampjes"): the old three keep their k,
+	# so yesterday's prices stay what they were
+	"hoeden": ["strik", "pet", "strohoed", "feestmuts", "bloem"],
+	"sjaals": ["das", "sjaaltje", "streepsjaal", "bandana", "belletjes"],
+	# groep 4 has only four shoe prices (€2..5), so the shoe stall holds four
+	# things at most; flippers and slippers are souvenirs (one price a pair)
+	"schoenen": ["sokjes", "gympjes", "laarsjes", "regenlaarsjes"],
+	"luxe": ["zonnebril", "slofjes", "parels", "kroon", "tiara", "sterrenbril"],
 	# the souvenirs of the old garden stall (games-b.md §5, moved into the
 	# arcade on 2026-09-24): the same three pieces, so what an animal bought
 	# there is still the thing on the counter here
-	"kraam": ["sjaaltje", "hoedje", "bal"],
+	"kraam": ["sjaaltje", "hoedje", "bal", "pompoen", "goudbal", "zwemvliezen", "pantoffels"],
 }
 
 ## Munten en briefjes per groep, groot naar klein.

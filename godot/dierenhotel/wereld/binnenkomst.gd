@@ -14,7 +14,12 @@ extends RefCounted
 ##   konijn  twitches its ears and hops all the way in little jumps, then one
 ##           big twisting hop at the desk;
 ##   gans    honks and flaps its wings in the doorway, waddles in flapping,
-##           waddles on with a big sway, and flaps once more at the desk.
+##           waddles on with a big sway, and flaps once more at the desk;
+##   vos     (2026-10-07) pricks its ears and sniffs in the doorway, trots in
+##           light and long-strided, and pounces the last stretch onto its spot
+##           — the fox's mouse jump — then sweeps its tail;
+##   varken  (2026-10-07) roots at the doormat with a grunt, waddles in on
+##           short legs with a little sway, and wiggles happily at the desk.
 ## Three to four seconds each, and every one ends in the plain waiting pose, on
 ## the spot the hotel asked for.
 ##
@@ -63,6 +68,10 @@ static func plan(kind: String, r, ingang: Dictionary, doel: Vector2) -> Array:
 			slagen = _konijn(pad)
 		"gans":
 			slagen = _gans(pad)
+		"vos":
+			slagen = _vos(pad)
+		"varken":
+			slagen = _varken(pad)
 		_:
 			slagen = _hond(pad)
 	return _met_deur(slagen, pad[0])
@@ -209,5 +218,62 @@ static func _gans(pad: Array[Vector2]) -> Array:
 	uit.append({"soort": "geluid", "naam": "plop", "hand": 3})
 	uit.append({"soort": "stil", "n": 6, "poses": ["fladder", "blijB"], "per": 2})
 	uit.append({"soort": "pluis", "n": 3, "kl": VEER, "omhoog": true})
+	uit.append({"soort": "stil", "n": 2, "poses": ["rust"], "per": 2})
+	return uit
+
+# ------------------------------------------------- de twee van 2026-10-07
+
+## How far before its spot the fox takes off for its pounce.
+const SPRONG_VOS := 9.0
+
+## The fox: ears up and a sniff in the doorway, a light trot in — the puppy's
+## gait with a longer stride and less bounce — and the last stretch one pounce
+## onto its spot, the fox's mouse jump, with a look round at its top; then a
+## sweep of the tail and the waiting pose.
+static func _vos(pad: Array[Vector2]) -> Array:
+	var uit: Array = [
+		{"soort": "stil", "n": 4, "poses": ["tril"], "per": 4},
+		{"soort": "stil", "n": 4, "poses": ["snuif", "kijk"], "per": 2},
+	]
+	var draf := ["loopA", "loopB"]
+	for i in range(1, pad.size() - 1):
+		uit.append({"soort": "loop", "naar": pad[i], "v": 3.4, "poses": draf,
+			"stap": 4.2, "bob": 1.6})
+	# the take-off: SPRONG_VOS short of the spot on the last leg, or the corner
+	# itself when that leg is shorter
+	var hoek: Vector2 = pad[pad.size() - 2]
+	var doel: Vector2 = pad[pad.size() - 1]
+	var af := doel
+	if hoek.distance_to(doel) > SPRONG_VOS + 2.0:
+		af = doel + (hoek - doel).normalized() * SPRONG_VOS
+		uit.append({"soort": "loop", "naar": af, "v": 3.2, "poses": draf,
+			"stap": 4.2, "bob": 1.6})
+	uit.append({"soort": "geluid", "naam": "hup"})
+	uit.append({"soort": "hup", "naar": doel, "n": 7, "hoog": 7.0, "land": 2, "draai": true})
+	uit.append({"soort": "pluis", "n": 2, "kl": ArtEffect.STER_KL[0], "omhoog": true})
+	uit.append({"soort": "stil", "n": 8, "poses": ["kwispelA", "kwispelB"], "per": 2})
+	uit.append({"soort": "stil", "n": 2, "poses": ["rust"], "per": 2})
+	return uit
+
+## The pig: a look, then it roots at the doormat with its snout down and a
+## grunt, waddles in on short legs — small steps, a small bob, a little sway
+## from side to side at the goose's pace — and at the desk wiggles happily.
+static func _varken(pad: Array[Vector2]) -> Array:
+	var uit: Array = [
+		{"soort": "stil", "n": 3, "poses": ["kijk"], "per": 3},
+		{"soort": "geluid", "naam": "knabbel"},
+		{"soort": "stil", "n": 8, "poses": ["snuif", "hap1"], "per": 2},
+		{"soort": "loop", "naar": pad[1], "v": 1.8, "poses": ["loopA", "loopB"],
+			"stap": 1.5, "bob": 0.8, "zij": 1.4},
+	]
+	for i in range(2, pad.size() - 1):
+		uit.append({"soort": "loop", "naar": pad[i], "v": 2.6,
+			"poses": ["loopA", "loopB"], "stap": 1.7, "bob": 0.8, "zij": 1.4})
+	uit.append({"soort": "loop", "naar": pad[pad.size() - 1], "v": 2.6,
+		"poses": ["loopA", "loopB"], "stap": 1.7, "bob": 0.8, "zij": 1.4, "rem": true})
+	uit.append({"soort": "geluid", "naam": "knabbel"})
+	uit.append({"soort": "stil", "n": 8, "poses": ["blijA", "blijB"], "per": 2,
+		"hup": 1.5, "zij": 1.6})
+	uit.append({"soort": "pluis", "n": 2, "kl": ArtEffect.STER_KL[1], "omhoog": true})
 	uit.append({"soort": "stil", "n": 2, "poses": ["rust"], "per": 2})
 	return uit

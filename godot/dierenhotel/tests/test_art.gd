@@ -160,6 +160,11 @@ func test_gouden_gast_alle_houdingen() -> void:
 func test_gouden_gast_alle_soorten() -> void:
 	Art.zet_stijl("voxel")   # the HTML goldens pin the voxel style (docs/ART-STIJL.md)
 	for kind in ArtGasten.SOORTEN:
+		if not FileAccess.file_exists("res://tests/gouden/gast_%s_rust_g4.png" % kind):
+			# the kinds of 2026-10-07 (vos, varken) have no HTML original and
+			# no golden plate; they are only required to bake
+			waar(Art.dier(kind, "rust", 4) != null, "%s rust bakt" % kind)
+			continue
 		_keur("gast_%s_rust_g4" % kind, Art.dier(kind, "rust", 4))
 	_schrijf_rapport()
 
@@ -248,6 +253,8 @@ func test_modelcensus() -> void:
 		fout("meta.json zonder census")
 		return
 	for kind in ArtGasten.SOORTEN:
+		if not stats.has(kind):
+			continue             # the kinds of 2026-10-07 have no HTML census
 		var c := Art.census(ArtGasten.bouw(kind, "rust", ""))
 		gelijk(c["voxels"], int(stats[kind]["voxels"]), "%s voxels" % kind)
 		gelijk(c["vlakken"], int(stats[kind]["vlakken"]), "%s gecullde vlakken" % kind)

@@ -383,6 +383,11 @@ static func _op_hoofdje(naam: String, voet := true) -> Array:
 			ArtGasten.strik(v, k, y0 + 1)
 		"kroon":
 			ArtGasten.kroon(v, k, y0 + 1)
+		# the goods of 2026-10-07, drawn by the same functions as on the animal
+		"feestmuts":
+			ArtGasten.feestmuts(v, k, y0 + 1)
+		"bloem":
+			ArtGasten.bloem(v, k, y0 + 1)
 	for q in v:
 		q["z"] = int(q["z"]) - 7
 	return v
@@ -452,6 +457,74 @@ static func waar(naam: String) -> Array:
 			for q in v:
 				if int(q["y"]) == 3:
 					q["k"] = ArtGasten.BAL_BAND
+		# ---- the goods of 2026-10-07 (owner: "nog extra accessoires om te kopen
+		# bij de kraampjes"): each one its neighbour's model in its own colours,
+		# so what is on the counter is what the animal wears afterwards
+		"feestmuts", "bloem":
+			return _op_hoofdje(naam)
+		"tiara":
+			# the crown's cushion, with the silver tiara on a gold band (the
+			# band is what shows it on a white animal)
+			ArtVorm.bx(v, -3, 0, -3, 7, 2, 7, KUSSEN)
+			ArtVorm.bx(v, -3, 0, -3, 1, 1, 1, ArtGasten.ZILVER_D)
+			var t: Array = []
+			ArtGasten.kroon(t, [0.0, 0.0, 2.9, 2.9], 0, ArtGasten.TIARA_KL,
+				ArtGasten.TIARA_BAND, ArtGasten.SAFFIER)
+			for q in t:
+				q["z"] = int(q["z"]) - 7
+			_zet(v, t, 0, 2, 0)
+		"bandana":
+			# folded like the scarves, blue with white dots
+			ArtVorm.bx(v, -3, 0, -2, 7, 3, 5, ArtGasten.BANDANA)
+			for q in v:
+				if int(q["y"]) == 2 and (int(q["x"]) + int(q["z"])) % 3 == 0:
+					q["k"] = LUIFEL_WIT
+		"belletjes":
+			# the pearls' cushion, a gold ring with red beads and three bells
+			ArtVorm.bx(v, -4, 0, -4, 8, 1, 8, KUSSEN)
+			for i in 10:
+				var a := float(i) / 10.0 * TAU
+				v.append({"x": int(round(cos(a) * 3.0)), "y": 1, "z": int(round(sin(a) * 3.0)),
+					"k": ArtGasten.GOUD if i % 2 == 0 else ArtGasten.ROBIJN})
+			for i in [0, 3, 7]:
+				var a := float(i) / 10.0 * TAU
+				v.append({"x": int(round(cos(a) * 3.0)), "y": 2, "z": int(round(sin(a) * 3.0)),
+					"k": ArtGasten.GOUD_D})
+		"regenlaarsjes", "pantoffels":
+			# a pair on a little board, like the boots and the slippers
+			var hoog := 4 if naam == "regenlaarsjes" else 2
+			for sz in [-3, 1]:
+				ArtVorm.bx(v, -3, 0, sz, 6, 2, 2, HOUT_L)
+				ArtVorm.bx(v, 1, 0, sz, 2, hoog, 2, HOUT_L)
+				var n0 := v.size() - 2 * 6 * 2 - 2 * hoog * 2
+				for i in range(n0, v.size()):
+					var y := int(v[i]["y"])
+					if naam == "regenlaarsjes":
+						v[i]["k"] = ArtGasten.REGEN_RAND if y == hoog - 1 else ArtGasten.REGEN
+					else:
+						v[i]["k"] = ArtGasten.PANTOFFEL if y == 0 else ArtGasten.PANTOFFEL_L
+		"zwemvliezen":
+			# two flat orange fins with a pocket for the foot at the back
+			for sz in [-4, 1]:
+				ArtVorm.bx(v, -4, 0, sz, 7, 1, 3, ArtGasten.ZWEMVLIES)
+				ArtVorm.bx(v, 1, 1, sz, 2, 2, 3, ArtGasten.ZWEMVLIES.darkened(0.18))
+		"sterrenbril":
+			# the sunglasses' stand, a gold frame and light-blue glass
+			ArtVorm.bx(v, -1, 0, -1, 2, 3, 2, HOUT_D)
+			ArtVorm.bx(v, 0, 3, -4, 1, 3, 3, ArtGasten.GOUD)
+			ArtVorm.bx(v, 0, 3, 1, 1, 3, 3, ArtGasten.GOUD)
+			ArtVorm.verf(v, 0, 0, 3, 4, -3, -3, ArtGasten.STER_GLAS)
+			ArtVorm.verf(v, 0, 0, 3, 4, 2, 2, ArtGasten.STER_GLAS)
+			ArtVorm.bx(v, 0, 5, -1, 1, 1, 2, ArtGasten.GOUD)
+		"pompoen", "goudbal":
+			var kl := ArtGasten.POMPOEN if naam == "pompoen" else ArtGasten.GOUD
+			var band := ArtGasten.POMPOEN_STEEL if naam == "pompoen" else ArtGasten.WIT
+			ArtVorm.ell(v, 0.0, 2.7, 0.0, 2.7, 2.7, 2.7, kl, {"e": 2.2})
+			for q in v:
+				if int(q["y"]) == 3:
+					q["k"] = band
+			if naam == "pompoen":
+				ArtVorm.bx(v, 0, 6, 0, 1, 1, 1, ArtGasten.POMPOEN_STEEL)    # the stalk
 	return v
 
 ## Het cadeaudoosje van de luxe winkel: roze met een gouden lint en een strik.
