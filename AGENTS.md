@@ -196,7 +196,7 @@ main.py                   PyCharm leftover, ignore
 
 | command | does | time |
 |---|---|---|
-| `tools/test.sh` | whole headless suite, own `user://`, fails on ANY engine ERROR line | ≈ 16 min (878 tests, 2026-10-08) |
+| `tools/test.sh` | whole headless suite, own `user://`, fails on ANY engine ERROR line | ≈ 16 min (887 tests, 2026-10-08) |
 | `DH_TEST_FILTER=zwembad tools/test.sh` | only test files whose name contains the filter | 5–20 s |
 | `tools/import.sh` | headless import pass, gated on ERROR lines | ≈ 20 s |
 | `tools/export.sh` | release web export → `godot/dierenhotel/build/web/` (≈ 41 MB) | ≈ 60 s |

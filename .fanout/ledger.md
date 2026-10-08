@@ -432,4 +432,18 @@ P1 | DONE_WITH_CONCERNS | COMMIT 5210b02 (14 files): 🔭 📮 🥁 👂 🔁 �
 P2 | DONE_WITH_CONCERNS | docs: PLAN.md §7 bullet (L1624–1660, 24 OPEN items = the owner's status notes) + batch-10 tasks E1–E6, AGENTS.md (23 games, 15 rooms, §3 suite ≈ 16 min), HOTEL.md, specs games-e.md (new) world.md games-a.md games-d.md art-sound-rules.md, docs/STATUS-2026-10-08.md
 Stand files of all eight worktrees copied into .fanout/scratch/uitbreiding/ (git-ignored) for resumption.
 Next: docs commit by the lead, then the blind verifier V2 on the final tree if the meter allows (< 68 %).
+Docs COMMIT e0a1905 (lead). V2 | 4 | fanout-verifier | r1 | dispatched 02:58 on e0a1905 (blind: owner's words + criteria A–G, plays everything in the export) | last meter read still 62 % @ 23:09Z; lead's estimate ≈ 66–67 % → V2 is the last planned dispatch.
+V2 | PASS_WITH_NOTES (03:35): A–G all PASS on e0a1905; suite 878/0 (1014 s); export rebuilt; all four games played wrong→right; Vlam/Knor seen; 6 of 11 accessories seen, pantoffels worn; painting bought, placed, reloaded. Findings: (1) MEDIUM phone money buttons lost their pictogram (`_geld_keuzes` icoon ""), spec changed to allow it without the owner; (2) speel.js `wachtlijst: []` seeds a second Boef; (3) status docs partly stale (OPEN 8–12 done in 5210b02, export date, commit count, 875→878); (4) tools/export.sh.bak committed by accident.
+V2F | 4 | fanout-worker | r1 | dispatched 03:37: fix finding 1 (pictogram on every money button, strip inside 360×740), 3, 4, koekjes comment; suite; export; commit; STATUS verification section. LAST dispatch of the run (lead's estimate ≈ 67–68 % weekly; meter still 429-locked since 23:09Z).
+V2F | DONE_WITH_CONCERNS | COMMIT aa68551: 💶 above the amount on phone money buttons (test pins it), spec games-d:281 reverted to match, PLAN/STATUS/AGENTS corrected (878 tests, 7 commits), export.sh.bak untracked + ignored, koekjes comment; suite 878/0; export OK; phone screenshots tmp/speel/v2f-*
+Meter 03:46: 5h 7 % (window reset) / 7d 64 %. Room to 70 % → wave 5 (last): three fanout-worker (xhigh) in worktrees from aa68551, patch delivery:
+W5b | 5 | old saves gain Vlam/Knor in the waiting list (State.ontleed migration) + speel/kiek seeding follows the pool | agent (see transcript)
+W5a | 5 | closed stall counters show the goods of the day (shared selection function) | agent (see transcript)
+W5e | 5 | post game: card at once while the helper walks; number plates on the portrait phone | agent (see transcript)
+Then: lead applies the three patches, full suite, commit, STATUS/PLAN touch-up, final report. No further dispatch after that.
+--- wave 5 results (05:35) ---
+W5b | DONE_WITH_CONCERNS | State.ontleed migration (Vlam idx clamp(3−N), Knor clamp(6−N)); speel/kiek seed from the pool; suite 882/0 in worktree
+W5a | DONE_WITH_CONCERNS | Beurt.te_koop shared; Games rust_nu re-reads resting props on hersteek; suite 880/0 in worktree
+W5e | DONE_WITH_CONCERNS | post: card at once, nearest helper walks in background, small plates on phones; 25 tests; suite 881/0 in worktree
+Lead: three patches applied with --3way (clean), full suite 887/0 (995 s), COMMIT 912f34d; export rebuilt. Meter 03:32Z: 5h 16 % / 7d 65 %. RUN CLOSED below 70 % — no further dispatch; fonly stays active.
 
