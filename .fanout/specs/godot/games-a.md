@@ -1093,6 +1093,68 @@ Na een misser: `🔄 Nog een keer` bij de kassa (`Ui.misser`). De spooklabels
 voor de openingsvraag bij de kassa (`💰 Hoeveel euro heb je?`, PLAN N6): een fout
 antwoord geeft dezelfde misser en geen telladder langs de munten.
 
+### 5.10 De decoratietab (port, 2026-10-07)
+
+Eigenaar: "En eventueel ook accessoires om in de kamers te zetten of de kamers te decoreren."
+Het boek heeft een derde tab, **`🩷 Decoratie`** (titel `Decoratie voor je kamer`, de enige
+nieuwe zin), naast `🪑 Meubels` en `⭐ Versiering`.  Negen stukken
+(`games/meubels/spel.gd::VERSIERING_KAMER`, zelfde vorm als `Sommen.Meubels.WINKEL`; types en
+modellen in `Rooms.DECORATIE`, world.md §1.8):
+
+| type | icoon | naam | prijs | plek | model (`art/decor_versiering.gd`) |
+|---|---|---|---|---|---|
+| `kussen` | 🩷 | kussen | €1 | vloer | plat roze kussen |
+| `bloemen` | 🌸 | bloemen | €2 | vloer | potje met drie bolletjes |
+| `slinger` | 🎈 | slinger | €2 | vloer | staander met drie ballonnen |
+| `bankje` | 🛋 | bankje | €3 | vloer | lila bankje |
+| `lamp` | 💡 | lamp | €3 | vloer | staande lamp met een gele kap |
+| `schilderij` | 🖼 (🌙 tot 2026-10-08) | schilderij | €4 | **wand** | gouden lijst, blauwe nachtlucht, gele maansikkel, twee sterretjes |
+| `kastje` | 🕐 | klokkastje | €4 | vloer | kastje met een la en een klokje |
+| `kist` | 🧸 | speelkist | €5 | vloer | speelkist met open deksel en een bal |
+| `aquarium` | 🐠 (💦 tot 2026-10-08) | aquarium | €6 | vloer | glazen bak op een kastje met een visje |
+
+**Betalen met munten**, langs de rekenlus van §5.5–5.6: de kassavraag (`💰 Hoeveel euro heb
+je?`), het boek, de tab, een kaartje (+ / 🛒), afrekenen, de munten op de toonbank, daarna één
+tik op een vrij ✨-vakje.  Alle prijzen liggen in €1..6, binnen het bereik dat de bevroren kern al
+maakt, dus de kassa en de sommen veranderen niet.  De sterrenpagina (§5.2, `VERSIERING`) is
+ongewijzigd: versiering kost sterren, decoratie kost munten.  Kaartjes compact (pictogram en prijs
+naast elkaar boven de knop): op een tablet 6 + 3 op twee rijen, op een telefoon drie rijen; alle
+knoppen in beeld op 1024×768, 768×1024 en 360×740, op 740×360 rolt het blad (zoals het
+meubelblad).  In de code komt de decoratie ná de kern: `_artikel()` zoekt eerst in `WINKEL`.
+
+**Neerzetten.**  Een vloerstuk gaat op een vrij vloervak, zoals de plant (§5.7).  Het
+**schilderij** hangt aan de muur: zijn ✨-vakjes zijn `Rooms.vrije_wandplekken` (op
+schilderijhoogte, minstens 24 uit elkaar).  Een wandplek ligt elke 12 voxels op de achterwand
+(z = 1) en de linkerwand (x = 1) van een binnenkamer; niet in of naast een deur, trap of
+voordeur (+6), niet over een vast wandstuk, niet achter iets dat het in iso zou verbergen (een
+`mijd`-vlak telt als 40 hoog, de balie als 30); geen in de tuin, het zwembad of het dakterras
+(`erf`), de glazen kas en een muur lager dan 45 (`WAND_Y` + `WAND_HOOG` + 4: de postkamer, 44).  Het hangt op `WAND_Y` 28 met `ver` en `aan_wand` (`rot` 1 op de
+linkerwand), is geen hindernis en houdt geen vloervak bezet.  Telling bij de bouw (U7, vóór de
+vier nieuwe kamers): kamer1 6, kamer2 6, speelzaal 3, receptie 1, keuken 2, wasserij 7, winkels 6,
+**gang 0** (drie deuren, twee trappen, posters en kapstok: daar `🚫 bezet`).  Heeft de kamer waar
+je bent geen vrije plek van die soort, dan gaat het schilderij naar een kamer die er een heeft
+(nooit de receptie: inrichten doe je in een kamer); een ruimte zonder plek toont `🚫 bezet`
+(bestaand woord, zonder geluid) boven de doos, ook bij een tik op de doos.
+
+**De kamer kiezen = erheen lopen** (bugfix, geldt voor elk meubel): `Hits` verbergt de
+hotelknoppen zolang een spel loopt, dus de doos kon alleen naar kamer 1.  De plaatsstap leent nu
+elk beeld de deur- en trapbordjes van de kamer waar je bent (`_leen_deuren`, zoals de voerkar),
+met hun eigen tik, en geeft ze terug buiten de plaatsstap; de doos loopt mee (`volg`).
+
+**Bewaren.**  Een decoratiestuk ís een meubelregel `{id, type, kamer, x, z, rot}` in
+`State.s["meubels"]`: het wordt bewaard, hersteld en uit een hotelbestand gelezen precies zoals
+een plant.  Na het neerzetten gaat het boek meteen weer open (bestaand gedrag voor elk meubel;
+het nieuwe stuk is dan alleen achter het waas te zien — open, PLAN.md §4 `E4`).
+
+**Tests:** `games/meubels/test_meubels.gd` — `test_kamerdecoratie_catalogus` (elk pictogram in de
+fonts), `test_kamerdecoratie_vakjes_per_soort`, `test_kamerdecoratie_staat_achterin_het_boek`,
+`test_kamerdecoratie_de_doos_loopt_mee_door_de_deur` (kamer1 → gang → kamer2),
+`test_kamerdecoratie_overleeft_een_herlaad` (wand en vloer via de JSON van `ctx`),
+`test_boek_past_op_elk_scherm` (ook de decoratietab); `tests/test_rooms.gd` —
+`test_wandplekken_hangen_aan_de_muur`, `test_decoratie_staat_op_zijn_soort_plek`,
+`test_een_volle_muur_neemt_niets_meer`; `tests/test_opslag.gd` —
+`test_kamerdecoratie_overleeft_de_opslag` (via het hotelbestand).
+
 ---
 
 ## 6. TOBBE-TIJD (`tobbe.js`)

@@ -115,8 +115,8 @@ pixel art as a backup to compare: it is whole in the code (`Art.STANDAARD = "vox
 switch to it themselves) and the branch `backup/pixelart` holds the game as it was.
 Every number lives in the world (biscuits in a bag, beds in a
 room, coins on a counter, hands on a clock). No quiz screens, no punishment, no
-reading required. Nineteen minigames (§6), the rooms as data (`Rooms.lijst()`,
-eleven of them today), a day cycle with guests, wishes, check-in and a bill at
+reading required. Twenty-three minigames (§6), the rooms as data (`Rooms.lijst()`,
+fifteen of them today), a day cycle with guests, wishes, check-in and a bill at
 checkout, and a wardrobe: what an animal buys in the shops it wears.
 Exported to the web (GitHub Pages, PWA).
 
@@ -155,7 +155,8 @@ godot/dierenhotel/        THE GAME (Godot 4.7.2, GDScript). Everything you edit 
   core/jsgetal.gd         JavaScript integer semantics, reproduced exactly
   spel/minigame.gd        MiniGame base class — the contract of every game (see §5)
   spel/ctx.gd             SpelCtx — the one object a game receives
-  games/<id>/spel.gd      the games (+ spel.tscn, test_<id>.gd, sometimes modellen.gd)
+  games/<id>/spel.gd      the games (+ spel.tscn, test_<id>.gd, often beurt.gd = maths + child
+                          text, sometimes modellen.gd or a big view: bord.gd, kijker.gd, …)
   games/_voorbeeld/       reference game: copy its shape; it is a `stub` (never shown)
   games/_winkel/          the shared shop game (`WinkelSpel`), its maths (beurt.gd) and its
                           tests; no spel.tscn, so the scan skips it (games-d.md)
@@ -165,7 +166,10 @@ godot/dierenhotel/        THE GAME (Godot 4.7.2, GDScript). Everything you edit 
   hotel/prikbord.gd       task board (≤ 3 cards);  hotel/rekening.gd  the checkout bill
   scenes/main.gd          the shell (boots the world, owns the `[probe] …` lines)
   scenes/kamer.gd dier.gd vloer.gd wereldobject.gd   the room in view
-  art/                    voxel models (decor, gasten + the wardrobe, vorm, vloer, effect)
+  art/                    voxel models (decor, gasten + the wardrobe, vorm, vloer, effect);
+                          decor_<thema>.gd per room theme, appended in `ArtDecor._extra()`:
+                          keuken wasserij slaapkamer hotel speelzaal buiten kas winkels, and
+                          (2026-10-07) bakkerij muziek dak post + versiering (room decoration)
   tools/bak_dieren.gd     contact sheet of the guests (poses × outfit) as one PNG, headless
   tests/                  runner + shell tests; tests/gouden/ = golden images + sound oracle
   tools/test.sh           the suite (run via ../../tools/test.sh)
@@ -174,7 +178,8 @@ tools/                    import.sh test.sh export.sh serve.sh probe.js  (the CI
 .github/workflows/        test.yml (import+suite+export on push), pages.yml (deploy)
 .fanout/specs/godot/      BINDING DESIGN: architecture.md, world.md, games-a.md, games-b.md,
                           games-c.md (kas), games-d.md (winkelstraat, kleding, the animation
-                          review), art-sound-rules.md, toolchain.md (grep, do not read whole)
+                          review), games-e.md (bakkerij, muziekkamer, dakterras, postkamer),
+                          art-sound-rules.md, toolchain.md (grep, do not read whole)
 .fanout/tickets/godot/    the tickets the port was built from
 (demos/ removed 2026-09-16 at the owner's request; the HTML/JS original and the
  two older prototypes are in git history at 7945251 — `git show 7945251:demos/dierenhotel/state.js`)
@@ -191,7 +196,7 @@ main.py                   PyCharm leftover, ignore
 
 | command | does | time |
 |---|---|---|
-| `tools/test.sh` | whole headless suite, own `user://`, fails on ANY engine ERROR line | ≈ 95 s |
+| `tools/test.sh` | whole headless suite, own `user://`, fails on ANY engine ERROR line | ≈ 16 min (875 tests, 2026-10-08) |
 | `DH_TEST_FILTER=zwembad tools/test.sh` | only test files whose name contains the filter | 5–20 s |
 | `tools/import.sh` | headless import pass, gated on ERROR lines | ≈ 20 s |
 | `tools/export.sh` | release web export → `godot/dierenhotel/build/web/` (≈ 41 MB) | ≈ 60 s |
@@ -266,17 +271,33 @@ stall moved to the shops on 2026-09-24),
 `zwembad` (outdoor since 2026-09-14; `bad` rect = the lane), `wasserij`,
 `speelzaal`, `kas` (glass house behind the garden), `winkels` (the shopping
 arcade — stalls hoeden, sjaals, schoenen, souvenirs, the photo booth at the end of the
-row, the luxe shop and the mirror).
+row, the luxe shop and the mirror), and the four of 2026-10-07 (owner: "Verzin nog
+vier kamers met activiteiten"; games-e.md, world.md §1.10), appended LAST so every
+older index stays: `bakkerij` (behind the keuken; game `koekjes`), `muziekkamer`
+(behind the speelzaal; `band`), `dakterras` (the roof; `sterren`; `Kamer.nacht`:
+`scenes/vloer.gd` draws a night sky, a plank deck, a railing and lights instead of
+walls) and `postkamer` (behind the kas, not the receptie: no fifth opening fits the
+lobby on a 360×740 phone; `post`).  Fifteen rooms, sixteen room-bar chips: held
+sideways the bar is one row that scrolls, upright it wraps to two rows; the floor
+plan wraps a floor over a second line on a narrow sheet.
+Room decoration (2026-10-07): `Rooms.DECORATIE`, nine types bought with coins on the
+meubelboek's tab 🩷 Decoratie (games-a.md §5.10), kept apart from the six of
+`MEUBEL` so `World.meubeltypen()` stays six; `Rooms.meubel_soort(type)` reads both,
+`plek_soort(type)` is "vloer" or "wand" (the picture hangs on
+`Rooms.vrije_wandplekken`); a piece is an ordinary furniture line in the save.
 **The hotel is a tower** (owner 2026-09-24, "net als Habbo Hotel"; world.md §1.2):
-`Kamer.etage` — 0 receptie, tuin, zwembad, kas (the ground floor is the lobby and
-the outdoors only); 1 gang, kamer1, kamer2, keuken (owner 2026-10-01: "Maak de
-kamers de eerste verdieping"); 2 winkels; 3 speelzaal; −1 (cellar, "K") wasserij.  Doors stay on their floor; ONE stairwell joins the floors
+`Kamer.etage` — 0 receptie, tuin, zwembad, kas, postkamer (the lobby, the outdoors
+and the post room behind the kas); 1 gang, kamer1, kamer2, keuken, bakkerij (owner
+2026-10-01: "Maak de kamers de eerste verdieping"); 2 winkels; 3 speelzaal,
+muziekkamer; 4 dakterras (the top since 2026-10-07); −1 (cellar, "K") wasserij.  Doors stay on their floor; ONE stairwell joins the floors
 (a lift until 2026-09-25, owner: "Ik wil graag de lift vervangen voor een trap"),
 and since 2026-10-01 (owner: "bij de trap tussen etages beweegt misschien een trap
 omhoog en een omlaag") every stair room has a flight per direction:
 `Kamer.trap = {op: {wand, at, breed[, punt]}, af: {…}}` — receptie, gang and
 winkels both (the gang's up flight is round the corner in the back wall, left of
-the kamer 1 door), the speelzaal (top) only `af`, the wasserij (cellar) only `op`.
+the kamer 1 door), the speelzaal both again since 2026-10-07 (its up flight in the
+left wall, z 30..42, climbs to the dakterras), the dakterras (top) only `af`, the
+wasserij (cellar) only `op`.
 `deur_punten[ander]` lies on the flight that goes that way, so `pad` and `World.reis`
 take the right flight like a door (a guest going up leaves by the up flight and
 steps out of the arriving floor's down flight).  `scenes/vloer.gd::_trap` draws each
@@ -301,7 +322,8 @@ and borrow a voice (`Snd.DIER_STEM`: vos → hond, varken → gans);
 fifteen HTML poses (golden plates, never change them) plus
 drawn extras in `POSE_EXTRA` (arrival, blink `knipper`, passing step `loopM`,
 wag `kwispelA/B`, sad walk `sjokA/B`); `Dier.beeld` is the drawn frame, `Dier.pose`
-the logical one every test reads.  Wardrobe: `ArtGasten.KLEDING` (slots hoofd,
+the logical one every test reads.  Wardrobe: `ArtGasten.KLEDING` (26 pieces, eleven
+of them added 2026-10-07 and sold at the stalls, games-d.md §2; slots hoofd,
 nek, poten, ogen, speel; one piece per slot via `World.accessoire`, which also
 writes `g.accessoires`), owned pieces `State.kast_van(id)` / `State.in_kast`.
 
@@ -352,7 +374,7 @@ Sounds: `ctx.snd.plop(i)`, `ja()`, `hoera()` … Particles: `World.spetter`.
 |---|---|---|---|---|
 | `bedden` | Verdeel bedden over de kamers | receptie → kamer1/kamer2 (step 4 of the check-in, no entry button) | adding on: the animals of the chosen room + the new guest; the guest walks there, camera along | games-a §3 |
 | `sleutels` | Het sleutelbord | receptie | number line / neighbours (missing numbers on a key board) | games-a §4 |
-| `meubels` | Het meubelboek | receptie → room | money, the growth loop (buy beds/furniture) | games-a §5 |
+| `meubels` | Het meubelboek | receptie → room | money, the growth loop (buy beds/furniture; since 2026-10-07 a tab 🩷 Decoratie: nine room decorations for coins, the picture on a wall) | games-a §5, §5.10 |
 | `tobbe` | Tobbe-tijd | tuin | fair sharing (division) of soap scoops | games-a §6 |
 | `voerkar` | De voerkar | keuken → rooms | k·N biscuits: every bowl asks its own sum (guests × per), then the guests walk to the bowl and eat there; reference for HOTEL.md §9 | games-a §7 |
 | `zwembad` | Zwembad | zwembad | the pool is a number line 0…L; lanes vary per day (`Sommen.Zwembad`) | games-b §1 |
@@ -367,6 +389,10 @@ Sounds: `ctx.snd.plop(i)`, `ja()`, `hoera()` … Particles: `World.spetter`.
 | `paskamer` | Paskamer | winkels | dressing up from the wardrobe (no sum, no star) | games-d §5 |
 | `spiegel` | Spiegelmaskers | speelzaal (on the easel, `SpiegelBord` shows the mask large) | mirror symmetry: a sum per band (groep 3 `5 − 2`, groep 4 doubling `4 + 4`, groep 5 two fold lines `3 × 4`), then per dot "which of three coloured marks is the mirror image?" | PLAN.md §3.7.2 (M3/M4) |
 | `foto` | Fotohokje | winkels (the booth at the end of the row; `FotoScherm` shows the photo large) | choose at least two animals, one price per animal under each, then how much money goes in: groep 3 `€2 + €2 + €2`, groep 4/5 `3 × €2`; a wrong amount sends them out (the shop rule) | games-d §5a |
+| `koekjes` | Koekjes bakken | bakkerij (the stone oven and the baker's table; `KoekjesBord` shows the table large) | one row of cookies per guest on a tray: groep 3 `2 + 2 + 2` or eggs `3 + 2`, groep 4 `4 × 5` and a double recipe `4 + 4`, groep 5 all tables and sharing with a rest for the cook `14 : 3` | games-e §1 |
+| `band` | De dierenband | muziekkamer (the drum; `BandNotenbalk` lights a note per tick) | one bar per guest, counting ticks: groep 3 one rhythm or two `a + c`, groep 4 bars of 2/5/10 `4 × 5`, groep 5 the tables and the inverse `48 : 8` (how many bars) | games-e §2 |
+| `sterren` | Sterren tellen | dakterras (the telescope; `SterrenKijker` shows the patterns) | stars in patterns: groep 3 dice/ten-frame, two together, up to 10; groep 4 rows of 2/5/10, double; groep 5 ten-frames + ones, blocks of a hundred, rows of s | games-e §3 |
+| `post` | De post sorteren | postkamer (the shelf with four holes, the cart) | the shelf is a number line in four holes: groep 3 1–20 in fives, groep 4 four tens, groep 5 a product on the letter (`7 × 8` → 50 - 59); answers on the strip | games-e §4 |
 
 Each has `test_<id>.gd` next to it (200–1000 lines, run headless with shells
 at four viewports). Owner's rules for zwembad are verbatim in games-b §1.
@@ -377,6 +403,9 @@ differential cases. Changing a number rule means changing the rule, the test
 fingerprint and the spec together — do it only when asked, never by accident.
 Per-game maths lives in the classes `Sommen.Zwembad`, `.Wekker`, `.Hinkel`,
 `.Was`, `.Kraam`, `.Sleutels`, `.Tobbe`, `.Bedden`, `.Meubels`, `.Voerkar`.
+The newer games keep theirs in their own `games/<id>/beurt.gd` (pure and static,
+reading at most `Sommen.Prng`): `_winkel`, `foto`, `spiegel`, `koekjes`, `band`,
+`sterren`, `post`.
 
 ## 7. Tests
 
@@ -422,9 +451,15 @@ Per-game maths lives in the classes `Sommen.Zwembad`, `.Wekker`, `.Hinkel`,
   for that reason.
 - Headless shell at 296×314 segfaults (pre-existing, no such device).
 
-## 9. Current state and backlog (2026-09-16)
+## 9. Current state and backlog (2026-09-16; updated 2026-10-08)
 
-- Everything is on `main`; pushed to origin. GitHub Pages deploy fails until
+- 2026-10-08: the expansion of 2026-10-07 is on `main` — `312f1be` (four rooms +
+  room decoration), `d20824f` (the four games playable), `0ee2813` (vos and varken,
+  eleven accessories, 33 emoji) — and NOT pushed (`main` is four commits ahead of
+  `origin/main` = `8123d05`, the fotohokje's `62f08d9` included).  Suite at `0ee2813`:
+  875 goed, 0 fout (≈ 16 min).  Open items: PLAN.md §7 (2026-10-08) and §4 batch 10
+  (`E1`–`E6`); the owner's summary is `docs/STATUS-2026-10-08.md`.
+- (2026-09-16) Everything was on `main` and pushed. GitHub Pages deploy fails until
   the owner sets Settings → Pages → Source = "GitHub Actions" (owner action).
 - Never tested on a real iPad/Android: chromium device emulation only.
 - 8 of 10 games were never blind-verified (HANDOFF §5).

@@ -372,3 +372,64 @@ Owner's mid-run amendment (14:12): sub-agents allowed (Opus 5.5 xhigh and Fable)
 - Worktrees branch from 8123d05, so the four room agents all add to autoload/rooms.gd independently; merge is the lead's job after the pause.
 ## Scratch
 .claude/worktrees/agent-*/.fanout/scratch/uitbreiding/*.md
+
+# Fanout Ledger — Uitbreiding, run 2: afmaken tot 70 % weeklimiet (2026-10-07 21:10, explicit /fanout; fonly stays active afterwards)
+BASELINE: 62f08d9 (fotohokje committed) | clean except untracked ANALYSIS.md MINIGAMES-RESEARCH.md tools/export.sh.bak | usage 5h 6 % / 7d 52 % at 21:08 (tmp/usage/state.json)
+Owner: "Continue with Opus5.5 agents. I want to use to 70% of my weekly limit continue until you hit that" + "Wanneer je klaar bent en iets is nog niet af, maak dan notities van de status".
+## Interview
+Q1 commits on main per green onderdeel? → "Ja, commit per groen onderdeel (aanbevolen)" (no push). Q2 what is "af"? → "Alles speelbaar": 1) merge + suite green, 2) the four new games playable (no stub) and played in the export, 3) animals/accessories/decoration visible in the export, 4) docs; stop where the budget ends.
+## Plan
+I1a | wave 1 | integrate | U1–U4 + U7 snapshots onto main (rooms.gd, test_rooms, decor files, game scaffolds, meubelboek tab), art/decor.gd::_extra(), test_kamerbalk/test_plattegrond fixes, full suite, commit, export + kiek | main checkout
+G1–G4 | wave 1 | implement | games koekjes/band/sterren/post playable end-to-end, headless turn tests, export + speel.js in the worktree | worktrees U1–U4 (games/<id>/** + own decor file)
+D1 | wave 1 | implement | vos/varken polish: pool positions (arrive within the first 8 guests), arrival/gait, test_hotel/test_opslag/test_ui expectations | worktree U5
+A1 | wave 1 | implement | accessoires: waar_<naam> display models in art/decor_winkels.gd, 360×740 strip width, kraam paws, tiara contrast, test_pixelstijl | worktree U6
+K1 | wave 1 | implement | kamerdecoratie: 9th card (aquarium) layout, phone kaders, _extra() registration instead of the lazy hook | worktree U7
+F1 | wave 1 | implement | fonts: all missing glyphs from the seven stand files into fonts/tekens.txt + rebuilt Emoji/Symbolen subsets via fonts/maak-fonts.sh | new worktree
+I1b | wave 2 | integrate | D1, A1, K1, F1 and the final G1–G4 game dirs onto main; suite; commit; export; speel.js per new game; screenshots
+R/V | wave 3 | review + blind verify the integrated result; docs (PLAN.md §7, specs); status notes for anything unfinished
+## Routing
+I1a, G1–G4 → fanout-worker-max (merge conflicts across five rooms.gd edits; games end-to-end with visuals, reload, lifecycle). D1, A1, K1, F1 → fanout-worker (xhigh): bounded polish lists from the stand files.
+## Tasks
+(see Attempts)
+## Attempts
+I1a | 1 | fanout-worker-max | r1 | dispatched 21:14 | agent a56c8913770df9248 | main checkout
+G1 koekjes | 1 | fanout-worker-max | r1 | dispatched 21:14 | agent ad14841e2ae457bd1 | worktree U1
+G2 band | 1 | fanout-worker-max | r1 | dispatched 21:14 | agent adc1d3668d9d2f0c1 | worktree U2
+G3 sterren | 1 | fanout-worker-max | r1 | dispatched 21:14 | agent ab84da15582014918 | worktree U3
+G4 post | 1 | fanout-worker-max | r1 | dispatched 21:14 | agent a7e3dbbdb71303212 | worktree U4
+D1 dieren | 1 | fanout-worker | r1 | dispatched 21:14 | agent a5aaca734de1c8478 | worktree U5
+A1 accessoires | 1 | fanout-worker | r1 | dispatched 21:14 | agent a2b0f5a8476d069c1 | worktree U6
+K1 kamerdecoratie | 1 | fanout-worker | r1 | dispatched 21:14 | agent a7af18bbf23ea9cd2 | worktree U7
+F1 fonts | 1 | fanout-worker | r1 | dispatched 21:14 | agent a6642b9a16f29cf51 | new worktree; patch → .fanout/scratch/uitbreiding/F1-fonts.diff
+## Decisions
+- Budget guard: poll `python3 ~/.claude/skills/burn-credits/scripts/usage.py check --state tmp/usage/state.json` between waves; no new dispatch above 66 % weekly, hard stop at 70 %; 5-hour window pauses dispatch at 90 %.
+- Pool positions for vos/varken: 4th and 7th arrival (hotel holds 8 guests; positions 10/11 would never show).
+--- wave 1 results (2026-10-08 00:35) ---
+F1 | DONE | 33 glyphs, Emoji.ttf 259→325 kB, test_ui 29/0 | patch .fanout/scratch/uitbreiding/F1-fonts.diff
+D1 | DONE_WITH_CONCERNS | Vlam 4th / Knor 7th, arrivals + gait, suite 764/2 (font-only), test_zwembad:186 touched outside fence; kiek/speel pool lists + voerkar/hinkel/tobbe icons still 🐾
+K1 | DONE_WITH_CONCERNS | 9 decorations buy/place/reload proven in export; Rooms.DECORATIE table, wall spots, borrow door signs during placement; suite 774/1 (versier goldens missing)
+G3 | DONE_WITH_CONCERNS | sterren 15 tests, Kamer.nacht + vloer.gd night, suite 772/9 (all room-count tests)
+G4 | DONE_WITH_CONCERNS | post 22 tests, strip answers, 💌; suite 777/11 (room-count + receptie door tests)
+G2 | DONE_WITH_CONCERNS | band 16 tests, notenbalk Control; suite 772/10 (room-count tests)
+A1 | DONE_WITH_CONCERNS | 11 pieces on counters, money strip fits phones, suite 769/0; closed counters show only 3 goods (games.gd outside fence)
+G1 | DONE_WITH_CONCERNS | koekjes 16 tests, bord.gd; suite 772/10 (room-count + keuken door sign); main diverged on the oven
+I1a | DONE_WITH_CONCERNS | COMMIT 312f1be (76 files, +3138/−121), suite 825/0; postkamer door hangs off the KAS (no fifth receptie door fits 360×740 — 27 layouts tried); plattegrond wraps floors, kamerbalk scrolls on landscape tablet; Rooms.DECORATIE + meubel_soort(); 24 new pixel goldens; 📮→💌, 🔭→⭐ pending the font
+--- wave 2 dispatched 00:40 ---
+I1b | 2 | fanout-worker-max | r1 | main checkout: final games + dakterras night + decoration polish + goldens + suite + commit + play all four games | agent (see transcript)
+I1c | 2 | fanout-worker-max | r1 | worktree from 312f1be: animals + accessories + fonts + kiek/speel pools + icon tables → patch .fanout/scratch/uitbreiding/I1c-dieren-accessoires.diff | agent (see transcript)
+Budget: usage endpoint 429-locked since 22:29 (polled every ≥ 10 min); crew tokens run 2 so far ≈ 4.3 M; wave 2 proceeds, wave 3 (review/verify/docs) only if the meter reads < 66 %.
+--- wave 2 results (2026-10-08 01:58) ---
+I1b | DONE | COMMIT d20824f (40 files, +8055/−1041): four games final (koekjes 16, band 16, sterren 15, post 22 tests), Kamer.nacht + night roof, decoration polish (wall spots, 9 cards, borrow door signs), 11 goldens re-created, suite 871/0, all four games + decoration tab played in the export (tmp/speel/i1b-*) | notes .fanout/scratch/uitbreiding/I1b-integratie.md
+I1c | DONE_WITH_CONCERNS | patch .fanout/scratch/uitbreiding/I1c-dieren-accessoires.diff (42 files, +889/−65) incl. the font patch; own suite 829/0 on 312f1be; export OK; notes I1c-notes.md | applied by the lead on d20824f with --3way: clean, 0 conflict markers, import OK; full suite running → tmp/log/i1c-suite.log
+Usage: 5h 67 % / 7d 62 % at 23:09Z (last successful read; endpoint mostly 429).
+I1c | applied by lead | full suite 875/0 (955 s), COMMIT 0ee2813 (44 files) | 2026-10-08 02:14
+--- wave 3 dispatched 02:16 ---
+P1 | 3 | fanout-worker | r1 | main: glyph switches (🔭 📮 🥁 👂 🔁 🥐 🖼 🐠), ambience for four rooms, "Bal" rename, Knor's ball colour; suite; export; commit
+P2 | 3 | fanout-worker | r1 | docs only: PLAN.md §7 bullet + OPEN list (the owner's status notes), AGENTS.md, specs (new games-e.md, world.md §1, games-d, games-a, art-sound-rules), docs/STATUS-2026-10-08.md
+Seat justification (xhigh, not max): bounded lists with exact file:line pointers from the integrators; no design content.
+--- wave 3 results (2026-10-08 02:55) ---
+P1 | DONE_WITH_CONCERNS | COMMIT 5210b02 (14 files): 🔭 📮 🥁 👂 🔁 🎵 🥐 🖼 🐠, ambience bakkerij=warm muziekkamer=speeldoos dakterras=wind postkamer=tiktak, "goudbal", Knor's ball blue; suite 878/0; export OK; glyphs checked in screenshots tmp/kiek/p1-*, tmp/speel/p1-*
+P2 | DONE_WITH_CONCERNS | docs: PLAN.md §7 bullet (L1624–1660, 24 OPEN items = the owner's status notes) + batch-10 tasks E1–E6, AGENTS.md (23 games, 15 rooms, §3 suite ≈ 16 min), HOTEL.md, specs games-e.md (new) world.md games-a.md games-d.md art-sound-rules.md, docs/STATUS-2026-10-08.md
+Stand files of all eight worktrees copied into .fanout/scratch/uitbreiding/ (git-ignored) for resumption.
+Next: docs commit by the lead, then the blind verifier V2 on the final tree if the meter allows (< 68 %).
+

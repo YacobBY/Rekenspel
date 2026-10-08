@@ -144,6 +144,13 @@ Two post-processes run on every plate:
 | accent | `e` | `#B4744A` | `#F4C8D5` | `#F5B0C2` | `#F6A957` |
 | light | `l` | `#FCE8D3` | `#EDEFF6` | `#FFFBF6` | `#FFFCF4` |
 
+**Port (2026-10-07, owner: "maak nog twee extra dieren"):** two more kinds, no HTML original —
+`vos` b `#EC8752` d `#CF6D3E` e `#7E4D3C` l `#FFF4E8` (a deeper red-orange than the pastel four,
+on purpose: the orange scarf vanished on a paler fox; white cheeks, chest and tail tip) and
+`varken` b `#F6B8C4` d `#E08EA0` e `#D97A92` l `#FBD9DF` (`ArtGasten.PAL`).  Pixel goldens only
+(`tests/gouden_pixel/gast_{vos,varken}_*`); on the pig the HTML ball is blue, `BAL_KL_VARKEN`
+`#6FA8DC` (2026-10-08: pink on pink vanished).
+
 Shared: ink `#4A3B33`, white `#FFF7EC`, eye `#5B4840` (soft dark brown, **never
 black**), nose/mouth `#7E6255`, dog collar (`BAND`) `#6BC5A4`, outline ink
 `rgba(112,90,76,.26)`.
@@ -753,6 +760,13 @@ in `zit`, `draai` looks round at the top), and the instant `geluid`, `pluis` and
 | konijn | twitches its ears (`tril`/`kijk`, 4), hops the whole way in little jumps of at most 10 voxels (4 high, 4 + 1 ticks each), then one big hop where it stands (10 high, 7 ticks) looking round at its top | the fifteen | `hup` on every other hop and on the big one; two sparkles | 58 |
 | gans | looks round (3), a double "gak" and four flaps in the doorway (`fladder`/`blijB`), a puff of feathers, the first steps in flapping (`fladderA`/`fladderB`), a big waddle round the desk (2.2 a tick, sway ±3 instead of ±1.6) flapping on, the last stretch plain (2.5), and three last flaps at the counter | `fladder` `fladderA` `fladderB` | `plop` 3 and `plop` 1 as the "gak", once more at the desk; white feathers (`#FFFCF4`, the goose's light) as rising particles | 58 |
 
+**Port (2026-10-07):** `vos` — ears prick (`tril`), a sniff and a look, a light trot (`loopA/B`,
+3.4 a tick, a gait frame every 4.2), then a mouse-pounce (`SPRONG_VOS` 9 voxels short of his spot,
+`hup` 7 ticks, 7 high, looking round at the top), lands, sweeps his tail (`kwispelA/B`), `rust`.
+`varken` — looks, `knabbel` (grunting and rooting), roots at the mat (`snuif`/`hap1`), waddles
+round the desk (1.8 → 2.6 a tick, sway 1.4), wiggles happily at the counter (`blijA/B`, small
+hops), `rust`.  No new sound buffers (`wereld/binnenkomst.gd` `_vos`, `_varken`).
+
 The ticks are those to the bell's spot `BALIEPLEK(0)` (3.9 s; 3.2–4.5 s to the other two
 spots). Every arrival ends on the spot in `wacht`, pose `rust`, feet on the floor — the pose
 the check-in has always had — within five seconds (`tests/test_binnenkomst.gd`). The door
@@ -1153,6 +1167,10 @@ starts and ends at exactly zero (no click, asserted).
 | `konijn_blij` | a happy hop: two high squeaks, each landing on a thump | `1100→1400→1250` @0 and `1250→1600→1450` @0.17 (0.06 s, 0.20) + thumps `240→90` @0.07, `250→95` @0.24 (0.07 s, 0.28) | −28.9 | −34.7 | 301 ms |
 | `gans_sip` | one low honk that sinks | `330→350→230, 0.44 s, 0.28`, five harmonics that round off, vibrato 2 % at 5 Hz | −30.2 | −35.6 | 412 ms |
 | `gans_blij` | two honks that go up: "hoenk-HOENK!" | `360→450, 0.15 s, 0.30` + `430→560, 0.18 s, 0.32, @0.17` | −28.8 | −33.9 | 342 ms |
+
+**Port (2026-10-07):** the fox and the pig borrow a voice — `Snd.DIER_STEM` = {vos: hond,
+varken: gans}; no new buffers, so the HTML oracle and these rules are unchanged
+(`tests/test_snd_dieren.gd` holds `DIER_STEM` to `ArtGasten.SOORTEN`).
 
 For comparison, the loudest 50 ms of `ja` is −35.4 dBFS (peak −23.8), of `zacht` −36.3
 (−26.6), of `hoera` −30.7 (−21.6). The rules the tests hold them to

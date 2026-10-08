@@ -71,6 +71,10 @@ direction of the camera slide.
 | 8 | `speelzaal` | `Speelzaal` | 🧸 | 114 × 100 | 56 | `hout` | 1.5 | mat, zone `dans` (R2) |
 | 9 | `kas` | `Kas` | 🪴 | 128 × 112 | 40 | `tegel` | 1.25 | **glass walls** (`glas`), terracotta path mat, zone `rijen`, `mijd` (R3, games-c.md §1) |
 
+**Port:** index 10 is `winkels` (2026-09-24, games-d.md §3); 11–14 are the four rooms of
+2026-10-07 — `bakkerij`, `muziekkamer`, `dakterras`, `postkamer` — appended last so every older
+index stays (§1.10).  Fifteen rooms; the room bar has sixteen chips (fifteen + 🗺️).
+
 `loop` is the walking-speed multiplier of that room (the rooms grew 1.5×, the animals did
 not, so a guest crosses a big room in the same wall-clock time as before).
 
@@ -175,6 +179,12 @@ sideways the up sign fits between it and the kamer 1 door; the flight up is in t
 left of the kamer 1 door, where the coat rack hung (the rack hangs between kamer 2 and the
 kitchen now, under the tree poster — between kamer 1 and kamer 2 hangs the clock of `wekker`).
 The speelzaal's flight up beside the climbing frame is gone.
+
+**2026-10-07 — floor 4 and the four new rooms** (§1.10): the tower has six floors now — 4
+`dakterras` (the top), 3 `speelzaal` + `muziekkamer`, 2 `winkels`, 1 `gang`, `kamer1`, `kamer2`,
+`keuken`, `bakkerij`, 0 `receptie`, `tuin`, `zwembad`, `kas`, `postkamer`, −1 `wasserij`.  The
+speelzaal has a flight UP again, in its left wall (x/30, door point (0, 36)), and the dakterras
+only a flight DOWN (z/51, (57, 0)); the rows are in the §1.10 table.
 
 | from | to | wand | at | breed | door point (x, z) | inside (ix, iz) |
 |---|---|---|---|---|---|---|
@@ -549,6 +559,14 @@ layout), `Rooms.vrijVak(kamerId, x, z)`.
 
 A bed added is a **guest added**: beds are the hard guest cap (HOTEL.md §2).
 
+**Port (2026-10-07): room decoration.**  `Rooms.DECORATIE` holds nine more types (`kussen`,
+`bloemen`, `slinger`, `bankje`, `lamp`, `schilderij`, `kastje`, `kist`, `aquarium`; soort `decor`,
+models `versier_*` in `art/decor_versiering.gd`, field `plek` "vloer" or "wand") — a table of its
+own so `MEUBEL` and `World.meubeltypen()` stay the six above (`tests/test_world.gd`).
+`Rooms.meubel_soort(type)` reads `MEUBEL`, then `DECORATIE`; `meubel_zet` takes both.  A "wand"
+piece (the picture) hangs on a WALL place (`Rooms.wandplekken` / `vrije_wandplekken`, `WAND_*`),
+is no obstacle and holds no floor cell.  Bought in the meubelboek: games-a.md §5.10.
+
 ### 1.9 Camera rules (per room)
 
 `world.js` gives **every room its own voxelmaat**; the frame height is the same for all
@@ -581,6 +599,74 @@ rooms (otherwise the page would jump at every door).
   camera jumps. During the slide the **hotspots already sit at their destination**, so a
   tap halfway lands on the right object.
 
+### 1.10 The four rooms of 2026-10-07 (port)
+
+Owner, 2026-10-07: "Verzin nog vier kamers met activiteiten" — each room has its own game
+(games-e.md).  Data as in `autoload/rooms.gd`; every one has `mijd` rectangles where the game's
+resting props stand (world.md §5.1), so no wander place and no bought furniture lands there.
+
+| # | id | naam | icoon | w × d | wand | vloer | loop | etage | special |
+|---|---|---|---|---|---|---|---|---|---|
+| 11 | `bakkerij` | `Bakkerij` | 🥐 (🍪 until 2026-10-08) | 114 × 100 | 56 | `hout` | 1.5 | 1 | `mijd` x 17..43 z 0..20 (the oven of `koekjes`) · x 33..79 z 31..69 (its table) |
+| 12 | `muziekkamer` | `Muziekkamer` | 🎵 (🔔 until 2026-10-08) | 100 × 90 | 50 | `hout` | 1.5 | 3 | round rug = zone `podium` x 22..78 z 22..70 (`#F2C4B0`/`#EBB49E`); `mijd` x 20..80 z 20..72 |
+| 13 | `dakterras` | `Dakterras` | 🌙 | 114 × 100 | 56 | `hout` | 1.5 | 4 | `erf`, **`nacht`**; zone `sterren` = `mijd` x 78..112 z 60..98 (the telescope of `sterren`) |
+| 14 | `postkamer` | `Postkamer` | 📮 (💌 until 2026-10-08) | 96 × 88 | 44 | `hout` | 1.25 | 0 | `kijk` (48, 44); `mijd` x 6..90 z 0..14 (shelf) · x 0..16 z 19..49 (counter) · x 30..52 z 37..51 (cart) |
+
+A plank floor everywhere: through the kitchen's tiles and the kas's tiles you must see a floor
+that room does not have (`test_elke_deur_laat_zien_waar_hij_heen_gaat`).
+
+| from | to | wand | at | breed | door point (x, z) | inside (ix, iz) |
+|---|---|---|---|---|---|---|
+| keuken | bakkerij | x | 3 | 12 | (0, 9) | (8, 9) — the back corner of the left wall (at z 96 its sign and the gang's took each other's place on 768×1024) |
+| bakkerij | keuken | x | 72 | 12 | (0, 78) | (8, 78) |
+| speelzaal | muziekkamer | z | 36 | 12 | (42, 0) | (42, 8) — back wall, between the climbing frame and the flight down |
+| muziekkamer | speelzaal | z | 10 | 12 | (16, 0) | (16, 8) |
+| speelzaal | *trap op* | x | 30 | 12 | (0, 36) | (8, 36) — to the dakterras; clear of the klimrek and the easel's `mijd` |
+| dakterras | *trap af* | z | 51 | 12 | (57, 0) | (57, 8) — the only flight, in a stairhouse |
+| kas | postkamer | x | 82 | 12 | (0, 88) | (8, 88) — the glass left wall, between the watering can and the wheelbarrow |
+| postkamer | kas | x | 60 | 12 | (0, 66) | (8, 66) |
+
+**Why the postkamer hangs off the kas.**  It was built behind the lobby (a door in the receptie's
+left wall).  A fifth opening there found no layout that held on a phone: 27 were tried
+(`tmp/int/receptie-zoektocht.log`; door at z 6, z 60, back wall x 0..8, the board in eight
+places and heights, the bench moved).  Every tablet had a layout that fits, but on 360×740 one
+of these always failed: a door sign without a place, the board's button 74–103 units from its
+board, the name plate 106 from Mispel, or the bell jumping while guests walk
+(`tests/test_hits.gd`, `tests/test_knoppen_staan_stil.gd`).  The receptie is byte-identical to
+before.  Undo = a receptie door and a change in `Hits` and those tests.
+
+**Fixed decor** (the games' own things are resting props, not decor):
+bakkerij — `aanrecht` (56, 6), `kast` (84, 6), `pottenplank` (56, 2, y 18, `ver`), `raam` (104, 1,
+y 25, `ver`), `zak` (14, 24), `keukentafel` (92, 82), `plant` (100, 44);
+muziekkamer — `kussenhoek` (86, 78), `muziekdoos` (6, 84), `wimpel` (70, 1, `ver`);
+dakterras — `lantaarn` (8, 8) and (108, 10), `bloembak` (24, 5) and (94, 5), `bankjez` (7, 44),
+`plant` (8, 70), `kussenhoek` (16, 84);
+postkamer — `klok` (84, 1, y 30, `ver`), `zak` (86, 40), `plant` (90, 66).
+Resting props: `koekjes` oven (30, 10) and table (56, 50); `band` drum (44, 44), xylophone
+(66, 30), upright piano (34, 1), music stand (24, 34); `sterren` telescope (94, 74); `post`
+shelf (48, 1), counter with scale (1, 34), cart (40, 44).
+
+**`Kamer.nacht`** (new field, default false; only the dakterras): `scenes/vloer.gd` draws a
+dark-blue gradient sky with 90 seeded stars and a moon over the whole viewport, under the mesh
+(the sky hangs on the view and does not slide with the camera), and instead of a lawn or two
+walls a bounded plank deck with a stone edge, the tower's two outer walls under it with rows of
+lit windows, a railing along the two back edges (open where a stairhouse stands), a stairhouse
+round every flight with the shared `_trap`, and strings of lights.  Every other room draws
+byte-identically; the pixel backup style rasterises it too.  Always night (an owner question).
+
+**Room bar and floor plan with fifteen rooms (2026-10-07).**  Sixteen chips do not fit one
+tablet row even at the smallest step.  Held sideways the bar keeps ONE row at its smallest step
+and scrolls sideways (`UiKamerbalk._rij_rolt`; a second row would cost the world frame a band,
+990×637 → 990×585, and the check-in card lost its guest); the 🗺️ chip is last and needs a swipe
+on a landscape iPad.  Upright the bar wraps, and every extra row first tries the tighter padding
+and the smaller steps, so an upright tablet keeps two rows (frame 734×788).  The floor plan
+(`ui/plattegrond.gd`) keeps one row per floor, but on a sheet too narrow for its cells a floor
+goes on over a second LINE inside its own band (before a cell drops under `CEL_MIN` or a name
+breaks); a phone shows three cells a line; doors are drawn only between neighbours on one line.
+
+**Ambience** (`Snd.SFEER`, 2026-10-08, existing loops only): bakkerij `warm`, muziekkamer
+`speeldoos`, dakterras `wind`, postkamer `tiktak` (`tests/test_rooms.gd::test_elke_kamer_heeft_een_sfeer`).
+
 ---
 
 ## 2. Guests
@@ -594,19 +680,26 @@ rooms (otherwise the page would jump at every door).
 | `boef` | `Boef` | hond | puppy | 2 | `Wandeling` | 30 |
 | `muis` | `Muis` | poes | poes | 1 | `Spelen` | 15 |
 | `wolkje` | `Wolkje` | konijn | konijn | 1 | `Bad` | 15 |
+| `vlam` | `Vlam` | vos | vos | 2 | `Wandeling` | 30 |
 | `gerrit` | `Gerrit` | gans | gans | 2 | `Plonzen` | 15 |
 | `pip` | `Pip` | hond | puppy | 3 | `Wandeling` | 30 |
+| `knor` | `Knor` | varken | varken | 3 | `Bad` | 15 |
 | `vlok` | `Vlok` | poes | poes | 2 | `Spelen` | 15 |
 | `stamp` | `Stampertje` | konijn | konijn | 1 | `Bad` | 15 |
 | `bikkel` | `Bikkel` | hond | puppy | 2 | `Wandeling` | 30 |
 | `pluis` | `Pluis` | poes | poes | 1 | `Spelen` | 15 |
+
+**Port (2026-10-07, owner: "maak nog twee extra dieren"):** `vlam` (the fox) is 4th and `knor`
+(the pig) 7th — the hotel holds 8 guests, so at the end of the list they would never come;
+eleven in all (`State.gasten_pool()`).  A save keeps its own `wachtlijst`, so a hotel that was
+already running meets them only when that list runs out and is refilled (no migration).
 
 When the waiting list runs out it is refilled from the same pool with ids suffixed
 `_d<dag>`; a still-colliding id gets `_2`, `_3`, … appended.
 
 Families for the thank-you letters, cycled by `famIdx`:
 `Van Dijk`, `De Groot`, `Bakker`, `Jansen`, `Visser`, `Mulder`.
-Articles: `de puppy`, `de poes`, `de gans`, `het konijn`.
+Articles: `de puppy`, `de poes`, `de gans`, `het konijn` (port 2026-10-07: `de vos`, `het varken`).
 Dutch possessive `bezit(naam)`: ends in s/x/z → `naam + "'"`; ends in a/i/o/u/y →
 `naam + "'s"`; otherwise `naam + "s"`. So `Boef → Boefs`, `Pip → Pip's`, `Vlok → Vloks`,
 `Muis → Muis'`. (Used by the frozen planner text only.)
@@ -632,6 +725,11 @@ Four species, each a voxel model built in `art.js` (details in X4). Palette per 
 | poes | `#C9CCDC` | `#A0A6C0` | `#F4C8D5` | `#EDEFF6` |
 | konijn | `#F5E7EC` | `#DCC6D3` | `#F5B0C2` | `#FFFBF6` |
 | gans | `#FDF8EA` | `#E0D8C2` | `#F6A957` | `#FFFCF4` |
+| vos (port, 2026-10-07) | `#EC8752` | `#CF6D3E` | `#7E4D3C` | `#FFF4E8` |
+| varken (port, 2026-10-07) | `#F6B8C4` | `#E08EA0` | `#D97A92` | `#FBD9DF` |
+
+**Port:** six kinds (`ArtGasten.SOORTEN`); the fox and the pig have no HTML original and no
+HTML golden plate, only pixel goldens `tests/gouden_pixel/gast_{vos,varken}_*` (art-sound-rules.md §2.1).
 
 Eyes `#5B4840`, nose/mouth `#7E6255`, dog collar `#6BC5A4`. A body is roughly 30 voxels
 long; the sprite anchor is `dierAnker = [13, 7.5]` (the middle of the four paws).

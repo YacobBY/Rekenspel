@@ -51,6 +51,19 @@ test leest — `rust`, `loopA` of `loopB` blijft.  Ze komen uit de tikteller en 
 van het dier, niet uit zijn generator, dus het dwalen van een dag is precies wat het
 was.  In rustmodus niets van dit alles.
 
+**Zes soorten (2026-10-07, eigenaar: "maak nog twee extra dieren").**  De **vos** (Vlam, de 4e
+gast) en het **varken** (Knor, de 7e) kregen eigen voxelbouwers (`ArtGasten.vos()`,
+`varken()`; de vier HTML-bouwers byte-gelijk), een eigen binnenkomst
+(art-sound-rules.md §11.8), een eigen loopje (`World._zaai`: de vos een lichte draf, het varken
+waggelt, `ZIJ_VARKEN`) en de pictogrammen 🦊 en 🐷 (`Hotel.DIER_ICOON` en de icoontabellen van
+voerkar, hinkel en tobbe).  De vos gebruikt de ankers van de hond; het varken heeft eigen
+garderobe-ankers (`ankers`, `_kop_vrij`, `_ogen_van`), zodat een hoed boven de ogen blijft.  Elk
+kledingstuk is op beide bekeken en getoetst (`test_kleding_blijft_klein_en_de_ogen_vrij`,
+`games/_winkel/test_winkel.gd::test_de_nieuwe_waren` bakt elk nieuw stuk op alle
+`ArtGasten.SOORTEN`).  Geen HTML-goudplaat: alleen pixelgoudplaten
+`tests/gouden_pixel/gast_{vos,varken}_{rust,lig,loopA,loopB,zit,sip,blijA}.png`.  Op het varken
+is de HTML-bal blauw in plaats van roze (`BAL_KL_VARKEN`, 2026-10-08: roze op roze viel weg).
+
 ## 2. De kleding (ArtGasten.KLEDING)
 
 Eén stuk per **slot**; `World.accessoire` zet het oude stuk van dat slot af.
@@ -67,6 +80,30 @@ De sleutel van een plaat blijft `ACC_NAMEN` in vaste volgorde, met de drie van d
 vooraan: elke oude sleutel en gouden plaat is ongewijzigd.  *Nagerekend*
 (`test_kleding_blijft_klein_en_de_ogen_vrij`): elk stuk op elke soort ≤ 4 lagen hoger
 dan het kale dier, ≤ 1/5 van zijn voxels erbij, en geen hoedvoxel op de ogen.
+
+**Elf stukken erbij (2026-10-07, eigenaar: "En nog extra accessoires om te kopen bij de kraapjes
+voor decoratie").**  Achteraan in `KLEDING` en `ACC_NAMEN` (26 stukken; elke oude sleutel en
+plaat ongewijzigd), elk met een uitstalmodel `waar_<naam>` (`art/decor_winkels.gd::waar()`),
+getekend met dezelfde functies en kleuren als op het dier:
+
+| id | naam (strookwoord) | slot | pictogram | op het dier |
+|---|---|---|---|---|
+| `feestmuts` | feestmuts | hoofd | 🥳 (eerst 🎉) | roze/witte kegel met een gouden pompon (`feestmuts()`) |
+| `bloem` | bloem | hoofd | 🌸 | geel hart met vier roze blaadjes (`bloem()`) |
+| `tiara` | tiara | hoofd | ✨ | `kroon()` in donkerder zilver (`TIARA_KL`) op een gouden band met een saffier — licht zilver viel weg op konijn en gans |
+| `bandana` | bandana | nek | 💙 | `sjaaltje()` in blauw, slip 3 |
+| `belletjes` | belletjes | nek | 🔔 | een parelring goud/rood met één gouden belletje onder de kin (de ring alleen viel bij de hond onder het oor weg) |
+| `regenlaarsjes` | regenlaarsjes | poten | 💙 (☔ zit niet in de subset) | `schoenen()` drie lagen blauw met een lichte rand |
+| `zwemvliezen` | zwemvliezen | poten | 🦆 | `schoenen()` één laag zeegroen `ZWEMVLIES` (oranje viel weg op de eigen poten van de gans) |
+| `pantoffels` | pantoffels | poten | 🩰 (eerst 🌙) | `schoenen()` één laag lila |
+| `sterrenbril` | sterrenbril | ogen | 👓 (eerst ⭐) | `zonnebril()` met een gouden montuur en lichtblauw glas |
+| `pompoen` | pompoen | speel | 🎃 | `bal()` oranje met een groene band |
+| `goudbal` | goudbal | speel | 🎾 (eerst ⭐) | `bal()` goud met een witte band; tot 2026-10-08 heette hij "gouden bal", en de strook zei dan "Bal" naast de "⚽ Bal" van de HTML |
+
+Een paar (`veel: true`) is buiten de schoenenkraam één ding met één prijs: alleen
+`winkel == "schoenen"` rekent × poten (`Beurt.sommen`;
+`test_een_paar_is_een_ding_buiten_de_schoenenkraam`).  Zwemvliezen en pantoffels zijn daarom
+souvenirs: de schoenenkraam heeft in groep 4 maar vier prijzen (€2–5) en dus hooguit vier dingen.
 
 **De kast.**  Wat een dier koopt is van hem: `g.kast` (nieuw, optioneel veld; een save
 zonder heeft een lege kast) plus wat hij draagt (`State.kast_van`).  `State.in_kast`.
@@ -149,6 +186,17 @@ het niet als spel.
 | `kraam` | Souvenirkraam | 🎁 Souvenirs, op `souvenirkraam` | sjaaltje, hoedje, bal (de souvenirs van de tuinkraam) |
 | `luxe` | Luxe winkel | 💎 Luxe, op `luxepuiz` | zonnebril, gouden slofjes, parelketting, kroon (drie per dag op de vitrine) |
 
+**Sinds 2026-10-07** verkoopt elke winkel meer (`Beurt.WAREN`, de nieuwe achteraan): hoeden
+strik, pet, strohoed, **feestmuts, bloem** · sjaals das, sjaaltje, streepsjaal, **bandana,
+belletjes** · schoenen sokjes, gympjes, laarsjes, **regenlaarsjes** · luxe zonnebril, gouden
+slofjes, parelketting, kroon, **tiara, sterrenbril** · souvenirs sjaaltje, hoedje, bal,
+**pompoen, goudbal, zwemvliezen, pantoffels**.  Op de toonbank staan er hooguit drie (`toon`).
+Wat het dier al heeft valt weg; zijn er dan meer dan vier over, dan draait de lijst elke dag
+op `(dag + N) mod aantal` en staan de eerste drie er; precies vier: één valt weg op die plek
+(`WinkelSpel._te_koop`).  Zo komt elk ding aan de beurt.  **In rust** (zonder spel) tonen de
+kraampjes nog de eerste drie waren: `Games._zet_rust` leest `definitie().rust` één keer bij het
+opstarten (open, PLAN.md §4 `E2`).
+
 `unlock`: N ≥ 1.  `kan`: er is een gast met een bed (anders geen knop).  Geen taak op het
 prikbord (het bord houdt ≤ 3 kaartjes) — behalve de souvenirkraam, die de wens 🎁 en haar
 kaartje uit de tuin meenam (§4.7).  Wat een dier al heeft ligt niet op de toonbank,
@@ -158,6 +206,12 @@ tenzij hij alles al heeft.
 
 Elke prijs is **k·N + r** (k = hoe duur het ding is, r uit het zaad van de dag),
 teruggevouwen in het bereik van de groep.  Hele euro's, echte munten en briefjes.
+k is de plek in `WAREN` (1, 2, 3, …): de nieuwe dingen staan achteraan (k 4–7), dus de oude
+houden hun k en hun prijzen van gisteren.  Twee dingen op één toonbank kosten nooit hetzelfde
+(behalve schoenen in groep 3).  De elf nieuwe vallen in hetzelfde bereik als hun winkel: hoeden,
+sjaals en souvenirs €2–9 / €6–19 / €12–39 (groep 3 / 4 / 5; zwemvliezen en pantoffels één prijs
+voor het paar), regenlaarsjes €1–2 / €2–5 / €3–9 per laarsje, tiara en sterrenbril €5–10 /
+€20–60 per 5 / €40–98 even (2026-10-07).
 
 | winkel | groep 3 | groep 4 | groep 5 |
 |---|---|---|---|
@@ -222,6 +276,15 @@ bewust níet gebruikt: de winkels bouwen hun eigen strook.)
 Alles ≤ 8 woorden en ≤ 40 tekens met de langste naam (Stampertje).  Nieuw in de
 emoji-subset: 🛍 🧢 👒 🎀 👔 📿 👟 👢 🥿 🕶 💎 🪞 😞.
 
+**2026-10-07.**  Op de kiesstrook staat een ding met het **laatste woord** van zijn naam
+("🧢 Pet €4", "🥿 Slofjes", "🎾 Goudbal"); geen twee dingen van één kraam delen dat woord
+(`test_elk_strookwoord_is_uniek_per_kraam`, 2026-10-08).  Op de geldstrook staat 💶 alleen nog
+in het lange woord ("💶 €5 + €2"), niet als pictogram: zonder dat passen de vier korte woorden
+("10+5+2+1") naast elkaar op 360×740, voor elk bedrag dat een kraam kan vragen
+(`test_elke_strook_past_op_elk_scherm`); de lange strook op een tablet is ongewijzigd.  Klaar
+met een nieuw stuk: "✅ Boef draagt nu de feestmuts!" — elke naam houdt die zin onder de 40
+tekens.  Nieuw in de emoji-subset (F1): 🦊 🐷 👓 🎾 🩰 🥳 (en de tekens van games-e.md).
+
 ### 4.6 Stoppen en herstellen
 
 `ctx.data().stand` = `{gast, dag, N, band, stap, waar, plek, pog, missers, weg, ster,
@@ -242,7 +305,8 @@ de winkel uit (§4.4).  Eén manier van betalen in één straat.  Wat bleef:
 - **het spel-id `kraam`**: de la in de save, de ster van de dag en `ontgrendeld` werken
   door.  Een oude beurt in die la (`stap` `som`/`leg`, `gelegd`, `hand`, `zeg` …) wordt een
   nieuwe keuze voor hetzelfde dier, met zijn `wens`; een afgemaakte beurt blijft af;
-- **de souvenirs zelf**: sjaaltje, hoedje en bal (`Beurt.WAREN["kraam"]`, goedkoop → duur),
+- **de souvenirs zelf**: sjaaltje, hoedje en bal (`Beurt.WAREN["kraam"]`, goedkoop → duur; sinds
+  2026-10-07 gevolgd door pompoen, goudbal, zwemvliezen en pantoffels, drie per dag),
   dezelfde kledingstukken; wat een dier in de tuin kocht is van hem (`State.kast_van` telt
   wat hij draagt) en ligt dus niet op de toonbank.  De tas (🎒, alleen een prijskaartje in
   de tuin) viel weg: geen kledingstuk;
@@ -375,11 +439,17 @@ op de foto, `vertrek`, rustige beweging en headless.  `tests/test_world.gd` — 
 `games/kraam/test_kraam.gd`: de souvenirkraam — de tuin zonder kraam, de vierde kraam in de
 rij, geen loop door een kraam, wens en kaartje, wegsturen en terugkomen, een echte loop van
 de klant, en een oude save (een muntbeurt in de la, een tuinkaartje, een hoedje uit de tuin)
-via `State.lees()`.
+via `State.lees()`; sinds 2026-10-07 zeven souvenirs met drie getoond (de eerste drie zijn de
+oude, de wensbeurt koopt het eerste getoonde, een oud hoedje uit de tuin staat er niet).
 `games/_winkel/test_winkel.gd`: aanmelding, prijzen en sommen per winkel/groep/N/dag,
 betalen met echt geld, elke zin past, een hele beurt in elke winkel en groep via de echte
 knoppen, **verkeerd geld stuurt het dier de winkel uit** (en dezelfde vraag daarna), een
 verkeerde som ook, herladen, de paskamer, de knoppen op vier schermen.
+Sinds 2026-10-07: `test_de_nieuwe_waren` (elk nieuw stuk te koop, met uitstalmodel,
+gebakken op alle zes soorten), `test_elke_strook_past_op_elk_scherm` (elke winkel × groep 3–5 ×
+1–14 gasten × dag 1–7 × ding × 4/2 poten; de breedste drie per scherm echt geplaatst),
+`test_een_paar_is_een_ding_buiten_de_schoenenkraam`; 2026-10-08 `test_elk_strookwoord_is_uniek_per_kraam`
+en `test_de_bal_van_het_varken_is_blauw`.
 `tests/test_world.gd`: één stuk per slot + de save, kleding blijft klein en de ogen vrij,
 knipperen/kwispelen/tussenstap, een blik duurt even, sjokken is langzaam en sip.
 `tests/test_binnenkomst.gd`: de zes nieuwe getekende houdingen.  `tests/test_rooms.gd`,
