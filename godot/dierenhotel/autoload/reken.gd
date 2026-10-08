@@ -36,9 +36,9 @@ extends Node
 ##      door signs dim, and one big pulsing `➕ Rekenen` button stands at the
 ##      foot of the frame.  It starts the best maths there is (`doe_rekenen`).
 ##      Always allowed: that button, whatever leads straight to maths (the
-##      entry of a maths game, the bell, a maths card on the board, the family
-##      at the desk in the evening), answering a card, the game bar, sheet
-##      buttons (closing a sheet), sound on/off.  The moment ends on the next
+##      entry of a maths game, the bell, the board and a maths card on it, the
+##      family at the desk in the evening), answering a card, the game bar,
+##      sheet buttons (closing a sheet), sound on/off.  The moment ends on the next
 ##      right answer that leaves the budget above 0.
 ##   5. Nothing is taken away, nothing is red, no clock is shown.
 ##   6. Everything is kept in its own file next to the hotel choice
@@ -286,6 +286,10 @@ func _altijd(bron: String, spot) -> bool:
 			return true
 	if bron.begins_with("taak:"):
 		return _taak_rekent(bron.substr(5), true)
+	# the board itself is the list of tasks: opening it is no play, and of its
+	# cards only the maths ones go (`taak:` above)
+	if bron == "prikbord" or bron == "chroom:Prikbord":
+		return true
 	# the bell only stands where ringing brings a guest to check in
 	if bron == "bel":
 		return true

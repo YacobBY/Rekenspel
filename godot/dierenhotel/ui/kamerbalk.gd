@@ -302,8 +302,11 @@ func _chip(id: String, icoon: String, naam: String, titel: String,
 		if _veegt:
 			return            # the end of a swipe, not a tap
 		# a room is a free tap: the rekenwacht counts it, and while the child
-		# owes a sum it refuses it (the chip shakes, nothing else happens)
+		# owes a sum it refuses it (the chip shakes, nothing else happens) —
+		# a chip is a toggle, so the refused one must not stay lit beside the
+		# room you are really in
 		if not Reken.laat_door("spel", "chip:" + (id if id != "" else "kaart"), b):
+			ververs()
 			return
 		Snd.tik()
 		if id == "":

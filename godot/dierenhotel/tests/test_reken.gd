@@ -363,10 +363,15 @@ func test_een_geweigerde_tik_doet_niets() -> void:
 	var balk: UiKamerbalk = _h["shell"].kamerbalk
 	waar(balk.gedimd(), "de kamerbalk is gedimd")
 	gelijk(snappedf(balk.modulate.a, 0.01), Reken.DIM, "zichtbaar gedimd")
-	(balk.chips()["tuin"] as Button).pressed.emit()
+	# a chip is a toggle: a real finger lights it before `pressed` arrives
+	var chip: Button = balk.chips()["tuin"]
+	chip.set_pressed_no_signal(true)
+	chip.pressed.emit()
 	await _frames(2)
 	gelijk(World.kamer_nu(), kamer, "een kamerchip brengt je nergens heen")
 	gelijk(_geweigerd(), 2, "ook geweigerd")
+	waar(not chip.button_pressed, "de geweigerde chip blijft niet aan")
+	waar((balk.chips()[kamer] as Button).button_pressed, "de chip van de kamer waar je bent wel")
 	# the chrome
 	var chroom: UiHud = _h["shell"].chroom
 	chroom.munt_badge.pressed.emit()
@@ -394,8 +399,9 @@ func test_een_geweigerde_tik_doet_niets() -> void:
 	await _af()
 
 ## What stays allowed during a moment, and is not counted then: the big
-## button, sound on/off, closing a sheet, a maths card on the board, the entry
-## of a maths game, the bell.  Not allowed: the board's play card.
+## button, sound on/off, the board and closing a sheet, a maths card on the
+## board, the entry of a maths game, the bell.  Not allowed: the board's play
+## card.
 func test_wat_altijd_mag() -> void:
 	alleen_spellen([])
 	await _op()
@@ -410,8 +416,14 @@ func test_wat_altijd_mag() -> void:
 	(_h["shell"].chroom as UiHud).geluid_knop.pressed.emit()
 	gelijk(bool(State.s.get("geluid", true)), not aan, "het geluid gaat om")
 	(_h["shell"].chroom as UiHud).geluid_knop.pressed.emit()
-	# a sheet closes
-	Hotel.bord_open()
+	# the board opens (it is the list of tasks), from the chrome and from the
+	# board in the receptie
+	(_h["shell"].chroom as UiHud).prikbord_knop.pressed.emit()
+	await _frames(2)
+	waar(Ui.blad_open_nu(), "het prikbord gaat open vanuit de bovenbalk")
+	Ui.blad_dicht()
+	await _frames(2)
+	waar(_druk("prikbord"), "het prikbord in de receptie")
 	await _frames(2)
 	waar(Ui.blad_open_nu(), "het prikbord staat open")
 	var sluit := Ui.huidig_blad().find_child("Ksluit", true, false) as BaseButton
