@@ -255,18 +255,23 @@ func test_beurt_op_band_3_4_en_5() -> void:
 			waar(woord.contains("🪨") and woord.contains("sprong"),
 				"%s: elke knop draagt pictogram én woord (%s)" % [wat, woord])
 
-		# pick the size of the verified row, then the right number of hops
-		waar(_tik_keuze("k%d" % int(rij["k"])), "%s: de sprongmaat is aan te tikken" % wat)
+		# since wave 2 the strip also holds a size that does not fit (a real
+		# question), and with two fitting sizes it keeps the larger one: pick the
+		# size of the verified row when it stands there, else the fitting one
+		var k := int(rij["k"]) if maten.has(int(rij["k"])) else int(maten[0])
+		@warning_ignore("integer_division")
+		var hops: int = (int(rij["doel"]) - int(rij["s"])) / k
+		waar(_tik_keuze("k%d" % k), "%s: de sprongmaat is aan te tikken" % wat)
 		Hits.plaats()
 		st = node.proef_stand()
 		gelijk(str(st["fase"]), "aantal", "%s: nu de vraag hoeveel sprongen" % wat)
-		gelijk(int(st["sprong"]), int(rij["k"]), "%s: de gekozen maat staat vast" % wat)
+		gelijk(int(st["sprong"]), k, "%s: de gekozen maat staat vast" % wat)
 		var keuzes := _keuze_woorden()
 		gelijk(keuzes.size(), 4, "%s: vier aantallen om uit te kiezen" % wat)
-		waar(keuzes.has("🪨 %d keer" % int(rij["hops"])),
+		waar(keuzes.has("🪨 %d keer" % hops),
 			"%s: het goede aantal staat erbij (%s)" % [wat, str(keuzes)])
 		var sterren_voor := int(State.s["sterren"])
-		waar(_tik_keuze("n%d" % int(rij["hops"])), "%s: het aantal is aan te tikken" % wat)
+		waar(_tik_keuze("n%d" % hops), "%s: het aantal is aan te tikken" % wat)
 		Hits.plaats()
 
 		st = node.proef_stand()
@@ -367,12 +372,13 @@ func _fout_aantal(node: Node) -> int:
 
 ## The owner, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten zelf
 ## leren rekenen.  Fout antwoord kiezen moet niet beloond worden met hulp maar
-## juist een teleurgesteld dier."  A wrong number of hops, one, two and three
-## times: the animal still hops what was chosen (never punishing) and then he
-## is disappointed — `sip`, `🔄 Nog een keer`, the strip locked for a moment.
-## Nothing helps: no bubble that says he is short or too far, no card that says
-## which way to go, no counting line on the next card.  The card asks the same
-## question as always from where he landed, and the right hops still finish.
+## juist een teleurgesteld dier."  And 2026-10-08: "het moet niet mogelijk zijn
+## om rekenen over te slaan".  A wrong number of hops, one, two and three
+## times: the animal does NOT hop (until 2026-10-08 he hopped what was chosen
+## and the next card asked from where he landed), he is disappointed — `sip`,
+## `🔄 Nog een keer`, the strip locked for a moment — and the SAME card stays,
+## the same four counts in the same order.  Nothing helps: no bubble that says
+## he is short or too far, no counting line.  The right hops still finish.
 func test_geen_hulp_na_een_fout() -> void:
 	_op()
 	var node := await _speel(5, 1, 3)          # band 4: van 10 naar 20 met 2, 5 sprongen
@@ -381,11 +387,13 @@ func test_geen_hulp_na_een_fout() -> void:
 		return
 	var gast := str(node.proef_stand()["gast"])
 	var naam := str(State.gast_van(gast).get("naam", ""))
+	var maten: Array = node.proef_maten()
+	waar(not maten.is_empty() and _tik_keuze("k%d" % int(maten[0])), "een sprongmaat")
+	Hits.plaats()
+	var st0: Dictionary = node.proef_stand()
+	var woorden := str(_keuze_woorden())
 	for i in 3:
 		var wat := "misser %d" % (i + 1)
-		var maten: Array = node.proef_maten()
-		waar(not maten.is_empty() and _tik_keuze("k%d" % int(maten[0])), "%s: een sprongmaat" % wat)
-		Hits.plaats()
 		var kaart := _kaart_knoop()
 		waar(kaart != null and not kaart.hulp_label.visible, "%s: bij de vraag geen telhulp" % wat)
 		var n := _fout_aantal(node)
@@ -394,19 +402,23 @@ func test_geen_hulp_na_een_fout() -> void:
 		Hits.plaats()
 		var st: Dictionary = node.proef_stand()
 		gelijk(int(st["missers"]), i + 1, "%s: geteld" % wat)
-		gelijk(str(st["fase"]), "sprong", "%s: de kaart vraagt van daaruit verder" % wat)
-		waar(int(st["s"]) != int(st["doel"]), "%s: hij staat niet op de trap" % wat)
+		gelijk(int(st["mis"]), i + 1, "%s: de open vraag heeft een misser" % wat)
+		gelijk(str(st["fase"]), "aantal", "%s: dezelfde vraag blijft staan" % wat)
+		gelijk(int(st["s"]), int(st0["s"]), "%s: hij sprong niet (steen %d)" % [wat, int(st["s"])])
+		gelijk(int(st["pogingen"]), int(st0["pogingen"]), "%s: het zaad van de strook bleef" % wat)
+		waar(node.proef_op_start_steen(), "%s: hij staat nog op zijn steen" % wat)
 		waar(is_sip(gast), "%s: het dier is teleurgesteld" % wat)
 		waar(mis_wolk("hk_som"), "%s: met 🔄 Nog een keer" % wat)
 		var strook := Hits.spot("hk_som_keuzes")
 		waar(strook != null and (strook.knoop as UiKeuzes).op_slot,
 			"%s: de strook staat even op slot" % wat)
+		gelijk(str(_keuze_woorden()), woorden, "%s: dezelfde vier aantallen" % wat)
 		waar(Hits.spot("hk_zeg") == null, "%s: geen wolkje met te ver of nog verder" % wat)
 		var regels := _regels()
 		waar(regels.size() == 2 and regels[0].ends_with(
-			"%s staat op %d, trap bij %d" % [naam, int(st["s"]), int(st["doel"])])
-			and regels[1] == "Kies je sprong",
-			"%s: dezelfde vraag als altijd, vanaf zijn steen (%s)" % [wat, str(regels)])
+			"%s springt %d per keer" % [naam, int(st["sprong"])])
+			and regels[1] == "Hoeveel sprongen?",
+			"%s: dezelfde vraag (%s)" % [wat, str(regels)])
 		kaart = _kaart_knoop()
 		waar(kaart != null and not kaart.hulp_label.visible, "%s: geen hulpregel" % wat)
 		for regel in _regels():
@@ -425,25 +437,25 @@ func test_geen_hulp_na_een_fout() -> void:
 	gelijk(int(State.s["sterren"]), 1, "de ster hangt aan het meedoen")
 	await _af()
 
-## Never off the line: an answer that would hop past the end is clamped and the
-## turn simply goes on (games-b.md §3.8).
+## Never off the line (games-b.md §3.8): since 2026-10-08 a wrong count is not
+## hopped at all, so no answer can carry him past the end — he stays on his
+## stone and the turn simply goes on.
 func test_nooit_van_de_lijn_af() -> void:
 	_op()
 	var node := await _speel(2, 1, 3)          # band 3: van 1 naar 3 met 1, 2 sprongen
 	if node == null:
 		await _af()
 		return
-	waar(_tik_keuze("k1"), "sprongmaat 1")
+	waar(_tik_keuze("k%d" % int(node.proef_maten()[0])), "een sprongmaat die past")
 	Hits.plaats()
 	var st: Dictionary = node.proef_stand()
 	gelijk(int(st["E"]), 10, "de lijn loopt tot 10")
-	# the strip never offers more than the line holds, so the clamp is proven on
-	# the state itself: nine hops from 1 with size 1 ends at 10, not at 12
 	waar(_tik_keuze("n%d" % 4), "vier sprongen")
 	Hits.plaats()
 	st = node.proef_stand()
-	gelijk(int(st["s"]), 5, "van 1 naar 5")
+	gelijk(int(st["s"]), 1, "een fout aantal: hij blijft op 1")
 	waar(int(st["s"]) <= int(st["E"]), "en nooit voorbij het einde van de lijn")
+	gelijk(str(st["fase"]), "aantal", "de vraag blijft staan")
 	await _af()
 
 # ============================================================ herstel en stop
@@ -556,12 +568,6 @@ func test_gasten_naast_de_strook_en_terug() -> void:
 
 # ======================================================= het dier van de beurt
 
-## "Een methode om te wisselen met welk dier je de spellen speelt" (owner,
-## 2026-09-23): every guest with a bed may hop, in check-in order; the game
-## still picks its own hopper; the animal on the game bar hands the path to the
-## next one in a fresh turn — the one who stood on the stones is sent off them
-## like every other guest — and the next start hops with the animal the child
-## picked.
 func test_het_kind_kiest_wie_er_hinkelt() -> void:
 	_op()
 	var node := await _speel(5, 1, 3)          # band 4: van 10 naar 20
@@ -574,9 +580,7 @@ func test_het_kind_kiest_wie_er_hinkelt() -> void:
 	gelijk(Games.speler(), eerste, "het spel kiest zelf, zoals altijd")
 	waar(_tik_keuze("k2"), "de sprongmaat 2")
 	Hits.plaats()
-	waar(_tik_keuze("n4"), "vier sprongen, nog niet bij de trap")
-	Hits.plaats()
-	gelijk(int(node.proef_stand()["s"]), 18, "hij staat halverwege het pad")
+	gelijk(str(node.proef_stand()["fase"]), "aantal", "de tweede vraag staat er")
 	var sterren := int(State.s["sterren"])
 	var volgende := Games.volgende_speler()
 	waar(not volgende.is_empty() and volgende != eerste, "er is een volgend dier")
@@ -593,7 +597,8 @@ func test_het_kind_kiest_wie_er_hinkelt() -> void:
 	# who stood on the stones is sent off them, like every guest who is not playing
 	var z: Dictionary = Rooms.get_kamer("tuin").zones["hinkel"]
 	var d = World.dier(eerste)
-	waar(d != null and (d.z >= float(z["z1"]) + 10.0 or not d.punten.is_empty()),
+	waar(d != null and (d.z >= float(z["z1"]) + 10.0 or not d.punten.is_empty()
+		or d.x < float(z["x0"]) - 10.0 or d.x > float(z["x1"]) + 10.0),
 		"%s staat niet meer op de stenen" % eerste)
 	# the next start hops with the animal the child picked
 	Games.stop()
@@ -1165,3 +1170,220 @@ func test_het_trapje_is_zichtbaar() -> void:
 			gelijk(maxf(0.0, sn.size.x) * maxf(0.0, sn.size.y), 0.0,
 				"%s: %s laat het doelbord heel" % [str(kader), id])
 		await _af()
+
+# ===================================================== rekenen eerst (wave 2)
+
+## Wave-2 rule R1 (owner, 2026-10-08: "rekenen moet minstens 50% van de
+## interactie zijn"): every tap of a whole turn by kind, the tap that opened
+## the game not counted; maths must win by at least one.  Both questions of
+## the hinkelpad are maths now: the hop size is graded (`sprong_keuzes` holds a
+## size that does not fit) and so is the count.
+var _teller := {"reken": 0, "spel": 0}
+
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller.get(soort, 0)) + 1
+
+## A size on the strip that does NOT land on the staircase.
+func _fout_maat(node: Node) -> int:
+	var goed: Array = node.proef_maten()
+	for k in node.proef_strook_maten():
+		if not goed.has(int(k)):
+			return int(k)
+	return -1
+
+func _rekenaandeel(n: int, dag: int, kunnen: int, band: int) -> void:
+	_op()
+	_teller = {"reken": 0, "spel": 0}
+	var node := await _speel(n, dag, kunnen)
+	if node == null:
+		await _af()
+		return
+	var st: Dictionary = node.proef_stand()
+	gelijk(int(st["band"]), band, "%d gasten: band %d" % [n, band])
+	# one miss on the hop size first: a wrong tap on a maths strip is maths too
+	var fout := _fout_maat(node)
+	waar(fout > 0, "band %d: er staat een sprong op de strook die niet past" % band)
+	_tel("reken")
+	waar(_tik_keuze("k%d" % fout), "een sprong die niet past")
+	Hits.plaats()
+	gelijk(str(node.proef_stand()["fase"]), "sprong", "band %d: dezelfde vraag" % band)
+	await _wacht_mispauze()
+	var maten: Array = node.proef_maten()
+	_tel("reken")
+	waar(_tik_keuze("k%d" % int(maten[0])), "een sprong die past")
+	Hits.plaats()
+	st = node.proef_stand()
+	@warning_ignore("integer_division")
+	var hops: int = absi(int(st["doel"]) - int(st["s"])) / maxi(1, int(st["sprong"]))
+	_tel("reken")
+	waar(_tik_keuze("n%d" % hops), "het goede aantal")
+	Hits.plaats()
+	gelijk(str(node.proef_stand()["fase"]), "af", "band %d, %d gasten: de beurt is af" % [band, n])
+	var r := int(_teller["reken"])
+	var s := int(_teller["spel"])
+	waar(r >= s + 1, "band %d, %d gasten: rekenen %d >= spel %d + 1" % [band, n, r, s])
+	await _af()
+
+func test_rekenaandeel_band_3() -> void:
+	await _rekenaandeel(1, 1, 3, 3)
+	await _rekenaandeel(8, 2, 2, 3)
+
+func test_rekenaandeel_band_4() -> void:
+	await _rekenaandeel(4, 1, 3, 4)
+	await _rekenaandeel(8, 3, 3, 4)
+
+func test_rekenaandeel_band_5() -> void:
+	await _rekenaandeel(7, 1, 4, 5)
+	await _rekenaandeel(8, 2, 4, 5)
+
+## The hop-size strip is a real question for every band, N 1..8 and a week of
+## days: at least one size on it lands exactly on the staircase, at least one
+## does not divide the distance at all, never one that divides it in more than
+## ten hops (that one is not wrong, so it is not offered), at most four buttons.
+func test_de_sprongmaat_is_een_echte_vraag() -> void:
+	var S: Script = load("res://games/hinkel/spel.gd")
+	for band in [3, 4, 5]:
+		for n in range(1, 9):
+			for dag in range(1, 8):
+				var b := Sommen.Hinkel.beurt(n, band, dag)
+				var afst := absi(int(b["doel"]) - int(b["s"]))
+				var strook: Array = S.sprong_keuzes(afst, band, int(b["s"]) + dag + int(b["band"]))
+				var wat := "band %d N %d dag %d (afstand %d, %s)" % [band, n, dag, afst, str(strook)]
+				var past := 0
+				var niet := 0
+				for k in strook:
+					if S.sprong_past(afst, int(k)):
+						past += 1
+					else:
+						niet += 1
+						waar(afst % int(k) != 0, "%s: %d deelt de afstand niet" % [wat, int(k)])
+				waar(past >= 1, "%s: er past er minstens één" % wat)
+				waar(niet >= 1, "%s: en er past er minstens één niet" % wat)
+				waar(strook.size() <= 3 and strook.size() == Sommen.Hinkel.maten(afst, band).size(),
+					"%s: evenveel knoppen als altijd (%d)" % [wat, Sommen.Hinkel.maten(afst, band).size()])
+				waar(S.sprong_past(afst, int(b["sprong"])) or past >= 1, "%s: de beurt is te spelen" % wat)
+
+## R2 (hop size): a size that does not land on the staircase is a miss — he is
+## disappointed, the SAME strip stays and nothing moves; until 2026-10-08 every
+## size on the strip fitted, so picking one was no maths at all.
+func test_een_sprong_die_niet_past_is_een_misser() -> void:
+	_op()
+	var node := await _speel(5, 1, 3)          # band 4: van 10 naar 20
+	if node == null:
+		await _af()
+		return
+	var gast := str(node.proef_stand()["gast"])
+	var woorden := str(_keuze_woorden())
+	var fout := _fout_maat(node)
+	waar(fout > 0, "er staat een sprong op de strook die niet past (%s)" % woorden)
+	waar(_tik_keuze("k%d" % fout), "die wordt getikt")
+	Hits.plaats()
+	var st: Dictionary = node.proef_stand()
+	gelijk(str(st["fase"]), "sprong", "de vraag blijft staan")
+	gelijk(int(st["sprong"]), 0, "er is geen maat gekozen")
+	gelijk(int(st["missers"]), 1, "een misser")
+	waar(is_sip(gast), "het dier is teleurgesteld")
+	gelijk(str(_keuze_woorden()), woorden, "dezelfde strook")
+	await _af()
+
+## R2: a missed question survives the animal switch on the game bar — the same
+## animal, the same stone, the same question and the same four counts.
+func test_een_gemiste_vraag_blijft_bij_een_wissel() -> void:
+	_op()
+	var node := await _speel(5, 1, 3)
+	if node == null:
+		await _af()
+		return
+	var eerste := str(node.proef_stand()["gast"])
+	waar(_tik_keuze("k2"), "de sprongmaat 2")
+	Hits.plaats()
+	var woorden := str(_keuze_woorden())
+	waar(_tik_keuze("n%d" % _fout_aantal(node)), "een fout aantal")
+	Hits.plaats()
+	waar(Games.wissel_speler(), "het kind tikt het dier op de spelbalk")
+	node = Games._knoop
+	var st: Dictionary = node.proef_stand()
+	gelijk(str(st["gast"]), eerste, "hetzelfde dier, geen nieuw")
+	gelijk(str(st["fase"]), "aantal", "dezelfde vraag")
+	gelijk(int(st["sprong"]), 2, "met dezelfde sprongmaat")
+	World.zet(eerste, "tuin", node.proef_dier_x(float(st["s"])), float(node.proef_pad_maat()["zDier"]))
+	Hits.plaats()
+	await _frames_hk(3)
+	gelijk(str(_keuze_woorden()), woorden, "en dezelfde vier aantallen")
+	await _af()
+
+## R2: a missed question survives a new day with more guests and a higher band
+## (until 2026-10-08 a stand of another day, N or band was never resumed).
+func test_een_gemiste_vraag_blijft_na_een_nieuwe_dag() -> void:
+	_op()
+	var node := await _speel(2, 1, 3)          # band 3
+	if node == null:
+		await _af()
+		return
+	var voor: Dictionary = node.proef_stand()
+	waar(_tik_keuze("k%d" % int(node.proef_maten()[0])), "een sprongmaat die past")
+	Hits.plaats()
+	waar(_tik_keuze("n%d" % _fout_aantal(node)), "een fout aantal")
+	Hits.plaats()
+	Games.stop()
+	State.s["dag"] = int(State.s["dag"]) + 1
+	State.s["kunnen"] = 4
+	waar(Games.start("hinkel"), "de volgende dag start het opnieuw")
+	var na: Dictionary = (Games._knoop as Node).proef_stand()
+	gelijk(int(na["s"]), int(voor["s"]), "hetzelfde startgetal")
+	gelijk(int(na["doel"]), int(voor["doel"]), "hetzelfde doel")
+	gelijk(int(na["band"]), int(voor["band"]), "dezelfde band")
+	gelijk(str(na["fase"]), "aantal", "en dezelfde vraag")
+	await _af()
+
+func _frames_hk(n: int) -> void:
+	for _f in n:
+		await (Engine.get_main_loop() as SceneTree).process_frame
+
+## Found in the export (speel.js, 2026-10-08): after a miss the sulk ran out
+## on the stone, the hopper wandered off, and the next card came without its
+## strip — a child was stuck.  Now he waits on his stone again before the sulk
+## runs out, and the strip with the same counts is there.
+func test_na_een_misser_blijft_hij_op_zijn_steen() -> void:
+	_op()
+	Ui.zet_rust_modus(false)
+	var node := await _speel(5, 1, 3)
+	if node == null:
+		await _af()
+		return
+	waar(_tik_keuze("k%d" % int(node.proef_maten()[0])), "een sprongmaat die past")
+	Hits.plaats()
+	var woorden := str(_keuze_woorden())
+	waar(_tik_keuze("n%d" % _fout_aantal(node)), "een fout aantal")
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 4500:
+		await boom.process_frame
+	Hits.plaats()
+	waar(node.proef_op_start_steen(), "na het mopperen staat hij nog op zijn steen")
+	gelijk(str(node.proef_stand()["fase"]), "aantal", "dezelfde vraag")
+	gelijk(str(_keuze_woorden()), woorden, "met dezelfde strook")
+	await _af()
+
+## A hopper who is somewhere else while a question is open (a wait that ran
+## out, another order) is fetched back to his stone, and the card with its
+## strip comes again when he stands there.
+func test_wie_van_zijn_steen_loopt_wordt_teruggehaald() -> void:
+	_op()
+	var node := await _speel(5, 1, 3)
+	if node == null:
+		await _af()
+		return
+	var st: Dictionary = node.proef_stand()
+	var gast := str(st["gast"])
+	World.zet(gast, "tuin", node.proef_dier_x(float(st["s"])) + 30.0, 100.0)
+	waar(not node.proef_op_start_steen(), "hij staat even ergens anders")
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - t0 < 4000 and not (node.proef_op_start_steen()
+			and Hits.spot("hk_som_keuzes") != null):
+		await boom.process_frame
+		Hits.plaats()
+	waar(node.proef_op_start_steen(), "hij is teruggehaald naar zijn steen")
+	waar(Hits.spot("hk_som_keuzes") != null, "en de strook staat er weer")
+	await _af()

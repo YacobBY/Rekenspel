@@ -114,18 +114,27 @@ func start(_c: SpelCtx) -> void:
 	var wil := ctx.voorkeur(spelers())
 	# Resume only when the saved turn is still THIS turn — and the turn of the
 	# picked animal: another one's is dropped (`weg`).
-	var hervat := not (S.is_empty() or g.is_empty() or int(S["dag"]) != dag
+	# An open question that was missed comes back UNCHANGED (wave 2, R2): after
+	# a new day, another N or band, an animal switch — the mask of the turn is
+	# rebuilt from the turn's own N, band and day, only the animal may change.
+	var vast := open_misser(S)
+	var hervat := vast or not (S.is_empty() or g.is_empty() or int(S["dag"]) != dag
 			or int(S["N"]) != n or int(S["band"]) != band or _stap() == "af")
 	var weg := ""
 	if hervat and not wil.is_empty() and wil != _gast_id():
 		weg = _gast_id()
-		hervat = false
+		if vast:
+			S["gast"] = wil
+		else:
+			hervat = false
+	elif vast and g.is_empty():
+		S["gast"] = str(kies[(dag + n) % kies.size()].get("id", ""))
 	if not hervat:
 		g = kies[(dag + n) % kies.size()] if wil.is_empty() else ctx.state.gast_van(wil)
 		S = _nieuwe_stand(g, n, band, dag)
 	d["stand"] = S
 	ctx.speelt(_gast_id())
-	O = Beurt.opzet(n, band, dag)
+	O = Beurt.opzet(int(S["N"]), int(S["band"]), int(S["dag"]))
 	S["i"] = clampi(int(S["i"]), 0, (O["doel"] as Array).size())
 	_t0 = Time.get_ticks_msec()
 	_kaart = null
@@ -189,6 +198,11 @@ static func _normaliseer(st: Dictionary) -> Dictionary:
 	var stap := str(st.get("stap", "som"))
 	st["stap"] = stap if stap in ["som", "plak", "af"] else "som"
 	return st
+
+## Does this saved turn hold a question that was answered wrong and is still
+## open?  Then nothing may replace it (wave 2, R2).
+static func open_misser(st: Dictionary) -> bool:
+	return not st.is_empty() and str(st.get("stap", "")) != "af" and int(st.get("pog", 0)) > 0
 
 func _stap() -> String:
 	return str(S.get("stap", ""))
@@ -268,6 +282,9 @@ func _kaart_neer() -> void:
 			o["icoon"] = Beurt.ICOON_PLAK
 			o["regel"] = Beurt.T_PLAK
 			o["keuze_titel"] = "kies een kleur"
+			# the mirror pick is graded geometry (meetkunde): every tap on
+			# this strip counts as maths (wave 2, R1/R4)
+			o["reken"] = true
 			var keuzes: Array = []
 			for j in Beurt.MERKEN.size():
 				var m: Dictionary = Beurt.MERKEN[j]
@@ -356,6 +373,7 @@ func _kies(j: int) -> void:
 		_meld()
 		return
 	_bezig = true
+	ctx.reken_goed()
 	S["pog"] = 0
 	S["i"] = i + 1
 	ctx.snd.sticker()

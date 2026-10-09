@@ -7,12 +7,18 @@ extends MiniGame
 ## a start stone; the child first picks the HOP SIZE and then the NUMBER OF
 ## HOPS, and the animal hops from stone to stone, counting along.
 ##
-## A wrong number of hops is hopped too (never punishing), and then the animal
-## is disappointed — `sip` with `🔄 Nog een keer` — and the card simply asks
-## the hop size again from the stone he landed on.  No help follows a miss
-## (owner, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten zelf
-## leren rekenen"): no counting line on the card, no bubble that says he is
-## short or too far, no card that says which way to hop.
+## Both questions are maths (owner, 2026-10-08: "het moet niet mogelijk zijn om
+## rekenen over te slaan en rekenen moet minstens 50% van de interactie zijn"):
+## the hop-size strip holds the sizes that land exactly on the staircase AND at
+## least one that does not divide the distance at all (`sprong_keuzes`), so
+## picking a size is a real question; and a wrong NUMBER of hops is no longer
+## hopped — he does not move, he is disappointed — `sip` with `🔄 Nog een
+## keer` — and the SAME card stays.  No help follows a miss (owner, 2026-09-24:
+## "Nee geef geen hulp na fouten.  Kinderen moeten zelf leren rekenen"): no
+## counting line on the card, no bubble that says he is short or too far, no
+## card that says which way to hop.  A question with a miss comes back
+## unchanged after any exit: a reload, a new day, a change of N or band, or
+## another animal picked on the game bar (`start`).
 ##
 ## Every number comes from `Sommen.Hinkel.*` (architecture.md §2, F1): this file
 ## never re-implements a generator.  What lives here is the world: two voxel
@@ -95,6 +101,7 @@ var _kaart: Ui.Kaart = null
 var _opzij: Array[String] = []      ## guests we sent off the strip
 var _hop_nr := 0                    ## every hop series gets a number
 var _wacht_loopt := false           ## exactly ONE wait for the guest at a time
+var _mis_nr := 0                    ## every miss gets a number (`_mis`)
 var _t0 := 0
 
 # =================================================================== aanmelding
@@ -197,8 +204,16 @@ func start(_c: SpelCtx) -> void:
 			or int(_s.get("band", 0)) != Sommen.Hinkel.band_of(band)
 			or str(_s.get("gast", "")).is_empty()
 			or State.gast_van(str(_s.get("gast", ""))).is_empty())
+	# ... except a question that was missed: it comes back unchanged after a new
+	# day, a change of N or band, and whoever the child picks on the game bar
+	# (wave-2 rule R2: no easier question in its place)
+	var mis_open := int(_s.get("mis", 0)) > 0 and str(_s.get("fase", "")) != "af" \
+			and not str(_s.get("gast", "")).is_empty() \
+			and not State.gast_van(str(_s.get("gast", ""))).is_empty()
+	if mis_open:
+		hervat = true
 	var weg := ""
-	if hervat and not wil.is_empty() and wil != str(_s.get("gast", "")):
+	if hervat and not mis_open and not wil.is_empty() and wil != str(_s.get("gast", "")):
 		weg = str(_s.get("gast", ""))
 		hervat = false
 	if not hervat:
@@ -258,7 +273,7 @@ func _nieuwe_stand(n: int, band: int, dag: int, gast_id: String) -> Dictionary:
 		"stap": int(b["stap"]), "gast": gast_id, "s": int(b["s"]),
 		"doel": int(b["doel"]), "sprong": 0, "n": int(b["n"]), "hops": 0,
 		"tel": 0, "fase": "sprong", "melding": "",
-		"missers": 0, "pogingen": 0, "ster": 0, "wens": 0}
+		"missers": 0, "pogingen": 0, "ster": 0, "wens": 0, "mis": 0}
 
 # =================================================================== de gasten
 
@@ -652,8 +667,30 @@ func _houd_vrij() -> void:
 func _houd_vrij_lus() -> void:
 	while actief and not _s.is_empty() and str(_s.get("fase", "")) != "af":
 		_houd_vrij()
+		_houd_hinkelaar()
 		if not await na(VRIJ_S):
 			break
+
+## Is one of the two questions open (the hop size or the count)?
+func _vraag_open() -> bool:
+	var fase := str(_s.get("fase", ""))
+	return fase == "sprong" or fase == "aantal"
+
+## While a question is open the hopper stays on his stone: waiting there, his
+## wait is renewed (a `wacht` that runs out lets an animal wander off); found
+## somewhere else, he is fetched back (`_teken` → `_haal_gast`).
+func _houd_hinkelaar() -> void:
+	if _s.is_empty() or not _vraag_open() or _wacht_loopt:
+		return
+	var g := _gast()
+	if g.is_empty():
+		return
+	if not _op_start_steen():
+		_teken()
+		return
+	var d = ctx.wereld.dier(str(g["id"]))
+	if d != null and str(d.staat) == "wacht":
+		ctx.wereld.blijf(str(g["id"]), "wacht")
 
 ## `stop()` gives them their own way back.
 func _laat_los() -> void:
@@ -669,8 +706,78 @@ func _afstand() -> int:
 func _richting() -> int:
 	return 1 if int(_s["doel"]) >= int(_s["s"]) else -1
 
+## The sizes that land EXACTLY on the staircase and stand on the strip.
 func _maten() -> Array[int]:
-	return Sommen.Hinkel.maten(_afstand(), int(_s["band"]))
+	return sprong_passend(_afstand(), int(_s["band"]))
+
+## The whole hop-size strip: the fitting sizes and the ones that do not fit.
+func _strook_maten() -> Array[int]:
+	return sprong_keuzes(_afstand(), int(_s["band"]), _sprong_zaad())
+
+func _sprong_zaad() -> int:
+	return int(_s["s"]) + int(_s["dag"]) + int(_s["band"])
+
+## Does a hop of `k` land exactly on the target, in one to ten hops?
+static func sprong_past(afst: int, k: int) -> bool:
+	if k < 1 or afst < 1 or afst % k != 0:
+		return false
+	@warning_ignore("integer_division")
+	var n := afst / k
+	return n >= 1 and n <= Sommen.Hinkel.MAX_HOP
+
+## The fitting sizes of the strip (wave 2, 2026-10-08): `Sommen.Hinkel.maten`
+## (at most three, first/middle/last), one fewer when a size that does not fit
+## stands beside them, so the strip keeps exactly as many buttons as it always
+## had (one more covered the number line on a 740 x 360 phone): three stay the
+## first and the last, two stay the larger one — a hop of 1 always fits, so
+## keeping it would make the answer "1" every time.
+static func sprong_passend(afst: int, band: int) -> Array[int]:
+	var uit: Array[int] = []
+	for k in Sommen.Hinkel.maten(afst, band):
+		if sprong_past(afst, int(k)):
+			uit.append(int(k))
+	if uit.is_empty():
+		uit = Sommen.Hinkel.maten(afst, band)       # never an empty strip
+	if _sprong_mis(afst, band).is_empty():
+		return uit
+	if uit.size() > 2:
+		var twee: Array[int] = [uit[0], uit[uit.size() - 1]]
+		uit = twee
+	elif uit.size() == 2:
+		var een: Array[int] = [uit[1]]
+		uit = een
+	return uit
+
+## The sizes that do NOT divide the distance: the band's own sizes first, and
+## for groep 3/4 (whose own sizes all divide some distances) the tables of 3
+## and 4 that groep 4 knows (IDEAS.md).  Never a size that divides the
+## distance but needs more than ten hops — that one is not wrong, so it is
+## simply not offered.
+static func _sprong_mis(afst: int, band: int) -> Array[int]:
+	var b := Sommen.Hinkel.band_of(band)
+	var uit: Array[int] = []
+	for k in Sommen.Hinkel.BAND[b]["sprongen"]:
+		if afst % int(k) != 0:
+			uit.append(int(k))
+	if uit.is_empty() and b >= 4:
+		for k in [3, 4]:
+			if afst % k != 0:
+				uit.append(k)
+	return uit
+
+## The hop-size strip: the fitting sizes plus one that does not fit, in
+## counting order — as many buttons as always.  Which non-fitting one is fixed
+## by `zaad` (start stone, day and band), so the same question always shows the
+## same strip.
+static func sprong_keuzes(afst: int, band: int, zaad: int) -> Array[int]:
+	var uit: Array[int] = sprong_passend(afst, band)
+	var mis := _sprong_mis(afst, band)
+	if not mis.is_empty() and uit.size() < 4:
+		var k := mis[posmod(zaad, mis.size())]
+		if not uit.has(k):
+			uit.append(k)
+	uit.sort()
+	return uit
 
 func _aantal_goed(k: int) -> int:
 	@warning_ignore("integer_division")
@@ -835,7 +942,7 @@ func _teken_kaart() -> void:
 	var keuzes: Array = []
 	if _op_start_steen() and fase == "sprong":
 		var terug := _richting() < 0
-		for k in _maten():
+		for k in _strook_maten():
 			var kk := int(k)
 			keuzes.append({"id": "k%d" % kk, "icoon": "🪨",
 				"tekst": ("terug %d" % kk) if terug else ("sprong %d" % kk),
@@ -857,6 +964,8 @@ func _teken_kaart() -> void:
 		o["regel2"] = str(zin[1])
 	if not keuzes.is_empty():
 		o["keuzes"] = keuzes
+		# both strips are graded questions: their taps are maths (wave-2 R4)
+		o["reken"] = true
 	# At the end there is no sum any more: "van 7 naar 7" is an empty statement,
 	# and the card carries only "✅ Precies op de trap!" with a tick.
 	_kaart = ctx.ui.somkaart(plek, "" if fase == "af" else _som_regel(), o)
@@ -865,6 +974,14 @@ func _teken_kaart() -> void:
 
 func _teken() -> void:
 	if not actief or _s.is_empty():
+		return
+	# a question needs its hopper on his stone (the strip only stands there
+	# then): a sulk or a long wait that ran out lets an animal wander off, and
+	# then he is fetched back and the card comes again when he stands there —
+	# never a card without its strip, never a child stuck (wave 2)
+	if _vraag_open() and not _wacht_loopt and not _gast().is_empty() \
+			and not _op_start_steen():
+		_haal_gast()
 		return
 	ctx.hotspots.wis_alles()
 	# nothing of the turn while he walks to his stone (`_haal_gast`)
@@ -901,9 +1018,17 @@ func _meld_probe() -> void:
 
 # =================================================================== spelen
 
+## The hop size is a real question since 2026-10-08: a size that does not land
+## on the staircase is a miss — he is disappointed and the same strip stays —
+## and only a fitting size opens the count question.
 func _kies_sprong(k: int) -> void:
 	if _s.is_empty() or str(_s.get("fase", "")) != "sprong":
 		return
+	if not sprong_past(_afstand(), k):
+		_mis("sprong", k)
+		return
+	_s["mis"] = 0
+	ctx.reken_goed()
 	_s["sprong"] = k
 	_s["n"] = _aantal_goed(k)
 	_s["fase"] = "aantal"
@@ -923,13 +1048,41 @@ func _antwoord(n: int) -> void:
 		_haal_gast()
 		return
 	var goed := _aantal_goed(int(_s["sprong"]))
-	_s["pogingen"] = int(_s["pogingen"]) + 1
 	if n != goed:
-		_s["missers"] = int(_s["missers"]) + 1
-	ctx.state.tel(n == goed, Time.get_ticks_msec() - _t0)
-	# ALSO on a wrong answer the animal hops the chosen number and the card asks
-	# on from there (architecture.md §13 Q-X3-8: never punishing, no attempt cap)
+		# a wrong count is no longer hopped (owner, 2026-10-08: "het moet niet
+		# mogelijk zijn om rekenen over te slaan"): he stays on his stone and
+		# the same card stays — `pogingen` does not move, so neither does the
+		# order of its four counts
+		_mis("aantal", n)
+		return
+	_s["pogingen"] = int(_s["pogingen"]) + 1
+	_s["mis"] = 0
+	ctx.reken_goed()
+	ctx.state.tel(int(_s["missers"]) == 0, Time.get_ticks_msec() - _t0)
 	_hop(n)
+
+## A wrong hop size or a wrong count: counted, saved, and the animal of the
+## turn is disappointed beside the same card (`Ui.misser`).  Nothing moves and
+## nothing helps.  `mis` counts the misses on the question that is open now.
+func _mis(vraag: String, n: int) -> void:
+	_s["missers"] = int(_s["missers"]) + 1
+	_s["mis"] = int(_s.get("mis", 0)) + 1
+	State.bewaar()
+	print("[probe] hk mis vraag=", vraag, " n=", n, " missers=", _s["missers"])
+	var g := _gast()
+	ctx.ui.misser(_kaart, "" if g.is_empty() else str(g["id"]))
+	if g.is_empty():
+		return
+	# the sulk (`Ui.SIP_TIKKEN`, 2 s) must not run out on the stone — a pose
+	# that runs out lets him wander off: waiting again just before it does
+	_mis_nr += 1
+	var mijn := _mis_nr
+	if not await na(1.4):
+		return
+	if mijn != _mis_nr or _s.is_empty() or not _vraag_open() or _wacht_loopt:
+		return
+	if _op_start_steen():
+		ctx.wereld.blijf(str(g["id"]), "wacht")
 
 ## The animal hops stone by stone; every landing counts on its own tag and
 ## sounds `hup`.
@@ -1077,6 +1230,10 @@ func proef_stand() -> Dictionary:
 
 func proef_maten() -> Array[int]:
 	return _maten() if not _s.is_empty() else [] as Array[int]
+
+## The whole hop-size strip (fitting and not fitting), as the child sees it.
+func proef_strook_maten() -> Array[int]:
+	return _strook_maten() if not _s.is_empty() else [] as Array[int]
 
 func proef_pad_maat() -> Dictionary:
 	return _pad_maat()

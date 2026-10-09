@@ -460,12 +460,14 @@ func _beurt_per_band(n_gasten: int, band: int) -> void:
 
 ## The owner, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten zelf
 ## leren rekenen.  Fout antwoord kiezen moet niet beloond worden met hulp maar
-## juist een teleurgesteld dier."  A stroke that is too short, one, two and
-## three times: he swims what the answer bought, and then he sulks in the water
-## (`sip`) with `🔄 Nog een keer` beside him — no bubble with the metres that
-## are left, no help line on the next card, no marker lighting up, no pale
-## marker in the water.  Never punishing either: no star less, the turn goes
-## on, and the right answers still reach the other side.
+## juist een teleurgesteld dier."  And 2026-10-08: "het moet niet mogelijk zijn
+## om rekenen over te slaan".  A stroke that is too short, one, two and three
+## times: he does NOT swim, he sulks where he is (`sip`) with `🔄 Nog een keer`
+## beside him, and the SAME card stays with the same four numbers in the same
+## order — no bubble with the metres that are left, no help line, no marker
+## lighting up, no pale marker in the water.  Never punishing either: no star
+## less, and the right answers still reach the other side.  (Until 2026-10-08
+## he swam what the wrong answer bought and a new card followed.)
 func test_geen_hulp_na_een_fout() -> void:
 	_op()
 	var gasten := _gasten(4)
@@ -480,19 +482,26 @@ func test_geen_hulp_na_een_fout() -> void:
 			break
 		var wat := "misser %d" % (i + 1)
 		var p_voor := int(_beurt()["p"])
+		var leg_voor := int(_beurt()["leg"])
+		var waarden_voor := str(_waarden())
+		var kaart_voor := _kaart_knoop()
+		var d0 = World.dier(gast)
+		var x_voor: float = d0.x
+		waar(await _wacht(_strook_open), "%s: de strook is open" % wat)
 		waar(_druk(kort), "%s: de te korte knop %d is aan te tikken" % [wat, kort])
 		waar(await _wacht(func() -> bool: return is_sip(gast)), "%s: hij wordt sip" % wat)
 		missers += 1
-		gelijk(int(_beurt()["p"]), p_voor + kort, "%s: hij zwom zo ver als gevraagd" % wat)
-		gelijk(int(_beurt()["misser"]), missers, "%s: geteld" % wat)
-		waar(mis_wolk("", gast), "%s: met 🔄 Nog een keer naast zich" % wat)
-		var wolk := Hits.spot("zb_wolk")
-		waar(wolk == null, "%s: geen wolkje met hoeveel of hooguit" % wat)
-		waar(not _kaart_staat(), "%s: eerst het sippe dier, dan de kaart" % wat)
-		waar(await _wacht(_kaart_staat), "%s: daarna gewoon een nieuwe kaart" % wat)
+		gelijk(int(_beurt()["p"]), p_voor, "%s: hij zwom geen meter" % wat)
 		var d = World.dier(gast)
-		waar(d != null and str(d.staat) == "zwem", "%s: en hij drijft weer (%s)"
-			% [wat, str(d.staat) if d != null else "?"])
+		waar(absf(d.x - x_voor) < 0.5, "%s: en staat nog waar hij stond" % wat)
+		gelijk(int(_beurt()["misser"]), missers, "%s: geteld" % wat)
+		gelijk(int(_beurt()["mis_open"]), missers, "%s: de open vraag heeft een misser" % wat)
+		gelijk(int(_beurt()["leg"]), leg_voor, "%s: het zaad van de strook bleef staan" % wat)
+		waar(mis_wolk(KAART, gast), "%s: met 🔄 Nog een keer naast zich" % wat)
+		waar(Hits.spot("zb_wolk") == null, "%s: geen wolkje met hoeveel of hooguit" % wat)
+		waar(_kaart_staat() and _kaart_knoop() == kaart_voor,
+			"%s: dezelfde kaart blijft staan" % wat)
+		gelijk(str(_waarden()), waarden_voor, "%s: met dezelfde vier getallen" % wat)
 		var kaart := _kaart_knoop()
 		waar(kaart != null and not kaart.hulp_label.visible, "%s: geen hulpregel" % wat)
 		if kaart != null:
@@ -508,20 +517,19 @@ func test_geen_hulp_na_een_fout() -> void:
 	# the right answers still get him to the other side
 	var slagen := 0
 	while _klaar().is_empty() and slagen < 6:
+		await _wacht(_strook_open)
 		waar(_druk(_juist_nu()), "het goede antwoord staat op de strook")
-		await _wacht(func() -> bool: return _kaart_staat() or not _klaar().is_empty(), 8000)
+		await _wacht(func() -> bool: return _strook_open() or not _klaar().is_empty(), 8000)
 		slagen += 1
 	gelijk(_klaar(), "precies", "precies aan de overkant")
 	await _af()
 
-## PLAN N3 (open question V1) and the owner, 2026-09-23 ("Bij stoten moet de
-## speler ook opnieuw rekenen met een andere afstand"): too far is a soft
-## bump, a 💛 Au! and never a cross, and never the end of the turn.  He swims
-## the rest, touches the wall, and the wall throws him back to a NEW metre —
-## so the card that follows is a new sum from there, not the question he just
-## missed.  Nothing is taken: no star, and the lane goes on from there.
-## (Until 2026-09-23 this test asserted the opposite: back on `p_voor` with
-## the same sum under the line "Te ver, hij tikt de rand".)
+## Too far is a miss like any other since 2026-10-08 (owner: "het moet niet
+## mogelijk zijn om rekenen over te slaan"): he does not swim to the wall, there
+## is no bump and no new metre with a new sum — he sulks where he is and the
+## SAME question stays.  Nothing is taken: no star, the turn goes on, and the
+## right answer still ends the lane.  (Until 2026-10-08 the wall threw him back
+## to `bots_plek` with a new, different sum: a guess that skipped the maths.)
 func test_een_te_ver_antwoord_eindigt_de_beurt_niet() -> void:
 	_op()
 	var gasten := _gasten(4)
@@ -532,61 +540,44 @@ func test_een_te_ver_antwoord_eindigt_de_beurt_niet() -> void:
 	var m := int(_beurt()["M"])
 	# first the honest stroke, so that a button above the rest exists
 	waar(_druk(_juist_nu()), "eerst netjes %d m" % m)
-	waar(await _wacht(_kaart_staat), "de tweede kaart staat er")
+	waar(await _wacht(_strook_open), "de tweede kaart staat er")
 	var ver := _ver_antwoord()
 	waar(ver > 0, "er staat een te verre knop op de strook (%d)" % ver)
 	var p_voor := int(_beurt()["p"])
-	var rest_voor := l - p_voor
 	var missers_voor := int(_beurt()["misser"])
-	var leg := int(_beurt()["leg"]) + 1
+	var leg := int(_beurt()["leg"])
+	var waarden := str(_waarden())
+	var d = World.dier(str(gasten[0]["id"]))
+	var x_voor: float = d.x
 	waar(_druk(ver), "de te verre knop is aan te tikken")
-	waar(await _wacht(_kaart_staat, 8000), "er komt een nieuwe vraag na de bots")
+	waar(await _wacht(func() -> bool: return is_sip(str(gasten[0]["id"]))), "hij is sip")
 	gelijk(_klaar(), "", "de beurt is NIET afgelopen")
-	var p_na := int(_beurt()["p"])
-	gelijk(p_na, ZwembadBeurt.bots_plek(l, m, p_voor, leg),
-		"de wand gooide hem terug naar de meter die bots_plek zegt")
-	waar(p_na != p_voor, "hij ligt NIET meer op meter %d" % p_voor)
-	waar(p_na > 0 and p_na < l, "maar wel in de baan (%d m)" % p_na)
-	waar(l - p_na != rest_voor, "dus het is een andere afstand (%d, was %d)"
-		% [l - p_na, rest_voor])
+	gelijk(int(_beurt()["p"]), p_voor, "hij ligt nog op meter %d" % p_voor)
+	waar(absf(d.x - x_voor) < 0.5, "hij zwom niet naar de wand (x=%.1f, was %.1f)" % [d.x, x_voor])
+	waar(Hits.spot("zb_wolk") == null, "geen 💛 Au!: er was geen bots")
 	gelijk(int(_beurt()["misser"]), missers_voor + 1, "de misser telt voor het adaptieve signaal")
+	gelijk(int(_beurt()["leg"]), leg, "en de vraag is dezelfde")
 	gelijk(int(State.s["sterren"]), sterren_voor, "en er viel geen ster")
 	var kaart := _kaart_knoop()
-	waar(kaart != null, "er staat weer een somkaart")
+	waar(kaart != null, "de somkaart staat er nog")
 	if kaart != null:
-		gelijk(kaart.regel_label.text, ZwembadBeurt.BOTS_KAART_ICOON + " "
-			+ ZwembadBeurt.regel_bots_terug(str(gasten[0]["naam"]), p_na),
-			"die zegt waar de wand hem heen gooide")
-		gelijk(kaart.regel2_label.text, ZwembadBeurt.regel2_verder(), "met de vraag")
-		gelijk(kaart.som_label.text, ZwembadBeurt.som_verder(l, p_na), "en de nieuwe som")
+		gelijk(kaart.regel_label.text, "🏊 " + ZwembadBeurt.regel_verder(str(gasten[0]["naam"]), p_voor),
+			"met dezelfde regel")
+		gelijk(kaart.som_label.text, ZwembadBeurt.som_verder(l, p_voor), "en dezelfde som")
 		waar(not kaart.regel_label.text.contains("✗"), "geen kruis op de kaart")
-	var rij := Hits.spot(STROOK).knoop.get_node_or_null("Rij")
-	gelijk(rij.get_child_count(), 4, "met vier keuzeknoppen")
-	gelijk(str(_waarden()), str(Sommen.Zwembad.keuze_getallen(l, m, p_na,
-		int(_beurt()["band"]), int(_beurt()["leg"]))["lijst"]),
-		"de keuzes komen uit de bevroren kern, vanaf zijn nieuwe meter")
-	# the swimmer really floats on his new metre, not against the wall
-	var d = World.dier(str(gasten[0]["id"]))
-	var doel := ZwembadBeurt.baan_x(Rooms.get_kamer(ID).bad, l, p_na)
-	waar(absf(d.x - doel) <= 3.0,
-		"en hij drijft op meter %d (x=%.1f, doel %.1f)" % [p_na, d.x, doel])
-	waar(Hits.spot(GAST_TAG) != null, "met zijn nummer op zijn rug")
-	# and the new sum fits one stroke: its exact answer ends the lane
-	waar(l - p_na <= m, "de nieuwe rest (%d) past in één slag (max %d)" % [l - p_na, m])
-	waar(_druk(_juist_nu()), "het goede antwoord op de nieuwe som")
+	gelijk(str(_waarden()), waarden, "met dezelfde vier knoppen in dezelfde volgorde")
+	# and the right answer on the same sum ends the lane
+	waar(await _wacht(_strook_open), "de strook gaat weer open")
+	waar(_druk(_juist_nu()), "het goede antwoord op dezelfde som")
 	waar(await _wacht(func() -> bool: return not _klaar().is_empty(), 8000), "de baan is af")
 	gelijk(_klaar(), "precies", "precies aan de overkant")
 	gelijk(int(State.s["sterren"]), sterren_voor + 1, "en nu pas valt de ster")
 	await _af()
 
-## De kaart die ná een bots terugkomt is een gewone kaart: ze past in het kader
-## en staat niet `krap`.  Deze proef loopt in OPGEWEKTE beweging (rust uit),
-## want alleen dan komt het einde van de terugzwemtocht uit de wereldtik zelf —
-## en een kaart die in díe fase gebouwd wordt, wordt opgemeten vóórdat haar
-## hulpregel een breedte heeft (een Label met autowrap meldt de hoogte die bij
-## zijn HUIDIGE breedte hoort, en `Hits` zet die hoogte daarna vast in
-## `custom_minimum_size`).  Zonder de tel tussen de bots en de vraag werd de
-## kaart daardoor een strook van kaderhoogte.
+## De kaart die na een te ver antwoord blijft staan is een gewone kaart: ze
+## past in het kader en staat niet `krap`.  Deze proef loopt in OPGEWEKTE
+## beweging (rust uit).  Sinds 2026-10-08 is er geen bots meer (een fout
+## antwoord zwemt niet): de kaart blijft gewoon staan waar ze stond.
 func test_de_kaart_na_een_bots_past_in_het_kader() -> void:
 	_op()
 	_gasten(1)
@@ -594,11 +585,11 @@ func test_de_kaart_na_een_bots_past_in_het_kader() -> void:
 	waar(Games.start(ID), "het spel start")
 	waar(await _wacht(_kaart_staat, 20000), "de vraagkaart staat er")
 	waar(_druk(_juist_nu()), "eerst de eerlijke slag")
-	waar(await _wacht(_kaart_staat, 20000), "de tweede kaart staat er")
+	waar(await _wacht(_strook_open, 20000), "de tweede kaart staat er")
 	var ver := _ver_antwoord()
 	waar(ver > 0, "er staat een te verre knop op de strook (%d)" % ver)
 	waar(_druk(ver), "de te verre knop is aan te tikken")
-	waar(await _wacht(_kaart_staat, 25000), "de vraag komt terug na de bots")
+	waar(await _wacht(_strook_open, 25000), "dezelfde vraag staat er weer open")
 	await _frames(3)
 	Ui.zet_rust_modus(true)
 	var a: Dictionary = Hits.debug().get(KAART, {})
@@ -615,7 +606,8 @@ func test_de_kaart_na_een_bots_past_in_het_kader() -> void:
 	await _af()
 
 ## En het sluitstuk van R3: de ster valt alleen bij `precies`.  Dezelfde beurt,
-## eerst een bots (geen ster, geen vinkje) en daarna het goede antwoord.
+## eerst een te ver antwoord (geen ster, geen vinkje, geen slag) en daarna het
+## goede antwoord.
 func test_de_ster_valt_alleen_bij_precies() -> void:
 	_op()
 	_gasten(4)
@@ -623,12 +615,12 @@ func test_de_ster_valt_alleen_bij_precies() -> void:
 	waar(Games.start(ID), "het spel start")
 	waar(await _wacht(_kaart_staat), "de vraagkaart staat er")
 	waar(_druk(_juist_nu()), "eerst een eerlijke etappe")
-	waar(await _wacht(_kaart_staat), "de tweede kaart staat er")
+	waar(await _wacht(_strook_open), "de tweede kaart staat er")
 	var ver := _ver_antwoord()
 	waar(ver > 0, "er staat een te verre knop op de strook (%d)" % ver)
 	waar(_druk(ver), "en die wordt getikt")
-	waar(await _wacht(_kaart_staat, 8000), "de vraag komt terug")
-	gelijk(int(State.s["sterren"]), sterren_voor, "een bots levert geen ster op")
+	waar(await _wacht(_strook_open, 8000), "de vraag staat er weer open")
+	gelijk(int(State.s["sterren"]), sterren_voor, "een te ver antwoord levert geen ster op")
 	gelijk(_klaar(), "", "en vinkt de beurt niet af")
 	gelijk(Games.actief(), ID, "het spel draait gewoon door")
 	# nu het goede antwoord: dan pas de ster
@@ -754,15 +746,12 @@ func test_wisselen_terwijl_het_spel_wacht() -> void:
 	World.pauzeer(false)
 	await _af()
 
-## De twee klimaxmomenten spatten: de wand en de overkant (pijler 4).  Met de
-## rust aan slikt `World.spetter` elke druppel in, dus deze twee suites lopen
-## in opgewekte beweging en meten de piek van `World.deeltjes()` per frame.
 ## Eén gast: band 3, baan 16 m — twee slagen, en over de laatste 6 m valt er
 ## precies één plonsdruppel (elke 5 m), zodat een piek van 6 druppels alleen
-## van de klimax zelf kan komen.  De return zegt óf er tijdens het polled een
+## van de klimax zelf kan komen.  De return zegt óf er tijdens het pollen een
 ## sterkleurig deeltje rondhing: dat hoort alleen bij de precieze overkant.
-## Sinds N3 eindigt een te verre slag de beurt niet meer: dan is de klimaks
-## voorbij zodra de vraag terugkomt, en de precieze overkant sluit hem wél af.
+## Sinds 2026-10-08 zwemt een te ver antwoord niet: dan spat er ook niets
+## (`soort_ver`: de proef wacht de misser af en eist stilte in het water).
 func _klimax_spat(soort_ver: bool) -> bool:
 	_op()
 	_gasten(1)
@@ -771,19 +760,24 @@ func _klimax_spat(soort_ver: bool) -> bool:
 	waar(Games.start(ID), "het spel start")
 	waar(await _wacht(_kaart_staat, 20000), "de vraagkaart staat er")
 	waar(_druk(_juist_nu()), "eerst de eerlijke slag")
-	waar(await _wacht(_kaart_staat, 20000), "de tweede kaart staat er")
+	waar(await _wacht(_strook_open, 20000), "de tweede kaart staat er")
 	var laatste := _juist_nu()
 	if soort_ver:
 		laatste = _ver_antwoord()
 		waar(laatste > 0, "er staat een te verre knop op de strook (%d)" % laatste)
+	# the drops of the first stroke settle first, so the count is this tap's
+	var boom := Engine.get_main_loop() as SceneTree
+	var rust_t := Time.get_ticks_msec()
+	while Time.get_ticks_msec() - rust_t < 3000 and World.deeltjes().size() > 0:
+		await boom.process_frame
 	var voor := World.deeltjes().size()
 	var piek := voor
 	var sprankel := false
-	var boom := Engine.get_main_loop() as SceneTree
 	var t0 := Time.get_ticks_msec()
 	waar(_druk(laatste), "de laatste knop is aan te tikken")
 	var af := func() -> bool:
-		return _kaart_staat() if soort_ver else not _klaar().is_empty()
+		return (Time.get_ticks_msec() - t0 > 1800 and _strook_open()) if soort_ver \
+			else not _klaar().is_empty()
 	while Time.get_ticks_msec() - t0 < 25000 and not af.call():
 		await boom.process_frame
 		piek = maxi(piek, World.deeltjes().size())
@@ -793,16 +787,17 @@ func _klimax_spat(soort_ver: bool) -> bool:
 	piek = maxi(piek, World.deeltjes().size())
 	Ui.zet_rust_modus(true)
 	if soort_ver:
-		gelijk(_klaar(), "", "een bots laat de beurt doorlopen")
-		waar(_kaart_staat(), "en de vraag staat er weer")
+		gelijk(_klaar(), "", "een te ver antwoord laat de beurt doorlopen")
+		waar(_kaart_staat(), "en de vraag staat er nog")
+		waar(piek - voor < 6, "en er spatte niets: hij zwom niet (piek %d, voor %d)" % [piek, voor])
 	else:
 		gelijk(_klaar(), "precies", "de beurt eindigt aan de overkant")
-	waar(piek - voor >= 6,
-		"'%s' spoot over (piek %d, voor %d)" % ["bots" if soort_ver else _klaar(), piek, voor])
+		waar(piek - voor >= 6, "'%s' spoot over (piek %d, voor %d)" % [_klaar(), piek, voor])
 	await _af()
 	return sprankel
 
-## Een te verre slag spoot tegen de wand — 💛 Au! én een spat water.
+## Een te ver antwoord zwemt sinds 2026-10-08 niet meer naar de wand: geen
+## spat, geen 💛 Au! (tot dan spoot het water tegen de wand op).
 func test_spat_tege_de_wand() -> void:
 	await _klimax_spat(true)
 
@@ -815,9 +810,9 @@ func test_spat_aan_de_overkant() -> void:
 func test_precies_sprankelt() -> void:
 	waar(await _klimax_spat(false), "er stegen sterren op boven de zwemmer")
 
-## De bots blijft zacht: water wel, sterren nooit (§1.7).
+## Een te ver antwoord krijgt nooit glans: sterren alleen bij precies (§1.7).
 func test_bots_sprankelt_niet() -> void:
-	waar(not await _klimax_spat(true), "bij een bots geen sterrendeeltje")
+	waar(not await _klimax_spat(true), "bij een te ver antwoord geen sterrendeeltje")
 
 ## The 🏊 wish is resolved, and only by the guest who had it (§1.7 step 2).
 func test_de_wens_wordt_ingelost() -> void:
@@ -1158,19 +1153,20 @@ func test_gehaalde_strepen_kleuren_mee() -> void:
 	await _af()
 
 ## Na een te korte slag licht er niets op (eigenaar 2026-09-24: geen hulp na
-## een fout): geen enkele streep vóór de vlag gloeit, en wat hij al zwom houdt
-## gewoon zijn roze knop.
+## een fout): geen enkele streep gloeit, en omdat een fout antwoord sinds
+## 2026-10-08 niet zwemt, is er ook geen streep gehaald.
 func test_na_een_misser_licht_niets_op() -> void:
 	_op()
-	_gasten(1)
+	var gasten := _gasten(1)
 	gelijk(State.band(), 3, "één gast baant weg op band 3")
 	Ui.zet_rust_modus(true)          # de zwemtocht kost geen muurkloktijd
 	waar(Games.start(ID), "het spel start")
 	waar(await _wacht(_kaart_staat, 20000), "de vraagkaart staat er")
 	waar(_druk(_kort_antwoord()), "één te korte slag")
-	waar(await _wacht(_kaart_staat, 20000), "de tweede kaart staat er")
+	waar(await _wacht(func() -> bool: return is_sip(str(gasten[0]["id"]))), "hij is sip")
 	gelijk(int(_beurt()["misser"]), 1, "het ís de eerste misser")
 	var p := int(_beurt()["p"])
+	gelijk(p, 0, "en hij zwom geen meter")
 	var Strepen := "zb_streep_".length()
 	var strepen := 0
 	for stuk in World.decor_lijst(ID):
@@ -1380,20 +1376,23 @@ func test_elke_knop_op_de_strook_werkt() -> void:
 					var midden := knop.get_global_rect().get_center()
 					var ingedrukt := [0]
 					knop.pressed.connect(func() -> void: ingedrukt[0] += 1)
-					var leg_voor := int(_beurt()["leg"])
+					# a right answer counts as a stroke (`leg`), a wrong one as a
+					# miss (`misser`) since 2026-10-08: either way the game got it
+					var tel_voor := int(_beurt()["leg"]) + int(_beurt()["misser"])
 					await _tik(vp, midden)
 					gelijk(ingedrukt[0], 1, wat + ": de vinger op %d m drukt de knop in" % n)
-					gelijk(int(_beurt()["leg"]), leg_voor + 1, wat + ": het spel telt de tik op %d" % n)
+					gelijk(int(_beurt()["leg"]) + int(_beurt()["misser"]), tel_voor + 1,
+						wat + ": het spel telt de tik op %d" % n)
 					getikt += 1
 					if maat != Vector2i(1024, 768):
 						continue
-					# what the stroke did — straight from the frozen core
+					# what the tap did: only the right answer swims (owner,
+					# 2026-10-08) — exactly what the frozen core says it swims
 					var slag := Sommen.Zwembad.slag(l, m, p0, n)
-					var verwacht: int = p0 + int(slag["meters"])
-					if str(slag["soort"]) == "ver":
-						verwacht = ZwembadBeurt.bots_plek(l, m, p0, leg_voor + 1)
-					waar(await _wacht(func() -> bool: return _kaart_staat() or not _klaar().is_empty(),
-						6000), wat + ": daarna een nieuwe vraag of de overkant")
+					var goed := str(slag["soort"]) == "goed"
+					var verwacht: int = p0 + int(slag["meters"]) if goed else p0
+					waar(await _wacht(func() -> bool: return _strook_open() or not _klaar().is_empty(),
+						6000), wat + ": daarna een open vraag of de overkant")
 					gelijk(int(_beurt()["p"]), verwacht,
 						wat + ": %d m (%s) brengt hem op meter %d" % [n, slag["soort"], verwacht])
 		Games.stop()
@@ -1437,9 +1436,9 @@ func _tik(vp: SubViewport, punt: Vector2) -> void:
 	vp.push_input(los)
 	await boom.process_frame
 
-## Reduced motion (games-b.md §0.11): the same bump, the same outcome, no
-## animation — he is on his new metre at once, there is not one particle, the
-## 💛 Au! still stands its full time, and then the new sum comes.
+## Reduced motion (games-b.md §0.11) and a too-far answer: since 2026-10-08
+## there is no bump — he stays on his metre, there is not one particle, he is
+## disappointed and the same sum stays on the same card.
 func test_de_bots_in_rustmodus() -> void:
 	_op()
 	var gasten := _gasten(4)
@@ -1450,52 +1449,32 @@ func test_de_bots_in_rustmodus() -> void:
 	var l := int(_beurt()["L"])
 	var m := int(_beurt()["M"])
 	waar(_druk(_juist_nu()), "eerst netjes %d m" % m)
-	waar(await _wacht(_kaart_staat), "de tweede kaart staat er")
+	waar(await _wacht(_strook_open), "de tweede kaart staat er")
 	var p_voor := int(_beurt()["p"])
-	var leg := int(_beurt()["leg"]) + 1
 	var ver := _ver_antwoord()
 	waar(ver > 0, "er staat een te verre knop (%d)" % ver)
-	var t0 := Time.get_ticks_msec()
-	waar(_druk(ver), "te ver getikt")
-	await _frames(2)
-	var p_na := ZwembadBeurt.bots_plek(l, m, p_voor, leg)
-	gelijk(int(_beurt()["p"]), p_na, "de bewaarde beurt staat meteen op zijn nieuwe meter")
 	var bad: Dictionary = Rooms.get_kamer(ID).bad
 	var d = World.dier(str(gasten[0]["id"]))
-	var wand := ZwembadBeurt.wand_x(bad)
-	var doel := ZwembadBeurt.baan_x(bad, l, p_na)
-	waar(absf(d.x - wand) < 0.01, "stilstaand beeld 1: hij ligt met zijn neus tegen de wand (x=%.1f)"
-		% d.x)
-	waar(Hits.spot("zb_wolk") != null, "met 💛 Au!")
+	var x_voor: float = d.x
+	waar(_druk(ver), "te ver getikt")
+	await _frames(2)
+	gelijk(int(_beurt()["p"]), p_voor, "de bewaarde beurt blijft op zijn meter")
+	waar(absf(d.x - x_voor) < 0.01, "hij ligt stil op meter %d (x=%.1f)" % [p_voor, d.x])
+	waar(absf(d.x - ZwembadBeurt.wand_x(bad)) > 1.0, "niet tegen de wand")
+	waar(Hits.spot("zb_wolk") == null, "zonder 💛 Au!")
 	gelijk(World.deeltjes().size(), 0, "geen enkel deeltje in rustmodus")
-	var gezien_deeltje := false
-	var tussendoor := false
-	while not _kaart_staat() and Time.get_ticks_msec() - t0 < 6000:
-		await _frames(1)
-		if not World.deeltjes().is_empty():
-			gezien_deeltje = true
-		if absf(d.x - wand) > 0.01 and absf(d.x - doel) > 0.01:
-			tussendoor = true
-	waar(_kaart_staat(), "de nieuwe vraag komt")
-	waar(absf(d.x - doel) < 0.01, "stilstaand beeld 2: hij drijft op meter %d (x=%.1f, doel %.1f)"
-		% [p_na, d.x, doel])
-	waar(not tussendoor, "en er zat geen beweging tussen")
-	waar(not gezien_deeltje, "en er spatte niets")
-	waar(Time.get_ticks_msec() - t0 >= 1150, "💛 Au! hield zijn volle tijd (%d ms)"
-		% (Time.get_ticks_msec() - t0))
+	waar(await _wacht(_strook_open, 6000), "dezelfde vraag staat weer open")
 	var kaart := _kaart_knoop()
 	if kaart != null:
-		gelijk(kaart.som_label.text, ZwembadBeurt.som_verder(l, p_na), "met de som vanaf daar")
+		gelijk(kaart.som_label.text, ZwembadBeurt.som_verder(l, p_voor), "met dezelfde som")
 	gelijk(int(State.s["sterren"]), sterren, "geen ster weg, geen ster erbij")
 	gelijk(_klaar(), "", "en de beurt loopt door")
 	await _af()
 
-## The bump as the child sees it, in real motion: he brakes into the far wall
-## and stops with his nose against it (never past it), 💛 Au! stands while he
-## bonks and wobbles there, the wall pushes him back with the number on his
-## back counting down to his new metre, and he ends afloat on that metre,
-## facing the wall again.  From the touch on, the save already says where he
-## will end up.
+## A too-far answer as the child sees it, in real motion (since 2026-10-08):
+## he does not swim one stroke — not to the wall, not back — his number stays,
+## he is disappointed on his metre with `🔄 Nog een keer`, and when the strip
+## opens again the same four numbers stand in the same order.
 func test_de_bots_als_film() -> void:
 	_op()
 	var gasten := _gasten(1)
@@ -1503,69 +1482,37 @@ func test_de_bots_als_film() -> void:
 	waar(Games.start(ID), "het spel start")
 	waar(await _wacht(_kaart_staat, 20000), "de vraagkaart staat er")
 	waar(_druk(_juist_nu()), "eerst de eerlijke slag")
-	waar(await _wacht(_kaart_staat, 20000), "de tweede kaart staat er")
-	var l := int(_beurt()["L"])
-	var m := int(_beurt()["M"])
+	waar(await _wacht(_strook_open, 20000), "de tweede kaart staat er")
 	var p_voor := int(_beurt()["p"])
-	var leg := int(_beurt()["leg"]) + 1
-	var p_na := ZwembadBeurt.bots_plek(l, m, p_voor, leg)
-	var bad: Dictionary = Rooms.get_kamer(ID).bad
-	var wand := ZwembadBeurt.wand_x(bad)
-	var doel := ZwembadBeurt.baan_x(bad, l, p_na)
+	var waarden := str(_waarden())
 	var ver := _ver_antwoord()
 	waar(ver > 0, "er staat een te verre knop (%d)" % ver)
 	var id := str(gasten[0]["id"])
+	var d = World.dier(id)
+	var x_voor: float = d.x
 	var boom := Engine.get_main_loop() as SceneTree
 	var t0 := Time.get_ticks_msec()
 	waar(_druk(ver), "te ver getikt")
-	var verste := -INF
-	var raak_t := -1
-	var wolk_weg_t := -1
-	var x_bij_wolk: Array = []
-	var p_bij_raak := -1
+	var verste := 0.0
 	var cijfers: Array = []
-	while Time.get_ticks_msec() - t0 < 20000 and not _kaart_staat():
+	var sip := false
+	while Time.get_ticks_msec() - t0 < 2500:
 		await boom.process_frame
-		var d = World.dier(id)
-		verste = maxf(verste, d.x)
-		var wolk := Hits.spot("zb_wolk") != null
-		if raak_t < 0 and wolk:
-			raak_t = Time.get_ticks_msec()
-			p_bij_raak = int(_beurt()["p"])
-		if raak_t >= 0 and wolk_weg_t < 0:
-			if wolk:
-				x_bij_wolk.append(d.x)
-			else:
-				wolk_weg_t = Time.get_ticks_msec()
+		verste = maxf(verste, absf(d.x - x_voor))
+		sip = sip or is_sip(id)
 		var tag := Hits.spot(GAST_TAG)
 		if tag != null and is_instance_valid(tag.knoop):
 			var tekst := str((tag.knoop as Label).text)
 			if cijfers.is_empty() or cijfers[cijfers.size() - 1] != tekst:
 				cijfers.append(tekst)
 	Ui.zet_rust_modus(true)
-	waar(_kaart_staat(), "de nieuwe vraag komt")
-	waar(verste <= wand + 0.01, "hij zwom nooit voorbij de wand (verste x=%.2f, wand %.2f)"
-		% [verste, wand])
-	waar(verste >= wand - 0.01, "maar wel met zijn neus ertegen (%.2f)" % verste)
-	waar(raak_t >= 0, "💛 Au! kwam bij de aanraking")
-	gelijk(p_bij_raak, p_na, "vanaf de aanraking staat zijn nieuwe meter al in de opslag")
-	waar(wolk_weg_t - raak_t >= 1100 and wolk_weg_t - raak_t <= 1700,
-		"💛 Au! stond %d ms (spec: 1200)" % (wolk_weg_t - raak_t))
-	var stil := true
-	for x in x_bij_wolk:
-		if absf(float(x) - wand) > 0.01:
-			stil = false
-	waar(stil, "zolang 💛 Au! er staat, ligt hij stil tegen de wand")
-	waar(cijfers.has("%d m" % l), "het getal op zijn rug haalde %d m" % l)
-	var terug := cijfers.slice(cijfers.find("%d m" % l))
-	var verwacht: Array = []
-	for metre in range(l, p_na - 1, -1):
-		verwacht.append("%d m" % metre)
-	gelijk(str(terug), str(verwacht), "en telde terug tot zijn nieuwe meter")
-	var d = World.dier(id)
-	waar(absf(d.x - doel) <= 0.5, "hij drijft op meter %d (x=%.1f, doel %.1f)" % [p_na, d.x, doel])
-	gelijk(d.face, 1, "met zijn neus weer naar de wand")
-	gelijk(str(d.staat), "zwem", "en drijvend")
+	waar(sip, "hij was sip")
+	waar(verste < 3.0, "hij zwom niet weg (verste %.2f voxels)" % verste)
+	gelijk(str(cijfers), str(["%d m" % p_voor]), "zijn nummer bleef %d m" % p_voor)
+	gelijk(int(_beurt()["p"]), p_voor, "en de opslag ook")
+	waar(_strook_open(), "de strook staat weer open")
+	gelijk(str(_waarden()), waarden, "met dezelfde vier getallen")
+	gelijk(str(d.staat), "zwem", "en hij drijft gewoon")
 	gelijk(_klaar(), "", "de beurt loopt door")
 	await _af()
 
@@ -1730,3 +1677,121 @@ func _ver_antwoord() -> int:
 		if int(v) > rest and (uit < 0 or int(v) < uit):
 			uit = int(v)
 	return uit
+
+# ------------------------------------------- rekenen eerst (wave 2, 2026-10-08)
+
+## Any number on the strip that is NOT the right answer.
+func _fout_antwoord() -> int:
+	var juist := _juist_nu()
+	for v in _waarden():
+		if int(v) != juist:
+			return int(v)
+	return -1
+
+## Is the answer strip there AND open (not locked by a miss)?
+func _strook_open() -> bool:
+	var s := Hits.spot(STROOK)
+	if s == null or not is_instance_valid(s.knoop):
+		return false
+	var strook := s.knoop as UiKeuzes
+	return strook != null and not strook.op_slot
+
+## Wave-2 rule R1 (owner, 2026-10-08: "rekenen moet minstens 50% van de
+## interactie zijn"): count every tap of a whole turn by kind — the tap that
+## opened the game is not counted — and maths must win by at least one.  The
+## pool has no tap besides its answers: the swimmer walks, climbs and dives by
+## himself.
+var _teller := {"reken": 0, "spel": 0}
+
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller.get(soort, 0)) + 1
+
+func _rekenaandeel(n_gasten: int, band: int) -> void:
+	_op()
+	_teller = {"reken": 0, "spel": 0}
+	_gasten(n_gasten, band - 1)
+	gelijk(State.band(), band, "band %d met %d gasten" % [band, n_gasten])
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_strook_open), "de vraagkaart staat er")
+	# one miss first: a wrong tap is maths too (an answer on a maths strip)
+	var fout := _fout_antwoord()
+	if fout > 0:
+		_tel("reken")
+		waar(_druk(fout), "een fout antwoord")
+		waar(await _wacht(_strook_open, 6000), "dezelfde vraag staat weer open")
+	var slagen := 0
+	while _klaar().is_empty() and slagen < 4:
+		_tel("reken")
+		waar(_druk(_juist_nu()), "het goede antwoord")
+		await _wacht(func() -> bool: return _strook_open() or not _klaar().is_empty(), 8000)
+		slagen += 1
+	gelijk(_klaar(), "precies", "band %d, %d gasten: de baan is af" % [band, n_gasten])
+	var r := int(_teller["reken"])
+	var s := int(_teller["spel"])
+	waar(r >= s + 1, "band %d, %d gasten: rekenen %d >= spel %d + 1" % [band, n_gasten, r, s])
+	await _af()
+
+func test_rekenaandeel_band_3() -> void:
+	await _rekenaandeel(1, 3)
+	await _rekenaandeel(8, 3)
+
+func test_rekenaandeel_band_4() -> void:
+	await _rekenaandeel(4, 4)
+	await _rekenaandeel(8, 4)
+
+func test_rekenaandeel_band_5() -> void:
+	await _rekenaandeel(7, 5)
+	await _rekenaandeel(8, 5)
+
+## R2: a question that was missed survives the animal switch on the game bar —
+## the same swimmer, the same metre, the same sum and the same four numbers in
+## the same order.  (Until 2026-10-08 the switch dropped the lane and the next
+## animal started at 0 m with a fresh question.)
+func test_een_gemiste_vraag_blijft_bij_een_wissel() -> void:
+	_op()
+	var gasten := _gasten(4)
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_strook_open), "de vraagkaart staat er")
+	var gast := str(_beurt()["gast"])
+	waar(_druk(_juist_nu()), "één etappe")
+	waar(await _wacht(_strook_open), "de tweede kaart staat er")
+	var p := int(_beurt()["p"])
+	var waarden := str(_waarden())
+	waar(_druk(_fout_antwoord()), "een fout antwoord")
+	waar(await _wacht(func() -> bool: return is_sip(gast)), "hij is sip")
+	waar(Games.wissel_speler(), "het kind tikt het dier op de spelbalk")
+	waar(await _wacht(_strook_open, 6000), "er staat weer een vraag")
+	gelijk(str(_beurt()["gast"]), gast, "dezelfde zwemmer, geen nieuw dier")
+	gelijk(int(_beurt()["p"]), p, "op dezelfde meter")
+	gelijk(str(_waarden()), waarden, "met dezelfde vier getallen")
+	var kaart := _kaart_knoop()
+	if kaart != null:
+		gelijk(kaart.som_label.text, ZwembadBeurt.som_verder(int(_beurt()["L"]), p),
+			"en dezelfde som")
+	waar(gasten.size() == 4, "vier gasten")
+	await _af()
+
+## R2: a missed question survives a reload and a new day with more guests (a
+## bigger N and another `dag` would have given another lane): the same lane,
+## the same metre and the same four numbers.
+func test_een_gemiste_vraag_blijft_na_een_nieuwe_dag() -> void:
+	_op()
+	_gasten(2)
+	waar(Games.start(ID), "het spel start")
+	waar(await _wacht(_strook_open), "de vraagkaart staat er")
+	var gast := str(_beurt()["gast"])
+	var l := int(_beurt()["L"])
+	var waarden := str(_waarden())
+	waar(_druk(_fout_antwoord()), "een fout antwoord")
+	waar(await _wacht(func() -> bool: return is_sip(gast)), "hij is sip")
+	Games.stop()
+	await _frames(2)
+	State.s["dag"] = int(State.s["dag"]) + 1
+	_gasten(6)
+	State.spel_data(ID)["gast"] = gast
+	waar(Games.start(ID), "de volgende dag start het spel opnieuw")
+	waar(await _wacht(_strook_open, 8000), "en er staat een vraag")
+	gelijk(int(_beurt()["L"]), l, "dezelfde baan")
+	gelijk(int(_beurt()["p"]), 0, "op dezelfde meter")
+	gelijk(str(_waarden()), waarden, "met dezelfde vier getallen")
+	await _af()

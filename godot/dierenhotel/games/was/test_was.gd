@@ -13,6 +13,7 @@ extends Proef
 ## ladder over 2.65 seconds.
 
 const ID := "was"
+const SpelWas := preload("res://games/was/spel.gd")
 const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024),
 	Vector2i(360, 740), Vector2i(740, 360)]
 const BANDEN := [3, 4, 5]
@@ -31,8 +32,8 @@ const KINDTEKST := [
 	"Hoeveel blokjes worden dat?",
 	"Alles gesorteerd!", "klaar",
 	"blokje", "blokjes", "krat met %s: %d %s",
-	"berg met %d stuks was, tik om er %d te pakken",
-	"berg met was, tik om er %d te pakken",
+	"berg met %d stuks was, kijk er goed naar",
+	"berg met was, kijk er goed naar",
 ]
 ## What the pile and the hand say, per kind — the game composes these from the
 ## table in `WasSoorten`, so the table is what is checked (§4.10).
@@ -84,9 +85,11 @@ func _licht_af() -> void:
 ## in `ctx.data()`, which are in memory — and a test that rewrote the save would
 ## hand the next suite its own day (measured: `test_ui.gd` read day 5 instead of
 ## the day it had just written).
-func _wereld(band: int, dag := 1, gasten := -1) -> void:
+func _wereld(band: int, dag := 1, gasten := -1, kunnen := -1) -> void:
 	State.nieuw_spel()
 	var opzet: Array = BAND_OPZET[band]
+	if kunnen >= 0:
+		opzet = [opzet[0], kunnen]
 	var aantal := gasten if gasten > 0 else int(opzet[0])
 	var pool := State.gasten_pool()
 	var bedden := State.alle_bedden()
@@ -123,9 +126,10 @@ func _tik(id: String) -> bool:
 	(s.knoop as BaseButton).emit_signal("pressed")
 	return true
 
-## One tap on the pile, one on a crate — exactly what a child does.  Group 5's
-## opening question is answered on the way, because a child answers it and then
-## simply keeps sorting (N8).
+## Since wave 2 the pile sorts itself (`_sorteer_vanzelf`, a piece every
+## SORTEER_S); the tests that only need the chart do not wait for it and take
+## the same step at once (`sorteer_een`).  Group 5's opening question is
+## answered on the way, because a child answers it before the pile sorts (N8).
 func _sorteer_alles() -> int:
 	var veilig := 0
 	while veilig < 240:
@@ -140,15 +144,20 @@ func _sorteer_alles() -> int:
 			continue
 		if stap != "sorteren":
 			break
-		var rij: Array = st["rij"]
-		var i := int(st["i"])
-		if i >= rij.size():
-			break
-		if not _tik("ws_berg"):
-			break
-		if not _tik("ws_k%d" % int(rij[i])):
+		var s := _spel()
+		if s == null or not s.has_method("sorteer_een") or not s.sorteer_een():
 			break
 	return veilig
+
+## Frames run (real time) until the turn stands on `stap`, or `max_s` passed.
+func _wacht_tot_stap(stap: String, max_s := 8.0) -> bool:
+	var boom := Engine.get_main_loop() as SceneTree
+	var eind := Time.get_ticks_msec() + int(max_s * 1000.0)
+	while Time.get_ticks_msec() < eind:
+		if str(_stand().get("stap", "")) == stap:
+			return true
+		await boom.process_frame
+	return str(_stand().get("stap", "")) == stap
 
 ## Tap the number `n` on the strip of four under the card (no keypad, no ✓).
 func _toets(n: int) -> bool:
@@ -330,17 +339,14 @@ func test_beurt_per_band() -> void:
 			if bron != null:
 				gelijk(bron.text, "🧹 nog te sorteren",
 					"de berg noemt geen aantal (band %d)" % band)
-		# one piece in the hand, and the hand says so in words
-		waar(_tik("ws_berg"), "tik op de berg")
-		var hand := int(_stand()["hand"])
-		waar(hand >= 0, "er zit iets in de hand")
-		var wolk := Hits.spot("ws_hand")
-		waar(wolk != null, "het handwolkje staat er")
-		if wolk != null:
-			var so := WasSoorten.soort(hand)
-			var wil := "een %s" % str(so["ev"]) if per == 1 else "twee %s" % str(so["naam"])
-			gelijk((wolk.knoop as UiWolk).zeg_label.text, wil, "de hand zegt het in woorden")
-		_sorteer_alles()
+		# wave 2: the pile sorts itself — a tap on it puts nothing in a hand,
+		# and the chart grows while the child watches, without one tap
+		_tik("ws_berg")
+		gelijk(int(_stand()["hand"]), -1, "een tik op de berg pakt niets (band %d)" % band)
+		waar(Hits.spot("ws_hand") == null, "er is geen handwolkje (band %d)" % band)
+		if Ui.bron_van("ws_berg") != null:
+			gelijk(int(Ui.bron_van("ws_berg").aantal), 0, "de berg is niet sleepbaar (band %d)" % band)
+		waar(await _wacht_tot_stap("vraag1"), "de berg sorteert zichzelf (band %d)" % band)
 		st = _stand()
 		gelijk(str(st["stap"]), "vraag1", "de berg is leeg, de vraag komt (band %d)" % band)
 		gelijk(int(st["i"]), (st["rij"] as Array).size(), "alles gesorteerd")
@@ -363,12 +369,13 @@ func test_beurt_per_band() -> void:
 			gelijk(str(st["stap"]), "af", "en dan is het af (band %d)" % band)
 		gelijk(int(st["ster"]), 1, "de ster is gevallen (band %d)" % band)
 		gelijk(int(State.s["sterren"]), sterren_voor + 1, "precies een ster erbij")
-		# the end card, with one button
+		# the end card, without a button (wave 2): it closes by itself
 		await _spoel(1.0)
 		gelijk(_kaart_tekst("regel"), "✅ Alles gesorteerd!", "de eindkaart (band %d)" % band)
-		waar(Hits.spot("ws_vraag_keuzes") != null, "met een knop eronder")
-		waar(_kies("ok"), "en die knop sluit het spel")
-		gelijk(Games.actief(), "", "het spel is gesloten (band %d)" % band)
+		waar(Hits.spot("ws_vraag_keuzes") == null, "zonder knop eronder")
+		gelijk(_kaart_tekst("vak"), "✓", "met een vinkje in het vakje, geen leeg vakje (band %d)" % band)
+		await _spoel(SpelWas.AF_S)
+		gelijk(Games.actief(), "", "het spel sluit zichzelf (band %d)" % band)
 	_licht_af()
 
 ## N8: group 5 opens with a question about the pile, before a single piece
@@ -389,7 +396,7 @@ func test_alleen_groep_5_begint_met_een_vraag() -> void:
 			gelijk(str(st["stap"]), "sorteren", "band %d sorteert meteen" % band)
 			waar(Hits.spot("ws_vraag") == null, "geen vraag over de berg (band %d)" % band)
 			if berg != null:
-				waar(int(berg.aantal) > 0, "en de berg is sleepbaar (band %d)" % band)
+				gelijk(int(berg.aantal), 0, "de berg sorteert zichzelf: niet sleepbaar (band %d)" % band)
 			Games.stop()
 			continue
 		gelijk(str(st["stap"]), "vraag0", "band 5 begint met de opening")
@@ -420,26 +427,27 @@ func test_geen_tussensom_en_geen_aantal_op_de_berg() -> void:
 		_wereld(band)
 		waar(Games.start(ID), "start band %d" % band)
 		waar(_door_de_opening(), "de opening, als die er is (band %d)" % band)
-		var per := int(_stand()["per"])
+		# the pile sorts itself (wave 2): watch it, frame by frame
 		var stappen: Array[String] = []
-		var veilig := 0
-		while veilig < 80:
-			veilig += 1
+		var boom := Engine.get_main_loop() as SceneTree
+		var eind := Time.get_ticks_msec() + 9000
+		var gezien := -1
+		while Time.get_ticks_msec() < eind:
 			var st := _stand()
-			stappen.append(str(st["stap"]))
-			if str(st["stap"]) != "sorteren":
+			if st.is_empty():
 				break
-			var rij: Array = st["rij"]
-			if int(st["i"]) >= rij.size():
+			if stappen.is_empty() or stappen[stappen.size() - 1] != str(st["stap"]):
+				stappen.append(str(st["stap"]))
+			if str(st["stap"]) != "sorteren" and str(st["stap"]) != "vraag0":
 				break
 			var berg := Ui.bron_van("ws_berg")
-			if band != 5 and berg != null:
+			if band != 5 and berg != null and int(st["i"]) != gezien:
+				gezien = int(st["i"])
 				gelijk(berg.text, "🧹 nog te sorteren",
-					"band %d, stuk %d: geen aantal op de berg" % [band, int(st["i"])])
-				gelijk(berg.tooltip_text, "berg met was, tik om er %d te pakken" % per,
-					"band %d, stuk %d: en ook niet in de titel" % [band, int(st["i"])])
-			_tik("ws_berg")
-			_tik("ws_k%d" % int(rij[int(st["i"])]))
+					"band %d, stuk %d: geen aantal op de berg" % [band, gezien])
+				gelijk(berg.tooltip_text, "berg met was, kijk er goed naar",
+					"band %d, stuk %d: en ook niet in de titel" % [band, gezien])
+			await boom.process_frame
 		waar(not stappen.has("vraagT"), "band %d: geen tussensom" % band)
 		gelijk(str(_stand()["stap"]), "vraag1",
 			"band %d: de berg is leeg en de vraag over het diagram komt" % band)
@@ -453,9 +461,7 @@ func test_een_oude_opslag_sorteert_verder() -> void:
 	_wereld(4)
 	waar(Games.start(ID), "band 4 start")
 	for _q in 2:
-		var st := _stand()
-		_tik("ws_berg")
-		_tik("ws_k%d" % int(st["rij"][int(st["i"])]))
+		_spel().sorteer_een()
 	Games.stop()
 	for oud in ["vraag0", "vraagT"]:
 		var bewaard: Dictionary = State.spel_data(ID).get("stand", {})
@@ -622,10 +628,11 @@ func test_geen_hulp_bij_de_openingsvraag() -> void:
 	gelijk(str(_stand().get("stap", "")), "sorteren", "en dan wordt er gesorteerd")
 	_licht_af()
 
-## Sorting wrong is not punished either: the crate bobs, the piece goes back on
-## the pile, `🔄 Nog een keer` hangs at that crate for the length of a miss,
-## and nothing that helps appears (games-b.md §4.7; owner 2026-09-24).  An
-## empty hand on a crate does nothing at all.
+## Wave 2: the pile sorts itself, and a finger is no step of it.  A tap on a
+## crate or on the pile moves nothing, makes no sound and shows no miss; then,
+## without a single tap, every piece lands in its own crate, one by one, with
+## a plop, and the chart is exactly the recipe.  (Before wave 2 this test drove
+## a wrong crate by hand: that cannot happen any more.)
 func test_mis_sorteren_is_niet_straffend() -> void:
 	_licht_op()
 	_wereld(4)
@@ -633,76 +640,55 @@ func test_mis_sorteren_is_niet_straffend() -> void:
 	waar(_door_de_opening(), "eerst de opening, dan de berg")
 	var voor := _stand()
 	var berg_voor := int(voor["i"])
-	# an empty hand on a crate: nothing moves
-	waar(_tik("ws_k0"), "tik op een krat met lege handen")
+	var hoor := Snd.luister(func() -> void:
+		_tik("ws_k0")
+		_tik("ws_berg"))
+	# only the click every button makes (`Hits`); the game itself says nothing
+	for naam in hoor:
+		gelijk(naam, "tik", "een tik op een krat of de berg: geen eigen geluid (%s)" % str(hoor))
 	var na1 := _stand()
 	gelijk(int(na1["i"]), berg_voor, "er gaat niets van de berg af")
 	gelijk(int(na1["hand"]), -1, "en er komt niets in de hand")
 	gelijk(str(na1["vak"]), str(voor["vak"]), "geen blokje erbij")
-	# a piece in the WRONG crate: back on the pile, no block, no punishment
-	waar(_tik("ws_berg"), "pak een stuk")
-	var soort := int(_stand()["hand"])
-	var fout_krat := (soort + 1) % int(_stand()["m"])
-	var beeld_voor := beeld(ID)
-	waar(_tik("ws_k%d" % fout_krat), "leg het in de verkeerde krat")
-	waar(Hits.spot(Ui.MIS_WOLK + "was_krat%d" % fout_krat) != null,
-		"🔄 Nog een keer bij de foute krat")
-	await _wacht_mispauze()
-	waar(Hits.spot(Ui.MIS_WOLK + "was_krat%d" % fout_krat) == null, "en dat gaat vanzelf weg")
-	for id in beeld(ID).keys():
-		waar(beeld_voor.has(id) or str(id) == "ws_hand",
-			"na het foute sorteren verschijnt %s niet" % id)
-	var na2 := _stand()
-	gelijk(int(na2["i"]), berg_voor, "het stuk ligt weer op de berg")
-	gelijk(int(na2["hand"]), -1, "de hand is leeg")
-	gelijk(int(na2["vak"][fout_krat]), int(voor["vak"][fout_krat]), "geen blokje in de foute krat")
+	waar(Hits.spot(Ui.MIS_WOLK + "was_krat0") == null, "en geen 🔄 bij de krat")
 	gelijk(int(State.s["sterren"]), 0, "en geen ster eraf")
-	gelijk(str(na2["stap"]), "sorteren", "de beurt loopt gewoon door")
-	# the same piece in the RIGHT crate does work
-	waar(_tik("ws_berg"), "pak het opnieuw")
-	var hoor := Snd.luister(func() -> void: waar(_tik("ws_k%d" % soort), "en leg het goed"))
-	waar(hoor.has("plof"), "de was valt met een plof in de krat (%s)" % str(hoor))
+	# one step of the pile by itself: a plop, one piece off, into ITS crate
+	var soort := int(voor["rij"][berg_voor])
+	var hoor2 := Snd.luister(func() -> void: _spel().sorteer_een())
+	waar(hoor2.has("plof"), "de was valt met een plof in de krat (%s)" % str(hoor2))
 	var na3 := _stand()
 	gelijk(int(na3["i"]), berg_voor + 1, "nu gaat er een stuk van de berg af")
 	gelijk(int(na3["vak"][soort]), int(voor["vak"][soort]) + 1, "en komt er een blokje bij")
+	waar(await _wacht_tot_stap("vraag1"), "de rest sorteert zichzelf")
+	gelijk(str(_stand()["vak"]), str(_stand()["doel"]), "elk stuk in de goede krat")
 	_licht_af()
 
-## Dragging from the pile to a crate: the catch area of the crate takes the
-## drop, and whoever drags picks up on the way (games-b.md §4.7).
+## Wave 2: nothing is dragged from the pile any more — it carries no load, and
+## a drop on a crate puts nothing in it.
 func test_slepen_van_de_berg_naar_de_krat() -> void:
 	_licht_op()
 	_wereld(3)
 	Games.start(ID)
-	waar(_door_de_opening(), "eerst de opening, dan mag er gesleept worden")
+	waar(_door_de_opening(), "eerst de opening")
 	Hits.plaats()
 	var bron := Ui.bron_van("ws_berg")
-	waar(bron != null and bron.sleep_naam == "krat", "de berg draagt de sleepnaam 'krat'")
-	# the drag really starts on the pile: a source with nothing in it gives none.
-	# `_get_drag_data` sets a preview, which only exists while the viewport is
-	# dragging, so one is started by hand and cancelled again (as test_kraam).
+	waar(bron != null, "de berg staat er")
+	if bron != null:
+		gelijk(int(bron.aantal), 0, "de berg geeft niets mee")
 	var vp := _laag.get_viewport()
 	_laag.force_drag({"sleep": "proef"}, null)
 	var sleep = bron._get_drag_data(Vector2.ZERO) if bron != null else null
 	vp.gui_cancel_drag()
-	waar(sleep is Dictionary and str((sleep as Dictionary).get("sleep", "")) == "krat",
-		"een sleep van de berg begint echt")
-	waar(bron != null and bron.get_node("Tellers/Telling").visible == false,
-		"zonder getalbolletje op de berg")
+	waar(sleep == null, "een sleep van de berg begint niet")
 	var st := _stand()
 	var soort := int(st["rij"][int(st["i"])])
 	var doel := Hits.spot("ws_k%d" % soort)
-	waar(doel != null and doel.vangvlak != null, "de krat heeft een vangvlak")
-	if doel == null or doel.vangvlak == null:
-		_licht_af()
-		return
-	var lading := {"sleep": "krat"}
-	waar(doel.vangvlak._can_drop_data(Vector2.ZERO, lading), "het vangvlak neemt de was aan")
-	waar(not doel.vangvlak._can_drop_data(Vector2.ZERO, {"sleep": "koekje"}), "en niets anders")
-	doel.vangvlak._drop_data(Vector2.ZERO, lading)
+	if doel != null and doel.vangvlak != null:
+		doel.vangvlak._drop_data(Vector2.ZERO, {"sleep": "krat"})
 	var na := _stand()
-	gelijk(int(na["i"]), int(st["i"]) + 1, "slepen pakt onderweg op en legt neer")
-	gelijk(int(na["vak"][soort]), int(st["vak"][soort]) + 1, "het blokje staat in de krat")
-	gelijk(int(na["hand"]), -1, "de hand is weer leeg")
+	gelijk(int(na["i"]), int(st["i"]), "een losse drop sorteert niets")
+	gelijk(str(na["vak"]), str(st["vak"]), "geen blokje erbij")
+	gelijk(int(na["hand"]), -1, "de hand is leeg")
 	_licht_af()
 
 ## The star hangs on taking part, never on being right (F5): three misses and
@@ -739,11 +725,9 @@ func test_herstel_uit_ctx_data() -> void:
 	Games.start(ID)
 	waar(_door_de_opening(), "eerst de opening")
 	gelijk(str(_stand()["stap"]), "sorteren", "en dan de berg")
-	# sort three pieces and stop halfway
+	# three pieces sorted (the pile's own steps) and stop halfway
 	for _q in 3:
-		var st := _stand()
-		_tik("ws_berg")
-		_tik("ws_k%d" % int(st["rij"][int(st["i"])]))
+		_spel().sorteer_een()
 	var halverwege := _stand()
 	gelijk(int(halverwege["i"]), 3, "drie stukken gesorteerd")
 	Games.stop()
@@ -772,7 +756,19 @@ func test_herstel_uit_ctx_data() -> void:
 	gelijk(int(na["missers"]), 3, "en de missers zijn niet weggegooid")
 	waar(Hits.spot("ws_sp0") == null, "maar er komen geen spookcijfers terug (2026-09-24)")
 	gelijk(_kaart_tekst("hulp"), "", "en geen hulpregel")
-	# a state from another day / band / guest count is NOT reused
+	# wave 2 (R2): a question that was missed is still open on another day —
+	# it comes back unchanged, chart and all
+	var regel := _kaart_tekst("regel")
+	Games.stop()
+	State.s["dag"] = int(State.s["dag"]) + 1
+	Games.start(ID)
+	var nog := _stand()
+	gelijk(str(nog["stap"]), "vraag1", "een nieuwe dag: de open vraag blijft")
+	gelijk(str(nog["vak"]), str(na["vak"]), "met hetzelfde diagram")
+	gelijk(_kaart_tekst("regel"), regel, "en dezelfde zin")
+	# ... until it is answered; a turn without an open miss is NOT reused on
+	# another day
+	waar(_antwoord_goed(), "het goede antwoord")
 	Games.stop()
 	State.s["dag"] = int(State.s["dag"]) + 1
 	Games.start(ID)
@@ -813,9 +809,7 @@ func test_opslag_overleeft_json() -> void:
 		_wereld(band)
 		Games.start(ID)
 		for _q in 2:
-			var st0 := _stand()
-			_tik("ws_berg")
-			_tik("ws_k%d" % int(st0["rij"][int(st0["i"])]))
+			_spel().sorteer_een()          # band 5 stands on its opening: no step
 		var voor := _stand()
 		Games.stop()
 		var tekst := JSON.stringify({"v": State.VERSIE, "s": State.s})
@@ -1191,3 +1185,86 @@ func test_dekking_is_nul_in_vier_kaders() -> void:
 							% [str(maat), fase, str(id), str(ander)])
 			waar(knoppen >= 4, "%s %s: er stonden %d eigen hotspots" % [str(maat), fase, knoppen])
 		await _shell_af(h)
+
+# ------------------------------------------------ rekenen eerst (wave 2, R1/R2)
+
+## R1: inside one turn (the entry tap not counted) the maths taps outnumber
+## the rest by at least one, for groep 3, 4 and 5 with a small and a large
+## hotel.  Every tap this test makes is labelled: the strip under the card is
+## maths (the piles of group 3 too, `reken: true`).  The pile sorts itself and
+## the end card closes itself, so there is nothing else to tap.  (Before wave 2
+## a turn was 9 … 20 sorting moves of one or two taps, then "👍 klaar": about
+## 8 % maths.)
+var _teller := {"reken": 0, "spel": 0}
+
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller[soort]) + 1
+
+func _fout_antwoord(band: int) -> bool:
+	if band == 3 and str(_stand().get("stap", "")) != "vraag0":
+		var vak: Array = _stand()["vak"]
+		var l := 0
+		for i in vak.size():
+			if int(vak[i]) < int(vak[l]):
+				l = i
+		return _kies(str(WasSoorten.soort(l)["id"]))
+	return _toets_fout()
+
+func test_rekenaandeel() -> void:
+	for geval in [[3, 1, 3], [3, 8, 2], [4, 4, 3], [4, 8, 3], [5, 7, 4], [5, 8, 4]]:
+		var band: int = geval[0]
+		var n: int = geval[1]
+		_teller = {"reken": 0, "spel": 0}
+		_licht_op()
+		_wereld(band, 1, n, int(geval[2]))
+		waar(Games.start(ID), "band %d, N %d: het spel start" % [band, n])
+		if str(_stand().get("stap", "")) == "vraag0":
+			waar(_fout_antwoord(band), "band %d: een misser op de opening" % band)
+			_tel("reken")
+			await _wacht_mispauze()
+			waar(_antwoord_goed(), "band %d: de opening goed" % band)
+			_tel("reken")
+		# nobody taps while the pile sorts itself
+		waar(await _wacht_tot_stap("vraag1", 10.0), "band %d, N %d: gesorteerd zonder tik" % [band, n])
+		waar(_fout_antwoord(band), "band %d: een misser op vraag 1" % band)
+		_tel("reken")
+		await _wacht_mispauze()
+		waar(_antwoord_goed(), "band %d: vraag 1 goed" % band)
+		_tel("reken")
+		if band != 3:
+			await _spoel(1.0)
+			waar(_antwoord_goed(), "band %d: vraag 2 goed" % band)
+			_tel("reken")
+		gelijk(str(_stand().get("stap", "")), "af", "band %d, N %d: af" % [band, n])
+		await _spoel(0.75 + SpelWas.AF_S + 0.3)
+		gelijk(Games.actief(), "", "band %d, N %d: het spel sluit zichzelf" % [band, n])
+		var reken := int(_teller["reken"])
+		var spel_tik := int(_teller["spel"])
+		waar(reken >= spel_tik + 1, "band %d, N %d: rekenen %d ≥ spel %d + 1" % [band, n, reken, spel_tik])
+		_licht_af()
+
+## R2: a question about the chart that was missed comes back unchanged after an
+## exit — also when the band changes in between (the strip of piles of group 3
+## would otherwise replace the number question of group 4).  Before wave 2
+## another band threw the turn away and started a new pile.
+func test_een_gemiste_vraag_blijft_bij_een_andere_band() -> void:
+	_licht_op()
+	_wereld(4)
+	Games.start(ID)
+	_sorteer_alles()
+	gelijk(str(_stand()["stap"]), "vraag1", "de vraag over het diagram")
+	var regel := _kaart_tekst("regel")
+	var vak := str(_stand()["vak"])
+	waar(_toets_fout(), "een misser")
+	Games.stop()
+	State.s["kunnen"] = 2                    # the band drops to groep 3
+	gelijk(State.band(), 3, "nu groep 3")
+	Games.start(ID)
+	gelijk(str(_stand()["stap"]), "vraag1", "de open vraag blijft")
+	gelijk(int(_stand()["band"]), 4, "de vraag van groep 4")
+	gelijk(str(_stand()["vak"]), vak, "over hetzelfde diagram")
+	gelijk(_kaart_tekst("regel"), regel, "dezelfde zin")
+	await _wacht_mispauze()
+	waar(_antwoord_goed(), "en pas het goede antwoord gaat verder")
+	gelijk(str(_stand()["stap"]), "vraag2", "naar de tweede vraag")
+	_licht_af()

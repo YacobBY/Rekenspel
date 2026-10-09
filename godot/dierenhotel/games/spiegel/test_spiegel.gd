@@ -55,10 +55,10 @@ func _af() -> void:
 
 ## `n` guests from the pool, the first ones in a real bed; `kunnen` lifts the
 ## adaptive cap so the band really is the band the test asks for.
-func _wereld(n: int, band: int, dag := 2) -> Array:
+func _wereld(n: int, band: int, dag := 2, kunnen := 5) -> Array:
 	State.nieuw_spel()
 	State.s["taken"] = []
-	State.s["kunnen"] = 5
+	State.s["kunnen"] = kunnen
 	State.s["dag"] = dag
 	var pool := State.gasten_pool()
 	var bedden := State.alle_bedden()
@@ -551,3 +551,105 @@ func _keur(kader: Vector2, wat: String) -> void:
 			continue
 		waar(r.size.x >= 44.0 and r.size.y >= 44.0, "%s: %s is een tikdoel" % [wat, id])
 	waar(eigen >= 2, "%s: het spel staat op het scherm (%d)" % [wat, eigen])
+
+# ------------------------------------------------ rekenen eerst (wave 2, R1/R2)
+
+## R1: inside one turn (the entry tap not counted) the maths taps outnumber
+## the rest by at least one, for groep 3, 4 and 5 with a small and a large
+## hotel.  Every tap this test makes is labelled: the number strip and every
+## mirror colour are maths (the colour pick is graded geometry, `reken: true`);
+## nothing else needs a tap — the game closes itself.
+var _teller := {"reken": 0, "spel": 0}
+
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller[soort]) + 1
+
+func test_rekenaandeel() -> void:
+	for geval in [[1, 3], [8, 3], [4, 4], [8, 4], [7, 5], [8, 5]]:
+		var n: int = geval[0]
+		var band: int = geval[1]
+		_teller = {"reken": 0, "spel": 0}
+		_op()
+		_wereld(n, band, 2, band - 1)
+		waar(Games.start(SPEL), "band %d, N %d: het spel start" % [band, n])
+		var o := Beurt.opzet(n, band, 2)
+		await _wacht(1.2)
+		# one miss on the sum first: also a maths tap
+		for kn in _strook():
+			if kn != "Kn%d" % int(o["goed"]):
+				_druk(kn)
+				_tel("reken")
+				break
+		await _wacht_mispauze()
+		_kies(int(o["goed"]))
+		_tel("reken")
+		await _wacht_kaart()
+		var spel := _spel()
+		var doel: Array = o["doel"]
+		for i in doel.size():
+			if spel == null:
+				break
+			_kleur(spel.goede_kleur())
+			_tel("reken")
+			await _wacht_plak()
+		gelijk(_stand().get("stap", ""), "af", "band %d, N %d: het masker is af" % [band, n])
+		var reken := int(_teller["reken"])
+		var spel_tik := int(_teller["spel"])
+		waar(reken >= spel_tik + 1, "band %d, N %d: rekenen %d ≥ spel %d + 1" % [band, n, reken, spel_tik])
+		_af()
+
+## R2: a sum that was missed comes back unchanged after an exit — even on the
+## next day, with another band.  (Before wave 2 both started a new mask with a
+## new sum.)
+func test_een_gemiste_som_blijft_na_een_nieuwe_dag() -> void:
+	_op()
+	_wereld(4, 4)
+	waar(Games.start(SPEL), "het spel start")
+	var o := Beurt.opzet(4, 4, 2)
+	await _wacht(1.2)
+	for kn in _strook():
+		if kn != "Kn%d" % int(o["goed"]):
+			_druk(kn)
+			break
+	gelijk(int(_stand().get("pog", 0)), 1, "een misser staat open")
+	Games.stop()
+	State.s["dag"] = 3
+	World.zet_dag(3)
+	waar(Games.start(SPEL), "de volgende dag")
+	gelijk(_stand().get("stap", ""), "som", "nog steeds de som")
+	gelijk(_kaart_tekst("Kolom/Regel"), "🎭 " + Beurt.vraag(o), "dezelfde vraag")
+	gelijk(_kaart_tekst("Kolom/Rij/Som"), str(o["som"]), "dezelfde som")
+	Games.stop()
+	State.s["kunnen"] = 2                    # the band drops to groep 3
+	waar(Games.start(SPEL), "een andere band")
+	gelijk(_kaart_tekst("Kolom/Rij/Som"), str(o["som"]), "nog steeds dezelfde som")
+	await _wacht(1.2)
+	_kies(int(o["goed"]))
+	await _wacht_kaart()
+	gelijk(_stand().get("stap", ""), "plak", "pas het goede antwoord gaat verder")
+	_af()
+
+## R2: a dot that was missed stays the open question when the child switches
+## to another animal on the game bar: the same mask, the same dot, the new
+## animal takes it over.
+func test_een_gemiste_stip_blijft_bij_een_ander_dier() -> void:
+	_op()
+	_wereld(4, 4)
+	waar(Games.start(SPEL), "het spel start")
+	var o := Beurt.opzet(4, 4, 2)
+	await _wacht(1.2)
+	_kies(int(o["goed"]))
+	await _wacht_kaart()
+	_kleur(_spel().goede_kleur())
+	await _wacht_plak()
+	var goed: String = _spel().goede_kleur()
+	_kleur(_foute_kleur(goed))
+	gelijk(int(_stand().get("i", -1)), 1, "de tweede stip staat open")
+	var gast := str(_stand().get("gast", ""))
+	waar(Games.wissel_speler(), "een ander dier neemt het over")
+	gelijk(_stand().get("stap", ""), "plak", "nog steeds plakken")
+	gelijk(int(_stand().get("i", -1)), 1, "dezelfde stip")
+	waar(str(_stand().get("gast", "")) != gast, "met het andere dier")
+	if _spel() != null:
+		gelijk(_spel().goede_kleur(), goed, "dezelfde vraag")
+	_af()

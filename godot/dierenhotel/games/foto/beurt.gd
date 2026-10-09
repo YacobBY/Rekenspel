@@ -10,10 +10,16 @@ extends RefCounted
 ## een dag altijd dezelfde prijs geeft en herladen dezelfde vraag.
 ##
 ## Eén prijs per dier, zoals een echt fotohokje: wie er ook op gaat, elk dier
-## kost hetzelfde.  Het kind kiest twee, drie of vier dieren, en dan:
+## kost hetzelfde.  Er gaan twee, drie of vier dieren op de foto (`aantal`, het
+## hokje van vandaag); het eerste stapt vanzelf in, de anderen kiest het kind,
+## en na elk dier dat erbij komt: wat kost de foto nu?
 ##   groep 3: €2 + €2 + €2 =      herhaald optellen, prijs €2 … €5, tot €20
 ##   groep 4: 3 × €2 =            de tafels van groep 4: €2, €3, €4, €5, €10
 ##   groep 5: 4 × €7 =            de tafels tot 9: €3 … €9
+## Dan het geld erin: welke munten en briefjes zijn precies dat bedrag
+## (`games/_winkel/beurt.gd`, dezelfde handjes geld als in de winkels).  Zo
+## rekent het kind na elke keuze, en is rekenen meer dan de helft van de tikken
+## (eigenaar, 2026-10-08: "rekenen moet minstens 50% van de interactie zijn").
 ## Eén schaalregel (HOTEL.md §3): de prijs is k·N + r — N het aantal gasten, r
 ## uit het zaad van de dag — teruggevouwen in het bereik van de groep.  Hele
 ## euro's, geen kommageld (IDEAS.md).
@@ -33,8 +39,8 @@ const ICOON_AF := "✨"
 const ICOON_WEG := "😞"
 const T_KNOP := "Foto"
 const T_KIES := "Wie gaan er op de foto?"            ## 6 woorden, 23 tekens
-const T_KLAAR := "Klaar"
-const T_SOM := "Hoeveel geld gooi je erin?"          ## 5 woorden, 26 tekens
+const T_SOM := "Hoeveel kost de foto nu?"            ## 5 woorden, 24 tekens
+const T_BETAAL := "Welk geld gooi je erin?"          ## 5 woorden, 23 tekens
 const T_AF := "Klik! Wat een mooie foto!"            ## 5 woorden, 25 tekens
 const T_WEG := "Dat klopt niet"                      ## 3 woorden
 const T_LEEG := "nog te weinig gasten"
@@ -60,6 +66,17 @@ static func prijs(n: int, band: int, dag: int) -> int:
 		4:
 			return int(TAFELS_4[(gasten + r) % TAFELS_4.size()])
 	return 3 + (2 * gasten + r) % 7                          # €3 … €9
+
+## Hoeveel dieren er vandaag op de foto gaan: twee, drie of vier, en nooit meer
+## dan er mogen (`pool`, de dieren met een bed, hooguit vier).  Een functie van
+## het hotel, de groep en de dag, zoals de prijs; de beurt bewaart het.
+static func aantal(n: int, band: int, dag: int, pool: int) -> int:
+	var hoog := mini(MAX_DIEREN, pool)
+	if hoog <= MIN_DIEREN:
+		return MIN_DIEREN
+	var rnd := Sommen.Prng.new(ZAAD + 4241 + dag * 613 + maxi(1, n) * 29 + groep(band) * 5)
+	var keuzes := hoog - MIN_DIEREN + 1
+	return MIN_DIEREN + int(rnd.volgende() * float(keuzes)) % keuzes
 
 ## Wat er in moet: zoveel dieren keer de prijs per dier.
 static func goed(aantal: int, prijs_: int) -> int:

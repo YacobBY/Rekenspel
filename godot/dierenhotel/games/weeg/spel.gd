@@ -2,23 +2,24 @@ extends MiniGame
 ## weeg — "Groenten wegen" (games-c.md §3).
 ##
 ## Rechts in de kas staat de grote marktweegschaal, met ernaast op de vloer de
-## gewichten.  Een beurt is meten met een balans, in drie stappen:
+## gewichten.  Een beurt is meten met een balans, in twee stappen:
 ##   1. de weegschaal staat recht met een pompoen links en gewichten rechts —
 ##      hoeveel kilo weegt de pompoen?  (de gewichten optellen)
-##   2. er komt iets anders op (een meloen, een zak aardappels) en de balans
-##      zakt naar die kant: leg zelf gewichten op tot hij weer recht staat — hij
-##      helt naar de zwaarste kant, dus het kind vergelijkt vóór het optelt;
-##   3. hoeveel kilo weegt het dan?  (de eigen gewichten optellen)
+##   2. er komt iets anders op (een meloen, een zak aardappels), de kaart zegt
+##      wat het weegt, en het kind MAAKT dat getal met de gewichten (splitsen:
+##      13 = 10 + 2 + 1) — precies goed, dan staat de balans recht.
 ## In groep 3 met 1, 2 en 5 kilo tot 10, in groep 4 met 10 kilo erbij tot 20,
 ## in groep 5 met 20 kilo erbij tot 60 — de reuzenpompoen.
 ##
-## Rekenen eerst (PLAN.md R1): de leesvraag staat er meteen.  Een misser kost
-## niets en helpt ook niet (HOTEL.md §9, S5; eigenaar 2026-09-24: "geef geen
-## hulp na fouten"): de strook van `Ui` maakt de weger sip, doet de pauze en
-## zet dezelfde vier keuzes terug — er komt geen telrij, geen bleek getal en
-## geen recept.  Te zwaar is geen fout: de balans helt gewoon de andere kant
-## op, en "eraf" haalt het laatste gewicht er weer af.  Een zesde gewicht past
-## niet meer: de weger is dan even sip, zonder tip.
+## Rekenen eerst (PLAN.md R1): de leesvraag staat er meteen.  Golf 2 (eigenaar:
+## "rekenen moet minstens 50% van de interactie zijn"): het opleggen was
+## proberen tot de balans recht stond ("nog te licht", "te zwaar", "eraf"),
+## tikken zonder getal.  Nu is elk gewicht een deel van een antwoord dat
+## nagekeken wordt: te veel, of de schaal vol en nog te licht, is een misser.
+## Een misser kost niets en helpt ook niet (HOTEL.md §9, S5; eigenaar
+## 2026-09-24: "geef geen hulp na fouten"): de weger is sip met `🔄 Nog een
+## keer`, na de pauze is de schaal weer leeg en staat dezelfde vraag er — geen
+## telrij, geen bleek getal, geen recept, geen opmerking over licht of zwaar.
 ##
 ## De getallen komen uit `beurt.gd` (eigen gezaaide generator, `core/sommen.gd`
 ## blijft bevroren); de weegschaal met wat erop ligt is één model.
@@ -36,8 +37,6 @@ const VELD_X := 114
 const VELD_Z := 100
 const KAART_ID := "wg_som"
 const STROOK_ID := "wg_som_keuzes"
-const ERAF_ID := "wg_eraf"
-const ZEG_ID := "wg_zeg"
 const AF_ID := "wg_af"
 const LEEG_ID := "wg_leeg"
 
@@ -57,7 +56,6 @@ const VOORRAAD_STAP := 10
 const RUST_BAND := 4
 
 const KAART_HOOG := 28.0
-const ZEG_HOOG := 20.0
 const AF_HOOG := 44.0
 
 const SOM_S := 0.6
@@ -70,8 +68,8 @@ var S: Dictionary = {}       ## the turn, in ctx.data()["stand"]
 var O: Dictionary = {}       ## the turn of today (Beurt.opzet), never saved
 var _kaart = null            ## Ui.Kaart
 var _kaart_stap := ""
-var _kaart_hulp := ""        ## the balance's remark on the card now (small frames)
 var _t0 := 0
+var _bezig := false          ## the beam is level, or a miss pauses: weights wait
 
 # ------------------------------------------------------------- aanmelding
 
@@ -128,21 +126,36 @@ func start(_c: SpelCtx) -> void:
 	# The animal the child picked on the game bar weighs, if he may (world.md
 	# §5.8); a turn of another animal is simply not finished.
 	var wil := ctx.voorkeur(spelers())
-	var hervat := not (S.is_empty() or g.is_empty() or int(S["dag"]) != dag
+	# An open question that was missed comes back UNCHANGED (wave 2, R2): after
+	# a new day, another N or band, an animal switch — the turn's numbers are
+	# rebuilt from its own N, band and day, only the weigher may change.
+	var vast := open_misser(S)
+	var hervat := vast or not (S.is_empty() or g.is_empty() or int(S["dag"]) != dag
 			or int(S["N"]) != n or int(S["band"]) != band or _stap() == "af")
 	var weg := ""
 	if hervat and not wil.is_empty() and wil != _gast_id():
 		weg = _gast_id()
-		hervat = false
+		if vast:
+			S["gast"] = wil
+		else:
+			hervat = false
+	elif vast and g.is_empty():
+		S["gast"] = str(kies[(dag + n + 1) % kies.size()].get("id", ""))
 	if not hervat:
 		g = kies[(dag + n + 1) % kies.size()] if wil.is_empty() else ctx.state.gast_van(wil)
 		S = _nieuwe_stand(g, n, band, dag)
 	d["stand"] = S
 	ctx.speelt(_gast_id())
-	O = Beurt.opzet(n, band, dag)
+	O = Beurt.opzet(int(S["N"]), int(S["band"]), int(S["dag"]))
+	# a pan that was left over-full (the game stopped inside a miss's pause)
+	# starts empty again for the same question
+	if _stap() == "leg" and (Beurt.som(_pan()) > int(O["gewicht2"])
+			or (_pan().size() >= Beurt.PAN_MAX and Beurt.som(_pan()) != int(O["gewicht2"]))):
+		S["pan"] = []
 	_t0 = Time.get_ticks_msec()
 	_kaart = null
 	_kaart_stap = ""
+	_bezig = false
 	# the balance and its weights stand there at once; the card waits for the
 	# weigher (`_begin`)
 	_zet_decor()
@@ -163,6 +176,7 @@ func stop() -> void:
 	O = {}
 	_kaart = null
 	_kaart_stap = ""
+	_bezig = false
 
 func _kandidaten() -> Array:
 	var uit: Array = []
@@ -198,15 +212,26 @@ static func _normaliseer(st: Dictionary) -> Dictionary:
 		st[k] = int(st.get(k, 0))
 	st["gast"] = str(st.get("gast", ""))
 	var stap := str(st.get("stap", "lees1"))
-	st["stap"] = stap if stap in ["lees1", "leg", "lees2", "af"] else "lees1"
 	var pan: Array = []
 	var bewaard = st.get("pan", [])
 	if typeof(bewaard) == TYPE_ARRAY:
 		for v in bewaard:
 			if pan.size() < Beurt.PAN_MAX:
 				pan.append(int(v))
+	# a save from before wave 2 may stand in the reading step after the
+	# balancing ("lees2"): it is the build again, from an empty pan
+	if stap == "lees2":
+		stap = "leg"
+		pan = []
+	st["stap"] = stap if stap in ["lees1", "leg", "af"] else "lees1"
 	st["pan"] = pan
 	return st
+
+## Does this saved turn hold a question that was answered wrong and is still
+## open?  Then nothing may replace it (wave 2, R2).
+static func open_misser(st: Dictionary) -> bool:
+	return not st.is_empty() and str(st.get("stap", "")) in ["lees1", "leg"] \
+			and int(st.get("pog", 0)) > 0
 
 func _stap() -> String:
 	return str(S.get("stap", ""))
@@ -242,6 +267,9 @@ func _begin() -> void:
 		return
 	_kaart_neer()
 	_teken()
+	# stopped in the moment the beam was level: that answer still counts
+	if _stap() == "leg" and not _pan().is_empty() and Beurt.som(_pan()) == int(O["gewicht2"]):
+		_na_gewicht()
 	_houd_bij_de_schaal()
 
 ## The guest of the turn stays beside the balance for the whole turn: a waiting
@@ -284,7 +312,6 @@ func _kaart_neer() -> void:
 		_kaart.weg()
 		_kaart = null
 	_kaart_stap = stap
-	_kaart_hulp = ""
 	var o := {"id": KAART_ID, "kamer": KAMER, "hoog": KAART_HOOG, "max": 2,
 		"dier": _gast_id(), "titel": "de weegschaal"}
 	var som := ""
@@ -300,18 +327,14 @@ func _kaart_neer() -> void:
 			# the weights on the card's own strip, pictogram and word: world
 			# buttons on five small weights in a row drifted off them on every
 			# frame the bands were full (owner, 2026-09-23: "labels floating
-			# where they don't belong"); the strip docks with its card
-			o["icoon"] = Beurt.ICOON
-			o["regel"] = Beurt.T_RECHT
+			# where they don't belong"); the strip docks with its card.  The
+			# card says what the thing weighs; the child makes that number, so
+			# every weight is part of a graded answer (wave 2, R1/R4)
+			o["icoon"] = Beurt.icoon(str(O["ding2"]))
+			o["regel"] = Beurt.maak(int(O["gewicht2"]))
 			o["keuze_titel"] = Beurt.T_KG_TITEL
 			o["keuzes"] = _gewicht_keuzes()
-		"lees2":
-			o["icoon"] = Beurt.icoon(str(O["ding2"]))
-			o["regel"] = Beurt.vraag(str(O["ding2"]))
-			o["goed"] = Beurt.som(_pan())
-			o["liever"] = Beurt.liever(_pan())
-			o["on_ok"] = _antwoord
-			som = Beurt.som_regel(_pan())
+			o["reken"] = true
 		_:
 			o["icoon"] = Beurt.ICOON_AF
 			o["regel"] = Beurt.af(str(O["ding2"]), int(O["gewicht2"]))
@@ -323,14 +346,13 @@ func _kaart_neer() -> void:
 		_kaart.klaar()
 		_kaart.zet(str(int(O["gewicht2"])))
 
-## One tap on the strip, for either reading question.
+## One tap on the strip of the reading question.
 func _antwoord(n, k) -> void:
 	if n == null or S.is_empty() or O.is_empty():
 		return
-	var stap := _stap()
-	if stap != "lees1" and stap != "lees2":
+	if _stap() != "lees1":
 		return
-	var goed := int(O["gewicht1"]) if stap == "lees1" else Beurt.som(_pan())
+	var goed := int(O["gewicht1"])
 	if int(n) != goed:
 		S["pog"] = int(S["pog"]) + 1
 		S["missers"] = int(S["missers"]) + 1
@@ -342,9 +364,6 @@ func _antwoord(n, k) -> void:
 		k.klaar()
 	ctx.snd.ja()
 	S["pog"] = 0
-	if stap == "lees2":
-		_klaar()
-		return
 	S["stap"] = "leg"
 	S["pan"] = []
 	_bewaar()
@@ -359,18 +378,16 @@ func _antwoord(n, k) -> void:
 
 # ------------------------------------------------------------------- wegen
 
-## Put one weight of `kg` on the right pan (a tap on it, or a drag).
+## Put one weight of `kg` on the right pan (a tap on its button on the strip).
+## The weights together are the answer to "make this many kilo" (wave 2): see
+## `_na_gewicht` for how the build is checked.
 func leg(kg: int) -> void:
-	if S.is_empty() or O.is_empty() or _stap() != "leg":
+	if S.is_empty() or O.is_empty() or _stap() != "leg" or _bezig:
 		return
 	if not (O["rek"] as Array).has(kg):
 		return
 	var pan := _pan()
 	if pan.size() >= Beurt.PAN_MAX:
-		# the pan is full: the weigher sulks, and no tip about heavier weights
-		# follows (owner, 2026-09-24) — the balance still says what it says
-		ctx.snd.zacht()
-		ctx.ui.misser(_kaart, _gast_id())
 		return
 	pan.append(kg)
 	S["pan"] = pan
@@ -384,43 +401,47 @@ func leg(kg: int) -> void:
 			Modellen.GEWICHT_KL.get(kg, Modellen.GOUD), true, 4.0)
 	_na_gewicht()
 
-## Lift the last weight off again.  Never a penalty: the beam just follows.
-func eraf() -> void:
-	if S.is_empty() or O.is_empty() or _stap() != "leg":
-		return
-	var pan := _pan()
-	if pan.is_empty():
-		return
-	pan.pop_back()
-	S["pan"] = pan
-	S["acties"] = int(S["acties"]) + 1
-	ctx.snd.terug()
-	_na_gewicht()
-
-## After every weight: where does the beam lean, and is it level?
+## After every weight the build is checked against the number on the card.
+## Exactly that many kilo: the beam is level — a right answer, and a moment
+## later the thing's weight stands under its sum.  Too many kilo, or the pan
+## full and still too few: a miss — the weigher is disappointed (`Ui.misser`),
+## the beam shows what lies there for the pause, and then the pan is empty
+## again for the SAME question.  Below the number nothing is said: no "too
+## light", no "too heavy" — the card already holds the number (owner,
+## 2026-09-24: no help after a mistake).
 func _na_gewicht() -> void:
-	var k := _kant()
-	if k < 0:
-		_zeg(Beurt.ICOON_LICHT, Beurt.T_LICHT)
-	elif k > 0:
-		_zeg(Beurt.ICOON_ZWAAR, Beurt.T_ZWAAR)
-	else:
-		_zeg(Beurt.ICOON, Beurt.T_PRECIES, "goed")
+	var t := Beurt.som(_pan())
+	var doel := int(O["gewicht2"])
 	_bewaar()
 	_teken()
-	if k != 0:
+	if t == doel:
+		_bezig = true
+		ctx.snd.ja()
+		ctx.reken_goed()
+		S["pog"] = 0
+		_bewaar()
+		if not await na(RECHT_S):
+			return
+		if S.is_empty() or _stap() != "leg":
+			return
+		_bezig = false
+		_klaar()
 		return
-	ctx.snd.ja()
-	var voor := Beurt.som(_pan())
-	if not await na(RECHT_S):
+	if t < doel and _pan().size() < Beurt.PAN_MAX:
 		return
-	if S.is_empty() or _stap() != "leg" or Beurt.som(_pan()) != voor:
-		return
-	S["stap"] = "lees2"
-	S["pog"] = 0
-	_zeg_weg()
+	_bezig = true
+	S["pog"] = int(S["pog"]) + 1
+	S["missers"] = int(S["missers"]) + 1
+	ctx.ui.misser(_kaart, _gast_id())
 	_bewaar()
-	_kaart_neer()
+	if not await na(Ui.MIS_PAUZE):
+		return
+	if S.is_empty() or _stap() != "leg":
+		return
+	S["pan"] = []
+	_bezig = false
+	ctx.snd.terug()
+	_bewaar()
 	_teken()
 
 func _kant() -> int:
@@ -435,7 +456,6 @@ func _klaar() -> void:
 		S["ster"] = 1
 		ctx.taak_klaar("weeg", {"sterren": 1})
 	ctx.snd.hoera()
-	_zeg_weg()
 	_bewaar()
 	_kaart_neer()
 	_teken()
@@ -481,45 +501,14 @@ func _schaal_params() -> Dictionary:
 		return {"kant": 0, "l": str(O["ding1"]), "lm": int(O["maat1"]), "r": O["set1"]}
 	return {"kant": _kant(), "l": str(O["ding2"]), "lm": int(O["maat2"]), "r": _pan()}
 
-## A short remark at the balance: which way it leans.
-func _zeg(icoon: String, tekst: String, klas := "hulp") -> void:
-	S["zeg"] = {"icoon": icoon, "tekst": tekst, "klas": klas}
-
-func _zeg_weg() -> void:
-	S.erase("zeg")
-
-## Everything round the balance, but never the card (see `_kaart_neer`).
+## Everything round the balance, but never the card (see `_kaart_neer`).  No
+## "eraf" button and no remark about light or heavy any more (wave 2): the
+## build is an answer, a wrong one is a miss and the pan empties by itself.
 func _teken() -> void:
 	if not actief or ctx == null or S.is_empty() or O.is_empty():
 		return
 	_zet_decor()
 	var stap := _stap()
-	if stap == "leg" and not _pan().is_empty():
-		ctx.hotspots.maak({"id": ERAF_ID, "kamer": KAMER, "obj": SCHAAL_ID, "op": "aan",
-			"x": float(SCHAAL_X), "z": float(SCHAAL_Z), "y": 12.0,
-			"icoon": Beurt.ICOON_ERAF, "label": Beurt.T_ERAF, "titel": Beurt.T_ERAF_TITEL,
-			"prio": 12, "aan": func(_s) -> void: eraf()})
-	else:
-		ctx.hotspots.weg(ERAF_ID)
-	# the remark of the last weight: a bubble at the balance on a tablet, the
-	# card's help line on a phone (no room beside the balance there)
-	var z: Dictionary = S.get("zeg", {}) if typeof(S.get("zeg", {})) == TYPE_DICTIONARY else {}
-	if stap == "leg" and not z.is_empty() and not _klein_kader():
-		ctx.ui.wolk({"id": ZEG_ID, "kamer": KAMER, "obj": SCHAAL_ID, "op": "aan",
-			"x": float(SCHAAL_X), "z": float(SCHAAL_Z), "hoog": ZEG_HOOG,
-			"icoon": str(z.get("icoon", "")), "tekst": str(z.get("tekst", "")),
-			"klas": str(z.get("klas", "hulp")), "prio": 10})
-	else:
-		ctx.ui.wolk_weg(ZEG_ID)
-	# On a phone the same remark is the card's second small line: there is no
-	# room for a bubble beside the balance.  It is what the balance shows after
-	# every weight, never help: a miss adds nothing (owner, 2026-09-24).
-	var op_kaart := ""
-	if _klein_kader() and stap == "leg" and not z.is_empty():
-		op_kaart = ("%s %s" % [str(z.get("icoon", "")), str(z.get("tekst", ""))]).strip_edges()
-	if _kaart != null and stap != "af" and op_kaart != _kaart_hulp:
-		_kaart_hulp = op_kaart
-		_kaart.hulp(op_kaart)
 	if stap == "af":
 		var id := _gast_id()
 		if World.dier(id) != null:
@@ -528,10 +517,6 @@ func _teken() -> void:
 				"getal": int(O["gewicht2"]), "tekst": "kilo", "klas": "goed", "prio": 12})
 	ctx.wereld.vuil()
 	_meld()
-
-func _klein_kader() -> bool:
-	var k := World.kader_rect().size
-	return k.x > 0.0 and minf(k.x, k.y) < 400.0
 
 func _volg_dier(id: String) -> Callable:
 	return func() -> Dictionary:

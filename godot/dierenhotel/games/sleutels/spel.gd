@@ -136,7 +136,12 @@ func start(_c: SpelCtx) -> void:
 	# with his key first — the frozen core seeds it on day, N, band and round,
 	# never on who holds the keys.
 	var wil := ctx.voorkeur(spelers())
-	if typeof(oud) != TYPE_DICTIONARY or str((oud as Dictionary).get("sig", "")) != sig \
+	# An open question that had a miss comes back UNCHANGED after any exit —
+	# another day, another hotel size or band, a new round, or the game bar's
+	# animal switch (wave 2, R2): the board of that key goes on as it was.
+	if open_vraag(oud):
+		pass
+	elif typeof(oud) != TYPE_DICTIONARY or str((oud as Dictionary).get("sig", "")) != sig \
 			or bool((oud as Dictionary).get("klaar", false)) or not _gasten_kloppen(oud) \
 			or (not wil.is_empty() and not _had_zijn_beurt(oud, wil)):
 		var mee: Array = _gasten_vanaf(wil).slice(0,
@@ -219,6 +224,20 @@ func _gasten_vanaf(id: String) -> Array:
 	if i <= 0:
 		return _gasten.duplicate()
 	return _gasten.slice(i) + _gasten.slice(0, i)
+
+
+## A saved board whose key in hand was already answered wrong at least once —
+## on the strip or on a hook — and whose guests are all still there: it may
+## not be swapped for a fresh board (R2).
+func open_vraag(p) -> bool:
+	if typeof(p) != TYPE_DICTIONARY or bool((p as Dictionary).get("klaar", false)) \
+			or not _gasten_kloppen(p):
+		return false
+	var lijst: Array = (p as Dictionary).get("sleutels", [])
+	var nu := int((p as Dictionary).get("nu", 0))
+	if nu < 0 or nu >= lijst.size():
+		return false
+	return int((lijst[nu] as Dictionary).get("mis", 0)) > 0
 
 
 ## Hing de sleutel van `id` op dit bord al, of zit hij nu in de hand?  Dan had
@@ -1221,6 +1240,10 @@ func _teken_kaart(b: Dictionary, s: Dictionary) -> void:
 			"regel2": VRAAG_WACHT % str(s.get("naam", "")),
 			"goed": nummer, "min": 1, "max": _cijfers(), "max_getal": _plafond(),
 			"liever": _buren_zichtbaar(_gat_nu()), "dier": gast,
+			# the strip's seed is the board's own day, not today's
+			# (`Ui._getal_keuzes` takes today): an open key keeps its four
+			# numbers across a new day (wave 2, R2)
+			"zaad": (hash(KAART) % 100003) + int(_p.get("dag", ctx.state.s["dag"])) * 17,
 			"on_ok": _op_getal,
 		})
 	else:
@@ -1323,6 +1346,10 @@ func _teken_haken(b: Dictionary, lay: Dictionary) -> void:
 			# ook niet van af
 			"geen_vlak": str(lay.get("modus", "")) == "wand",
 			"vast": true, "prio": 12, "titel": titel,
+			# wave 2, R4: hanging the key on an empty hook is checked against
+			# its number — maths; reading a plate aloud (or the "choose first"
+			# nudge before the number is chosen) is a free action
+			"reken": leeg and hang, "vrij": not (leeg and hang),
 			"icoon": "🔑" if not str(h.get("sleutel", "")).is_empty() else "",
 			"label": label,
 			"aan": func(_s) -> void: _tik_haak(idx),
@@ -1380,6 +1407,9 @@ func _teken_sleutel(s: Dictionary) -> void:
 		"titel": titel,
 		"sleep": DROP, "drop": "", "data": {"nummer": nummer},
 		"volg": _volg_gast(id),
+		# a tap reads the number aloud: a free action (wave 2, R4); dragging it
+		# onto a hook is the hook's maths
+		"vrij": true,
 		"tik": func(_s) -> void: _wijs_aan(),
 	})
 
@@ -1544,6 +1574,8 @@ func _goed(i: int) -> void:
 	var nummer := int(s.get("nummer", 0))
 	h["sleutel"] = gast
 	s["op"] = true
+	# the key on its own number: a right answer that is not a `goed: n` strip
+	ctx.reken_goed()
 	_licht = i
 	ctx.snd.sleutel()
 	ctx.snd.ja()

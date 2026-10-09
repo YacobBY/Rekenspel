@@ -1203,3 +1203,125 @@ func _klok_stemmen() -> int:
 
 func _klok_klinkt() -> bool:
 	return _klok_stemmen() > 0
+
+# ------------------------------------------- golf 2: rekenen eerst (R1, R2)
+
+var _teller := {"reken": 0, "spel": 0}
+
+## Every tap the test performs, labelled the way R1 counts it.  Turning the
+## hands and ✅ are taps on the strip of a maths card (`reken: true`): the
+## turning builds the time that ✅ then checks against the wish — a graded
+## manipulative, and a wrong ✅ is a miss without help.
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller.get(soort, 0)) + 1
+
+## R1 (wave 2, owner: "rekenen moet minstens 50% van de interactie zijn"): one
+## guest woken, from the start (the entry tap not counted), in every group and
+## for a small and a large hotel: every tap is maths — the hour question of
+## groep 5, the turning, ✅ (once wrong, once right).
+func test_rekenaandeel() -> void:
+	for geval in [[1, 1, 3, 3], [3, 1, 3, 3], [4, 2, 3, 4], [6, 2, 3, 4], [7, 2, 5, 5],
+			[8, 2, 5, 5]]:
+		var n: int = geval[0]
+		var wat := "groep %d, %d gasten" % [int(geval[3]), n]
+		_teller = {"reken": 0, "spel": 0}
+		_op()
+		_gasten(n, int(geval[1]), int(geval[2]))
+		gelijk(State.band(), int(geval[3]), "%s: de band" % wat)
+		waar(Games.start(ID), "%s: het spel start" % wat)
+		var spel := _spel()
+		if spel == null:
+			_af()
+			return
+		var s: Dictionary = spel.stand()
+		if str(s["stap"]) == "duur":
+			_tel("reken")
+			waar(_tik("u%d" % int(s["doelU"])), "%s: het goede uur" % wat)
+		# one real try beside the wish: a miss, and a maths tap too
+		for i in 13:
+			_tel("reken")
+			_tik("uur")
+			if not spel.goed():
+				break
+		_tel("reken")
+		waar(_tik("klaar"), "%s: ✅ naast de wektijd" % wat)
+		gelijk(str(s["stap"]), "mis", "%s: een misser, de gast slaapt door" % wat)
+		await _wacht_mispauze()
+		var stappen := {"uur": 60, "kwartier": 15, "vijf": 5}
+		for _rondje in 200:
+			if spel.goed():
+				break
+			var nu: int = Sommen.Wekker.in_min(int(s["u"]), int(s["m"]))
+			var over: int = posmod(Sommen.Wekker.in_min(int(s["doelU"]), int(s["doelM"])) - nu, 720)
+			var gedaan := false
+			for knop in ["uur", "kwartier", "vijf"]:
+				if _knop(knop) != null and over >= int(stappen[knop]):
+					_tel("reken")
+					gedaan = _tik(knop)
+					break
+			if not gedaan:
+				break
+		_tel("reken")
+		waar(_tik("klaar"), "%s: ✅ op de wektijd" % wat)
+		gelijk(str(s["stap"]), "wakker", "%s: de gast wordt wakker" % wat)
+		var reken := int(_teller["reken"])
+		var spel_n := int(_teller["spel"])
+		waar(reken >= spel_n + 1, "%s: R1 reken %d >= spel %d + 1" % [wat, reken, spel_n])
+		_af()
+
+## R2 (wave 2): a wish that was answered wrong (✅ beside the time) comes back
+## UNCHANGED after any exit — a new day, another band, another hotel size, the
+## animal on the game bar picking somebody who had no turn yet — with the same
+## guest, the same wish and the hands where the child left them; only the
+## right time wakes him.
+func test_een_gemiste_wektijd_komt_onveranderd_terug() -> void:
+	_op()
+	var gasten := _gasten(5, 2, 3)
+	waar(Games.start(ID), "het spel start")
+	var spel := _spel()
+	if spel == null:
+		_af()
+		return
+	_draai_naast(spel, "aan de wijzers draaien")
+	await _verkeerd_klaar("✅ naast de wektijd")
+	var voor: Dictionary = (spel.stand() as Dictionary).duplicate(true)
+	gelijk(int(voor["missers"]), 1, "een misser")
+	for stap in ["een nieuwe dag", "een andere band", "een gast minder", "het dier op de balk"]:
+		Games.stop()
+		match stap:
+			"een nieuwe dag":
+				State.s["dag"] = 3
+				World.zet_dag(3)
+			"een andere band":
+				State.s["kunnen"] = 2
+				gelijk(State.band(), 3, "nu groep 3")
+			"een gast minder":
+				(State.s["gasten"] as Array).pop_back()
+				World.sync(State.s["gasten"])
+			_:
+				State.s["speler"] = str(gasten[1]["id"])
+		waar(Games.start(ID), "%s: het spel start" % stap)
+		spel = _spel()
+		var nu: Dictionary = spel.stand()
+		for k in ["dag", "N", "band", "idx", "doelU", "doelM", "u", "m", "missers"]:
+			gelijk(int(nu[k]), int(voor[k]), "%s: %s blijft" % [stap, k])
+		gelijk(str(nu["gast"]), str(voor["gast"]), "%s: dezelfde gast" % stap)
+		gelijk(_kaart_tekst("Kolom/Regel"), "⏰ " + str(spel.zin_zet()[0]), "%s: dezelfde wens" % stap)
+	var s: Dictionary = spel.stand()
+	var stappen := {"uur": 60, "kwartier": 15, "vijf": 5}
+	for _rondje in 200:
+		if spel.goed():
+			break
+		var over: int = posmod(Sommen.Wekker.in_min(int(s["doelU"]), int(s["doelM"]))
+			- Sommen.Wekker.in_min(int(s["u"]), int(s["m"])), 720)
+		var gedaan := false
+		for knop in ["uur", "kwartier", "vijf"]:
+			if _knop(knop) != null and over >= int(stappen[knop]):
+				gedaan = _tik(knop)
+				break
+		if not gedaan:
+			break
+	waar(_tik("klaar"), "✅ op de wektijd")
+	gelijk(str(s["stap"]), "wakker", "nu wordt hij wakker")
+	State.s.erase("speler")
+	_af()

@@ -7,12 +7,12 @@ extends RefCounted
 ## file only READS `Sommen.Prng`, the seeded mulberry32 every game shares.
 ##
 ## A turn is measuring with a balance (meten, kg — groep 4 in the curriculum
-## table of IDEAS.md, natural units and comparing in groep 3), in three steps:
+## table of IDEAS.md, natural units and comparing in groep 3), in two steps:
 ##   1. read a balanced scale: the thing weighs what the weights weigh together;
-##   2. weigh a second thing yourself: put weights on until the beam is level —
-##      the balance tilts towards the heavier side, so the child compares
-##      before she adds;
-##   3. read your own measurement: add up the weights you put on.
+##   2. weigh a second thing yourself: its weight is on the card, the child
+##      makes that number with the weights (splitsen) and the beam is level.
+## (Until wave 2 the second thing was balanced by trying — "nog te licht",
+## "te zwaar", "eraf" — and then read; those taps carried no number.)
 ## Weights per band: 1, 2, 5 kg (tot 10) · + 10 kg (tot 20) · 1, 5, 10, 20 kg
 ## (tot 60, the giant pumpkin of groep 5).  The second weight grows with the
 ## hotel.
@@ -41,20 +41,14 @@ const ICOON := "⚖️"
 ## for the maths bar of a 360-wide phone, and the first card of the turn would
 ## float over the room while every other card of the turn docks.
 const T_HOEVEEL := "Hoeveel kilo is %s?"                ## 5 woorden, ≤ 27 tekens
-const T_RECHT := "Maak de weegschaal weer recht"         ## 5 woorden, 29 tekens
+## The second step (wave 2): the thing's weight is the question, the weights
+## the child lays are the answer.  The pictogram of the thing goes first.
+const T_MAAK := "Leg %d kilo op de weegschaal"           ## 6 woorden, ≤ 28 tekens
 const T_AF := "%s weegt %d kilo!"                        ## 5 woorden, ≤ 25 tekens
-const T_LICHT := "nog te licht"
-const T_ZWAAR := "te zwaar"
-const T_PRECIES := "precies!"
-const T_ERAF := "eraf"
-const T_ERAF_TITEL := "haal het laatste gewicht eraf"
 const T_KG := "%d kg"
 const T_KG_TITEL := "leg een gewicht op de weegschaal"
 const ICOON_LEG := "⬇"
 const T_LEEG := "nog geen gasten"
-const ICOON_LICHT := "⬆"
-const ICOON_ZWAAR := "⬇"
-const ICOON_ERAF := "⬆"
 const ICOON_AF := "✅"
 
 ## The turn of today.
@@ -162,6 +156,10 @@ static func liever(lijst: Array) -> Array:
 ## A sentence with the thing in it.
 static func vraag(ding: String) -> String:
 	return T_HOEVEEL % str(NAAM.get(ding, ["", "het", "Het"])[1])
+
+## The building question: "Leg 13 kilo op de weegschaal".
+static func maak(kilo: int) -> String:
+	return T_MAAK % kilo
 
 static func af(ding: String, kilo: int) -> String:
 	return T_AF % [str(NAAM.get(ding, ["", "het", "Het"])[2]), kilo]

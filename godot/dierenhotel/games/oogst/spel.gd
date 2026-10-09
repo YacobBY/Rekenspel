@@ -4,13 +4,17 @@ extends MiniGame
 ## In de kas staat de pluktafel met tien plekken voor bakjes van tien.  Er
 ## staan volle bakjes en één open bakje; het kind telt hoeveel aardbeien er
 ## liggen (tientallen en eenheden), rekent uit hoeveel er nog bij moeten
-## (splitsen tot 10, aanvullen tot het tiental of tot 100) en plukt ze daarna
-## zelf uit de aardbeienbak: één per tik, en in groep 5 na het volle bakje een
-## heel bakje per tik — "via de tien" om naar honderd te komen.  De gast van de
-## beurt staat naast de tafel en eet mee.
+## (splitsen tot 10, aanvullen tot het tiental of tot 100), en daarna plukt de
+## gast van de beurt ze zelf uit de aardbeienbak: één per stap, en in groep 5 na
+## het volle bakje een heel bakje per stap — "via de tien" om naar honderd te
+## komen.  De gast van de beurt staat naast de tafel en eet mee.
 ##
 ## Rekenen eerst (PLAN.md R1): de telvraag staat er meteen, het plukken komt pas
-## na de twee sommen (R2/R3).  Een misser kost niets en helpt ook niet
+## na de twee sommen (R2/R3).  Sinds golf 2 (eigenaar: "rekenen moet minstens
+## 50% van de interactie zijn") plukt de gast vanzelf: de 1 … 50 tikken op de
+## bak waren spel zonder getal, en de kaart verklapte hoeveel er nog moesten
+## ("Pluk er nog %d").  Elke tik van het kind is nu een antwoord.
+## Een misser kost niets en helpt ook niet
 ## (HOTEL.md §9, S5; eigenaar 2026-09-24: "geef geen hulp na fouten"): de
 ## centrale strook van `Ui` maakt de plukker sip, doet de pauze en zet dezelfde
 ## vier keuzes terug, en verder verschijnt er niets — geen telrij, geen bleek
@@ -26,13 +30,12 @@ const Beurt := preload("res://games/oogst/beurt.gd")
 const TAFEL_ID := "og_tafel"
 const RUST_TAFEL := "rust_og_tafel"
 ## The strawberry planter (fixed decor of the kas): the berries come from it,
-## the pick button hangs on it, and the entry button is anchored to it.
+## and the entry button is anchored to it.
 const BAK := "aardbeienbakz"
 const BAK_X := 7
 const BAK_Z := 38
 const KAART_ID := "og_som"
 const STROOK_ID := "og_som_keuzes"
-const PLUK_ID := "og_pluk"
 const LEKKER_ID := "og_lekker"
 const LEEG_ID := "og_leeg"
 
@@ -47,10 +50,11 @@ const GAST_Z := 32.0
 const RUST_BAKJES := [0, 0, 0, 0, 0]
 
 const KAART_HOOG := 26.0     ## the card's aim over the table (when it floats)
-const PLUK_HOOG := 12.0
 const LEKKER_HOOG := 44.0
 
 const SOM_S := 0.6           ## a right answer, then the next card this much later
+const PLUK_S := 0.2          ## the guest picks one step (a berry, a punnet) this often
+const PLUK_EERST := 0.6      ## ... and starts this long after the picking card lands
 const AF_S := 3.4            ## the end card is readable this long before it closes
 const LEEG_S := 1.8
 const BLIJF_S := 1.5         ## how often the guest of the turn is kept at his spot
@@ -64,6 +68,7 @@ var O: Dictionary = {}
 var _kaart = null            ## Ui.Kaart
 var _kaart_stap := ""        ## the step the card on screen was built for
 var _t0 := 0
+var _plukt := false          ## the guest is picking (`_pluk_vanzelf`)
 
 # ------------------------------------------------------------- aanmelding
 
@@ -111,18 +116,27 @@ func start(_c: SpelCtx) -> void:
 	var wil := ctx.voorkeur(spelers())
 	# Resume only when the saved turn is still THIS turn (games-c.md §2.10) —
 	# and the turn of the picked animal: another one's is dropped (`weg`).
-	var hervat := not (S.is_empty() or g.is_empty() or int(S["dag"]) != dag
+	# An open question that was missed comes back UNCHANGED (wave 2, R2): after
+	# a new day, another N or band, an animal switch — the table of the turn is
+	# rebuilt from the turn's own N, band and day, only the picker may change.
+	var vast := open_misser(S)
+	var hervat := vast or not (S.is_empty() or g.is_empty() or int(S["dag"]) != dag
 			or int(S["N"]) != n or int(S["band"]) != band or _stap() == "af")
 	var weg := ""
 	if hervat and not wil.is_empty() and wil != _gast_id():
 		weg = _gast_id()
-		hervat = false
+		if vast:
+			S["gast"] = wil
+		else:
+			hervat = false
+	elif vast and g.is_empty():
+		S["gast"] = str(kies[(dag + n) % kies.size()].get("id", ""))
 	if not hervat:
 		g = kies[(dag + n) % kies.size()] if wil.is_empty() else ctx.state.gast_van(wil)
 		S = _nieuwe_stand(g, n, band, dag)
 	d["stand"] = S
 	ctx.speelt(_gast_id())
-	O = Beurt.opzet(n, band, dag)
+	O = Beurt.opzet(int(S["N"]), int(S["band"]), int(S["dag"]))
 	_t0 = Time.get_ticks_msec()
 	_kaart = null
 	_kaart_stap = ""
@@ -186,6 +200,12 @@ static func _normaliseer(st: Dictionary) -> Dictionary:
 	st["stap"] = stap if stap in ["tel", "bij", "pluk", "af"] else "tel"
 	return st
 
+## Does this saved turn hold a question that was answered wrong and is still
+## open?  Then nothing may replace it (wave 2, R2).
+static func open_misser(st: Dictionary) -> bool:
+	return not st.is_empty() and str(st.get("stap", "")) in ["tel", "bij"] \
+			and int(st.get("pog", 0)) > 0
+
 func _stap() -> String:
 	return str(S.get("stap", ""))
 
@@ -219,6 +239,8 @@ func _begin() -> void:
 		return
 	_kaart_neer()
 	_teken()
+	if _stap() == "pluk":
+		_pluk_vanzelf()            # a reload in the middle of the picking
 	_houd_bij_de_tafel()
 
 ## The guest of the turn stays beside the table for the whole turn: a waiting
@@ -286,7 +308,9 @@ func _kaart_neer() -> void:
 			o["on_ok"] = _antwoord
 			som = Beurt.som_bij(O)
 		"pluk":
-			o["regel"] = Beurt.T_PLUK % _nog()
+			# the guest picks: the sum line counts on with every step, and the
+			# card says nothing the child still has to work out
+			o["regel"] = Beurt.T_PLUKT
 			som = "%d + %d =" % [int(O["T"]), int(S["geplukt"])]
 		_:
 			o["icoon"] = Beurt.ICOON_AF
@@ -343,11 +367,31 @@ func _antwoord(n, k) -> void:
 		return
 	_kaart_neer()
 	_teken()
+	if _stap() == "pluk":
+		_pluk_vanzelf()
 
 # ---------------------------------------------------------------- plukken
 
-## One tap on the planter: one berry into the open punnet, or (band 5, once
-## that punnet is full) a whole punnet.  The card counts on with it.
+## The guest of the turn picks the answer by himself, one step every PLUK_S
+## (wave 2: the child's taps are the answers, not the picking).  A reload in the
+## middle goes on from what is already in the punnets.
+func _pluk_vanzelf() -> void:
+	if _plukt:
+		return
+	_plukt = true
+	var eerst := true
+	while actief and not S.is_empty() and _stap() == "pluk" and _nog() > 0:
+		# the first step waits a moment longer: the card that says so lands first
+		if not await na(PLUK_EERST if eerst else PLUK_S):
+			return
+		eerst = false
+		if S.is_empty() or _stap() != "pluk":
+			break
+		pluk()
+	_plukt = false
+
+## One pick step: one berry into the open punnet, or (band 5, once that punnet
+## is full) a whole punnet.  The card counts on with it.
 func pluk() -> void:
 	if S.is_empty() or O.is_empty() or _stap() != "pluk":
 		return
@@ -367,7 +411,6 @@ func pluk() -> void:
 		_klaar()
 		return
 	if _kaart != null:
-		_kaart.regel(Beurt.T_PLUK % _nog())
 		_kaart.som("%d + %d =" % [int(O["T"]), int(S["geplukt"])])
 		_kaart.zet(str(_totaal()))
 	_bewaar()
@@ -411,17 +454,6 @@ func _teken() -> void:
 		return
 	_zet_tafel()
 	var stap := _stap()
-	if stap == "pluk":
-		var stap_n := Beurt.pluk_stap(O, int(S["geplukt"]))
-		var b := World.mik(BAK, KAMER)
-		ctx.hotspots.maak({"id": PLUK_ID, "kamer": KAMER, "obj": BAK, "op": "aan",
-			"x": float(b.get("x", BAK_X)), "z": float(b.get("z", BAK_Z)), "y": PLUK_HOOG,
-			"icoon": Beurt.ICOON if stap_n <= 1 else Beurt.ICOON_PLUK10,
-			"label": Beurt.T_PLUK_KNOP if stap_n <= 1 else Beurt.T_PLUK10_KNOP,
-			"titel": Beurt.T_PLUK_TITEL if stap_n <= 1 else Beurt.T_PLUK10_TITEL,
-			"prio": 12, "aan": func(_s) -> void: pluk()})
-	else:
-		ctx.hotspots.weg(PLUK_ID)
 	if stap == "af":
 		var id := _gast_id()
 		if World.dier(id) != null:

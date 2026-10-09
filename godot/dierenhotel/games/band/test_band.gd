@@ -922,3 +922,153 @@ func _keur(kader: Vector2, wat: String) -> void:
 			continue
 		waar(r.size.x >= 44.0 and r.size.y >= 44.0, "%s: %s is een tikdoel" % [wat, id])
 	waar(eigen >= 3, "%s: het spel staat op het scherm (%d)" % [wat, eigen])
+
+
+# ------------------------------------------- golf 2: rekenen eerst (R1, R2)
+
+var _teller := {"reken": 0, "spel": 0}
+
+## Every tap the test performs, labelled the way R1 counts it: an answer on a
+## maths strip is "reken", everything else — `🔁` too — "spel".
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller.get(soort, 0)) + 1
+
+## The day (1..120) whose rhythm for `n` guests in `band` is the shortest,
+## whatever its kind: the tests wait for it in real time.
+func _korte_dag(n: int, band: int) -> int:
+	var beste := 1
+	var kort := INF
+	for dag in range(1, 120):
+		var t := Beurt.duur(Beurt.opzet(n, band, dag))
+		if t < kort:
+			kort = t
+			beste = dag
+	return beste
+
+## The pause before the drum's free replay (read at run time, so this file
+## also loads against a game without it — the red run of wave 2).
+func _gratis_s() -> float:
+	return float((Spel as GDScript).get_script_constant_map().get("GRATIS_S", 1.2))
+
+## Until the card asks (the rhythm was heard), at most `s` seconds.
+func _wacht_op_kaart(s: float) -> bool:
+	var boom := Engine.get_main_loop() as SceneTree
+	var eind := Time.get_ticks_msec() + int(s * 1000.0)
+	while Time.get_ticks_msec() < eind:
+		if _knoop(STROOK) != null:
+			return true
+		await boom.process_frame
+	return _knoop(STROOK) != null
+
+## R1 (wave 2, owner: "rekenen moet minstens 50% van de interactie zijn"): a
+## whole turn, from the start (the entry tap not counted), in every group and
+## for a small and a large hotel.  The child listens (no tap), the card asks,
+## and the drum plays the rhythm ONCE MORE by itself — the first replay is
+## free, so counting along costs no tap; the answer is the only tap the turn
+## needs (a miss is a maths tap too).
+func test_rekenaandeel() -> void:
+	alleen_spellen([SPEL])
+	for geval in [[1, 3, true], [3, 3, false], [4, 4, false], [6, 4, true], [7, 5, false],
+			[8, 5, false]]:
+		var n: int = geval[0]
+		var band: int = geval[1]
+		var mis: bool = geval[2]
+		var wat := "groep %d, %d gasten" % [band, n]
+		var dag := _korte_dag(n, band)
+		_teller = {"reken": 0, "spel": 0}
+		_op()
+		_wereld(n, band, dag)
+		var o := Beurt.opzet(n, band, dag)
+		var t0 := Time.get_ticks_msec()
+		waar(Games.start(SPEL), "%s: het spel start" % wat)
+		waar(await _wacht_op_kaart(minf(Beurt.duur(o), Beurt.KAART_NA_S) + 1.0), "%s: de kaart vraagt" % wat)
+		if not mis:
+			# the free replay: when the first rhythm is over the drum plays it
+			# again without a tap
+			var al := float(Time.get_ticks_msec() - t0) / 1000.0
+			await _wacht(maxf(0.0, Beurt.duur(o) + _gratis_s() + 0.3 - al))
+			waar(_spel() != null and _spel().speelt(), "%s: de trommel speelt het nog eens, vanzelf" % wat)
+			gelijk(int(_stand().get("gratis", 0)), 1, "%s: de gratis herhaling is gebruikt" % wat)
+		else:
+			_tel("reken")
+			_druk(_foute_keuze(int(o["goed"])))
+			gelijk(str(_stand().get("stap", "")), "som", "%s: een misser rondt niets af" % wat)
+			await _wacht(Ui.MIS_PAUZE + 0.25)
+		_tel("reken")
+		_druk("Kn%d" % int(o["goed"]))
+		gelijk(str(_stand().get("stap", "")), "af", "%s: het goede antwoord rondt af" % wat)
+		var reken := int(_teller["reken"])
+		var spel := int(_teller["spel"])
+		waar(reken >= spel + 1, "%s: R1 reken %d >= spel %d + 1" % [wat, reken, spel])
+		_af()
+
+## No free replay as an answer to a miss (no help after a miss): a question
+## that was answered wrong before the drum played it again gets none.
+func test_geen_gratis_herhaling_na_een_misser() -> void:
+	alleen_spellen([SPEL])
+	var dag := _korte_dag(3, 3)
+	_op()
+	_wereld(3, 3, dag)
+	var o := Beurt.opzet(3, 3, dag)
+	waar(Games.start(SPEL), "het spel start")
+	waar(await _wacht_op_kaart(minf(Beurt.duur(o), Beurt.KAART_NA_S) + 1.0), "de kaart vraagt")
+	_druk(_foute_keuze(int(o["goed"])))
+	await _wacht(_gratis_s() + 0.3)
+	waar(_spel() != null and not _spel().speelt(), "de trommel speelt niet vanzelf na de misser")
+	_af()
+
+## R2 (wave 2): a question that was answered wrong comes back UNCHANGED after
+## any exit — a new day, another band, another hotel size, the animal on the
+## game bar — with the same rhythm, the same question and the same four
+## numbers; only after the right answer is the next turn new.
+func test_een_gemiste_vraag_komt_onveranderd_terug() -> void:
+	alleen_spellen([SPEL])
+	var dag := _korte_dag(5, 4)
+	_op()
+	var gasten := _wereld(5, 4, dag)
+	var o := Beurt.opzet(5, 4, dag)
+	waar(Games.start(SPEL), "het spel start")
+	waar(await _wacht_op_kaart(minf(Beurt.duur(o), Beurt.KAART_NA_S) + 1.0), "de kaart vraagt")
+	var vraag := _kaart_tekst("Kolom/Regel")
+	var som := _kaart_tekst("Kolom/Rij/Som")
+	var keuzes := _strook()
+	var ritme := str(Beurt.toon(_spel().opzet()))
+	var speler := str(_stand().get("gast", ""))
+	var ander := ""
+	for i in 4:
+		if str(gasten[i]["id"]) != speler:
+			ander = str(gasten[i]["id"])
+			break
+	_druk(_foute_keuze(int(o["goed"])))
+	gelijk(int(_stand().get("missers", 0)), 1, "een misser")
+	await _wacht(Ui.MIS_PAUZE + 0.25)
+	for stap in ["een nieuwe dag", "een andere band", "een gast minder", "het dier op de balk"]:
+		Games.stop()
+		match stap:
+			"een nieuwe dag":
+				State.s["dag"] = dag + 1
+				World.zet_dag(dag + 1)
+			"een andere band":
+				State.s["kunnen"] = 2
+				gelijk(State.band(), 3, "nu groep 3")
+			"een gast minder":
+				(State.s["gasten"] as Array).pop_back()
+				World.sync(State.s["gasten"])
+			_:
+				State.s["speler"] = ander
+		waar(Games.start(SPEL), "%s: het spel start" % stap)
+		gelijk(str(_stand().get("stap", "")), "som", "%s: de vraag staat nog open" % stap)
+		gelijk(int(_stand().get("missers", 0)), 1, "%s: met zijn misser" % stap)
+		gelijk(str(Beurt.toon(_spel().opzet())), ritme, "%s: hetzelfde ritme" % stap)
+		gelijk(_kaart_tekst("Kolom/Regel"), vraag, "%s: dezelfde vraag" % stap)
+		gelijk(_kaart_tekst("Kolom/Rij/Som"), som, "%s: dezelfde som" % stap)
+		gelijk(str(_strook()), str(keuzes), "%s: dezelfde vier getallen" % stap)
+	gelijk(str(_stand().get("gast", "")), ander, "het gekozen dier speelt, aan dezelfde vraag")
+	_druk("Kn%d" % int(o["goed"]))
+	gelijk(str(_stand().get("stap", "")), "af", "nu goed")
+	Games.stop()
+	State.s.erase("speler")
+	waar(Games.start(SPEL), "na het goede antwoord")
+	gelijk(int(_stand().get("missers", -1)), 0, "een nieuwe beurt")
+	gelijk(int(_stand().get("dag", -1)), dag + 1, "van vandaag")
+	_af()

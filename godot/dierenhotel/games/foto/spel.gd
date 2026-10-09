@@ -5,20 +5,28 @@ extends MiniGame
 ## je moet inwerpen").
 ##
 ## The booth stands at the end of the row of stalls (`fotohokje`, decor of the
-## arcade).  A turn:
-##   1. "📸 Wie gaan er op de foto?" — the strip holds the animals that may go
-##      (at most four) and, from the second one on, "📸 Klaar".  Every animal
-##      the child taps walks to the booth, looks at it and steps INTO it
-##      through the curtain (owner, 2026-10-06: "kan het echt in het hokje
-##      geanimeerd worden van een camera hokje PoV met alle dieren die erin
-##      zitten"): he is gone from the street (`World.verstop`) and the booth's
-##      screen, large in front (`FotoScherm`), shows him sitting inside — a
-##      frame per animal, and under every frame the price per animal, the same
-##      for everyone, as in a real booth.
-##   2. When they all sit inside: "💶 Hoeveel geld gooi je erin?" with the sum
-##      under it (groep 3 `€2 + €2 + €2 =`, from groep 4 `3 × €2 =`) and four
-##      amounts on the strip (`beurt.gd`).
-##   3. Right: the coins drop in, the screen counts 3 – 2 – 1, the shutter
+## arcade).  Today's booth takes two, three or four animals (`Beurt.aantal`,
+## kept in the turn).  A turn:
+##   1. The first animal — the one picked on the game bar, else the first of
+##      the day — walks to the booth by itself and steps INTO it through the
+##      curtain (owner, 2026-10-06: "kan het echt in het hokje geanimeerd
+##      worden van een camera hokje PoV met alle dieren die erin zitten"): he
+##      is gone from the street (`World.verstop`) and the booth's screen, large
+##      in front (`FotoScherm`), shows him sitting inside — a frame per animal,
+##      and under every frame the price per animal, the same for everyone, as
+##      in a real booth.
+##   2. "📸 Wie gaan er op de foto?" — the strip holds the animals that may
+##      still go; the one the child taps walks in too.
+##   3. When they all sit inside: "💶 Hoeveel kost de foto nu?" with the sum
+##      under it (groep 3 `€2 + €2`, from groep 4 `2 × €2 =`) and four amounts
+##      on the strip (`beurt.gd`).  Right, and there is room for one more: back
+##      to 2.  So every animal the child adds is a sum (owner, 2026-10-08:
+##      "rekenen moet minstens 50% van de interactie zijn"; there is no
+##      "📸 Klaar" any more: the booth is full when it is full).
+##   4. Full: "💶 Welk geld gooi je erin?" — four handfuls of coins and notes,
+##      exactly one of them the price of the photo (the shops' money,
+##      `games/_winkel/beurt.gd`).
+##   5. Right: the coins drop in, the screen counts 3 – 2 – 1, the shutter
 ##      clicks and the photo develops — and one star.  Then the animals come
 ##      out again, happy.
 ##
@@ -26,11 +34,15 @@ extends MiniGame
 ## 2026-09-24, `WinkelSpel`): the card goes at once, the animals come out of the
 ## booth, sulk ("😞 Dat klopt niet"), walk slowly away with their heads down,
 ## and the game closes by itself.  A tap on the booth brings the same animals
-## back and the SAME question — the turn is in the save.  No help, no hint,
-## nothing taken away.  Whatever ends the game, nobody stays inside (`stop`).
+## back and the SAME question — the turn is in the save, and a question that
+## was answered wrong is never dropped: not for a new day, another hotel size
+## or another band (`start`).  No help, no hint, nothing taken away.  Whatever
+## ends the game, nobody stays inside (`stop`).
 
 const KAMER := "winkels"
 const Beurt := preload("res://games/foto/beurt.gd")
+## The money of the street: handfuls of coins and notes (`betaal_keuzes`).
+const Geld := preload("res://games/_winkel/beurt.gd")
 
 const HOKJE := "fotohokje"
 const HOKJE_X := 144.0
@@ -90,6 +102,11 @@ var _gaat_in: Dictionary = {}   ## id -> true while he walks there to step in
 ## during the sad walk out looked like a glitch.  `{kader, maat, boven,
 ## midden}`; empty until the question is up.
 var _vast: Dictionary = {}
+## The loop that keeps the animals at the booth runs (`_houd_bij_het_hokje`).
+var _houdt := false
+
+## The steps that ask a sum.
+const VRAGEN := ["som", "betaal"]
 
 # ------------------------------------------------------------- aanmelding
 
@@ -124,8 +141,12 @@ func start(_c: SpelCtx) -> void:
 	var dag := int(ctx.state.s["dag"])
 	var oud = d.get("stand", null)
 	S = _normaliseer((oud as Dictionary).duplicate(true)) if typeof(oud) == TYPE_DICTIONARY else {}
-	var hervat := not (S.is_empty() or int(S["dag"]) != dag or int(S["N"]) != n
-			or int(S["band"]) != band or _stap() == "af")
+	# A question that was answered wrong stays until it is answered right
+	# (owner, 2026-10-08: "het moet niet mogelijk zijn om rekenen over te
+	# slaan"): not another day, another hotel size nor another band gives a
+	# new photo at a new price.  It comes back with its own price and amounts.
+	var hervat := open_misser() or not (S.is_empty() or int(S["dag"]) != dag
+			or int(S["N"]) != n or int(S["band"]) != band or _stap() == "af")
 	if hervat:
 		# an animal that left the hotel is not on the photo any more
 		var nog: Array = []
@@ -133,7 +154,7 @@ func start(_c: SpelCtx) -> void:
 			if alle.has(str(id)) and World.dier(str(id)) != null:
 				nog.append(str(id))
 		S["dieren"] = nog
-		if _stap() == "som" and nog.size() < Beurt.MIN_DIEREN:
+		if VRAGEN.has(_stap()) and nog.size() < Beurt.MIN_DIEREN:
 			S["stap"] = "kies"
 	else:
 		S = _nieuwe_stand(n, band, dag)
@@ -142,13 +163,26 @@ func start(_c: SpelCtx) -> void:
 	d["stand"] = S
 	# a group photo has no animal of the turn on the game bar
 	ctx.speelt("")
-	O = {"prijs": Beurt.prijs(n, band, dag), "pool": _pool(alle, n, dag)}
+	# the price and the size of the photo belong to the turn: a resumed turn
+	# keeps the day, the hotel size and the band it began with
+	if int(S["prijs"]) <= 0:
+		S["prijs"] = Beurt.prijs(int(S["N"]), int(S["band"]), int(S["dag"]))
+	var pool := _pool(alle, int(S["N"]), int(S["dag"]))
+	if int(S["aantal"]) < Beurt.MIN_DIEREN:
+		S["aantal"] = Beurt.aantal(int(S["N"]), int(S["band"]), int(S["dag"]), pool.size())
+	S["aantal"] = clampi(int(S["aantal"]), maxi(Beurt.MIN_DIEREN, _dieren().size()),
+		maxi(_dieren().size(), mini(Beurt.MAX_DIEREN, pool.size())))
+	# the first animal goes by itself: the child chooses who joins him
+	if _stap() == "kies" and _dieren().is_empty() and not pool.is_empty():
+		_dieren().append(str(pool[0]))
+	O = {"prijs": int(S["prijs"]), "pool": pool}
 	_t0 = Time.get_ticks_msec()
 	_kaart = null
 	_kaart_sleutel = ""
 	_binnen.clear()
 	_gaat_in.clear()
 	_vast = {}
+	_houdt = false
 	State.bewaar()
 	_begin()
 
@@ -212,16 +246,17 @@ func _meld_leeg() -> void:
 	ctx.ui.wolk_weg(LEEG_ID)
 	ctx.sluit()
 
+## `prijs` and `aantal` (how many go on the photo) are filled in by `start`.
 func _nieuwe_stand(n: int, band: int, dag: int) -> Dictionary:
 	return {"dag": dag, "N": n, "band": band, "stap": "kies", "dieren": [],
-		"pog": 0, "missers": 0, "weg": 0, "ster": 0}
+		"pog": 0, "missers": 0, "weg": 0, "ster": 0, "prijs": 0, "aantal": 0}
 
 ## A turn that came through the save is JSON: every number a float.
 static func _normaliseer(st: Dictionary) -> Dictionary:
-	for k in ["dag", "N", "band", "pog", "missers", "weg", "ster"]:
+	for k in ["dag", "N", "band", "pog", "missers", "weg", "ster", "prijs", "aantal"]:
 		st[k] = int(st.get(k, 0))
 	var stap := str(st.get("stap", "kies"))
-	st["stap"] = stap if stap in ["kies", "som", "af"] else "kies"
+	st["stap"] = stap if stap in ["kies", "som", "betaal", "af"] else "kies"
 	var dieren: Array = []
 	var oud = st.get("dieren", [])
 	if typeof(oud) == TYPE_ARRAY:
@@ -234,8 +269,27 @@ static func _normaliseer(st: Dictionary) -> Dictionary:
 func _stap() -> String:
 	return str(S.get("stap", ""))
 
+## A money question of this turn is open and was answered wrong at least once:
+## then it is not dropped for anything (R2, see `start`).
+func open_misser() -> bool:
+	return not S.is_empty() and int(S.get("missers", 0)) > 0 and VRAGEN.has(_stap())
+
 func _dieren() -> Array:
 	return S.get("dieren", [])
+
+## How many go on the photo this turn.
+func _aantal() -> int:
+	return int(S.get("aantal", Beurt.MIN_DIEREN))
+
+## Tests and tools: how many go on this photo (two to four, never fewer than
+## are chosen, never more than may go), while it is still being chosen.
+func zet_aantal(k: int) -> void:
+	if S.is_empty() or _stap() != "kies":
+		return
+	var pool: Array = O.get("pool", [])
+	S["aantal"] = clampi(k, maxi(Beurt.MIN_DIEREN, _dieren().size()),
+		maxi(_dieren().size(), mini(Beurt.MAX_DIEREN, pool.size())))
+	_bewaar()
 
 func _prijs() -> int:
 	return int(O.get("prijs", 0))
@@ -258,8 +312,8 @@ func _begin() -> void:
 	_scherm_neer()
 	for i in _dieren().size():
 		_stuur(i)
-	if _stap() == "som":
-		_naar_de_som()
+	if VRAGEN.has(_stap()):
+		_naar_de_vraag()
 		return
 	_kaart_neer()
 	_teken()
@@ -296,7 +350,7 @@ func _stap_in(id: String, plek: Vector2) -> void:
 ## May `id` still step in: the turn chooses or asks the money, nobody was sent
 ## out, he is on the photo and not inside yet.
 func _mag_in(id: String) -> bool:
-	return not S.is_empty() and _stap() in ["kies", "som"] and int(S.get("weg", 0)) == 0 \
+	return not S.is_empty() and _stap() in ["kies", "som", "betaal"] and int(S.get("weg", 0)) == 0 \
 		and _dieren().has(id) and not _binnen.has(id)
 
 ## Still at his place in front of the booth: in this room, not travelling, as
@@ -325,10 +379,11 @@ func _in_het_hokje(id: String) -> void:
 func kies_dier(id: String) -> void:
 	_kies_dier(id)
 
-## One animal more on the photo.  Not a sum: nothing is right or wrong.
+## One animal more on the photo.  Not a sum: nothing is right or wrong — the
+## sum comes right after it (`_naar_de_som`).
 func _kies_dier(id: String) -> void:
 	if S.is_empty() or _stap() != "kies" or _dieren().has(id) \
-			or _dieren().size() >= Beurt.MAX_DIEREN or not (O.get("pool", []) as Array).has(id):
+			or _dieren().size() >= _aantal() or not (O.get("pool", []) as Array).has(id):
 		return
 	_dieren().append(id)
 	ctx.snd.plop(_dieren().size())
@@ -337,27 +392,19 @@ func _kies_dier(id: String) -> void:
 	_bewaar()
 	_stuur(_dieren().size() - 1)
 	_scherm_neer()
-	# everyone who may go is chosen: on to the money at once
-	if _dieren().size() >= mini(Beurt.MAX_DIEREN, (O.get("pool", []) as Array).size()):
-		_naar_de_som()
-		return
-	_kaart_neer()
-	_teken()
-
-func klaar() -> void:
-	_klaar_gekozen()
-
-## "📸 Klaar": the photo has its animals.
-func _klaar_gekozen() -> void:
-	if S.is_empty() or _stap() != "kies" or _dieren().size() < Beurt.MIN_DIEREN:
-		return
 	_naar_de_som()
 
-## The money question, as soon as everybody sits inside the booth.  Until then
-## there is no card: the hotel shows who is still on the way (`komt eraan`).
+## After every animal the child adds: what does the photo cost now?
 func _naar_de_som() -> void:
 	S["stap"] = "som"
 	_bewaar()
+	_naar_de_vraag()
+
+## The question of the step the turn is in (the cost or the money), as soon as
+## everybody sits inside the booth.  Until then there is no card: the hotel
+## shows who is still on the way (`komt eraan`).
+func _naar_de_vraag() -> void:
+	var stap := _stap()
 	if _kaart != null:
 		_kaart.weg()
 		_kaart = null
@@ -371,7 +418,7 @@ func _naar_de_som() -> void:
 	while not _allemaal_binnen():
 		if not await na(SpelCtx.WACHT_TIK):
 			return
-		if S.is_empty() or _stap() != "som" or int(S.get("weg", 0)) == 1:
+		if S.is_empty() or _stap() != stap or int(S.get("weg", 0)) == 1:
 			return
 		for id in _dieren():
 			if World.dier(str(id)) == null:
@@ -381,11 +428,12 @@ func _naar_de_som() -> void:
 			_stuur(i)                          # one whose walk in ended is sent again
 	if not await na(SOM_S * 0.5):
 		return
-	if S.is_empty() or _stap() != "som" or int(S.get("weg", 0)) == 1:
+	if S.is_empty() or _stap() != stap or int(S.get("weg", 0)) == 1:
 		return
 	_kaart_neer()
 	_teken()
-	_houd_bij_het_hokje()
+	if not _houdt:
+		_houd_bij_het_hokje()
 
 ## Does everybody on the photo sit inside the booth?
 func _allemaal_binnen() -> bool:
@@ -401,11 +449,13 @@ func _allemaal_binnen() -> bool:
 ## `World.zet_dag`) is walked back to his place and steps in again there,
 ## unseen — the photo is never taken with him standing outside.
 func _houd_bij_het_hokje() -> void:
+	_houdt = true
 	var tel := 0
 	while actief and not S.is_empty():
 		if not await na(BLIJF_S):
 			return
 		if S.is_empty() or int(S.get("weg", 0)) == 1:
+			_houdt = false
 			return
 		tel += 1
 		var dieren := _dieren()
@@ -433,17 +483,34 @@ func _houd_bij_het_hokje() -> void:
 func antwoord(n: int) -> void:
 	_antwoord(n, _kaart)
 
-## One tap on an amount.  Wrong: out of the booth (see the header).  Right: the
-## coins drop in, the countdown, the flash, and the photo.
+## One tap on an amount or a handful of money.  Wrong: out of the booth (see
+## the header).  Right on the cost: room for one more, then the next animal is
+## chosen; full, then the money.  Right on the money: the coins drop in, the
+## countdown, the flash, and the photo.
 func _antwoord(n: int, k) -> void:
-	if S.is_empty() or O.is_empty() or _stap() != "som" or int(S.get("weg", 0)) == 1:
+	var stap := _stap()
+	if S.is_empty() or O.is_empty() or not VRAGEN.has(stap) or int(S.get("weg", 0)) == 1:
 		return
 	if n != _goed():
 		_weggestuurd()
 		return
+	# a right answer on a strip of choices: the Rekenwacht counts it (R4)
+	ctx.reken_goed()
 	if k != null:
 		k.zet(Beurt.euro(n))
 		k.klaar()
+	if stap == "som":
+		ctx.snd.ja()
+		S["stap"] = "kies" if _dieren().size() < _aantal() else "betaal"
+		_bewaar()
+		# the right amount stays on the card a moment, then the next card
+		if not await na(SOM_S):
+			return
+		if S.is_empty() or _stap() == "som" or _stap() == "af" or int(S.get("weg", 0)) == 1:
+			return
+		_kaart_neer()
+		_teken()
+		return
 	ctx.snd.munt()
 	S["stap"] = "af"
 	_bewaar()
@@ -595,8 +662,16 @@ func _kaart_neer() -> void:
 			o["icoon"] = Beurt.ICOON_GELD
 			o["regel"] = Beurt.T_SOM
 			o["keuzes"] = _geld_keuzes()
-			o["keuze_titel"] = "kies hoeveel geld"
+			o["keuze_titel"] = "kies wat de foto kost"
+			o["reken"] = true
 			som = Beurt.som(dieren.size(), _prijs(), int(S["band"]))
+		"betaal":
+			o["icoon"] = Beurt.ICOON_GELD
+			o["regel"] = Beurt.T_BETAAL
+			o["keuzes"] = _munt_keuzes()
+			o["keuze_titel"] = "kies het geld"
+			o["reken"] = true
+			som = Beurt.euro(_goed())
 		_:
 			o["icoon"] = Beurt.ICOON_AF
 			o["regel"] = Beurt.T_AF
@@ -608,13 +683,12 @@ func _kaart_neer() -> void:
 		_kaart.zet(Beurt.euro(_goed()))
 
 ## The choice: a button per animal that may still go, its own picture and its
-## name, and from the second animal on "📸 Klaar" — four buttons at most.
+## name — four buttons at most.  No "Klaar": the booth is full when it holds
+## `aantal`, and every animal added is a sum first.
 func _kies_keuzes() -> Array:
 	var uit: Array = []
-	var klaar := _dieren().size() >= Beurt.MIN_DIEREN
-	var plek := Ui.MAX_KEUZES - (1 if klaar else 0)
 	for id in O.get("pool", []):
-		if _dieren().has(str(id)) or uit.size() >= plek:
+		if _dieren().has(str(id)) or uit.size() >= Ui.MAX_KEUZES:
 			continue
 		var g: Dictionary = ctx.state.gast_van(str(id))
 		if g.is_empty():
@@ -625,10 +699,6 @@ func _kies_keuzes() -> Array:
 			"icoon": str(Hotel.DIER_ICOON.get(str(g.get("kind", "hond")), "🐾")),
 			"tekst": naam, "kort": naam, "titel": "%s gaat op de foto" % naam,
 			"kies": func(_id, _k) -> void: _kies_dier(dier_id)})
-	if klaar:
-		uit.append({"id": "klaar", "icoon": Beurt.ICOON, "tekst": Beurt.T_KLAAR,
-			"kort": Beurt.T_KLAAR, "titel": "klaar, maak de foto",
-			"kies": func(_id, _k) -> void: _klaar_gekozen()})
 	return uit
 
 ## Four amounts, one of them right (`Afleiders.vier`); the same four in the same
@@ -644,6 +714,22 @@ func _geld_keuzes() -> Array:
 		uit.append({"id": "n%d" % n, "icoon": "", "tekst": Beurt.euro(n), "kort": str(n),
 			"titel": "%d euro" % n,
 			"kies": func(_id, k) -> void: _antwoord(n, k)})
+	return uit
+
+## Four handfuls of coins and notes, exactly one of them the price of the photo
+## — the shops' money (`Geld.betaal_keuzes`), with the 💶 in the long and the
+## short word; the same four in the same order every time it comes back.
+func _munt_keuzes() -> Array:
+	var uit: Array = []
+	var zaad := Beurt.zaad(int(S["N"]), int(S["band"]), int(S["dag"]), _dieren().size()) + 7
+	for st in Geld.betaal_keuzes(_goed(), int(S["band"]), zaad):
+		var stapel: Array = st
+		var som := Geld.tel(stapel)
+		uit.append({"id": "g%d" % som, "icoon": "",
+			"tekst": "%s %s" % [Geld.ICOON_GELD, Geld.stapel_tekst(stapel)],
+			"kort": Geld.stapel_knop_kort(stapel),
+			"titel": "gooi %s erin" % Geld.stapel_tekst(stapel),
+			"kies": func(_id, k) -> void: _antwoord(som, k)})
 	return uit
 
 # ------------------------------------------------------------------ tekenen
@@ -714,7 +800,7 @@ func _scherm_maat() -> Vector2:
 ## lies in the band.
 func _scherm_stand() -> Dictionary:
 	var kader := World.kader_rect().size
-	var vraag := _stap() == "som" and int(S.get("weg", 0)) == 0 and _kaart != null
+	var vraag := VRAGEN.has(_stap()) and int(S.get("weg", 0)) == 0 and _kaart != null
 	var vast := not vraag and not _vast.is_empty() \
 		and (_vast["kader"] as Vector2).is_equal_approx(kader)
 	var band := _scherm_band(_vast["boven"] if vast else null)
@@ -820,11 +906,11 @@ func opzet() -> Dictionary:
 ## (`tel`, 0 = none) and whether the photo is taken (`foto`).
 func probe_regel() -> String:
 	var sch := _scherm()
-	return "[probe] foto stap=%s band=%d prijs=%d dieren=%s goed=%d weg=%d missers=%d ster=%d binnen=%s tel=%d foto=%d" % [
+	return "[probe] foto stap=%s band=%d prijs=%d dieren=%s goed=%d weg=%d missers=%d ster=%d binnen=%s tel=%d foto=%d aantal=%d" % [
 		_stap(), int(S.get("band", 0)), _prijs(), ",".join(PackedStringArray(_dieren())), _goed(),
 		int(S.get("weg", 0)), int(S.get("missers", 0)), int(S.get("ster", 0)),
 		",".join(PackedStringArray(_binnen)), sch.tel_getal if sch != null else 0,
-		1 if sch != null and sch.foto else 0]
+		1 if sch != null and sch.foto else 0, _aantal()]
 
 ## Machine-readable lines for `tools/kiek.js` / `speel.js`, web export only.
 func _meld() -> void:

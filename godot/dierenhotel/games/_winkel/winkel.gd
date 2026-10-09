@@ -9,9 +9,12 @@ extends MiniGame
 ## A turn: the animal of the turn walks up to the counter.  The goods stand on
 ## the counter, each with its price on it, and the child picks what the animal
 ## buys (owner, 2026-09-24: "meer aanpassingsmogelijkheden ... zoals kleding").
-## Then one to three sums, each a strip of four — the price of four shoes, the
-## price with a gift box, half price, the money to pay with, the change
-## (`beurt.gd`).  Then the animal wears it, happily, until it checks out, and
+## Then two or three sums, each a strip of four — the price of four shoes, the
+## price with a gift box, half price, the money to pay with, what is left in
+## the purse, the change (`beurt.gd`): the choice is one tap, the maths at least
+## two (owner, 2026-10-08: "rekenen moet minstens 50% van de interactie zijn").
+## A sum answered wrong stays open until it is answered right, whatever happens
+## in between (`start`).  Then the animal wears it, happily, until it checks out, and
 ## keeps it in its wardrobe: the fitting room lets the child change outfits.
 ##
 ## A WRONG ANSWER SENDS THE ANIMAL OUT (owner, 2026-09-24: "Zorg ervoor dat het
@@ -149,13 +152,20 @@ func start(_c: SpelCtx) -> void:
 	var g: Dictionary = {}
 	if not S.is_empty():
 		g = ctx.state.gast_van(_gast_id())
+	# A question that was answered wrong stays until it is answered right
+	# (owner, 2026-10-08: "het moet niet mogelijk zijn om rekenen over te
+	# slaan"): not another day, another hotel size, another band nor another
+	# animal on the game bar gives a fresh choice — a cheaper thing, an easier
+	# sum.  It comes back with its own prices (`O` below).
+	var open := not g.is_empty() and open_misser()
 	# the animal the child picked on the game bar shops, if it may (world.md
-	# §5.8); another animal's unfinished turn is simply not finished
+	# §5.8); another animal's unfinished turn is simply not finished — unless
+	# it has a missed question open
 	var wil := ctx.voorkeur(spelers())
-	var hervat := not (S.is_empty() or g.is_empty() or int(S["dag"]) != dag
+	var hervat := open or not (S.is_empty() or g.is_empty() or int(S["dag"]) != dag
 			or int(S["N"]) != n or int(S["band"]) != band or _stap() == "af")
 	var weg := ""
-	if hervat and not wil.is_empty() and wil != _gast_id():
+	if hervat and not open and not wil.is_empty() and wil != _gast_id():
 		weg = _gast_id()
 		hervat = false
 	if not hervat:
@@ -166,7 +176,10 @@ func start(_c: SpelCtx) -> void:
 	S["weg"] = 0
 	d["stand"] = S
 	ctx.speelt(_gast_id())
-	O = Beurt.opzet(str(_w("id", "hoeden")), n, band, dag)
+	# the shop of the turn: a new turn is today's shop; a resumed one keeps the
+	# day, the hotel size and the band it began with, so its prices and its
+	# answer strip are the very same
+	O = Beurt.opzet(str(_w("id", "hoeden")), int(S["N"]), int(S["band"]), int(S["dag"]))
 	_t0 = Time.get_ticks_msec()
 	_kaart = null
 	_kaart_stap = ""
@@ -254,7 +267,7 @@ static func _normaliseer(oud: Dictionary) -> Dictionary:
 	st["gast"] = str(oud.get("gast", ""))
 	st["waar"] = str(oud.get("waar", ""))
 	var stap := str(oud.get("stap", "kies"))
-	st["stap"] = stap if stap in ["kies", "som", "half", "betaal", "terug", "af"] else "kies"
+	st["stap"] = stap if stap == "kies" or stap == "af" or Beurt.REKENSTAPPEN.has(stap) else "kies"
 	if not st["stap"] in ["kies", "af"] and not ArtGasten.KLEDING.has(st["waar"]):
 		st["stap"] = "kies"
 	if st["stap"] == "kies" and stap != "kies":
@@ -266,6 +279,11 @@ static func _normaliseer(oud: Dictionary) -> Dictionary:
 
 func _stap() -> String:
 	return str(S.get("stap", ""))
+
+## A sum of this turn is on the counter and was answered wrong at least once:
+## then it is not dropped for anything (R2, see `start`).
+func open_misser() -> bool:
+	return not S.is_empty() and int(S.get("missers", 0)) > 0 and Beurt.REKENSTAPPEN.has(_stap())
 
 func _gast_id() -> String:
 	return str(S.get("gast", ""))
@@ -448,8 +466,10 @@ func _kaart_neer() -> void:
 			o["icoon"] = Beurt.ICOON_GELD
 			o["keuzes"] = _geld_keuzes(s)
 			o["keuze_titel"] = "kies het geld"
-		"som", "half", "terug":
+			o["reken"] = true
+		"som", "half", "terug", "over":
 			o["keuzes"] = _getal_keuzes(stap, s)
+			o["reken"] = true
 		_:
 			o["icoon"] = Beurt.ICOON_AF
 	var plek := {"x": float(_w("x", 60.0)), "z": float(_w("z", 60.0)), "kamer": KAMER}
@@ -477,9 +497,10 @@ func _kies_keuzes() -> Array:
 ## order every time this question comes back.
 func _getal_keuzes(stap: String, s: Dictionary) -> Array:
 	var goed := Beurt.goed(stap, s)
-	var zaad := int(O.get("zaad", 0)) + ["som", "half", "terug"].find(stap) * 211
+	var zaad := int(O.get("zaad", 0)) + ["som", "half", "terug", "over"].find(stap) * 211
+	# something is always left in the purse: no "€0" on the `over` strip
 	var getallen := Afleiders.vier(goed, zaad,
-		{"min": 0, "max": 199, "liever": Beurt.liever(stap, s, O)})
+		{"min": 1 if stap == "over" else 0, "max": 199, "liever": Beurt.liever(stap, s, O)})
 	var uit: Array = []
 	for g in getallen:
 		var n: int = g
@@ -539,12 +560,14 @@ func _antwoord(n: int, k) -> void:
 	if S.is_empty() or O.is_empty() or int(S.get("weg", 0)) == 1:
 		return
 	var stap := _stap()
-	if not stap in ["som", "half", "betaal", "terug"]:
+	if not Beurt.REKENSTAPPEN.has(stap):
 		return
 	var goed := Beurt.goed(stap, _sommen())
 	if n != goed:
 		_weggestuurd()
 		return
+	# a right answer on a strip of choices: the Rekenwacht counts it (R4)
+	ctx.reken_goed()
 	if k != null:
 		k.zet(Beurt.euro(n))
 		k.klaar()

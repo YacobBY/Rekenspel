@@ -70,6 +70,7 @@ const KAART_HOOG := 30.0
 const BALK_HOOG := 30.0     ## the stave's aim over the drum (when it floats)
 const BALK_MAX := 900.0     ## px: the stave is at most this wide
 const SOM_S := 0.5          ## the right answer, then the band plays this much later
+const GRATIS_S := 1.2       ## after the first rhythm the drum plays it once more by itself
 const TOVER_S := 0.5        ## ... and the magic this much after the cheer
 const AF_S := 3.4           ## the end is readable this long before it closes
 const LEEG_S := 1.8
@@ -144,7 +145,19 @@ func start(_c: SpelCtx) -> void:
 			or int(S["dag"]) != dag or int(S["N"]) != n or int(S["band"]) != band
 			or _stap() == "af")
 	var weg := ""
-	if hervat and not wil.is_empty() and wil != _gast_id():
+	# An open question that had a miss comes back UNCHANGED after any exit —
+	# another day, another hotel size or band, the game bar's animal switch
+	# (wave 2, R2): the rhythm is seeded on the turn's own N, band, day and
+	# number (`Beurt.opzet` below), so it is the same rhythm.  The picked
+	# animal may take over the drum; the question stays.
+	if open_vraag(S):
+		hervat = true
+		if not wil.is_empty() and wil != _gast_id():
+			weg = _gast_id()
+			S["gast"] = wil
+		elif g.is_empty() or str(g.get("bed", "")).is_empty():
+			S["gast"] = str((kies[(dag + n) % kies.size()] as Dictionary).get("id", ""))
+	elif hervat and not wil.is_empty() and wil != _gast_id():
 		weg = _gast_id()
 		hervat = false
 	if not hervat:
@@ -214,16 +227,22 @@ func _meld_leeg() -> void:
 ## (the card asks), then "af".
 static func _nieuwe_stand(g: Dictionary, n: int, band: int, dag: int, nr: int) -> Dictionary:
 	return {"gast": str(g.get("id", "")), "dag": dag, "N": n, "band": band, "nr": nr,
-		"stap": "luister", "pog": 0, "missers": 0, "ster": 0}
+		"stap": "luister", "pog": 0, "missers": 0, "ster": 0, "gratis": 0}
 
 ## A turn that came through the save is JSON: every number a float.
 static func _normaliseer(st: Dictionary) -> Dictionary:
-	for k in ["dag", "N", "band", "nr", "pog", "missers", "ster"]:
+	for k in ["dag", "N", "band", "nr", "pog", "missers", "ster", "gratis"]:
 		st[k] = int(st.get(k, 0))
 	st["gast"] = str(st.get("gast", ""))
 	var stap := str(st.get("stap", "luister"))
 	st["stap"] = stap if stap in ["luister", "som", "af"] else "luister"
 	return st
+
+## A saved turn whose question is still asked and was already answered wrong
+## at least once: it may not be swapped for another rhythm (R2).
+static func open_vraag(st: Dictionary) -> bool:
+	return not st.is_empty() and str(st.get("stap", "")) == "som" \
+		and int(st.get("missers", 0)) > 0
 
 func _stap() -> String:
 	return str(S.get("stap", ""))
@@ -322,6 +341,25 @@ func _speel_ritme() -> void:
 	if _stap() == "luister":
 		_vraag()
 	_meld()
+	_gratis_nog_eens(nr)
+
+## The first replay of a question is free (wave 2, R1/R4): when the first
+## rhythm has been heard to its end and the card asks, the drum plays it once
+## more by itself — the child counts along without a tap.  Never as an answer
+## to a miss (no help after a miss): a question that was already missed gets
+## no free replay.  Every replay after this one is `🔁`, a free action.
+func _gratis_nog_eens(nr: int) -> void:
+	if S.is_empty() or _stap() != "som" or int(S.get("gratis", 0)) != 0:
+		return
+	S["gratis"] = 1
+	_bewaar()
+	if int(S.get("pog", 0)) > 0:
+		return
+	if not await na(GRATIS_S):
+		return
+	if nr != _ritme or S.is_empty() or _stap() != "som" or int(S.get("pog", 0)) > 0:
+		return
+	_speel_ritme()
 
 ## A long rhythm does not keep the card waiting (`Beurt.KAART_NA_S`).
 func _vraag_na(begin: int) -> void:
@@ -417,6 +455,9 @@ func _kaart_neer() -> void:
 		o["max_getal"] = int(O["max"])
 		o["liever"] = O.get("liever", [])
 		o["keuze_titel"] = "hoeveel"
+		# the strip's seed is the turn's own day, not today's (`Ui._getal_keuzes`
+		# takes today): an open question keeps its four numbers across a new day
+		o["zaad"] = (hash(KAART) % 100003) + int(S["dag"]) * 17
 		o["on_ok"] = _antwoord
 	else:
 		# the end: the sum that was answered, with its answer in it
@@ -536,6 +577,9 @@ func _knop_nog() -> void:
 		return
 	ctx.hotspots.maak({"id": KNOP_NOG, "kamer": KAMER, "x": NOG.x, "z": NOG.y, "y": 6.0,
 		"icoon": Beurt.ICOON_NOG, "label": Beurt.T_NOG, "titel": "luister nog een keer",
+		# wave 2, R4: the first replay is the drum's own (`_gratis_nog_eens`);
+		# a tap on 🔁 is a free action, refused when the maths budget is out
+		"vrij": true,
 		"prio": 9, "aan": func(_s) -> void: nog_eens()})
 
 ## The stave, large and straight on, from the start of the turn until the

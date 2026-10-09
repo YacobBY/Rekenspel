@@ -130,10 +130,15 @@ func test_strings_van_wereld_7_8_staan_er_verbatim() -> void:
 			"Morgen ▸", "gaat naar huis", "sliep", "per nacht",
 			"gaf €%d, het kost €%d", "klaar", "klaar met tellen",
 			"de toonbank", "munt van %d euro", "de buidel is leeg",
-			"op de toonbank ligt €%d", "tik een getal", "zo ziet het uit",
-			"zoveel is het samen", "dit moet er nog bij",
-			"zoveel krijgt de familie terug", "terug", "betaald"]:
+			"op de toonbank ligt €%d", "tik een getal", "terug", "betaald"]:
 		waar(bron.contains(zin), 'world.md §7.8: "%s" staat in de bron' % zin)
+	# The titles of the ghost coins were help after a miss; the owner's rule
+	# "Nee geef geen hulp na fouten" (2026-09-24, 2026-10-08) took them out of
+	# the bill together with the ghost coins themselves.
+	for zin in ["zo ziet het uit", "zoveel is het samen", "dit moet er nog bij",
+			"zoveel krijgt de familie terug"]:
+		waar(not _lees("res://hotel/rekening.gd").contains(zin),
+			'geen hulp na een fout: "%s" staat niet meer in de rekening' % zin)
 	gelijk(Hotel.POST["titel"], "💌 Er is post!", "de kop van het postblad")
 	gelijk(Hotel.POST["knop"], "Hang de brief op de muur 📌", "de knop eronder")
 	gelijk(Hotel.POST["toast"], "💌 Aan de muur!", "de toast na het ophangen")
@@ -383,13 +388,18 @@ func test_check_in_twee_vragen_dan_een_kamer() -> void:
 	gelijk(v["stap"], 3, "goed: nu een kamer, geen bed (eigenaar, 2026-09-24)")
 
 	# de kamer.  Dit bestand meldt de echte spellen af, dus zonder beddenspel
-	# krijgt hij meteen het vrije bed van die kamer: de check-in loopt nooit vast
+	# komt de beddensom aan de balie (2026-10-08: nooit een bed zonder som),
+	# en het goede antwoord geeft het vrije bed van die kamer: de check-in
+	# loopt nooit vast
 	waar(State.kamers_met_plek().has("kamer2"), "kamer 2 heeft plek")
 	waar(not Hotel.kies_kamer("zolder"), "een kamer die er niet is gaat niet")
 	gelijk(v["stap"], 3, "en de vraag blijft")
 	var sterren_voor := int(State.s["sterren"])
 	State.s["ronde"] = "ochtend"
 	waar(Hotel.kies_kamer("kamer2"), "kamer 2 gekozen")
+	waar(State.s["checkin"] != null, "eerst de beddensom")
+	gelijk(int(State.s["sterren"]), sterren_voor, "nog geen ster")
+	Hotel.antwoord_bed(int(v["slapers"]) + 1)
 	gelijk(State.s["checkin"], null, "de check-in is klaar")
 	gelijk(State.s["nieuweGast"], null, "niemand meer aan de balie")
 	gelijk((State.s["gasten"] as Array).size(), 2, "de gast slaapt nu in het hotel")
@@ -605,7 +615,11 @@ func test_spelen_met_de_mand() -> void:
 	for g in gasten:
 		g["behoefte"] = "spelen"
 	Hotel.bouw_taken(true)
+	# the basket asks a small count first (2026-10-08): the play comes with
+	# the right answer
 	Hotel.tik_mand("kamer1")
+	gelijk(gasten[0].get("blij", false), false, "eerst de som")
+	Hotel.mand_antwoord("kamer1", int(Hotel.mand_vraag("kamer1").get("goed", -1)))
 	gelijk(gasten[0]["blij"], true, "de eerste speelt")
 	gelijk(gasten[1]["blij"], true, "de tweede ook")
 	gelijk(int(State.s["sterren"]), 1, "één ster voor het spelen")
@@ -971,9 +985,11 @@ func test_een_som_haalt_de_deurbordjes_weg() -> void:
 	Ui.zet_rust_modus(rust)
 	await boom.process_frame
 
-## The voerkar borrows the hotel's doors to push its trolley through them
-## (games-a.md §7): with a sum on the glass in the kitchen those doors stay —
-## they are the game's own buttons now, not a way out of the sum.
+## Since wave 2 (owner, 2026-10-08: "het moet niet mogelijk zijn om rekenen
+## over te slaan") the voerkar borrows no door: its trolley rolls through them
+## by itself.  So its load sum in the kitchen hides the kitchen's doors like any
+## other sum — they are no way out of the sum.  (Until wave 2 the borrowed doors
+## stayed on the glass as the game's own buttons, games-a.md §7.)
 func test_de_voerkar_houdt_zijn_deuren_bij_een_som() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	var kar_voor := World.ding("kar")
@@ -1005,19 +1021,12 @@ func test_de_voerkar_houdt_zijn_deuren_bij_een_som() -> void:
 	World.naar("keuken")
 	waar(Games.start("voerkar"), "de voerkar start")
 	Hits.plaats()
-	var geleend: Array[String] = []
-	for d in _deurbordjes("keuken"):
+	waar(Ui.som_in_beeld(), "de som van de kar staat in de keuken")
+	var deuren := _deurbordjes("keuken")
+	for d in deuren:
 		var s := Hits.spot(d)
-		if s != null and s.geleend_door == "voerkar":
-			geleend.append(d)
-	waar(not geleend.is_empty(), "de voerkar leent de keukendeuren")
-	Ui.somkaart({"x": 40.0, "z": 40.0}, "2 + 2 =", {"id": "proef_som",
-		"kamer": "keuken", "goed": 4, "regel": "🍪 Hoeveel koekjes samen?"})
-	Hits.plaats()
-	waar(Ui.som_in_beeld(), "er staat een som in de keuken")
-	for d in geleend:
-		waar(_op_het_glas(d), "de geleende %s blijft staan" % d)
-	Hits.weg("proef_som")
+		waar(s == null or s.geleend_door != "voerkar", "de voerkar leent %s niet" % d)
+		waar(not _op_het_glas(d), "%s staat niet op het glas tijdens de som" % d)
 	Games.stop()
 	Hits.wis_alles()
 	World.decor_wis_alles()

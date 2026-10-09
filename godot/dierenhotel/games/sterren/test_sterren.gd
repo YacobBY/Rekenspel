@@ -545,6 +545,10 @@ func test_herladen_toont_dezelfde_hemel() -> void:
 	var kijker := _kijker()
 	waar(kijker != null and kijker.aantal_sterren() == sterren_in_beeld, "dezelfde sterren in de kijker")
 	gelijk(int(_stand().get("missers", 0)), 1, "de misser telt nog mee")
+	# wave 2, R2: a missed question waits for its right answer, also across a
+	# new day — so answer it first, then the next day is another sky
+	_druk("Kn%d" % int(b["goed"]))
+	gelijk(str(_stand().get("stap", "")), "af", "nu goed geteld")
 	Games.stop()
 	State.s["dag"] = 3
 	waar(Games.start(SPEL), "de volgende dag")
@@ -668,3 +672,94 @@ func _keur(kader: Vector2, wat: String) -> void:
 			continue
 		waar(r.size.x >= 44.0 and r.size.y >= 44.0, "%s: %s is een tikdoel" % [wat, id])
 	waar(eigen >= 2, "%s: het spel staat op het scherm (%d)" % [wat, eigen])
+
+# ------------------------------------------- golf 2: rekenen eerst (R1, R2)
+
+var _teller := {"reken": 0, "spel": 0}
+
+## Every tap the test performs, labelled the way R1 counts it: an answer on a
+## maths strip is "reken", everything else "spel".
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller.get(soort, 0)) + 1
+
+## R1 (wave 2, owner: "rekenen moet minstens 50% van de interactie zijn"): in a
+## whole turn — from the start, the entry tap not counted — the maths taps
+## outnumber everything else by at least one, in every group and for a small
+## and a large hotel.  A turn at the telescope needs one tap: the answer on
+## the strip (a miss is a maths tap too).
+func test_rekenaandeel() -> void:
+	alleen_spellen([SPEL])
+	for geval in [[1, 3, true], [3, 3, false], [4, 4, false], [6, 4, true], [7, 5, false],
+			[8, 5, false]]:
+		var n: int = geval[0]
+		var band: int = geval[1]
+		var mis: bool = geval[2]
+		var wat := "groep %d, %d gasten" % [band, n]
+		_teller = {"reken": 0, "spel": 0}
+		_op()
+		_wereld(n, band, 2)
+		waar(Games.start(SPEL), "%s: het spel start" % wat)
+		var b := _beurt()
+		gelijk(str(_stand().get("stap", "")), "som", "%s: de vraag staat er" % wat)
+		if mis:
+			_tel("reken")
+			_druk(_foute_keuze(int(b["goed"])))
+			gelijk(str(_stand().get("stap", "")), "som", "%s: een misser rondt niets af" % wat)
+			await _wacht(Ui.MIS_PAUZE + 0.25)
+		_tel("reken")
+		_druk("Kn%d" % int(b["goed"]))
+		gelijk(str(_stand().get("stap", "")), "af", "%s: het goede antwoord rondt af" % wat)
+		var reken := int(_teller["reken"])
+		var spel := int(_teller["spel"])
+		waar(reken >= spel + 1, "%s: R1 reken %d >= spel %d + 1" % [wat, reken, spel])
+		_af()
+
+## R2 (wave 2): a question that was answered wrong comes back UNCHANGED after
+## any exit — a new day, another band, another hotel size, the animal on the
+## game bar — until it is answered right; only then is the next turn new.
+func test_een_gemiste_vraag_komt_onveranderd_terug() -> void:
+	alleen_spellen([SPEL])
+	_op()
+	var gasten := _wereld(5, 4, 2)
+	waar(Games.start(SPEL), "het spel start")
+	var b := _beurt()
+	var regel := _kaart_tekst("Kolom/Regel")
+	var keuzes := _strook()
+	var kijker := str(_stand().get("gast", ""))
+	var ander := ""
+	for i in 4:
+		if str(gasten[i]["id"]) != kijker:
+			ander = str(gasten[i]["id"])
+			break
+	_druk(_foute_keuze(int(b["goed"])))
+	gelijk(int(_stand().get("missers", 0)), 1, "een misser")
+	await _wacht(Ui.MIS_PAUZE + 0.25)
+	for stap in ["een nieuwe dag", "een andere band", "een gast minder", "het dier op de balk"]:
+		Games.stop()
+		match stap:
+			"een nieuwe dag":
+				State.s["dag"] = 3
+				World.zet_dag(3)
+			"een andere band":
+				State.s["kunnen"] = 2
+				gelijk(State.band(), 3, "nu groep 3")
+			"een gast minder":
+				(State.s["gasten"] as Array).pop_back()
+				World.sync(State.s["gasten"])
+			_:
+				State.s["speler"] = ander
+		waar(Games.start(SPEL), "%s: het spel start" % stap)
+		gelijk(str(_stand().get("stap", "")), "som", "%s: de vraag staat nog open" % stap)
+		gelijk(int(_stand().get("missers", 0)), 1, "%s: met zijn misser" % stap)
+		gelijk(_beurt(), b, "%s: dezelfde hemel" % stap)
+		gelijk(_kaart_tekst("Kolom/Regel"), regel, "%s: dezelfde vraag" % stap)
+		gelijk(str(_strook()), str(keuzes), "%s: dezelfde vier getallen" % stap)
+	gelijk(str(_stand().get("gast", "")), ander, "het gekozen dier kijkt, naar dezelfde hemel")
+	_druk("Kn%d" % int(b["goed"]))
+	gelijk(str(_stand().get("stap", "")), "af", "nu goed")
+	Games.stop()
+	State.s.erase("speler")
+	waar(Games.start(SPEL), "na het goede antwoord")
+	gelijk(int(_stand().get("missers", -1)), 0, "een nieuwe beurt")
+	gelijk(int(_stand().get("dag", -1)), 3, "van vandaag")
+	_af()

@@ -219,6 +219,161 @@ func _alleen_teleurstelling(kaart_id: String, wat: String) -> void:
 	gelijk(_kaart_tekst(kaart_id, "hulp"), "", "%s: geen hulpregel" % wat)
 	waar(not _er_is("mb_spook"), "%s: geen spookmunten" % wat)
 
+# --------------------------------------------------- de Rekenwacht (golf 2)
+
+## R1-teller: elke tik die deze test doet, gelabeld zoals R1 het zegt.
+var _r1 := {"reken": 0, "spel": 0}
+
+func _tel(soort: String) -> void:
+	_r1[soort] = int(_r1[soort]) + 1
+
+## Eén tik op een knop van een eigen strook (de kassa, genoeg, de munten).
+func _kies(kaart_id: String, keuze: String) -> bool:
+	var strook := Hits.spot(kaart_id + "_keuzes")
+	if strook == null or not is_instance_valid(strook.knoop):
+		fout("de strook van %s staat er niet" % kaart_id)
+		return false
+	var k := strook.knoop.get_node_or_null("Rij/K" + keuze) as Button
+	if k == null:
+		fout("knop %s staat niet op de strook van %s" % [keuze, kaart_id])
+		return false
+	k.pressed.emit()
+	return true
+
+## De munten die de muntstrook onder de bon aanbiedt, klein naar groot.
+func _munten_op_strook() -> Array[int]:
+	var uit: Array[int] = []
+	for k in _strook_knoppen("mb_bon"):
+		var naam := str((k as Node).name)
+		if naam.begins_with("Km"):
+			uit.append(naam.substr(2).to_int())
+	uit.sort()
+	return uit
+
+## Een munt op de toonbank leggen: één tik op de muntstrook.
+func _leg(waarde: int) -> bool:
+	return _kies("mb_bon", "m%d" % waarde)
+
+## Wacht tot een hotspot er staat (de stappen volgen elkaar op na 0,45 s).
+func _wacht_op(id: String, max_s := 3.0) -> bool:
+	var t := 0.0
+	while t < max_s:
+		if _er_is(id):
+			return true
+		await _wacht(0.05)
+		t += 0.05
+	return _er_is(id)
+
+func _wacht_boek() -> void:
+	for _p in 60:
+		if Ui.blad_open_nu():
+			break
+		await _wacht(0.05)
+	await _tel_frames()
+
+## Na het betalen: wacht tot het eerste ✨-vakje er ligt.
+func _wacht_vak() -> String:
+	for _p in 60:
+		if not _eerste_vak().is_empty():
+			break
+		await _wacht(0.05)
+	return _eerste_vak()
+
+## Het rekenwerk van één aankoop bij de kassa, zoals een kind het doet, met de
+## R1-teller: [som] → genoeg → munten → [wisselgeld] → over.
+func _reken_door(heb: int, totaal: int, band: int, aantal: int, wat: String,
+		ster := false) -> void:
+	if aantal > 1:
+		waar(await _wacht_op("mb_som_keuzes"), "%s: de som staat er" % wat)
+		waar(_typ("mb_som", totaal), "%s: som = %d" % [wat, totaal])
+		_tel("reken")
+	waar(await _wacht_op("mb_genoeg_keuzes"), "%s: genoeg? staat er" % wat)
+	waar(_kies("mb_genoeg", "ja"), "%s: genoeg" % wat)
+	_tel("reken")
+	if not ster:
+		waar(await _wacht_op("mb_bon_keuzes"), "%s: de muntstrook staat er" % wat)
+		var voor := int(_r1["reken"])
+		var gelegd := _leg_precies(totaal)
+		gelijk(gelegd, totaal, "%s: precies %d op de toonbank" % [wat, totaal])
+		waar(int(_r1["reken"]) > voor, "%s: de munten tellen als rekenen" % wat)
+		if Sommen.Meubels.wisselgeld(band):
+			waar(await _wacht_op("mb_wissel_keuzes"), "%s: het wisselgeld staat er" % wat)
+			waar(_typ("mb_wissel", gelegd - totaal), "%s: wisselgeld %d" % [wat, gelegd - totaal])
+			_tel("reken")
+	waar(await _wacht_op("mb_over_keuzes"), "%s: houd je over? staat er" % wat)
+	waar(_typ("mb_over", heb - totaal), "%s: over = %d" % [wat, heb - totaal])
+	_tel("reken")
+
+## Eén hele beurt: start (de ingangstik telt niet mee) → kassavraag → [tab] →
+## kiezen → [afrekenen] → rekenen → neerzetten → het spel gaat vanzelf dicht.
+## Daarna: R1, en de munten zijn betaald.
+func _r1_beurt(types: Array, tab: String, wat: String) -> void:
+	_r1 = {"reken": 0, "spel": 0}
+	var band := State.band()
+	var heb := int(State.s["munten"])
+	var totaal := 0
+	for t in types:
+		totaal += int(Spel._artikel(str(t))["prijs"])
+	waar(Games.start("meubels"), "%s: het spel start" % wat)
+	await _tel_frames()
+	waar(_typ("mb_kas", heb), "%s: de kassavraag" % wat)
+	_tel("reken")
+	await _wacht_boek()
+	if tab != "meubels":
+		waar(_blad_tik("Ktab_" + tab), "%s: naar de tab %s" % [wat, tab])
+		_tel("spel")
+		await _tel_frames()
+	for t in types:
+		waar(_blad_tik("Kk_" + str(t)), "%s: %s kiezen" % [wat, t])
+		_tel("spel")
+		await _tel_frames()
+	if band >= 4 and types.size() == 1:
+		waar(_blad_tik("Kafrekenen"), "%s: afrekenen" % wat)
+		_tel("spel")
+		await _tel_frames()
+	await _reken_door(heb, totaal, band, types.size(), wat)
+	gelijk(int(State.s["munten"]), heb - totaal, "%s: de prijs is betaald" % wat)
+	for i in types.size():
+		var vak: String = await _wacht_vak()
+		waar(not vak.is_empty(), "%s: een vakje voor stuk %d" % [wat, i + 1])
+		if vak.is_empty():
+			break
+		waar(_tik(vak), "%s: neerzetten" % wat)
+		_tel("spel")
+		await _tel_frames(2)
+	await _wacht(2.3)
+	gelijk(Games.actief(), "", "%s: het spel ging vanzelf dicht" % wat)
+	waar(int(_r1["reken"]) >= int(_r1["spel"]) + 1,
+		"%s: R1 reken %d >= spel %d + 1" % [wat, _r1["reken"], _r1["spel"]])
+	print("[r1] ", wat, " reken=", _r1["reken"], " spel=", _r1["spel"])
+
+## Een sticker met sterren: kassavraag (als er munten zijn) → ⭐-tab → kiezen →
+## genoeg → over.
+func _r1_sticker(sleutel: String, wat: String) -> void:
+	_r1 = {"reken": 0, "spel": 0}
+	var munten := int(State.s["munten"])
+	var sterren := int(State.s["sterren"])
+	var nodig := int(Spel._versier(sleutel)["ster"])
+	waar(Games.start("meubels"), "%s: het spel start" % wat)
+	await _tel_frames()
+	if munten > 0:
+		waar(_typ("mb_kas", munten), "%s: de kassavraag" % wat)
+		_tel("reken")
+		await _wacht_boek()
+		waar(_blad_tik("Ktab_versiering"), "%s: naar de sterren" % wat)
+		_tel("spel")
+		await _tel_frames()
+	waar(_blad_tik("Kv_" + sleutel), "%s: %s kiezen" % [wat, sleutel])
+	_tel("spel")
+	await _tel_frames()
+	await _reken_door(sterren, nodig, State.band(), 1, wat, true)
+	gelijk(int(State.s["sterren"]), sterren - nodig, "%s: de sterren zijn betaald" % wat)
+	await _wacht(1.9)
+	gelijk(Games.actief(), "", "%s: het spel ging vanzelf dicht" % wat)
+	waar(int(_r1["reken"]) >= int(_r1["spel"]) + 1,
+		"%s: R1 reken %d >= spel %d + 1" % [wat, _r1["reken"], _r1["spel"]])
+	print("[r1] ", wat, " reken=", _r1["reken"], " spel=", _r1["spel"])
+
 # ==================================================================================
 # 1. registratie en ontgrendeling
 # ==================================================================================
@@ -294,7 +449,8 @@ func test_ontgrendelt_vanaf_drie_gasten() -> void:
 # 2. een hele beurt per band
 # ==================================================================================
 
-## Groep 3: één ding per keer, precies betalen, geen wisselgeld.
+## Groep 3: één ding per keer, precies betalen, geen wisselgeld — en sinds de
+## Rekenwacht ook bij één ding: genoeg? → munten → hoeveel houd je over?
 func test_beurt_band_3() -> void:
 	await _op(Vector2(1000, 648), 3, 9)
 	gelijk(State.band(), 3, "de band is 3")
@@ -303,25 +459,40 @@ func test_beurt_band_3() -> void:
 	await _kassa_door()
 	gelijk(Sommen.Meubels.max_lijst(3), 1, "groep 3 koopt één ding per keer")
 	waar(_blad_knop("Kk_mandje") != null, "het mandje staat in het boek")
-	gelijk(_blad_knop("Kk_mandje").text, "🛒", "en is te koop bij 9 munten")
-	gelijk(_blad_knop("Kk_badkuip").text, "🛒", "de badkuip van €8 ook")
+	gelijk(_blad_knop("Kk_mandje").text, "🛒", "met een 🛒")
+	gelijk(_blad_knop("Kk_badkuip").text, "🛒",
+		"de badkuip ook: of je genoeg hebt is de vraag bij de kassa")
 	waar(_blad_tik("Kk_mandje"), "tik op 🛒 bij het mandje")
 	await _tel_frames()
+	# eerst de vergelijking: genoeg?
+	gelijk(_kaart_tekst("mb_genoeg", "regel"), "🧺 Mandje kost €3", "de prijszin")
+	gelijk(_kaart_tekst("mb_genoeg", "regel2"), "Je hebt €9. Is dat genoeg?", "de vraag")
+	gelijk(_strook_knoppen("mb_genoeg").size(), 2, "twee knoppen: genoeg en te weinig")
+	waar(_kies("mb_genoeg", "ja"), "genoeg")
+	waar(await _wacht_op("mb_bon_keuzes"), "de bon met de muntstrook")
 	# de bon hangt op de kassa, met de prijs in het vakje
 	gelijk(_kaart_tekst("mb_bon", "regel"), "🧺 Mandje kost €3", "de prijszin")
 	gelijk(_kaart_tekst("mb_bon", "regel2"), Spel.T_LEG_MUNTEN, "en de tweede regel")
 	gelijk(_kaart_tekst("mb_bon", "vak"), "€3", "het vakje draagt het bedrag")
-	waar(_er_is("mb_bank") and _er_is("mb_buidel"), "toonbank en buidel staan er")
+	gelijk(_kaart_tekst("mb_bon", "som"), "🧺 = €3",
+		"en de somregel ook: met een muntstrook is er geen vakje te zien")
+	waar(_er_is("mb_bank"), "de toonbank staat er")
 	waar(_er_is("mb_boek"), "en de weg terug naar het boek")
-	# buidel(9) = [2,2,2,2,1]; leg 1 + 2 = 3 neer
-	gelijk(_titel("mb_buidel"), "munt van 1 euro (1 in je buidel)", "de buideltitel")
-	waar(_tik("mb_bank"), "leg de munt van 1 neer")
+	waar(not _er_is("mb_ok"), "geen ✔ Klaar meer: de stapel wordt zelf gekeurd")
+	# buidel(9) = [2,2,2,2,1]: de strook biedt €1 en €2
+	gelijk(str(_munten_op_strook()), "[1, 2]", "de muntsoorten in je hand")
+	waar(_leg(1), "leg de munt van 1 neer")
 	gelijk(_titel("mb_bank"), "de toonbank: €1", "de toonbank telt mee")
 	waar(_er_is("mb_terug"), "en nu kan er een munt terug")
-	waar(_tik("mb_bank"), "leg de munt van 2 neer")
-	gelijk(_titel("mb_bank"), "de toonbank: €3", "precies genoeg")
+	waar(not _er_is("mb_boek"), "en niet meer terug naar het boek")
 	var sterren_voor := int(State.s["sterren"])
-	waar(_tik("mb_ok"), "klaar met tellen")
+	waar(_leg(2), "leg de munt van 2 neer: precies €3")
+	gelijk(int(State.s["munten"]), 9, "nog niets betaald: eerst de laatste vraag")
+	waar(await _wacht_op("mb_over_keuzes"), "hoeveel houd je over?")
+	gelijk(_kaart_tekst("mb_over", "som"), "€9 − €3 =", "de som, met een echte −")
+	gelijk(_kaart_tekst("mb_over", "regel"), "💰 Je hebt €9, het kost €3", "de zin")
+	gelijk(_kaart_tekst("mb_over", "regel2"), Spel.T_OVER_VRAAG, "en de vraag")
+	waar(_typ("mb_over", 6), "tik 6")
 	gelijk(int(State.s["munten"]), 6, "de munten gaan uit de kassa")
 	gelijk(int(State.s["sterren"]), sterren_voor + 1, "één ster voor het meedoen")
 	gelijk(str(_spel().call("_nog")), '["mandje"]', "het mandje wacht op een plekje")
@@ -336,9 +507,11 @@ func test_beurt_band_3() -> void:
 	waar(_tik(vak), "zet het mandje neer")
 	gelijk(ctx_meubels().size(), voor + 1, "er staat een meubel bij")
 	gelijk(str(_spel().call("_nog")), "[]", "en de doos is leeg")
+	await _wacht(2.3)
+	gelijk(Games.actief(), "", "het spel ging vanzelf dicht: geen ✖ nodig")
 	_af()
 
-## Groep 4: twee dingen samen, en wisselgeld.
+## Groep 4: twee dingen samen (het tweede rekent meteen af), en wisselgeld.
 func test_beurt_band_4() -> void:
 	await _op(Vector2(1000, 648), 5, 12)
 	gelijk(State.band(), 4, "de band is 4")
@@ -350,33 +523,34 @@ func test_beurt_band_4() -> void:
 	waar(_blad_tik("Kk_plant"), "plant erbij")
 	await _tel_frames()
 	gelijk(_blad_knop("Kk_plant").text, "1×", "en staat er als 1×")
-	waar(_blad_tik("Kk_mandje"), "mandje erbij")
-	await _tel_frames()
-	waar(_blad_knop("Kafrekenen") != null, "de afrekenknop verschijnt")
+	waar(_blad_knop("Kafrekenen") != null, "met één ding staat er een afrekenknop")
 	gelijk(_blad_knop("Kafrekenen").tooltip_text, Spel.T_AFREKENEN, "aria Afrekenen")
 	gelijk(_blad_knop("Kleeg").tooltip_text, Spel.T_LIJST_LEEG, "aria Lijstje leeg")
-	waar(_blad_tik("Kafrekenen"), "afrekenen")
+	waar(_blad_tik("Kk_mandje"), "mandje erbij: het lijstje is vol")
 	await _tel_frames()
+	waar(not Ui.blad_open_nu(), "een vol lijstje rekent meteen af")
 	# stap som
 	gelijk(_kaart_tekst("mb_som", "som"), "€1 + €3 =", "de som staat op de kassa")
 	gelijk(_kaart_tekst("mb_som", "regel"), "🛒 Plant €1 en mandje €3", "de somzin")
 	gelijk(_kaart_tekst("mb_som", "regel2"), Spel.T_SAMEN, "en de vraag")
 	waar(_typ("mb_som", 4), "tik 4 op de strook")
-	await _wacht(0.6)
-	await _tel_frames()
+	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
+	gelijk(_kaart_tekst("mb_genoeg", "regel"), "🛒 Plant en mandje kosten €4", "de prijszin")
+	waar(_kies("mb_genoeg", "ja"), "genoeg")
+	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
 	# stap munten: buidel(12) = [5,2,2,2,1]; €5 is te veel -> wisselgeld
 	gelijk(_kaart_tekst("mb_bon", "regel"), "🛒 Plant en mandje kosten €4", "de prijszin")
-	waar(_tik("mb_buidel"), "volgende muntsoort")
-	waar(_tik("mb_buidel"), "en nog een")
-	gelijk(_titel("mb_buidel"), "munt van 5 euro (1 in je buidel)", "nu heb je €5 in je hand")
-	waar(_tik("mb_bank"), "leg €5 neer")
-	waar(_tik("mb_ok"), "klaar met tellen")
-	await _tel_frames()
+	gelijk(str(_munten_op_strook()), "[1, 2, 5]", "de muntsoorten in je hand")
+	waar(_leg(5), "leg €5 neer")
+	waar(await _wacht_op("mb_wissel_keuzes"), "de wisselvraag")
 	gelijk(_kaart_tekst("mb_wissel", "som"), "€5 − €4 =", "de wisselsom, met een echte −")
 	gelijk(_kaart_tekst("mb_wissel", "regel"), "👛 Je gaf €5, het kost €4", "de wisselzin")
 	gelijk(_kaart_tekst("mb_wissel", "regel2"), Spel.T_TERUG_VRAAG, "en de vraag")
 	var sterren_voor := int(State.s["sterren"])
 	waar(_typ("mb_wissel", 1), "tik het wisselgeld")
+	waar(await _wacht_op("mb_over_keuzes"), "hoeveel houd je over?")
+	gelijk(_kaart_tekst("mb_over", "som"), "€12 − €4 =", "de oversom")
+	waar(_typ("mb_over", 8), "tik 8")
 	gelijk(int(State.s["munten"]), 8, "de prijs gaat uit de kassa, niet het gelegde bedrag")
 	gelijk(int(State.s["sterren"]), sterren_voor + 1, "één ster")
 	gelijk(str(_spel().call("_nog")), '["plant", "mandje"]', "twee dingen wachten")
@@ -393,7 +567,8 @@ func test_beurt_band_4() -> void:
 	gelijk(str(_spel().call("_nog")), "[]", "de doos is leeg")
 	_af()
 
-## Groep 5: dezelfde regels als groep 4, met de grotere buidel.
+## Groep 5: dezelfde regels als groep 4, met de grotere buidel.  Precies
+## betalen geeft in groep 4/5 ook de wisselvraag: €9 − €9 = €0.
 func test_beurt_band_5() -> void:
 	await _op(Vector2(1000, 648), 7, 20)
 	gelijk(State.band(), 5, "de band is 5")
@@ -404,20 +579,24 @@ func test_beurt_band_5() -> void:
 	await _kassa_door()
 	waar(_blad_tik("Kk_bed"), "bed erbij")
 	await _tel_frames()
-	waar(_blad_tik("Kk_speelmand"), "speelmand erbij")
-	await _tel_frames()
-	waar(_blad_tik("Kafrekenen"), "afrekenen")
+	waar(_blad_tik("Kk_speelmand"), "speelmand erbij: afrekenen")
 	await _tel_frames()
 	gelijk(_kaart_tekst("mb_som", "som"), "€5 + €4 =", "de som")
 	waar(_typ("mb_som", 9), "tik 9")
-	await _wacht(0.6)
-	await _tel_frames()
-	# buidel(20) = precies te leggen; tel tot 9 met wat er in je hand zit
+	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
+	waar(_kies("mb_genoeg", "ja"), "genoeg")
+	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
+	# buidel(20) = precies te leggen
 	var gelegd := _leg_precies(9)
 	gelijk(gelegd, 9, "er ligt precies €9 op de toonbank")
+	waar(await _wacht_op("mb_wissel_keuzes"), "ook bij precies betalen: de wisselvraag")
+	gelijk(_kaart_tekst("mb_wissel", "som"), "€9 − €9 =", "nul is een uitkomst")
+	waar(_strook_knop("mb_wissel", 0) != null, "en 0 staat op de strook")
+	waar(_typ("mb_wissel", 0), "tik 0")
+	waar(await _wacht_op("mb_over_keuzes"), "hoeveel houd je over?")
 	var bedden_voor := State.alle_bedden().size()
 	var cap_voor := State.max_gasten()
-	waar(_tik("mb_ok"), "klaar met tellen")
+	waar(_typ("mb_over", 11), "tik 11")
 	gelijk(int(State.s["munten"]), 11, "20 − 9 = 11 in de kassa")
 	await _wacht(1.4)
 	await _tel_frames()
@@ -435,66 +614,36 @@ func test_beurt_band_5() -> void:
 	waar(State.max_gasten() >= cap_voor, "de gastenlimiet zakt er nooit door")
 	_af()
 
-## Leg net zolang munten neer tot het bedrag klopt; kies zo nodig een andere
-## soort.  Precies wat een kind doet, alleen sneller.
-## Alles wat deze lus weet, leest ze van de knoppen zelf: het bedrag staat op
-## de toonbank ("de toonbank: \u20ac4") en de munt in je hand op de buidel
-## ("munt van 2 euro (3 in je buidel)").  Geen enkele interne functie.
+## Leg net zolang munten neer tot het bedrag klopt: telkens de grootste munt van
+## de strook die nog past.  Precies wat een kind doet, alleen sneller.  Alles wat
+## deze lus weet, leest ze van de knoppen zelf (de toonbank en de muntstrook);
+## elke gelegde munt telt voor R1 als rekenen (een gekeurde handeling).
 func _leg_precies(doel: int) -> int:
-	var terug_gebruikt := 0
-	for _poging in 60:
-		var geteld := _op_de_bank()
-		if geteld < 0 or geteld >= doel:
+	var geteld := maxi(0, _op_de_bank())
+	for _poging in 30:
+		if geteld >= doel:
 			return geteld
-		var beste := _grootste_die_past(doel - geteld)
-		if beste <= 0:
-			# niets past meer: haal de toonbank leeg, precies waar « voor is
-			if terug_gebruikt >= 1 or not _er_is("mb_terug"):
-				return geteld
-			terug_gebruikt += 1
-			for _r in 20:
-				if not _er_is("mb_terug") or _op_de_bank() <= 0:
-					break
-				_tik("mb_terug")
-			continue
-		for _rondje in 5:
-			if _in_de_hand() == beste:
-				break
-			_tik("mb_buidel")
-		if _in_de_hand() != beste:
+		var beste := 0
+		for v in _munten_op_strook():
+			if v <= doel - geteld:
+				beste = maxi(beste, v)
+		if beste <= 0 or not _leg(beste):
 			return geteld
-		_tik("mb_bank")
-	return -1
-
-## Tik de buidel één rondje rond en onthoud de grootste soort die nog past.
-## De buidel staat daarna weer op de soort waar hij begon.
-func _grootste_die_past(ruimte: int) -> int:
-	var eerste := _in_de_hand()
-	if eerste <= 0:
-		return 0
-	var beste := eerste if eerste <= ruimte else 0
-	for _r in 4:
-		_tik("mb_buidel")
-		var v := _in_de_hand()
-		if v <= 0 or v == eerste:
-			break
-		if v <= ruimte:
-			beste = maxi(beste, v)
-	return beste
+		_tel("reken")
+		geteld += beste
+	return geteld
 
 func _op_de_bank() -> int:
 	var t := _titel("mb_bank")
-	if not t.begins_with("de toonbank: \u20ac"):
+	if not t.begins_with("de toonbank: €"):
 		return -1
-	return t.substr("de toonbank: \u20ac".length()).split(" ")[0].to_int()
+	return t.substr("de toonbank: €".length()).split(" ")[0].to_int()
 
-func _in_de_hand() -> int:
-	var t := _titel("mb_buidel")
-	if not t.begins_with("munt van "):
-		return 0
-	# `to_int()` plukt ELK cijfer uit de string ("2 euro (3 in je buidel)" -> 23),
-	# dus alleen het eerste woord telt.
-	return t.substr("munt van ".length()).split(" ")[0].to_int()
+
+
+
+
+
 
 ## Het prikbordkaartje van vandaag draagt een vinkje.
 func _keur_taak_afgevinkt() -> void:
@@ -582,7 +731,9 @@ func test_het_spel_begint_met_een_muntvraag() -> void:
 		"de stand staat in het laatje")
 	_af()
 
-## Stap 0: met een lege buidel valt er niets te tellen — dan meteen het boek.
+## Stap 0: met een lege buidel valt er niets te tellen — dan meteen het boek,
+## en wel op de sterrenbladzijde: daar is het enige dat je kunt halen, en elke
+## sticker vraagt zelf rekenen (Rekenwacht).
 func test_nul_munten_slaat_de_vraag_over() -> void:
 	await _op(Vector2(1000, 648), 3, 0)
 	waar(Games.start("meubels"), "het spel start")
@@ -590,11 +741,280 @@ func test_nul_munten_slaat_de_vraag_over() -> void:
 	waar(not _er_is("mb_kas"), "er komt geen som met goed = 0")
 	waar(not _er_is("mb_munten"), "en geen lege toonbank")
 	waar(Ui.blad_open_nu(), "het boek gaat meteen open")
+	waar(_blad_knop("Kv_vlag") != null, "op de sterrenbladzijde")
 	waar(_er_is("mb_geen"), "met een wolkje dat zegt waarom")
 	gelijk(_wolk_deel("mb_geen", "icoon"), "💰", "het pictogram van het wolkje")
 	gelijk(_wolk_deel("mb_geen", "tekst"), Spel.T_GEEN_MUNTEN, "Nog geen munten")
 	gelijk(str(State.spel_data("meubels").get("view", "")), "boek",
 		"en de stand staat op het boek")
+	_af()
+
+## De eigenaar, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten
+## zelf leren rekenen."  Drie foute sommen bij het afrekenen, drie foute
+## antwoorden op "Heb je genoeg?" en drie foute antwoorden op "Hoeveel houd je
+## over?": elke keer `🔄 Nog een keer` bij de kassa en verder niets — geen
+## doortellen, geen "+€3", geen spookmunten.  Nooit straffen: niets afgepakt,
+## en de goede antwoorden leveren nog gewoon een ster op.
+func test_geen_hulp_en_nooit_straffen() -> void:
+	await _op(Vector2(1000, 648), 5, 12)
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	waar(_blad_tik("Kk_plant"), "plant erbij")
+	await _tel_frames()
+	waar(_blad_tik("Kk_mandje"), "mandje erbij: afrekenen")
+	await _tel_frames()
+	var munten_voor := int(State.s["munten"])
+	var sterren_voor := int(State.s["sterren"])
+	gelijk(_kaart_tekst("mb_som", "hulp"), "", "eerst geen hulpregel")
+	var voor := beeld("meubels")
+	waar(voor.has("mb_boek"), "vóór een misser mag je nog terug naar het boek")
+	voor.erase("mb_boek")       # R2: na een misser is die weg terug er niet meer
+	for keer in 3:
+		var wat := "som, misser %d" % (keer + 1)
+		waar(_typ_fout("mb_som", 4), "%s: een fout antwoord" % wat)
+		await _tel_frames()
+		waar(_op_slot("mb_som"), "%s: de strook staat even op slot" % wat)
+		_alleen_teleurstelling("mb_som", wat)
+		await _wacht_mispauze()
+		niets_erbij(voor, beeld("meubels"), wat)
+	gelijk(int(State.s["munten"]), munten_voor, "er is geen munt afgepakt")
+	gelijk(int(State.s["sterren"]), sterren_voor, "en geen ster afgepakt")
+	waar(_er_is("mb_som"), "de kaart staat er nog")
+	waar(_typ("mb_som", 4), "het goede antwoord")
+	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
+	var gen := beeld("meubels")
+	for keer in 3:
+		var wat := "genoeg, misser %d" % (keer + 1)
+		waar(_kies("mb_genoeg", "nee"), "%s: te weinig gezegd" % wat)
+		await _tel_frames()
+		waar(_op_slot("mb_genoeg"), "%s: de strook staat even op slot" % wat)
+		_alleen_teleurstelling("mb_genoeg", wat)
+		await _wacht_mispauze()
+		niets_erbij(gen, beeld("meubels"), wat)
+	waar(not Ui.blad_open_nu(), "een fout 'te weinig' brengt je niet terug naar het boek")
+	waar(_kies("mb_genoeg", "ja"), "het goede antwoord")
+	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
+	var gelegd := _leg_precies(4)
+	gelijk(gelegd, 4, "leg €4 neer")
+	waar(await _wacht_op("mb_wissel_keuzes"), "de wisselvraag")
+	waar(_typ("mb_wissel", 0), "precies betaald: 0 terug")
+	waar(await _wacht_op("mb_over_keuzes"), "hoeveel houd je over?")
+	var over := beeld("meubels")
+	for keer in 3:
+		var wat := "over, misser %d" % (keer + 1)
+		waar(_typ_fout("mb_over", 8), "%s: een fout antwoord" % wat)
+		await _tel_frames()
+		waar(_op_slot("mb_over"), "%s: de strook staat even op slot" % wat)
+		_alleen_teleurstelling("mb_over", wat)
+		gelijk(int(State.s["munten"]), munten_voor, "%s: er is nog niets betaald" % wat)
+		await _wacht_mispauze()
+		niets_erbij(over, beeld("meubels"), wat)
+	waar(_typ("mb_over", 8), "het goede antwoord")
+	gelijk(int(State.s["munten"]), 8, "nu pas betaald")
+	gelijk(int(State.s["sterren"]), sterren_voor + 1,
+		"de ster komt er ook na negen missers (F5)")
+	_af()
+
+## Een fout wisselgeld (groep 4 en 5): dezelfde pauze, en geen telladder.
+func test_geen_hulp_bij_het_wisselgeld() -> void:
+	await _op(Vector2(1000, 648), 5, 12)
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	waar(_blad_tik("Kk_plant"), "plant erbij")
+	await _tel_frames()
+	waar(_blad_tik("Kk_mandje"), "mandje erbij: afrekenen")
+	await _tel_frames()
+	waar(_typ("mb_som", 4), "de som")
+	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
+	waar(_kies("mb_genoeg", "ja"), "genoeg")
+	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
+	# buidel(12) = [5,2,2,2,1]: leg €5 neer, dan de wisselvraag (geen ✔ Klaar)
+	waar(_leg(5), "leg €5 neer")
+	waar(await _wacht_op("mb_wissel_keuzes"), "de wisselvraag staat er")
+	var voor := beeld("meubels")
+	for keer in 3:
+		var wat := "wisselgeld, misser %d" % (keer + 1)
+		waar(_typ_fout("mb_wissel", 1), "%s: een fout getal" % wat)
+		await _tel_frames()
+		waar(_op_slot("mb_wissel"), "%s: de strook staat even op slot" % wat)
+		_alleen_teleurstelling("mb_wissel", wat)
+		await _wacht_mispauze()
+		niets_erbij(voor, beeld("meubels"), wat)
+	waar(_typ("mb_wissel", 1), "het goede wisselgeld")
+	waar(await _wacht_op("mb_over_keuzes"), "hoeveel houd je over?")
+	waar(_typ("mb_over", 8), "het goede antwoord")
+	gelijk(int(State.s["munten"]), 8, "de prijs gaat uit de kassa")
+	_af()
+
+## Groep 3 rekent geen wisselgeld uit: te veel op de toonbank is een misser
+## zonder hulp — de stapel gaat terug in je hand, dezelfde bon blijft staan.
+## En « pakt een munt terug (vrij spel), zolang er iets ligt.
+func test_groep_drie_pakt_een_munt_terug() -> void:
+	await _op(Vector2(1000, 648), 3, 9)
+	waar(not Sommen.Meubels.wisselgeld(3), "groep 3 kent nog geen wisselgeld")
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	waar(_blad_tik("Kk_mandje"), "koop het mandje van €3")
+	await _tel_frames()
+	waar(_kies("mb_genoeg", "ja"), "genoeg")
+	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
+	# buidel(9) = [2,2,2,2,1]: leg €1 neer en pak hem terug met «
+	waar(_leg(1), "leg €1 neer")
+	waar(_er_is("mb_terug"), "de knop om een munt terug te pakken")
+	gelijk(_titel("mb_terug"), Spel.T_MUNT_TERUG, "met de titel van §5.9")
+	waar(_tik("mb_terug"), "pak de munt terug")
+	gelijk(_titel("mb_bank"), "de toonbank: €0", "de toonbank is weer leeg")
+	# nu te veel: €2 + €2 = €4 voor een mandje van €3
+	waar(_leg(2), "leg €2 neer")
+	waar(_leg(2), "en nog €2: te veel")
+	await _tel_frames()
+	waar(not _er_is("mb_wissel"), "er komt géén wisselkaart in groep 3")
+	_alleen_teleurstelling("mb_bon", "te veel")
+	gelijk(int(State.s["munten"]), 9, "er is niets betaald")
+	await _wacht_mispauze()
+	gelijk(_titel("mb_bank"), "de toonbank: €0", "de stapel ging terug in je hand")
+	gelijk(_kaart_tekst("mb_bon", "vak"), "€3", "dezelfde bon, dezelfde prijs")
+	gelijk(str(_munten_op_strook()), "[1, 2]", "en dezelfde munten")
+	waar(_leg(2) and _leg(1), "€2 + €1: precies")
+	waar(await _wacht_op("mb_over_keuzes"), "hoeveel houd je over?")
+	waar(_typ("mb_over", 6), "9 − 3 = 6")
+	gelijk(int(State.s["munten"]), 6, "drie munten betaald")
+	_af()
+
+## Rekenwacht: het boek zegt niet meer vooraf of je genoeg hebt (vroeger 💛).
+## Wie de badkuip van €8 met €3 wil, krijgt de vraag "Heb je genoeg?" — en het
+## goede antwoord "💛 Te weinig" geeft het spaarwolkje.  Er gaat niets op slot.
+func test_te_weinig_geld_zet_niets_op_slot() -> void:
+	await _op(Vector2(1000, 648), 3, 3)
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	gelijk(_blad_knop("Kk_badkuip").text, "🛒", "de badkuip heeft gewoon een 🛒")
+	gelijk(_blad_knop("Kk_badkuip").tooltip_text, "badkuip kopen, 8 euro",
+		"en staat gewoon in het boek")
+	waar(_blad_tik("Kk_badkuip"), "tik hem aan")
+	await _tel_frames()
+	waar(_er_is("mb_genoeg"), "de vraag: heb je genoeg?")
+	gelijk(_kaart_tekst("mb_genoeg", "regel2"), "Je hebt €3. Is dat genoeg?", "de vraag")
+	waar(_kies("mb_genoeg", "nee"), "te weinig: goed gezegd")
+	await _tel_frames()
+	waar(_er_is("mb_spaar"), "er komt een spaarwolkje")
+	gelijk(_titel("mb_spaar"), "💛 €8 je hebt €3", "met de prijs en wat je hebt")
+	gelijk(int(State.s["munten"]), 3, "er is niets afgeschreven")
+	waar(Ui.blad_open_nu(), "het boek staat weer open")
+	waar(_blad_knop("Kk_badkuip") != null, "en de badkuip staat er nog")
+	waar(_blad_knop("Kk_plant") != null and _blad_knop("Kk_plant").text == "🛒",
+		"wat je wel kunt betalen blijft gewoon te koop")
+	gelijk(State.spel_data("meubels").get("open", null), null, "er staat geen open vraag")
+	_af()
+
+## Versiering kost sterren, en die gaan pas af na "Heb je genoeg?" en "Hoeveel
+## houd je over?" (Rekenwacht: geen sticker zonder rekenen).
+func test_versiering_kost_sterren() -> void:
+	await _op(Vector2(1000, 648), 3, 5)
+	State.s["sterren"] = 2
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	waar(_blad_tik("Ktab_versiering"), "naar de sterrenpagina")
+	await _tel_frames()
+	gelijk(_blad_knop("Kv_vlag").tooltip_text, "vlaggetjes kopen voor 1 sterren",
+		"aria van §5.9")
+	gelijk(_blad_knop("Kv_slinger").text, "🛒", "de slinger van 3 sterren: de vraag beslist")
+	waar(_blad_tik("Kv_slinger"), "tik hem aan")
+	await _tel_frames()
+	gelijk(_kaart_tekst("mb_genoeg", "regel"), "🎈 Dit kost 3 ⭐", "de prijs in sterren")
+	gelijk(_kaart_tekst("mb_genoeg", "regel2"), "Je hebt 2⭐. Is dat genoeg?", "de vraag")
+	waar(_kies("mb_genoeg", "nee"), "te weinig: goed gezegd")
+	await _tel_frames()
+	gelijk(int(State.s["sterren"]), 2, "er gaat geen ster af")
+	gelijk(_titel("mb_spaar"), "⭐ 3 je hebt 2", "wel een spaarwolkje")
+	waar(_blad_tik("Kv_vlag"), "koop de vlaggetjes")
+	await _tel_frames()
+	waar(_kies("mb_genoeg", "ja"), "genoeg")
+	gelijk(int(State.s["sterren"]), 2, "nog geen ster af: eerst de laatste vraag")
+	waar(await _wacht_op("mb_over_keuzes"), "hoeveel houd je over?")
+	gelijk(_kaart_tekst("mb_over", "som"), "⭐ 2 − 1 =", "de oversom in sterren")
+	waar(_typ("mb_over", 1), "2 − 1 = 1")
+	gelijk(int(State.s["sterren"]), 1, "één ster betaald")
+	var q: Dictionary = State.spel_data("meubels")
+	gelijk(int((q["versiering"] as Dictionary).get("vlag", 0)), 1, "en je hebt er een")
+	await _wacht(1.9)
+	gelijk(Games.actief(), "", "daarna gaat het spel vanzelf dicht")
+	_af()
+
+func test_herstel_uit_ctx_data() -> void:
+	await _op(Vector2(1000, 648), 5, 12)
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	waar(_blad_tik("Kk_plant"), "plant erbij")
+	await _tel_frames()
+	waar(_blad_tik("Kk_mandje"), "mandje erbij: afrekenen")
+	await _tel_frames()
+	waar(_typ("mb_som", 4), "de som")
+	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
+	waar(_kies("mb_genoeg", "ja"), "genoeg")
+	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
+	var gelegd := _leg_precies(4)
+	gelijk(gelegd, 4, "leg €4 neer")
+	waar(await _wacht_op("mb_wissel_keuzes"), "wisselgeld")
+	waar(_typ("mb_wissel", 0), "0 terug")
+	waar(await _wacht_op("mb_over_keuzes"), "over")
+	waar(_typ("mb_over", 8), "8 over")
+	await _wacht(1.4)
+	await _tel_frames()
+	var voor: Dictionary = State.spel_data("meubels").duplicate(true)
+	gelijk(str(voor["wacht"]), '{ "nog": ["plant", "mandje"] }',
+		"twee dingen staan in het laatje")
+	# een herlaad: het spel stopt, de wereld gaat leeg, het spel start opnieuw
+	Games.stop()
+	await _tel_frames()
+	waar(Games.start("meubels"), "opnieuw gestart")
+	await _tel_frames()
+	gelijk(str(State.spel_data("meubels")["wacht"]), str(voor["wacht"]),
+		"de wachtrij overleeft de herlaad")
+	waar(_er_is("mb_doos"), "en het spel staat meteen op de plaatsstap")
+	waar(not _eerste_vak().is_empty(), "met een vakje om in te zetten")
+	waar(not Ui.blad_open_nu(), "het boek staat niet open: eerst neerzetten")
+	waar(_tik(_eerste_vak()), "zet de plant neer")
+	await _tel_frames()
+	gelijk(str(_spel().call("_nog")), '["mandje"]', "er blijft er één over")
+	_af()
+
+func test_stop_laat_de_wereld_schoon() -> void:
+	await _op(Vector2(1000, 648), 5, 12)
+	Hits.maak({"id": "vreemde_knop", "kamer": "receptie", "x": 8.0, "z": 8.0, "y": 10.0,
+		"icoon": "🔔", "label": "Bel", "door": "keurmeester", "aan": func(_s) -> void: pass})
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	waar(_blad_tik("Kk_plant"), "plant erbij")
+	await _tel_frames()
+	waar(_blad_tik("Kafrekenen"), "afrekenen")
+	await _tel_frames()
+	var eigen := 0
+	for id in Hits.lijst():
+		if Hits.spot(id).door == "meubels":
+			eigen += 1
+	waar(eigen >= 3, "het spel plaatste eigen hotspots (%d)" % eigen)
+	waar(World.decor_lijst("receptie").any(func(d): return str(d["door"]) == "meubels"),
+		"en eigen decor")
+	waar(Ui.blad_open_nu() == false, "tijdens het betalen staat er geen blad")
+	Games.stop()
+	await _tel_frames()
+	for id in Hits.lijst():
+		waar(Hits.spot(id).door != "meubels", "geen hotspot bleef staan: %s" % id)
+	gelijk(World.decor_lijst().filter(func(d): return str(d["door"]) == "meubels").size(), 0,
+		"en geen los decor")
+	waar(not Ui.blad_open_nu(), "het blad is dicht")
+	gelijk(Hits.voorrang_van(), "", "niemand heeft voorrang")
+	waar(Hits.spot("vreemde_knop") != null, "de knop van een ander bleef staan")
+	waar(not World.kamer_veranderd.is_connected(Callable(_spel(), "_op_kamer")) if _spel() != null else true,
+		"en de kamerluisteraar is losgekoppeld")
 	_af()
 
 ## R3: er is geen route langs de som heen, en een misser kost niets en helpt
@@ -673,241 +1093,20 @@ func test_de_kassavraag_overleeft_een_herlaad() -> void:
 # 3. geen hulp na een fout, en nooit straffen
 # ==================================================================================
 
-## De eigenaar, 2026-09-24: "Nee geef geen hulp na fouten.  Kinderen moeten
-## zelf leren rekenen."  Eén, twee en drie foute sommen bij het afrekenen, en
-## drie keer "klaar" met te weinig op de toonbank: elke keer `🔄 Nog een keer`
-## bij de kassa en verder niets — geen doortellen, geen "+€3", geen
-## spookmunten.  Nooit straffen: niets afgepakt, en het goede antwoord en het
-## goede bedrag leveren nog gewoon een ster op.
-func test_geen_hulp_en_nooit_straffen() -> void:
-	await _op(Vector2(1000, 648), 5, 12)
-	waar(Games.start("meubels"), "het spel start")
-	await _tel_frames()
-	await _kassa_door()
-	waar(_blad_tik("Kk_plant"), "plant erbij")
-	await _tel_frames()
-	waar(_blad_tik("Kk_mandje"), "mandje erbij")
-	await _tel_frames()
-	waar(_blad_tik("Kafrekenen"), "afrekenen")
-	await _tel_frames()
-	var munten_voor := int(State.s["munten"])
-	var sterren_voor := int(State.s["sterren"])
-	gelijk(_kaart_tekst("mb_som", "hulp"), "", "eerst geen hulpregel")
-	var voor := beeld("meubels")
-	for keer in 3:
-		var wat := "som, misser %d" % (keer + 1)
-		waar(_typ_fout("mb_som", 4), "%s: een fout antwoord" % wat)
-		await _tel_frames()
-		waar(_op_slot("mb_som"), "%s: de strook staat even op slot" % wat)
-		_alleen_teleurstelling("mb_som", wat)
-		await _wacht_mispauze()
-		niets_erbij(voor, beeld("meubels"), wat)
-	gelijk(int(State.s["munten"]), munten_voor, "er is geen munt afgepakt")
-	gelijk(int(State.s["sterren"]), sterren_voor, "en geen ster afgepakt")
-	waar(_er_is("mb_som"), "de kaart staat er nog")
-	waar(_typ("mb_som", 4), "het goede antwoord")
-	await _wacht(0.6)
-	await _tel_frames()
-	# te weinig neergelegd, drie keer "klaar"
-	waar(_tik("mb_bank"), "leg één munt neer")
-	await _tel_frames()
-	var bon := beeld("meubels")
-	for keer in 3:
-		var wat := "te weinig, klaar %d" % (keer + 1)
-		waar(_tik("mb_ok"), "%s: zeg dat je klaar bent" % wat)
-		await _tel_frames()
-		_alleen_teleurstelling("mb_bon", wat)
-		gelijk(_kaart_tekst("mb_bon", "vak"), "€4", "%s: de bon houdt zijn prijs" % wat)
-		await _wacht_mispauze()
-		niets_erbij(bon, beeld("meubels"), wat)
-	var sterren_nu := int(State.s["sterren"])
-	var gelegd := _leg_precies(4)
-	gelijk(gelegd, 4, "leg de rest neer")
-	waar(_tik("mb_ok"), "klaar")
-	gelijk(int(State.s["sterren"]), sterren_nu + 1,
-		"de ster komt er ook na zes missers (F5)")
-	_af()
 
-## Een fout wisselgeld (groep 4 en 5): dezelfde pauze, en geen telladder.
-func test_geen_hulp_bij_het_wisselgeld() -> void:
-	await _op(Vector2(1000, 648), 5, 12)
-	waar(Games.start("meubels"), "het spel start")
-	await _tel_frames()
-	await _kassa_door()
-	waar(_blad_tik("Kk_plant"), "plant erbij")
-	await _tel_frames()
-	waar(_blad_tik("Kk_mandje"), "mandje erbij")
-	await _tel_frames()
-	waar(_blad_tik("Kafrekenen"), "afrekenen")
-	await _tel_frames()
-	waar(_typ("mb_som", 4), "de som")
-	await _wacht(0.6)
-	await _tel_frames()
-	# buidel(12) = [5,2,2,2,1]: leg €5 neer, dan de wisselvraag
-	waar(_tik("mb_buidel") and _tik("mb_buidel"), "naar de munt van 5")
-	waar(_tik("mb_bank"), "leg €5 neer")
-	waar(_tik("mb_ok"), "klaar met tellen")
-	await _tel_frames()
-	waar(_er_is("mb_wissel"), "de wisselvraag staat er")
-	var voor := beeld("meubels")
-	for keer in 3:
-		var wat := "wisselgeld, misser %d" % (keer + 1)
-		waar(_typ_fout("mb_wissel", 1), "%s: een fout getal" % wat)
-		await _tel_frames()
-		waar(_op_slot("mb_wissel"), "%s: de strook staat even op slot" % wat)
-		_alleen_teleurstelling("mb_wissel", wat)
-		await _wacht_mispauze()
-		niets_erbij(voor, beeld("meubels"), wat)
-	waar(_typ("mb_wissel", 1), "het goede wisselgeld")
-	gelijk(int(State.s["munten"]), 8, "de prijs gaat uit de kassa")
-	_af()
 
-## Groep 3 rekent geen wisselgeld uit: te veel = een munt terugpakken.
-func test_groep_drie_pakt_een_munt_terug() -> void:
-	await _op(Vector2(1000, 648), 3, 9)
-	waar(not Sommen.Meubels.wisselgeld(3), "groep 3 kent nog geen wisselgeld")
-	waar(Games.start("meubels"), "het spel start")
-	await _tel_frames()
-	await _kassa_door()
-	waar(_blad_tik("Kk_plant"), "koop de plant van €1")
-	await _tel_frames()
-	# buidel(9) = [2,2,2,2,1]; leg de 2 neer -> te veel
-	waar(_tik("mb_buidel"), "kies de munt van 2")
-	gelijk(_titel("mb_buidel"), "munt van 2 euro (4 in je buidel)", "vier tweetjes")
-	waar(_tik("mb_bank"), "leg €2 neer")
-	waar(_tik("mb_ok"), "klaar met tellen")
-	await _tel_frames()
-	waar(not _er_is("mb_wissel"), "er komt géén wisselkaart in groep 3")
-	_alleen_teleurstelling("mb_bon", "te veel")
-	await _wacht_mispauze()
-	waar(_er_is("mb_terug"), "en de knop om een munt terug te pakken")
-	gelijk(_titel("mb_terug"), Spel.T_MUNT_TERUG, "met de titel van §5.9")
-	waar(_tik("mb_terug"), "pak de munt terug")
-	gelijk(_titel("mb_bank"), "de toonbank: €0", "de toonbank is weer leeg")
-	waar(_tik("mb_buidel"), "kies de munt van 1")
-	gelijk(_titel("mb_buidel"), "munt van 1 euro (1 in je buidel)", "één eentje")
-	waar(_tik("mb_bank"), "leg de munt van 1 neer")
-	gelijk(_titel("mb_bank"), "de toonbank: €1", "precies")
-	waar(_tik("mb_ok"), "klaar")
-	gelijk(int(State.s["munten"]), 8, "één munt betaald")
-	_af()
 
 # ==================================================================================
 # 4. te weinig geld, en versiering
 # ==================================================================================
 
-func test_te_weinig_geld_zet_niets_op_slot() -> void:
-	await _op(Vector2(1000, 648), 3, 3)
-	waar(Games.start("meubels"), "het spel start")
-	await _tel_frames()
-	await _kassa_door()
-	gelijk(_blad_knop("Kk_badkuip").text, "💛", "de badkuip is te duur")
-	gelijk(_blad_knop("Kk_badkuip").tooltip_text, "badkuip kopen, 8 euro",
-		"maar staat gewoon in het boek")
-	waar(_blad_tik("Kk_badkuip"), "tik hem toch aan")
-	await _tel_frames()
-	waar(_er_is("mb_spaar"), "er komt een spaarwolkje")
-	gelijk(_titel("mb_spaar"), "💛 €8 je hebt €3", "met de prijs en wat je hebt")
-	gelijk(int(State.s["munten"]), 3, "er is niets afgeschreven")
-	waar(_blad_knop("Kk_badkuip") != null, "en de badkuip staat er nog")
-	waar(_blad_knop("Kk_plant") != null and _blad_knop("Kk_plant").text == "🛒",
-		"wat je wel kunt betalen blijft gewoon te koop")
-	_af()
 
-func test_versiering_kost_sterren() -> void:
-	await _op(Vector2(1000, 648), 3, 5)
-	State.s["sterren"] = 2
-	waar(Games.start("meubels"), "het spel start")
-	await _tel_frames()
-	await _kassa_door()
-	waar(_blad_tik("Ktab_versiering"), "naar de sterrenpagina")
-	await _tel_frames()
-	gelijk(_blad_knop("Kv_vlag").tooltip_text, "vlaggetjes kopen voor 1 sterren",
-		"aria van §5.9")
-	gelijk(_blad_knop("Kv_slinger").text, "💛", "de slinger van 3 sterren kan niet")
-	waar(_blad_tik("Kv_slinger"), "tik hem toch aan")
-	await _tel_frames()
-	gelijk(int(State.s["sterren"]), 2, "er gaat geen ster af")
-	gelijk(_titel("mb_spaar"), "⭐ 3 je hebt 2", "wel een spaarwolkje")
-	waar(_blad_tik("Kv_vlag"), "koop de vlaggetjes")
-	await _tel_frames()
-	gelijk(int(State.s["sterren"]), 1, "één ster betaald")
-	var q: Dictionary = State.spel_data("meubels")
-	gelijk(int((q["versiering"] as Dictionary).get("vlag", 0)), 1, "en je hebt er een")
-	gelijk(_blad_knop("Kv_vlag").text, "🛒", "de tweede kan nog")
-	_af()
 
 # ==================================================================================
 # 5. herstellen uit ctx.data(), en opruimen
 # ==================================================================================
 
-func test_herstel_uit_ctx_data() -> void:
-	await _op(Vector2(1000, 648), 5, 12)
-	waar(Games.start("meubels"), "het spel start")
-	await _tel_frames()
-	await _kassa_door()
-	waar(_blad_tik("Kk_plant"), "plant erbij")
-	await _tel_frames()
-	waar(_blad_tik("Kk_mandje"), "mandje erbij")
-	await _tel_frames()
-	waar(_blad_tik("Kafrekenen"), "afrekenen")
-	await _tel_frames()
-	waar(_typ("mb_som", 4), "de som")
-	await _wacht(0.6)
-	var gelegd := _leg_precies(4)
-	gelijk(gelegd, 4, "leg €4 neer")
-	waar(_tik("mb_ok"), "klaar")
-	await _wacht(1.4)
-	await _tel_frames()
-	var voor: Dictionary = State.spel_data("meubels").duplicate(true)
-	gelijk(str(voor["wacht"]), '{ "nog": ["plant", "mandje"] }',
-		"twee dingen staan in het laatje")
-	# een herlaad: het spel stopt, de wereld gaat leeg, het spel start opnieuw
-	Games.stop()
-	await _tel_frames()
-	waar(Games.start("meubels"), "opnieuw gestart")
-	await _tel_frames()
-	gelijk(str(State.spel_data("meubels")["wacht"]), str(voor["wacht"]),
-		"de wachtrij overleeft de herlaad")
-	waar(_er_is("mb_doos"), "en het spel staat meteen op de plaatsstap")
-	waar(not _eerste_vak().is_empty(), "met een vakje om in te zetten")
-	waar(not Ui.blad_open_nu(), "het boek staat niet open: eerst neerzetten")
-	waar(_tik(_eerste_vak()), "zet de plant neer")
-	await _tel_frames()
-	gelijk(str(_spel().call("_nog")), '["mandje"]', "er blijft er één over")
-	_af()
 
-func test_stop_laat_de_wereld_schoon() -> void:
-	await _op(Vector2(1000, 648), 5, 12)
-	Hits.maak({"id": "vreemde_knop", "kamer": "receptie", "x": 8.0, "z": 8.0, "y": 10.0,
-		"icoon": "🔔", "label": "Bel", "door": "keurmeester", "aan": func(_s) -> void: pass})
-	waar(Games.start("meubels"), "het spel start")
-	await _tel_frames()
-	await _kassa_door()
-	waar(_blad_tik("Kk_plant"), "plant erbij")
-	await _tel_frames()
-	waar(_blad_tik("Kafrekenen"), "afrekenen")
-	await _tel_frames()
-	var eigen := 0
-	for id in Hits.lijst():
-		if Hits.spot(id).door == "meubels":
-			eigen += 1
-	waar(eigen >= 3, "het spel plaatste eigen hotspots (%d)" % eigen)
-	waar(World.decor_lijst("receptie").any(func(d): return str(d["door"]) == "meubels"),
-		"en eigen decor")
-	waar(Ui.blad_open_nu() == false, "tijdens het betalen staat er geen blad")
-	Games.stop()
-	await _tel_frames()
-	for id in Hits.lijst():
-		waar(Hits.spot(id).door != "meubels", "geen hotspot bleef staan: %s" % id)
-	gelijk(World.decor_lijst().filter(func(d): return str(d["door"]) == "meubels").size(), 0,
-		"en geen los decor")
-	waar(not Ui.blad_open_nu(), "het blad is dicht")
-	gelijk(Hits.voorrang_van(), "", "niemand heeft voorrang")
-	waar(Hits.spot("vreemde_knop") != null, "de knop van een ander bleef staan")
-	waar(not World.kamer_veranderd.is_connected(Callable(_spel(), "_op_kamer")) if _spel() != null else true,
-		"en de kamerluisteraar is losgekoppeld")
-	_af()
 
 func test_blad_dicht_geeft_de_wereldpagina() -> void:
 	await _op(Vector2(1000, 648), 5, 12)
@@ -1024,19 +1223,24 @@ func _vakken() -> Array[String]:
 func test_teksten_staan_er_letterlijk() -> void:
 	var bron := FileAccess.get_file_as_string("res://games/meubels/spel.gd")
 	waar(not bron.is_empty(), "spel.gd is te lezen")
-	# games-a.md §5.9, in volgorde van verschijnen
+	# games-a.md §5.9, in volgorde van verschijnen (✔ "klaar met tellen" en de
+	# buideltitel bestaan sinds de Rekenwacht niet meer: de munten liggen als
+	# strook onder de bon en de stapel wordt zelf gekeurd)
 	for zin in ["📖 Meubelboek", "Meubels", "Versiering met sterren", "Afrekenen",
 			"Lijstje leeg", "Boek dicht", "is genoeg", "je hebt ",
 			"Hoeveel euro heb je?", "Nog geen munten", "je munten op de toonbank",
 			"je buidel: ", " munten",
 			"Hoeveel euro is dat samen?", "Je gaf ", "Hoeveel krijg je terug?",
 			"kost ", "kosten ", "Leg de 🪙 munten op de toonbank", "tik een getal",
-			"de toonbank: ", "munt van ", " in je buidel)", "klaar met tellen",
+			"de toonbank: ", "munt van ",
 			"een munt terugpakken", "terug naar het meubelboek",
 			"terug", "betaald", " neerzetten", "sleep naar een plekje",
 			"hier neerzetten", "meer plekjes", "bezet", "gasten", "iemand slaapt",
 			"bed draaien", " oppakken", " euro erbij", " kopen, ",
-			" kopen voor ", " sterren"]:
+			" kopen voor ", " sterren",
+			# de Rekenwacht
+			"Je hebt %s. Is dat genoeg?", "Je hebt %s, het kost %s",
+			"Hoeveel houd je over?", "Dit kost %d ⭐", "Genoeg", "Te weinig"]:
 		waar(bron.contains(zin), 'de zin "%s" staat letterlijk in spel.gd' % zin)
 	# de echte minus U+2212 (F3)
 	waar(bron.contains("−"), "de wisselsom gebruikt het echte minteken U+2212")
@@ -1049,7 +1253,9 @@ func test_teksten_staan_er_letterlijk() -> void:
 	for zin in [Spel.T_TITEL, Spel.T_SAMEN, Spel.T_TERUG_VRAAG, Spel.T_LEG_MUNTEN,
 			Spel.T_TIK_GETAL, Spel.T_SLEEP, Spel.T_HIER, Spel.T_MEER, Spel.T_BEZET,
 			Spel.T_SLAAPT, Spel.T_DRAAIEN, Spel.T_EERST,
-			Spel.T_HOEVEEL, Spel.T_GEEN_MUNTEN, Spel.T_OP_TAFEL, Spel.T_BUIDEL]:
+			Spel.T_HOEVEEL, Spel.T_GEEN_MUNTEN, Spel.T_OP_TAFEL, Spel.T_BUIDEL,
+			Spel.T_GENOEG_VRAAG, Spel.T_OVER_ZIN, Spel.T_OVER_VRAAG, Spel.T_STER_PRIJS,
+			Spel.W_GENOEG, Spel.W_TE_WEINIG, Spel.T_MUNT_LEG]:
 		gelijk(str(Ui.mist_tekens(zin)), "[]", 'elk teken van "%s" zit in de subset' % zin)
 
 ## Elk teken dat dit spel op een knop, een kaart of een wolkje kan zetten moet
@@ -1061,15 +1267,17 @@ func test_elk_pictogram_zit_in_het_lettertype() -> void:
 	for zin in [Spel.T_TITEL, Spel.T_MEUBELS, Spel.T_VERSIERING, Spel.T_AFREKENEN,
 			Spel.T_LIJST_LEEG, Spel.T_BOEK_DICHT, Spel.T_GENOEG, Spel.T_SAMEN,
 			Spel.T_TERUG_VRAAG, Spel.T_LEG_MUNTEN, Spel.T_TIK_GETAL,
-			Spel.T_KLAAR_TELLEN, Spel.T_MUNT_TERUG, Spel.T_TERUG_BOEK,
+			Spel.T_MUNT_TERUG, Spel.T_TERUG_BOEK,
 			Spel.T_TERUG, Spel.T_BETAALD, Spel.T_SLEEP, Spel.T_HIER, Spel.T_MEER,
 			Spel.T_BEZET, Spel.T_GASTEN, Spel.T_SLAAPT, Spel.T_DRAAIEN,
-			Spel.T_EERST, Spel.W_HIER, Spel.W_MEER, Spel.W_KLAAR, Spel.W_TERUG,
+			Spel.T_EERST, Spel.W_HIER, Spel.W_MEER, Spel.W_TERUG,
 			Spel.W_BOEK, Spel.W_DRAAIEN, Spel.W_OPPAKKEN,
-			Spel.T_HOEVEEL, Spel.T_GEEN_MUNTEN, Spel.T_OP_TAFEL, Spel.T_BUIDEL]:
+			Spel.T_HOEVEEL, Spel.T_GEEN_MUNTEN, Spel.T_OP_TAFEL, Spel.T_BUIDEL,
+			Spel.T_GENOEG_VRAAG, Spel.T_OVER_ZIN, Spel.T_OVER_VRAAG, Spel.T_STER_PRIJS,
+			Spel.W_GENOEG, Spel.W_TE_WEINIG, Spel.T_MUNT_LEG]:
 		tekens.append(zin)
 	# elk pictogram dat het spel zelf op een knop of in een wolkje zet
-	for icoon in ["📖", "🪑", "⭐", "💰", "🛏", "🛒", "💛", "+", "«", "✖", "✔",
+	for icoon in ["📖", "🪑", "⭐", "💰", "🛏", "🛒", "💛", "+", "«", "✖",
 			"▸", "✨", "📦", "🔄", "☝", "🧾", "🪙", "💶", "👛", "🐾", "✅", "«",
 			"🚫", "💤", "🧺", "✓", "×", "€", "−", "…", "🎉", "🌸", "🩷", "🎈"]:
 		tekens.append(icoon)
@@ -1093,10 +1301,14 @@ func test_elk_pictogram_zit_in_het_lettertype() -> void:
 		waar(not bron.contains(char(verboden)),
 			"U+%04X staat niet meer in de bron: het lettertype kent hem niet" % verboden)
 
-## F4: elke zin op elke kaart, voor elke combinatie die het spel kan maken.
+## F4: elke zin op elke kaart, voor elke combinatie die het spel kan maken —
+## ook de vragen van de Rekenwacht (genoeg?, houd je over?, met munten en met
+## sterren), tot een buidel van honderd.
 func test_elke_kaartzin_past_in_het_budget() -> void:
 	var namen: Array[String] = []
 	for w in Sommen.Meubels.WINKEL:
+		namen.append(str(w["type"]))
+	for w in Spel.VERSIERING_KAMER:
 		namen.append(str(w["type"]))
 	var gekeurd := 0
 	for a in namen:
@@ -1113,10 +1325,23 @@ func test_elke_kaartzin_past_in_het_budget() -> void:
 		for prijs in [1, 2, 3, 4, 5, 8]:
 			_keur_zin("Je gaf €%d, het kost €%d" % [betaald, prijs], "wisselzin")
 			gekeurd += 1
-	for zin in [Spel.T_SAMEN, Spel.T_TERUG_VRAAG, Spel.T_LEG_MUNTEN]:
+	# genoeg? en houd je over?, met munten en met sterren
+	for heb in [0, 9, 20, 99, 100, 250]:
+		for prijs in [1, 8, 16]:
+			_keur_zin(Spel.T_GENOEG_VRAAG % ("€%d" % heb), "genoegzin")
+			_keur_zin(Spel.T_GENOEG_VRAAG % ("%d⭐" % heb), "genoegzin ster")
+			_keur_zin("💰 " + Spel.T_OVER_ZIN % ["€%d" % heb, "€%d" % prijs], "overzin")
+			_keur_zin("⭐ " + Spel.T_OVER_ZIN % ["%d⭐" % heb, "%d⭐" % prijs], "overzin ster")
+			gekeurd += 4
+	for v in Sommen.Meubels.VERSIERING:
+		_keur_zin("%s %s" % [str(v["icoon"]), Spel.T_STER_PRIJS % int(v["ster"])], "sterprijs")
+		gekeurd += 1
+	for zin in [Spel.T_SAMEN, Spel.T_TERUG_VRAAG, Spel.T_LEG_MUNTEN, Spel.T_OVER_VRAAG]:
 		_keur_zin(zin, "vaste regel")
 		gekeurd += 1
 	waar(gekeurd > 100, "er zijn %d zinnen gekeurd" % gekeurd)
+
+
 
 func _keur_zin(zin: String, wat: String) -> void:
 	var woorden := zin.split(" ", false).size()
@@ -1205,8 +1430,9 @@ func _hotel_af(h: Dictionary) -> void:
 
 ## Het boek is het enige paneel dat HOTEL.md §9 toestaat, en een knop erin moet
 ## te halen zijn zonder te rollen.  Gemeten op 360 x 740 stond `✖ Boek dicht`
-## op y 762 — 22 eenheden onder de onderrand — zodra er twee dingen op het
-## lijstje lagen; §5.5 zegt dat die knop er altijd is.
+## op y 762 — 22 eenheden onder de onderrand — zodra er iets op het lijstje
+## lag; §5.5 zegt dat die knop er altijd is.  (Sinds de Rekenwacht rekent een
+## vol lijstje meteen af, dus het langste blad heeft één ding op het lijstje.)
 func test_boek_past_op_elk_scherm() -> void:
 	var bewaard := State.s.duplicate(true)
 	var boom := Engine.get_main_loop() as SceneTree
@@ -1216,11 +1442,9 @@ func test_boek_past_op_elk_scherm() -> void:
 		for _f in 3:
 			await boom.process_frame
 		await _kassa_door()
-		# twee dingen op het lijstje: dan is de bladzijde op zijn langst
+		# één ding op het lijstje: dan staat de lijstrij erbij en is het blad op
+		# zijn langst
 		_blad_tik("Kk_plant")
-		for _f in 2:
-			await boom.process_frame
-		_blad_tik("Kk_mandje")
 		for _f in 3:
 			await boom.process_frame
 		var scherm := Vector2(maat)
@@ -1236,6 +1460,53 @@ func test_boek_past_op_elk_scherm() -> void:
 		gelijk(Spel.VERSIERING_KAMER.size(), 9, "negen decoratiestukken in het boek")
 		_keur_blad_past(maat, scherm, namen)
 		waar(_blad_knop("Kk_plant") == null, "%s: geen meubel op de decoratiepagina" % str(maat))
+		await _hotel_af(h)
+	State.s = bewaard
+
+func test_knoppen_dekken_hun_voorwerp_niet() -> void:
+	var bewaard := State.s.duplicate(true)
+	var boom := Engine.get_main_loop() as SceneTree
+	for maat in SCHERMEN:
+		var h: Dictionary = await _hotel_op(maat)
+		var kader: Vector2 = h["kader"]
+		waar(Games.start("meubels"), "%s: het spel start" % str(maat))
+		for _f in 3:
+			await boom.process_frame
+		# eerst de kassastap: de kaart, de munten en de buidel staan er samen
+		_keur_dekking("%s kassastap" % str(maat), kader)
+		await _kassa_door()
+		# door naar de wereld: twee dingen = meteen afrekenen, de som
+		_blad_tik("Kk_plant")
+		for _f in 2:
+			await boom.process_frame
+		_blad_tik("Kk_mandje")
+		for _f in 3:
+			await boom.process_frame
+		_keur_dekking("%s betaalstap" % str(maat), kader)
+		# genoeg?, en dan de bon met de muntstrook: de drukste stap
+		_typ("mb_som", 4)
+		waar(await _wacht_op("mb_genoeg_keuzes"), "%s: genoeg?" % str(maat))
+		for _f in 2:
+			await boom.process_frame
+		_keur_dekking("%s genoegstap" % str(maat), kader)
+		_kies("mb_genoeg", "ja")
+		waar(await _wacht_op("mb_bon_keuzes"), "%s: de bon" % str(maat))
+		_leg(1)
+		for _f in 3:
+			await boom.process_frame
+		waar(_er_is("mb_terug"), "%s: « staat er" % str(maat))
+		_keur_dekking("%s muntstap" % str(maat), kader)
+		# en de plaatsstap, met de doos en de vakjes.  Die wordt hier via het
+		# laatje bereikt in plaats van door een hele afrekening te spelen: dat
+		# is precies de herstelweg van §5.7 ("al betaald, nog niet neergezet")
+		# en het scheelt vier keer twee seconden wachten in de suite.
+		Games.stop()
+		State.spel_data("meubels")["wacht"] = {"nog": ["plant", "bed"]}
+		waar(Games.start("meubels"), "%s: opnieuw gestart op de plaatsstap" % str(maat))
+		for _f in 3:
+			await boom.process_frame
+		waar(_er_is("mb_doos"), "%s: de doos staat er" % str(maat))
+		_keur_dekking("%s plaatsstap" % str(maat), kader)
 		await _hotel_af(h)
 	State.s = bewaard
 
@@ -1305,42 +1576,6 @@ func _verzamel_knoppen(k: Node, uit: Array[Button]) -> void:
 	for kind in k.get_children():
 		_verzamel_knoppen(kind, uit)
 
-func test_knoppen_dekken_hun_voorwerp_niet() -> void:
-	var bewaard := State.s.duplicate(true)
-	var boom := Engine.get_main_loop() as SceneTree
-	for maat in SCHERMEN:
-		var h: Dictionary = await _hotel_op(maat)
-		var kader: Vector2 = h["kader"]
-		waar(Games.start("meubels"), "%s: het spel start" % str(maat))
-		for _f in 3:
-			await boom.process_frame
-		# eerst de kassastap: de kaart, de munten en de buidel staan er samen
-		_keur_dekking("%s kassastap" % str(maat), kader)
-		await _kassa_door()
-		# door naar de wereld: de betaalstap heeft de meeste knoppen tegelijk
-		_blad_tik("Kk_plant")
-		for _f in 2:
-			await boom.process_frame
-		_blad_tik("Kk_mandje")
-		for _f in 2:
-			await boom.process_frame
-		_blad_tik("Kafrekenen")
-		for _f in 3:
-			await boom.process_frame
-		_keur_dekking("%s betaalstap" % str(maat), kader)
-		# en de plaatsstap, met de doos en de vakjes.  Die wordt hier via het
-		# laatje bereikt in plaats van door een hele afrekening te spelen: dat
-		# is precies de herstelweg van §5.7 ("al betaald, nog niet neergezet")
-		# en het scheelt vier keer twee seconden wachten in de suite.
-		Games.stop()
-		State.spel_data("meubels")["wacht"] = {"nog": ["plant", "bed"]}
-		waar(Games.start("meubels"), "%s: opnieuw gestart op de plaatsstap" % str(maat))
-		for _f in 3:
-			await boom.process_frame
-		waar(_er_is("mb_doos"), "%s: de doos staat er" % str(maat))
-		_keur_dekking("%s plaatsstap" % str(maat), kader)
-		await _hotel_af(h)
-	State.s = bewaard
 
 ## Elke knop van dit spel staat op 0 % van zijn voorwerp, binnen het kader, en
 ## is een echt tikdoel.
@@ -1589,3 +1824,236 @@ func test_kamerdecoratie_de_doos_loopt_mee_door_de_deur() -> void:
 	var terug = Hits.spot("deur_kamer2_gang")
 	waar(terug == null or str(terug.geleend_door).is_empty(), "na het neerzetten is het bordje weer van het hotel")
 	_af()
+
+
+# ==================================================================================
+# 9. de Rekenwacht (golf 2): R1 — rekenen is minstens de helft van een beurt
+# ==================================================================================
+
+## Groep 3, een kleine en een grote N: één meubel, decoratie (via de tab), een
+## derde ding, en een sticker met sterren — vier beurten na elkaar, elk van de
+## start tot het spel vanzelf dichtgaat, en elk met reken >= spel + 1.
+func test_rekenaandeel_band_3() -> void:
+	for n in [3, 8]:
+		await _op(Vector2(1000, 648), n, 20, 5 if n == 3 else 2)
+		gelijk(State.band(), 3, "N=%d: band 3" % n)
+		await _r1_beurt(["mandje"], "meubels", "groep 3 N=%d, 1 ding" % n)
+		await _r1_beurt(["lamp"], "decoratie", "groep 3 N=%d, decoratie" % n)
+		if n == 3:
+			await _r1_beurt(["plant"], "meubels", "groep 3 N=%d, 3e ding" % n)
+			await _r1_sticker("vlag", "groep 3 N=%d, sticker" % n)
+		_af()
+
+## Groep 4: twee dingen (het tweede rekent meteen af), één ding (met 🛒
+## Afrekenen), decoratie één en twee (via de tab) — de zwaarste beurt voor R1
+## is één decoratiestuk: tab, +, afrekenen, neerzetten = 4 speltikken tegen
+## kassa, genoeg, munt, wisselgeld en over = 5 rekentikken.
+func test_rekenaandeel_band_4() -> void:
+	for n in [5, 8]:
+		await _op(Vector2(1000, 648), n, 40, 5 if n == 5 else 3)
+		gelijk(State.band(), 4, "N=%d: band 4" % n)
+		await _r1_beurt(["plant", "mandje"], "meubels", "groep 4 N=%d, 2 dingen" % n)
+		await _r1_beurt(["kussen"], "decoratie", "groep 4 N=%d, 1 decoratie" % n)
+		if n == 5:
+			await _r1_beurt(["speelmand"], "meubels", "groep 4 N=%d, 3e ding" % n)
+			await _r1_beurt(["bloemen", "slinger"], "decoratie", "groep 4 N=%d, 2 decoratie" % n)
+		_af()
+
+## Groep 5: een bed (N klein: er is een bedplek vrij) en een badkuip samen,
+## een speelkist, een schilderij aan de muur.
+func test_rekenaandeel_band_5() -> void:
+	for n in [7, 8]:
+		await _op(Vector2(1000, 648), n, 60, 5)
+		gelijk(State.band(), 5, "N=%d: band 5" % n)
+		if n == 7:
+			await _r1_beurt(["bed", "badkuip"], "meubels", "groep 5 N=%d, 2 dingen" % n)
+			await _r1_beurt(["schilderij"], "decoratie", "groep 5 N=%d, schilderij" % n)
+		await _r1_beurt(["kist"], "decoratie", "groep 5 N=%d, 1 decoratie" % n)
+		await _r1_beurt(["bakje"], "meubels", "groep 5 N=%d, 1 meubel" % n)
+		_af()
+
+## Zonder munten: het boek opent op de sterren, en een sticker is één speltik
+## tegen twee rekentikken.
+func test_rekenaandeel_zonder_munten() -> void:
+	await _op(Vector2(1000, 648), 3, 0)
+	State.s["sterren"] = 4
+	await _r1_sticker("bloem", "zonder munten, sticker")
+	_af()
+
+# ==================================================================================
+# 10. de Rekenwacht: R2 — geen beloning zonder een goed antwoord, en een open
+#     vraag met een misser komt onveranderd terug
+# ==================================================================================
+
+## R2-gat 1 (spel.gd:1023 vóór de fix): één ding kopen sloeg de som over — de
+## bon stond meteen klaar met de prijs al ingevuld, in groep 3 elke keer.  Nu
+## is de eerste kaart na het kiezen een rekenvraag, in elke band.
+func test_r2_een_ding_kopen_vraagt_rekenen() -> void:
+	for geval in [[3, 9, 3], [5, 12, 4], [7, 20, 5]]:
+		await _op(Vector2(1000, 648), geval[0], geval[1])
+		gelijk(State.band(), geval[2], "de band is %d" % geval[2])
+		waar(Games.start("meubels"), "het spel start")
+		await _tel_frames()
+		await _kassa_door()
+		if geval[2] >= 4:
+			waar(_blad_tik("Kk_plant"), "groep %d: plant erbij" % geval[2])
+			await _tel_frames()
+			waar(_blad_tik("Kafrekenen"), "en afrekenen")
+		else:
+			waar(_blad_tik("Kk_plant"), "groep 3: koop de plant")
+		await _tel_frames()
+		waar(not _er_is("mb_bon"), "groep %d: geen bon zonder vraag" % geval[2])
+		waar(_er_is("mb_genoeg_keuzes"), "groep %d: eerst een rekenvraag" % geval[2])
+		var munten := int(State.s["munten"])
+		waar(_kies("mb_genoeg", "ja"), "genoeg")
+		waar(await _wacht_op("mb_bon_keuzes"), "de muntstrook")
+		_leg_precies(1)
+		var over_id := "mb_over_keuzes" if geval[2] == 3 else "mb_wissel_keuzes"
+		waar(await _wacht_op(over_id), "groep %d: nog een vraag na het leggen" % geval[2])
+		gelijk(int(State.s["munten"]), munten, "groep %d: nog niets betaald" % geval[2])
+		gelijk(str(_spel().call("_nog")), "[]", "groep %d: nog niets in de doos" % geval[2])
+		_af()
+
+## R2-gat 2 (spel.gd:841-865 vóór de fix): de sterrenpagina verkocht stickers
+## zonder één som.  Nu gaat er geen ster af en komt er geen sticker zonder twee
+## goede antwoorden — ook niet met nul munten, waar het boek meteen opent.
+func test_r2_versiering_alleen_na_rekenen() -> void:
+	await _op(Vector2(1000, 648), 3, 0)
+	State.s["sterren"] = 3
+	waar(Games.start("meubels"), "het spel start zonder munten")
+	await _tel_frames()
+	waar(Ui.blad_open_nu(), "het boek staat open")
+	waar(_blad_tik("Kv_vlag"), "tik de vlaggetjes aan")
+	await _tel_frames()
+	gelijk(int(State.s["sterren"]), 3, "er gaat nog geen ster af")
+	gelijk(int((State.spel_data("meubels")["versiering"] as Dictionary).get("vlag", 0)), 0,
+		"en er is nog geen sticker")
+	waar(_er_is("mb_genoeg_keuzes"), "eerst: heb je genoeg?")
+	waar(_kies("mb_genoeg", "nee"), "een fout antwoord")
+	await _wacht_mispauze()
+	gelijk(int(State.s["sterren"]), 3, "na een misser: nog altijd niets af")
+	waar(_kies("mb_genoeg", "ja"), "het goede antwoord")
+	waar(await _wacht_op("mb_over_keuzes"), "dan: hoeveel houd je over?")
+	gelijk(int((State.spel_data("meubels")["versiering"] as Dictionary).get("vlag", 0)), 0,
+		"nog altijd geen sticker")
+	waar(_typ("mb_over", 2), "3 − 1 = 2")
+	gelijk(int(State.s["sterren"]), 2, "nu pas één ster af")
+	gelijk(int((State.spel_data("meubels")["versiering"] as Dictionary).get("vlag", 0)), 1,
+		"en de sticker in het bakje")
+	_af()
+
+## R2-gat 3 (spel.gd:200-215 vóór de fix): stoppen gooide de afrekening weg;
+## wie een misser had, kon via een uitgang een nieuwe (makkelijkere) vraag
+## halen.  Nu komt de open vraag ONVERANDERD terug — ook na een nieuwe dag, met
+## meer munten en een andere band.
+func test_r2_open_vraag_komt_onveranderd_terug() -> void:
+	await _op(Vector2(1000, 648), 5, 12)
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	waar(_blad_tik("Kk_plant"), "plant erbij")
+	await _tel_frames()
+	waar(_blad_tik("Kk_mandje"), "mandje erbij: afrekenen")
+	await _tel_frames()
+	var knoppen_voor := _strook_namen("mb_som")
+	waar(_typ_fout("mb_som", 4), "een misser op de som")
+	await _tel_frames()
+	# een uitgang, een nieuwe dag, meer munten en een andere band
+	Games.stop()
+	await _tel_frames()
+	State.s["dag"] = int(State.s.get("dag", 1)) + 1
+	State.s["munten"] = 30
+	State.s["gasten"] = _gasten(7)
+	State.herbereken()
+	waar(State.band() != 4 or true, "de band mag veranderen")
+	waar(Games.start("meubels"), "opnieuw gestart")
+	await _tel_frames()
+	waar(not _er_is("mb_kas"), "geen nieuwe kassavraag eroverheen")
+	waar(not Ui.blad_open_nu(), "en geen boek")
+	gelijk(_kaart_tekst("mb_som", "som"), "€1 + €3 =", "dezelfde som")
+	gelijk(_strook_namen("mb_som"), knoppen_voor, "met dezelfde vier knoppen")
+	waar(not _er_is("mb_boek"), "na een misser geen weg terug naar het boek")
+	waar(_typ("mb_som", 4), "het goede antwoord")
+	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
+	gelijk(_kaart_tekst("mb_genoeg", "regel2"), "Je hebt €12. Is dat genoeg?",
+		"de vraag rekent met wat je had: dezelfde vraag")
+	waar(_kies("mb_genoeg", "ja"), "genoeg")
+	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
+	gelijk(str(_munten_op_strook()), "[1, 2, 5]", "dezelfde buidel van €12")
+	_af()
+
+## En de kassavraag zelf: na een misser en een uitgang dezelfde munten op de
+## toonbank en dezelfde vier knoppen, ook al kwamen er munten bij.
+func test_r2_kassavraag_komt_onveranderd_terug() -> void:
+	await _op(Vector2(1000, 648), 3, 9)
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	var knoppen_voor := _strook_namen("mb_kas")
+	var munten_voor := _wolk_deel("mb_munten", "getal")
+	waar(_typ_fout("mb_kas", 9), "een misser")
+	await _tel_frames()
+	Games.stop()
+	await _tel_frames()
+	State.s["munten"] = 14
+	State.s["dag"] = int(State.s.get("dag", 1)) + 1
+	waar(Games.start("meubels"), "opnieuw gestart")
+	await _tel_frames()
+	gelijk(_wolk_deel("mb_munten", "getal"), munten_voor, "dezelfde munten op de toonbank")
+	gelijk(_strook_namen("mb_kas"), knoppen_voor, "dezelfde vier knoppen")
+	waar(_typ("mb_kas", 9), "het goede antwoord is nog altijd 9")
+	await _wacht_boek()
+	waar(Ui.blad_open_nu(), "dan pas het boek")
+	gelijk(State.spel_data("meubels").get("open", null), null, "de open vraag is gesloten")
+	_af()
+
+## R2-gat 4: na een misser terug naar het boek en iets goedkopers kiezen
+## verving de open vraag.  Nu staat 📖 er na een misser niet meer.
+func test_r2_na_een_misser_geen_goedkoper_ding() -> void:
+	await _op(Vector2(1000, 648), 3, 9)
+	waar(Games.start("meubels"), "het spel start")
+	await _tel_frames()
+	await _kassa_door()
+	waar(_blad_tik("Kk_badkuip"), "koop de badkuip van €8")
+	await _tel_frames()
+	waar(_er_is("mb_boek"), "zonder misser mag je nog terug naar het boek")
+	waar(_kies("mb_genoeg", "nee"), "een misser: 9 is wel genoeg voor 8")
+	await _tel_frames()
+	waar(not _er_is("mb_boek"), "na een misser niet meer")
+	await _wacht_mispauze()
+	waar(not _er_is("mb_boek"), "ook niet na de pauze")
+	waar(_kies("mb_genoeg", "ja"), "het goede antwoord")
+	waar(await _wacht_op("mb_bon_keuzes"), "de bon van de badkuip")
+	gelijk(_kaart_tekst("mb_bon", "vak"), "€8", "dezelfde aankoop")
+	waar(not _er_is("mb_boek"), "en ook hier geen weg terug")
+	_af()
+
+## R4: wat geen rekenen is maar wel mag (herschikken, een munt terugpakken,
+## de buidel aantikken, ▸ meer plekjes) is gemarkeerd als `vrij`.  `Hits`
+## bewaart die sleutel nog niet (de echte Rekenwacht komt op main), dus de
+## keuring leest de bron.
+func test_r4_vrije_acties_zijn_gemarkeerd() -> void:
+	var bron := FileAccess.get_file_as_string("res://games/meubels/spel.gd")
+	for id in ['"mbdraai_%s"', '"mbop_%s"', '"mb_terug"', '"mb_buidel"', '"mb_meer"']:
+		var i := bron.find('"id": %s' % id)
+		waar(i >= 0, "%s staat in de bron" % id)
+		if i >= 0:
+			var stuk := bron.substr(i, 700)
+			var einde := stuk.find("})")
+			waar(einde > 0 and stuk.substr(0, einde).contains('"vrij": true'),
+				"%s is vrij spel" % id)
+	for id in ['"mb_kas"', '"mb_genoeg"', '"mb_bon"']:
+		var i := bron.find('"id": %s' % id)
+		waar(i >= 0 and bron.substr(i, 400).contains('"reken": true'),
+			"%s telt als rekenen" % id)
+	# de eigen knoppen van het boek gaan door de poort van de Rekenwacht, en
+	# bladeren (de tabs) is vrij spel
+	waar(bron.contains('Reken.laat_door("spel", "meubels:" + id, b, vrij)'),
+		"elke boekknop gaat door Reken.laat_door")
+	waar(bron.contains('_knop("tab_" + welke, tekst, titel, wissel, true)'),
+		"de tabs zijn vrij")
+
+func _strook_namen(kaart_id: String) -> String:
+	var uit := PackedStringArray()
+	for k in _strook_knoppen(kaart_id):
+		uit.append("%s:%s" % [str((k as Node).name), (k as Button).text])
+	return ",".join(uit)

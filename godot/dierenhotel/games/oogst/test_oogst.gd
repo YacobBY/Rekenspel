@@ -58,10 +58,10 @@ func _af() -> void:
 ## `n` guests from the pool, the first four in a real bed.  `kunnen` lifts
 ## the adaptive cap so the band really is the band the test asks for.  The
 ## save is never written: `start_gekozen()` is not called (see test_kraam).
-func _wereld(n: int, band: int, dag := 2) -> Array:
+func _wereld(n: int, band: int, dag := 2, kunnen := 5) -> Array:
 	State.nieuw_spel()
 	State.s["taken"] = []
-	State.s["kunnen"] = 5
+	State.s["kunnen"] = kunnen
 	State.s["dag"] = dag
 	var pool := State.gasten_pool()
 	var bedden := State.alle_bedden()
@@ -161,6 +161,28 @@ func _fout_getal(goed: int) -> int:
 		if k != goed:
 			return k
 	return goed + 1
+
+## Frames run until the guest has picked everything (the turn is `af`), or
+## `max_s` passed; returns every `geplukt` the turn went through, in order.
+func _wacht_tot_af(max_s := 8.0) -> Array:
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	var reeks: Array = [int(_stand().get("geplukt", 0))]
+	while Time.get_ticks_msec() - t0 < int(max_s * 1000.0):
+		var g := int(_stand().get("geplukt", 0))
+		if g != int(reeks[reeks.size() - 1]):
+			reeks.append(g)
+		if str(_stand().get("stap", "")) == "af":
+			break
+		await boom.process_frame
+	return reeks
+
+## Frames run until the guest has picked at least `n` steps' worth.
+func _wacht_tot_geplukt(n: int, max_s := 4.0) -> void:
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	while int(_stand().get("geplukt", 0)) < n and Time.get_ticks_msec() - t0 < int(max_s * 1000.0):
+		await boom.process_frame
 
 func _berries(b: Array) -> int:
 	var t := 0
@@ -311,12 +333,12 @@ func test_elke_zin_past() -> void:
 	if Ui.thema == null or Ui.thema.default_font == null:
 		Ui._bouw_thema(17)
 	var zinnen := [Beurt.T_TEL, Beurt.T_TEL2, Beurt.T_BIJ, Beurt.T_HONDERD, Beurt.T_AF,
-		Beurt.T_PLUK % 49, Beurt.T_AF2 % 100]
+		Beurt.T_PLUKT, Beurt.T_AF2 % 100]
 	for zin in zinnen:
 		waar(Ui.keur_regel("oogst", zin), "binnen het budget: %s" % zin)
 		waar((Beurt.ICOON + " " + zin).length() <= 40, "met het pictogram ≤ 40 tekens: %s" % zin)
 		gelijk(Ui.mist_tekens(zin).size(), 0, "alle tekens bestaan: %s" % zin)
-	for teken in [Beurt.ICOON, Beurt.ICOON_PLUK10, Beurt.ICOON_AF, Beurt.ICOON_LEKKER]:
+	for teken in [Beurt.ICOON, Beurt.ICOON_AF, Beurt.ICOON_LEKKER]:
 		gelijk(Ui.mist_tekens(teken).size(), 0, "het pictogram %s staat in de fontsubset" % teken)
 	var o := {"band": 4, "vol": 3, "los": 4, "T": 34, "doel": 4, "nodig": 6}
 	gelijk(Beurt.som_bij(o), "4 + __ = 10", "de aanvulsom met het gat")
@@ -383,14 +405,18 @@ func test_een_beurt_in_groep_4() -> void:
 	waar(_strook().has(int(o["nodig"])), "het goede antwoord staat op de strook")
 	_kies(int(o["nodig"]))
 	await _wacht_kaart()
-	gelijk(_stand().get("stap", ""), "pluk", "nu zelf plukken")
-	waar(_knoop(PLUK) != null, "de plukknop hangt aan de aardbeienbak")
-	gelijk(_kaart_tekst("Kolom/Regel"), "🍓 " + Beurt.T_PLUK % int(o["nodig"]), "pluk er nog …")
-	for i in int(o["nodig"]):
-		var hoor := Snd.luister(func() -> void: _tik(PLUK))
-		waar(hoor.has("pluk"), "een aardbei klinkt als plukken (%s)" % str(hoor))
-		if i < int(o["nodig"]) - 1:
-			gelijk(_kaart_tekst("Kolom/Rij/Vak"), str(int(o["T"]) + i + 1), "het vakje telt mee")
+	# wave 2: the guest picks by himself — no pick button, and the card gives
+	# no number away
+	gelijk(_stand().get("stap", ""), "pluk", "nu plukt de gast")
+	waar(_knoop(PLUK) == null, "geen plukknop: het kind hoeft niet te tikken")
+	gelijk(_kaart_tekst("Kolom/Regel"), "🍓 " + Beurt.T_PLUKT, "kijk, de bakjes worden vol")
+	var hoor := Snd.luister(func() -> void: _spel().pluk())
+	waar(hoor.has("pluk"), "een aardbei klinkt als plukken (%s)" % str(hoor))
+	if str(_stand().get("stap", "")) == "pluk":
+		gelijk(_kaart_tekst("Kolom/Rij/Vak"), str(int(o["T"]) + int(_stand().get("geplukt", 0))),
+			"het vakje telt mee")
+	var reeks := await _wacht_tot_af()
+	gelijk(int(reeks[reeks.size() - 1]), int(o["nodig"]), "precies het antwoord geplukt (%s)" % str(reeks))
 	gelijk(_stand().get("stap", ""), "af", "alle bakjes vol")
 	gelijk(int(State.s["sterren"]), sterren + 1, "één ster voor het meedoen")
 	gelijk(_kaart_tekst("Kolom/Regel"), "✅ " + Beurt.T_AF, "de slotzin")
@@ -405,7 +431,7 @@ func test_een_beurt_in_groep_4() -> void:
 	_af()
 
 ## Groep 5 goes to a hundred, and "via the ten": first the loose berries, then
-## a whole punnet per tap — the button says so.
+## a whole punnet per step — the guest picks it that way by himself.
 func test_een_beurt_in_groep_5() -> void:
 	_op()
 	_wereld(8, 5)
@@ -418,24 +444,19 @@ func test_een_beurt_in_groep_5() -> void:
 	_kies(int(o["nodig"]))
 	await _wacht_kaart()
 	gelijk(_stand().get("stap", ""), "pluk", "plukken")
-	var tikken := 0
-	var bakjes_tikken := 0
-	while str(_stand().get("stap", "")) == "pluk" and tikken < 60:
-		var knop := _knoop(PLUK) as Button
-		waar(knop != null, "de plukknop is er")
-		if knop == null:
-			break
-		var voor := int(_stand().get("geplukt", 0))
+	waar(_knoop(PLUK) == null, "geen plukknop")
+	var reeks := await _wacht_tot_af()
+	var bakjes_stappen := 0
+	for i in range(1, reeks.size()):
+		var voor := int(reeks[i - 1])
+		var stap := int(reeks[i]) - voor
 		if voor >= 10 - int(o["los"]):
-			waar(knop.text.contains(Beurt.T_PLUK10_KNOP), "na het volle bakje: pluk een bakje (%s)" % knop.text)
-			bakjes_tikken += 1
+			gelijk(stap, 10, "na het volle bakje: een heel bakje per stap (%s)" % str(reeks))
+			bakjes_stappen += 1
 		else:
-			waar(knop.text.contains(Beurt.T_PLUK_KNOP) and not knop.text.contains(Beurt.T_PLUK10_KNOP),
-				"eerst één aardbei per tik (%s)" % knop.text)
-		knop.pressed.emit()
-		tikken += 1
+			gelijk(stap, 1, "eerst één aardbei per stap (%s)" % str(reeks))
 	gelijk(_stand().get("stap", ""), "af", "tot honderd")
-	gelijk(bakjes_tikken, 9 - int(o["vol"]), "de lege bakjes elk met één tik")
+	gelijk(bakjes_stappen, 9 - int(o["vol"]), "de lege bakjes elk in één stap")
 	gelijk(_kaart_tekst("Kolom/Rij/Vak"), "100", "honderd aardbeien")
 	gelijk(_kaart_tekst("Kolom/Regel2"), Beurt.T_AF2 % 100, "honderd voor de gasten")
 	_af()
@@ -458,8 +479,7 @@ func test_een_beurt_in_groep_3() -> void:
 		gelijk(_kaart_tekst("Kolom/Rij/Som"), "%d + __ = 10" % int(o["los"]), "splitsen tot 10")
 		_kies(int(o["nodig"]))
 		await _wacht_kaart()
-		for i in int(o["nodig"]):
-			_tik(PLUK)
+		await _wacht_tot_af()
 		gelijk(_stand().get("stap", ""), "af", "het bakje is vol (dag %d)" % dag)
 		_af()
 
@@ -528,11 +548,18 @@ func test_herladen_hervat_de_beurt() -> void:
 	gelijk(_kaart_tekst("Kolom/Regel"), "🍓 " + Beurt.T_BIJ, "met dezelfde vraag")
 	_kies(int(o["nodig"]))
 	await _wacht_kaart()
-	_tik(PLUK)
+	await _wacht_tot_geplukt(1)
 	Games.stop()
+	var g1 := int(_stand().get("geplukt", 0))
+	waar(g1 >= 1, "de gast plukte al (%d)" % g1)
 	waar(Games.start(SPEL), "en nog een keer")
-	gelijk(int(_stand().get("geplukt", 0)), 1, "de geplukte aardbei ligt er nog")
-	gelijk(str(_tafel()["params"]["b"]), str(Beurt.bakjes(o, 1)), "ook op de tafel")
+	gelijk(int(_stand().get("geplukt", 0)), g1, "de geplukte aardbeien liggen er nog")
+	gelijk(str(_tafel()["params"]["b"]), str(Beurt.bakjes(o, g1)), "ook op de tafel")
+	if g1 < int(o["nodig"]):
+		gelijk(_stand().get("stap", ""), "pluk", "en de gast plukt verder")
+		await _wacht_tot_af()
+		gelijk(_stand().get("stap", ""), "af", "tot alles vol is")
+		gelijk(int(_stand().get("geplukt", 0)), int(o["nodig"]), "precies het antwoord")
 	# the JSON way back: floats in the save are read as numbers
 	var d := State.spel_data(SPEL)
 	var st: Dictionary = d["stand"]
@@ -736,8 +763,9 @@ func test_de_knoppen_op_vier_schermen() -> void:
 		await _wacht_kaart()
 		for _f in 3:
 			await boom.process_frame
-		_keur(kader.size, "%s pluk" % str(maat))
-		_bij_zijn_ding(PLUK, "%s: de plukknop" % str(maat))
+		# wave 2: the guest picks by himself; only the card stands (no button)
+		_keur(kader.size, "%s pluk" % str(maat), 1)
+		waar(Hits.spot(PLUK) == null, "%s: geen plukknop" % str(maat))
 		Games.stop()
 		Ui.naamplaten_leeg()
 		Hits.wis_alles()
@@ -793,7 +821,7 @@ func test_groep_5_op_de_telefoon() -> void:
 
 ## Every spot of the game: inside the frame, never `krap`, a tap target, and
 ## no button on an object (a card and a number may lie over the world).
-func _keur(kader: Vector2, wat: String) -> void:
+func _keur(kader: Vector2, wat: String, min_eigen := 2) -> void:
 	var dbg := Hits.debug()
 	var vakken: Array[Rect2] = []
 	for id in dbg.keys():
@@ -833,7 +861,7 @@ func _keur(kader: Vector2, wat: String) -> void:
 			var snij := r.intersection(v)
 			waar(maxf(0.0, snij.size.x) * maxf(0.0, snij.size.y) <= 0.15 * v.get_area() + 0.5,
 				"%s: %s dekt geen ander voorwerp af" % [wat, id])
-	waar(eigen >= 2, "%s: het spel staat op het scherm (%d)" % [wat, eigen])
+	waar(eigen >= min_eigen, "%s: het spel staat op het scherm (%d)" % [wat, eigen])
 
 ## A button that belongs to a thing touches that thing (on a phone at most one
 ## band away, like test_hits holds every room to).
@@ -850,3 +878,100 @@ func _bij_zijn_ding(id: String, wat: String) -> void:
 	var kader := World.kader_rect().size
 	var mag := Hits.GAT + 1.0 if minf(kader.x, kader.y) >= 400.0 else float(Hits.RIJ) + Hits.GAT
 	waar(gat_x <= mag and gat_y <= mag, "%s hangt bij zijn ding (gat %.0f, %.0f)" % [wat, gat_x, gat_y])
+
+# ------------------------------------------------ rekenen eerst (wave 2, R1/R2)
+
+## R1: inside one turn (the entry tap not counted) the maths taps outnumber
+## the rest by at least one, for groep 3, 4 and 5 with a small and a large
+## hotel.  Every tap this test makes is labelled: both strips are maths; the
+## picking is the guest's own, so there is nothing else to tap.  (Before wave 2
+## the picking was 1 … 50 taps on the planter: 2 maths against up to 10 play.)
+var _teller := {"reken": 0, "spel": 0}
+
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller[soort]) + 1
+
+func test_rekenaandeel() -> void:
+	for geval in [[1, 3], [8, 3], [4, 4], [8, 4], [7, 5], [8, 5]]:
+		var n: int = geval[0]
+		var band: int = geval[1]
+		_teller = {"reken": 0, "spel": 0}
+		_op()
+		_wereld(n, band, 2, band - 1)
+		waar(Games.start(SPEL), "band %d, N %d: het spel start" % [band, n])
+		var o := Beurt.opzet(n, band, 2)
+		await _wacht(1.2)
+		_kies(_fout_getal(int(o["T"])))
+		_tel("reken")
+		await _wacht_mispauze()
+		_kies(int(o["T"]))
+		_tel("reken")
+		await _wacht_kaart()
+		_kies(int(o["nodig"]))
+		_tel("reken")
+		await _wacht_kaart()
+		# whatever is tappable now would be play; the turn must end without it
+		waar(Hits.spot(PLUK) == null, "band %d, N %d: niets meer te tikken" % [band, n])
+		await _wacht_tot_af()
+		gelijk(_stand().get("stap", ""), "af", "band %d, N %d: alle bakjes vol" % [band, n])
+		var reken := int(_teller["reken"])
+		var spel_tik := int(_teller["spel"])
+		waar(reken >= spel_tik + 1, "band %d, N %d: rekenen %d ≥ spel %d + 1" % [band, n, reken, spel_tik])
+		_af()
+
+## R2 (the giveaway): after the second answer nothing on the card tells a
+## number the child still has to work out, and the punnets fill without a
+## single tap — so no tap is play.  (Before wave 2 the card said "Pluk er nog
+## 6" and the child tapped the planter six times.)
+func test_het_plukken_verklapt_niets() -> void:
+	_op()
+	_wereld(4, 4)
+	waar(Games.start(SPEL), "het spel start")
+	var o := Beurt.opzet(4, 4, 2)
+	await _wacht(1.2)
+	_kies(int(o["T"]))
+	await _wacht_kaart()
+	_kies(int(o["nodig"]))
+	await _wacht_kaart()
+	var regel := _kaart_tekst("Kolom/Regel")
+	waar(not regel.contains(str(int(o["nodig"]))), "de zin noemt geen getal (%s)" % regel)
+	waar(Hits.spot(PLUK) == null, "er is geen plukknop om te tikken")
+	await _wacht_tot_af()
+	gelijk(_stand().get("stap", ""), "af", "de bakjes worden vanzelf vol")
+	gelijk(int(_stand().get("geplukt", 0)), int(o["nodig"]), "precies het antwoord")
+	_af()
+
+## R2: a question that was missed comes back unchanged after an exit — on the
+## next day, with another hotel size, after an animal switch.  (Before wave 2
+## each of those started a new table with new numbers.)
+func test_een_gemiste_vraag_blijft_na_een_nieuwe_dag() -> void:
+	_op()
+	_wereld(4, 4)
+	waar(Games.start(SPEL), "het spel start")
+	var o := Beurt.opzet(4, 4, 2)
+	await _wacht(1.2)
+	_kies(int(o["T"]))
+	await _wacht_kaart()
+	_kies(_fout_getal(int(o["nodig"])))
+	gelijk(int(_stand().get("pog", 0)), 1, "een misser staat open")
+	var som := _kaart_tekst("Kolom/Rij/Som")
+	Games.stop()
+	State.s["dag"] = 3
+	World.zet_dag(3)
+	waar(Games.start(SPEL), "de volgende dag")
+	gelijk(_stand().get("stap", ""), "bij", "nog steeds de tweede vraag")
+	gelijk(_kaart_tekst("Kolom/Rij/Som"), som, "dezelfde som")
+	Games.stop()
+	(State.s["gasten"] as Array).pop_back()   # a guest went home: N = 3, groep 3
+	World.sync(State.s["gasten"])
+	waar(Games.start(SPEL), "een kleiner hotel")
+	gelijk(_kaart_tekst("Kolom/Rij/Som"), som, "nog steeds dezelfde som")
+	var gast := str(_stand().get("gast", ""))
+	waar(Games.wissel_speler(), "een ander dier")
+	gelijk(_kaart_tekst("Kolom/Rij/Som"), som, "ook dan dezelfde som")
+	waar(str(_stand().get("gast", "")) != gast, "met het andere dier")
+	await _wacht(1.2)
+	_kies(int(o["nodig"]))
+	await _wacht_kaart()
+	gelijk(_stand().get("stap", ""), "pluk", "pas het goede antwoord gaat verder")
+	_af()

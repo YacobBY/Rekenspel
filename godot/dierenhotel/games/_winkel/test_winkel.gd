@@ -137,6 +137,12 @@ func _wacht(s: float) -> void:
 func _wacht_kaart() -> void:
 	await _wacht(WinkelSpel.SOM_S + 0.25)
 
+## The shop of the turn in the save: its own day, hotel size and band (an open
+## question with a miss keeps them, R2), not necessarily today's.
+func _opzet_van(spel: String, st: Dictionary) -> Dictionary:
+	return Beurt.opzet(spel, int(st.get("N", State.n_gasten())), int(st.get("band", State.band())),
+		int(st.get("dag", State.s["dag"])))
+
 ## Every right answer of this turn, one step at a time, through the strip.
 func _speel_goed(spel: String) -> void:
 	for _i in 6:
@@ -144,7 +150,7 @@ func _speel_goed(spel: String) -> void:
 		var stap := str(st.get("stap", ""))
 		if stap == "af" or stap.is_empty():
 			return
-		var o := Beurt.opzet(spel, State.n_gasten(), State.band(), int(State.s["dag"]))
+		var o := _opzet_van(spel, st)
 		var kind := str(State.gast_van(str(st["gast"])).get("kind", "hond"))
 		var s := Beurt.sommen(o, str(st["waar"]), kind)
 		var goed := Beurt.goed(stap, s)
@@ -155,7 +161,7 @@ func _speel_goed(spel: String) -> void:
 func _fout_keuze(spel: String) -> String:
 	var st := _stand(spel)
 	var stap := str(st.get("stap", ""))
-	var o := Beurt.opzet(spel, State.n_gasten(), State.band(), int(State.s["dag"]))
+	var o := _opzet_van(spel, st)
 	var kind := str(State.gast_van(str(st["gast"])).get("kind", "hond"))
 	var goed := Beurt.goed(stap, Beurt.sommen(o, str(st["waar"]), kind))
 	var juist := ("g%d" if stap == "betaal" else "n%d") % goed
@@ -251,12 +257,34 @@ func test_de_prijzen_en_de_sommen() -> void:
 									"%s: er is altijd wisselgeld (%d van %d)" % [winkel, int(s["terug"]),
 										int(s["briefje"])])
 								waar(int(s["briefje"]) in [20, 50, 100], "een echt briefje")
+							if Beurt.stappen(winkel, band).has("over"):
+								gelijk(int(s["beurs"]), 10 if band == 3 else 20,
+									"%s groep %d: €10 / €20 in de beurs" % [winkel, band])
+								gelijk(int(s["over"]), int(s["beurs"]) - t, "%s: wat er over is" % winkel)
+								waar(int(s["over"]) >= 1 and int(s["over"]) <= (8 if band == 3 else 14),
+									"%s groep %d: er blijft iets over, binnen 10 / 20 (%d)" % [winkel, band,
+										int(s["over"])])
+							if Beurt.stappen(winkel, band).has("half"):
+								gelijk(p % 2, 0, "%s groep 5: een even prijs, de helft is hele euro's (%d)"
+									% [winkel, p])
+								gelijk(int(s["half"]), int(p / 2), "%s: de halve prijs" % winkel)
 	# the steps per groep: groep 3 never gives change, groep 5 always does, the
 	# luxury shop computes most
 	for winkel in WINKELS:
 		waar(not Beurt.stappen(winkel, 3).has("terug"), "%s groep 3: geen wisselgeld" % winkel)
 		waar(Beurt.stappen(winkel, 5).has("terug"), "%s groep 5: wisselgeld" % winkel)
 		gelijk(Beurt.stappen(winkel, 4)[0], "kies", "%s: eerst kiezen" % winkel)
+		# R1 (owner, 2026-10-08): after the one choice, at least two sums in
+		# every groep — maths is never less than half of the taps
+		for band in [3, 4, 5]:
+			var sommen := 0
+			for stap in Beurt.stappen(winkel, band):
+				if Beurt.REKENSTAPPEN.has(stap):
+					sommen += 1
+			waar(sommen >= 2, "%s groep %d: minstens twee sommen na het kiezen (%s)"
+				% [winkel, band, str(Beurt.stappen(winkel, band))])
+	gelijk(Beurt.stappen("hoeden", 3), ["kies", "betaal", "over"], "een kraam in groep 3: betalen, dan over")
+	gelijk(Beurt.stappen("sjaals", 5), ["kies", "half", "terug"], "een kraam in groep 5: halve prijs, dan terug")
 	gelijk(Beurt.stappen("luxe", 5).size(), 4, "de luxe winkel: kies, half, samen, terug")
 	waar(Beurt.stappen("schoenen", 4).has("som"), "schoenen: eerst uitrekenen wat vier kosten")
 
@@ -294,7 +322,8 @@ func test_elke_zin_past() -> void:
 		Ui._bouw_thema(17)
 	var naam := "Stampertje"
 	var zinnen: Array[String] = [Beurt.T_KIES % naam, Beurt.T_SOM_DOOS, Beurt.T_HALF,
-		Beurt.T_BETAAL % "€19", Beurt.T_TERUG % [naam, "€100"], Beurt.T_WEG, Beurt.T_LEEG]
+		Beurt.T_BETAAL % "€19", Beurt.T_TERUG % [naam, "€100"], Beurt.T_OVER % [naam, "€20"],
+		Beurt.T_WEG, Beurt.T_LEEG]
 	for kl in ArtGasten.KLEDING:
 		var w: Dictionary = ArtGasten.KLEDING[kl]
 		zinnen.append(Beurt.T_AF % [naam, str(w["lid"]), str(w["naam"])])
@@ -832,7 +861,7 @@ func _alle_stroken() -> Dictionary:
 								match str(stap):
 									"betaal":
 										keuzes = knoop._geld_keuzes(s)
-									"som", "half", "terug":
+									"som", "half", "terug", "over":
 										keuzes = knoop._getal_keuzes(str(stap), s)
 									_:
 										continue
@@ -897,7 +926,9 @@ func test_een_paar_is_een_ding_buiten_de_schoenenkraam() -> void:
 						gelijk(int(hond["totaal"]), int(gans["totaal"]),
 							"%s %s groep %d: elk dier betaalt hetzelfde" % [winkel, naam, band])
 						if winkel == "kraam":
-							gelijk(int(hond["totaal"]), int(w["prijs"]),
+							# one price for the whole thing; in groep 5 the stall
+							# sells it at half price (R1, 2026-10-09)
+							gelijk(int(hond["totaal"]), int(w["prijs"]) / (2 if band == 5 else 1),
 								"kraam %s: één prijs voor het hele ding" % naam)
 						if bool(ArtGasten.KLEDING[naam].get("veel", false)):
 							paren += 1
@@ -1028,3 +1059,155 @@ func test_de_toonbank_volgt_de_dag_en_de_gasten() -> void:
 			nieuw += 1
 	waar(nieuw > 0, "een gast erbij zet andere waren op de toonbank (%d kramen)" % nieuw)
 	_af()
+
+# ------------------------------------------- R2: een misser blijft staan
+# The owner (2026-10-08): "het moet niet mogelijk zijn om rekenen over te
+# slaan".  An open question that had a miss comes back UNCHANGED after every
+# exit — also when the child switches the animal on the game bar, when a new
+# day begins, when a guest arrives (N) or the band moves.  Before 2026-10-09
+# each of these threw the turn away and offered a fresh choice: a cheaper thing,
+# an easier question (red log: tmp/log/r2-rood-winkel.log).
+
+## Into the shop, choose, answer the first sum WRONG and wait until the animal
+## is out and the game closed by itself.  {gast, waar, stap, keuzes} of that
+## question.
+func _misser(spel: String) -> Dictionary:
+	waar(Games.start(spel), "%s start" % spel)
+	await _wacht(0.3)
+	_kies(_keuzes()[0])
+	await _wacht_kaart()
+	var st := _stand(spel)
+	var uit := {"gast": str(st.get("gast", "")), "waar": str(st.get("waar", "")),
+		"stap": str(st.get("stap", "")), "keuzes": str(_keuzes())}
+	waar(not str(uit["stap"]) in ["kies", "af", ""], "%s: een rekenvraag staat open (%s)" % [spel, uit["stap"]])
+	_kies(_fout_keuze(spel))
+	await _wacht(WinkelSpel.SIP_S + WinkelSpel.WEG_WACHT + 0.8)
+	gelijk(Games.actief(), "", "%s: na de misser is het spel dicht" % spel)
+	gelijk(int(_stand(spel).get("missers", 0)), 1, "%s: de misser is bewaard" % spel)
+	return uit
+
+## Back into the shop: the same animal, the same thing, the same step and the
+## same four choices in the same order.
+func _zelfde_vraag(spel: String, voor: Dictionary, wat: String) -> void:
+	Games.hersteek()
+	waar(Games.start(spel), "%s: terug de winkel in (%s)" % [spel, wat])
+	await _wacht(0.3)
+	var st := _stand(spel)
+	gelijk(str(st.get("gast", "")), voor["gast"], "%s: hetzelfde dier (%s)" % [spel, wat])
+	gelijk(str(st.get("waar", "")), voor["waar"], "%s: hetzelfde ding (%s)" % [spel, wat])
+	gelijk(str(st.get("stap", "")), voor["stap"], "%s: dezelfde vraag (%s)" % [spel, wat])
+	gelijk(str(_keuzes()), voor["keuzes"], "%s: dezelfde vier keuzes (%s)" % [spel, wat])
+	gelijk(int(st.get("missers", 0)), 1, "%s: de misser telt nog (%s)" % [spel, wat])
+
+## An animal with a bed that is not `gast`.
+func _ander_dier(gast: String) -> String:
+	for g in State.s["gasten"]:
+		if str(g.get("id", "")) != gast and not str(g.get("bed", "")).is_empty():
+			return str(g["id"])
+	return ""
+
+func test_r2_misser_blijft_na_wissel_van_dier() -> void:
+	for spel in ["hoeden", "schoenen"]:
+		_op()
+		_wereld(4, 4)
+		var voor: Dictionary = await _misser(spel)
+		# picked on the game bar before going back in ...
+		var ander := _ander_dier(str(voor["gast"]))
+		waar(not ander.is_empty(), "er is een ander dier")
+		State.s["speler"] = ander
+		await _zelfde_vraag(spel, voor, "ander dier gekozen")
+		# ... and the chip tapped while the question is open
+		Games.wissel_speler()
+		await _wacht(0.3)
+		gelijk(str(_stand(spel).get("gast", "")), voor["gast"], "%s: wisselen laat de vraag staan" % spel)
+		gelijk(str(_stand(spel).get("stap", "")), voor["stap"], "%s: dezelfde stap na het wisselen" % spel)
+		gelijk(str(_keuzes()), voor["keuzes"], "%s: dezelfde keuzes na het wisselen" % spel)
+		await _speel_goed(spel)
+		gelijk(str(_stand(spel).get("stap", "")), "af", "%s: goed beantwoord, dan klaar" % spel)
+		State.s.erase("speler")
+		_af()
+
+func test_r2_misser_blijft_na_een_nieuwe_dag() -> void:
+	_op()
+	_wereld(4, 4)
+	var voor: Dictionary = await _misser("sjaals")
+	Hotel.morgen()
+	gelijk(int(State.s["dag"]), 3, "het is de volgende dag")
+	await _zelfde_vraag("sjaals", voor, "nieuwe dag")
+	await _speel_goed("sjaals")
+	gelijk(str(_stand("sjaals").get("stap", "")), "af", "goed beantwoord, dan klaar")
+	_af()
+
+func test_r2_misser_blijft_na_een_gast_erbij() -> void:
+	_op()
+	_wereld(4, 4)
+	var voor: Dictionary = await _misser("kraam")
+	var gasten: Array = State.s["gasten"]
+	var g: Dictionary = State.gasten_pool()[gasten.size()]
+	g["kamer"] = ""
+	g["bed"] = ""
+	g["waar"] = "receptie"
+	gasten.append(g)
+	World.sync(gasten)
+	gelijk(State.n_gasten(), 5, "een gast erbij")
+	gelijk(State.band(), 4, "de band blijft")
+	await _zelfde_vraag("kraam", voor, "N 5")
+	await _speel_goed("kraam")
+	gelijk(str(_stand("kraam").get("stap", "")), "af", "goed beantwoord, dan klaar")
+	_af()
+
+func test_r2_misser_blijft_na_een_andere_band() -> void:
+	_op()
+	_wereld(7, 5)
+	var voor: Dictionary = await _misser("luxe")
+	State.s["kunnen"] = 2
+	gelijk(State.band(), 3, "de band zakt naar groep 3")
+	await _zelfde_vraag("luxe", voor, "band 3")
+	await _speel_goed("luxe")
+	gelijk(str(_stand("luxe").get("stap", "")), "af", "goed beantwoord, dan klaar")
+	_af()
+
+# ------------------------------------------------- R1: het rekenaandeel
+
+## Counted by the rule of 2026-10-08 (R1): an answer on a maths strip is
+## "reken", choosing the thing is "spel"; the tap that opened the shop is not
+## counted.
+var _teller := {"reken": 0, "spel": 0}
+
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller[soort]) + 1
+
+## The owner (2026-10-08): "rekenen moet minstens 50% van de interactie zijn".
+## A whole turn in every shop, groep 3, 4 and 5, a small and a large hotel,
+## through the real strips: reken >= spel + 1, so with the tap that opened the
+## shop maths is still at least half.
+func test_rekenaandeel() -> void:
+	for winkel in WINKELS:
+		for geval in [[3, 1], [3, 3], [4, 4], [4, 6], [5, 7], [5, 8]]:
+			var band: int = geval[0]
+			var n: int = geval[1]
+			var wat := "%s groep %d, %d gasten" % [winkel, band, n]
+			_op()
+			_wereld(n, band)
+			_teller = {"reken": 0, "spel": 0}
+			waar(Games.start(winkel), "%s: start" % wat)
+			await _wacht(0.3)
+			_kies(_keuzes()[0])
+			_tel("spel")
+			await _wacht_kaart()
+			for _i in 6:
+				var st := _stand(winkel)
+				var stap := str(st.get("stap", ""))
+				if stap == "af" or stap.is_empty():
+					break
+				waar(Beurt.REKENSTAPPEN.has(stap), "%s: na het kiezen alleen sommen (%s)" % [wat, stap])
+				var o := _opzet_van(winkel, st)
+				var kind := str(State.gast_van(str(st["gast"])).get("kind", "hond"))
+				var goed := Beurt.goed(stap, Beurt.sommen(o, str(st["waar"]), kind))
+				_kies(("g%d" if stap == "betaal" else "n%d") % goed)
+				_tel("reken")
+				await _wacht_kaart()
+			gelijk(str(_stand(winkel).get("stap", "")), "af", "%s: de beurt is af" % wat)
+			waar(int(_teller["reken"]) >= int(_teller["spel"]) + 1,
+				"%s: rekenen %d >= spel %d + 1" % [wat, int(_teller["reken"]), int(_teller["spel"])])
+			_af()

@@ -786,8 +786,10 @@ func test_het_kind_kiest_de_postbode() -> void:
 	waar(Games.wissel_speler(), "het dier op de balk geeft de kar door")
 	gelijk(Games.actief(), SPEL, "het sorteren gaat door")
 	gelijk(Games.speler(), volgende, "met het volgende dier")
-	gelijk(str(_stand().get("gast", "")), volgende, "in een eigen beurt")
-	gelijk(int(_stand().get("i", -1)), 0, "die bij de eerste brief begint")
+	gelijk(str(_stand().get("gast", "")), volgende, "die de kar overneemt")
+	# wave 2, R2: the pile and its progress stay — the switch used to start the
+	# same pile again at letter 0
+	gelijk(int(_stand().get("i", -1)), 1, "en verder gaat bij de tweede brief")
 	gelijk(int(State.s["sterren"]), sterren, "er ging geen ster af")
 	Games.stop()
 	waar(Games.start(SPEL), "het spel start opnieuw")
@@ -1028,3 +1030,103 @@ func _platen_op_volgorde(wat: String, vorm: String) -> void:
 			var snij := r.intersection(vorige)
 			waar(snij.size.x <= 0.0 or snij.size.y <= 0.0, "%s: bordje %d raakt bordje %d niet" % [wat, j, j - 1])
 		vorige = r
+
+# ------------------------------------------- golf 2: rekenen eerst (R1, R2)
+
+var _teller := {"reken": 0, "spel": 0}
+
+## Every tap the test performs, labelled the way R1 counts it: an answer on a
+## maths strip is "reken", everything else "spel".
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller.get(soort, 0)) + 1
+
+## R1 (wave 2, owner: "rekenen moet minstens 50% van de interactie zijn"): in a
+## whole turn — from the start, the entry tap not counted — the maths taps
+## outnumber everything else by at least one, in every group and for a small
+## and a large hotel.  Every tap of the post is a hole on the choice strip of
+## a maths card (`reken: true`), one per letter (a miss is a maths tap too).
+func test_rekenaandeel() -> void:
+	for geval in [[1, 3, true], [3, 3, false], [4, 4, false], [6, 4, true], [7, 5, false],
+			[8, 5, false]]:
+		var n: int = geval[0]
+		var band: int = geval[1]
+		var mis: bool = geval[2]
+		var wat := "groep %d, %d gasten" % [band, n]
+		_teller = {"reken": 0, "spel": 0}
+		_op()
+		_wereld(n, band, 2)
+		waar(Games.start(SPEL), "%s: het spel start" % wat)
+		if mis:
+			var br := _brief()
+			_tel("reken")
+			_kies(_fout_vak(int(br["vak"])))
+			gelijk(int(_stand().get("i", -1)), 0, "%s: een misser schuift niets op" % wat)
+			await _wacht_mispauze()
+		var brieven := 0
+		while str(_stand().get("stap", "")) == "sorteer" and brieven < 10:
+			var br := _brief()
+			if br.is_empty():
+				break
+			_tel("reken")
+			_kies(int(br["vak"]))
+			brieven += 1
+			await _wacht_brief()
+		gelijk(str(_stand().get("stap", "")), "af", "%s: de stapel is gesorteerd" % wat)
+		var reken := int(_teller["reken"])
+		var spel := int(_teller["spel"])
+		waar(reken >= spel + 1, "%s: R1 reken %d >= spel %d + 1" % [wat, reken, spel])
+		_af()
+
+## R2 (wave 2): a letter that was put in a wrong hole stays on top of the pile
+## UNCHANGED after any exit — a new day, another band, another hotel size, the
+## animal on the game bar — with the letters already sorted still sorted; only
+## after the pile is done is the next one new.
+func test_een_gemiste_brief_komt_onveranderd_terug() -> void:
+	_op()
+	var gasten := _wereld(5, 4, 2)
+	waar(Games.start(SPEL), "het spel start")
+	var o := _opzet().duplicate(true)
+	var eerste := _brief()
+	_kies(int(eerste["vak"]))
+	await _wacht_brief()
+	var br := _brief()
+	var som := _kaart_tekst("Kolom/Rij/Som")
+	var keuzes := _strook_teksten()
+	var bode := str(_stand().get("gast", ""))
+	var ander := ""
+	for i in 4:
+		if str(gasten[i]["id"]) != bode:
+			ander = str(gasten[i]["id"])
+			break
+	_kies(_fout_vak(int(br["vak"])))
+	gelijk(int(_stand().get("pog", 0)), 1, "een misser op de tweede brief")
+	await _wacht_mispauze()
+	for stap in ["een nieuwe dag", "een andere band", "een gast minder", "het dier op de balk"]:
+		Games.stop()
+		match stap:
+			"een nieuwe dag":
+				State.s["dag"] = 3
+				World.zet_dag(3)
+			"een andere band":
+				State.s["kunnen"] = 2
+				gelijk(State.band(), 3, "nu groep 3")
+			"een gast minder":
+				(State.s["gasten"] as Array).pop_back()
+				World.sync(State.s["gasten"])
+			_:
+				State.s["speler"] = ander
+		waar(Games.start(SPEL), "%s: het spel start" % stap)
+		gelijk(int(_stand().get("i", -1)), 1, "%s: de tweede brief ligt nog bovenop" % stap)
+		gelijk(int(_stand().get("pog", 0)), 1, "%s: met zijn misser" % stap)
+		gelijk(str(_opzet().get("brieven", [])), str(o["brieven"]), "%s: dezelfde stapel" % stap)
+		gelijk(_kaart_tekst("Kolom/Rij/Som"), som, "%s: dezelfde brief" % stap)
+		gelijk(str(_strook_teksten()), str(keuzes), "%s: dezelfde vier vakjes" % stap)
+	gelijk(str(_stand().get("gast", "")), ander, "het gekozen dier sorteert verder")
+	await _sorteer_alles()
+	gelijk(str(_stand().get("stap", "")), "af", "de stapel is af")
+	Games.stop()
+	State.s.erase("speler")
+	waar(Games.start(SPEL), "na de stapel")
+	gelijk(int(_stand().get("i", -1)), 0, "een nieuwe stapel")
+	gelijk(int(_stand().get("dag", -1)), 3, "van vandaag")
+	_af()

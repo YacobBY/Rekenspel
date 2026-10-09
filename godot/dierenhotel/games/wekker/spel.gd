@@ -221,6 +221,12 @@ func start(_c: SpelCtx) -> void:
 		and int(oud.get("doelU", 0)) > 0 \
 		and not gast_van(str(oud.get("gast", ""))).is_empty() \
 		and (wil.is_empty() or _had_zijn_beurt(oud, wil))
+	# Een open vraag waar al naast gezeten is komt ONVERANDERD terug, wat er
+	# ook gebeurde: een nieuwe dag, een ander aantal gasten of een andere band,
+	# of het dier op de spelbalk (golf 2, R2).  Dezelfde gast, dezelfde
+	# wektijd, dezelfde wijzerstand.
+	if open_vraag(oud):
+		zelfde = true
 	if zelfde:
 		_s = oud
 		# Na een herlaad slaapt iedereen weer, en de stap `wakker` hoort bij
@@ -250,6 +256,16 @@ func start(_c: SpelCtx) -> void:
 	State.bewaar()
 	print("[probe] spel=start id=", ctx.id, " kamer=", ctx.kamer,
 		" band=", band, " stap=", str(_s.get("stap", "")))
+
+## Een bewaarde beurt waarvan de vraag nog openstaat en al een keer fout werd
+## beantwoord (een verkeerde ✅ of een verkeerd uur): die mag niet vervangen
+## worden door een verse of makkelijkere (golf 2, R2).
+func open_vraag(oud: Dictionary) -> bool:
+	return not oud.is_empty() and int(oud.get("af", 0)) == 0 \
+		and int(oud.get("doelU", 0)) > 0 \
+		and str(oud.get("stap", "")) in ["zet", "mis", "duur"] \
+		and (int(oud.get("missers", 0)) > 0 or int(oud.get("gemist", 0)) > 0) \
+		and not gast_van(str(oud.get("gast", ""))).is_empty()
 
 func stop() -> void:
 	if _kader_af.is_valid():
@@ -377,6 +393,9 @@ func _nieuwe_beurt(n: int, band: int, dag: int, idx: int, gast: String,
 	b["gast"] = gast
 	b["slaapt"] = dutje
 	b["missers"] = 0
+	# `gemist`: er is al eens een verkeerd antwoord gegeven (ook een ✅ zonder
+	# te draaien, die geen misser telt): de vraag staat open (R2)
+	b["gemist"] = 0
 	# `draaien` telt elke draai aan de wijzers, `gekeurd` de stand van die teller
 	# bij de vorige ✅.  Zijn ze gelijk, dan is er sinds de vorige keuring niets
 	# veranderd en is een tik op ✅ geen nieuwe poging (R3).
@@ -397,7 +416,7 @@ func _lees_stand(v) -> Dictionary:
 		return {}
 	var uit: Dictionary = {}
 	for k in ["dag", "N", "band", "idx", "doelU", "doelM", "u", "m", "duur",
-			"missers", "draaien", "gekeurd", "ster", "af"]:
+			"missers", "draaien", "gekeurd", "ster", "af", "gemist"]:
 		uit[k] = int(float(v.get(k, 0)))
 	uit["stap"] = str(v.get("stap", "zet"))
 	uit["gast"] = str(v.get("gast", ""))
@@ -858,6 +877,7 @@ func klaar_tik() -> Variant:
 	if not actief or _af_nu() or str(_s.get("stap", "")) == "duur":
 		return null
 	if not goed():
+		_s["gemist"] = 1
 		if int(_s.get("draaien", 0)) != int(_s.get("gekeurd", 0)):
 			_s["gekeurd"] = int(_s.get("draaien", 0))
 			_s["missers"] = int(_s.get("missers", 0)) + 1
@@ -884,8 +904,11 @@ func kies_tijd(u: int) -> Variant:
 		return null
 	if Sommen.Wekker.u12(u) != Sommen.Wekker.u12(int(_s.get("doelU", 12))):
 		_s["missers"] = int(_s.get("missers", 0)) + 1
+		_s["gemist"] = 1
 		_mis()
 		return false
+	# goed op een keuzestrook zonder `goed: n`: het spel meldt het zelf
+	ctx.reken_goed()
 	_s["stap"] = "zet"
 	_s["hulp"] = T_HULP_BEGIN
 	ctx.snd.ja()
@@ -898,6 +921,8 @@ func kies_tijd(u: int) -> Variant:
 func _wakker_worden() -> void:
 	_s["stap"] = "wakker"
 	_s["hulp"] = ""
+	# de wijzers staan goed en ✅ keurt ze: een goed antwoord (golf 2, R4)
+	ctx.reken_goed()
 	ctx.state.tel(int(_s.get("missers", 0)) == 0, Time.get_ticks_msec() - _t0)
 	_gong()                       # de slag bij het goede uur: nooit afgeremd
 	if _kaart != null:

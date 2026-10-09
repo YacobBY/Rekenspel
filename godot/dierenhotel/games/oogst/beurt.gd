@@ -28,16 +28,14 @@ const T_BIJ := "Hoeveel passen er nog bij?"              ## 5 woorden, 26 tekens
 ## Not "Hoeveel nog tot 100 aardbeien?": one line too wide for the maths bar
 ## of a 360-wide phone, and the card floated over the room (the 🍓 says what).
 const T_HONDERD := "Hoeveel nog tot 100?"                ## 4 woorden, 20 tekens
-const T_PLUK := "Pluk er nog %d"                         ## 4 woorden
+## While the answer is picked (wave 2, R1): the guest of the turn picks by
+## himself, so no tap of the child is play — and no line on the card gives a
+## number away ("Pluk er nog %d" told the answer to the picking).
+const T_PLUKT := "Kijk, de bakjes worden vol"            ## 5 woorden, 26 tekens
 const T_AF := "Alle bakjes zijn vol!"                    ## 4 woorden, 21 tekens
 const T_AF2 := "%d aardbeien voor de gasten"             ## 5 woorden
 const T_LEEG := "nog geen gasten"
 const T_LEKKER := "lekker!"
-const T_PLUK_KNOP := "Pluk"
-const T_PLUK10_KNOP := "Pluk een bakje"
-const T_PLUK_TITEL := "pluk een aardbei"
-const T_PLUK10_TITEL := "pluk een heel bakje vol"
-const ICOON_PLUK10 := "🧺"
 const ICOON_AF := "✅"
 const ICOON_LEKKER := "😋"
 
@@ -123,9 +121,10 @@ static func bakjes(o: Dictionary, geplukt: int) -> Array:
 		b[i] = n
 	return b
 
-## What one tap on the planter picks: one berry while the open punnet is not
-## full, then (band 5, towards a hundred) a whole punnet at a time — the
-## strategy "via the ten" made physical.
+## What one pick step brings in: one berry while the open punnet is not full,
+## then (band 5, towards a hundred) a whole punnet at a time — the strategy
+## "via the ten" made physical.  Since wave 2 the guest picks by himself, step
+## by step, after the second answer.
 static func pluk_stap(o: Dictionary, geplukt: int) -> int:
 	var rest := int(o["nodig"]) - geplukt
 	if rest <= 0:

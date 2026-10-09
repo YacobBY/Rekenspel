@@ -75,6 +75,12 @@ const KAMER_TITEL := "kies een kamer"
 const BEDDEN_SPEL := "bedden"
 ## The bell when no bedroom can take one more guest (world.md §7.4).
 const BEL_VOL := "alle kamers vol"
+## The beds sum at the desk when the beds game cannot start — the beds game's
+## own words (games/bedden/spel.gd), ≤ 8 words and ≤ 40 characters.
+const BED_NIEMAND := "%s slaapt nog niemand"
+const BED_EEN := "%s slaapt al 1 dier"
+const BED_VEEL := "%s slapen al %d dieren"
+const BED_ERBIJ := "%s komt erbij. Hoeveel bedden?"
 
 var _bord_open := false
 var _bord_blad = null          ## the open board sheet (UiBlad), or null
@@ -469,6 +475,11 @@ func morgen() -> void:
 	# skip a day without an evening round
 	Hits.wis_eigenaar(AVOND)
 	bord_dicht()
+	# Nobody wants to play when the day begins, so the basket's card goes; a
+	# missed basket question stays in its drawer and comes back unchanged.  An
+	# open check-in and an open bill are not touched at all: their numbers and
+	# their strip seeds are stored, so a missed question survives the night (R2).
+	Hits.wis_eigenaar(MAND)
 	State.s["dag"] = int(State.s["dag"]) + 1
 	for g in State.s["gasten"]:
 		if not str(g.get("bed", "")).is_empty():
@@ -603,8 +614,25 @@ func init_checkin(g: Dictionary) -> void:
 		"dagen": int(State.s["levering"]), "voorraad": int(State.s["scoops"]),
 		"stap": 1, "fouten1": 0, "fouten2": 0, "invoer": "", "keuze": null,
 		"weg": false, "t0": Time.get_ticks_msec(), "kamer": "",
+		# the seed of the number strips, fixed today: a missed question comes
+		# back with the same four numbers after a night or a reload (R2) —
+		# `Ui`'s own seed moves with the day
+		"zaad": _ci_zaad(int(State.s["dag"])),
 	}
 	checkin_veranderd.emit()
+
+## The seed `Ui` would take for the desk card on day `dag` — so on the day the
+## guest rings nothing changes, and after that it no longer moves.
+func _ci_zaad(dag: int) -> int:
+	return (hash("ci_som") % 100003) + dag * 17
+
+## The seed of the check-in's strips: the one stored at the bell, or (a save
+## from before it was stored) today's.
+func _ci_zaad_van(v: Dictionary) -> int:
+	if v.has("zaad") and v["zaad"] != null:
+		return int(v["zaad"])
+	v["zaad"] = _ci_zaad(int(State.s["dag"]))
+	return int(v["zaad"])
 
 ## "1 schep" versus "2 scheppen": a wrong plural makes a six-year-old read the
 ## sentence twice (HOTEL.md §9).
@@ -639,10 +667,17 @@ func paint_checkin() -> void:
 		if Games.actief() == BEDDEN_SPEL:
 			checkin_veranderd.emit()
 			return
-		v["stap"] = 3
+		if not _ci_los(v):
+			v["stap"] = 3
+			_bedden_vast(v)
 	var kamers: Array[String] = []
 	if int(v["stap"]) == 3:
 		kamers = State.kamers_met_plek()
+		# a beds question that was missed stays the question: only its room
+		# is offered, never an emptier one instead (R2)
+		var vast := str(v.get("vast", ""))
+		if not vast.is_empty() and kamers.has(vast):
+			kamers = [vast]
 		if kamers.is_empty():
 			# the floor filled up while he waited (furniture): another day
 			_checkin_vol.call_deferred()
@@ -673,6 +708,7 @@ func paint_checkin() -> void:
 			"goed": int(v["nieuw"]), "liever": [int(v["samen"]), int(v["extra"]),
 				int(v["samen"]) + int(v["extra"]) + 1],
 			"max": 2, "hoog": _ci_hoog(), "icoon": "🥄", "volg": volg, "dier": gid,
+			"zaad": _ci_zaad_van(v),
 			"regel": "Elke dag eten de gasten %s" % scheppen(int(v["samen"])),
 			"regel2": "%s wil er %d bij. Hoeveel samen?" % [g["naam"], int(v["extra"])],
 			"on_ok": op_ok})
@@ -684,10 +720,26 @@ func paint_checkin() -> void:
 		_ci_kaart = Ui.somkaart(plek, "%d × %d" % [int(v["dagen"]), int(v["nieuw"])], {
 			"id": "ci_som", "door": CHECKIN, "kamer": "receptie", "pad": false,
 			"hoog": _ci_hoog(), "icoon": "🥄", "volg": volg, "dier": gid,
+			# three choices, and still a maths answer (R1/R4)
+			"reken": true,
 			"regel": "Voer voor %s: elke dag %s" % [dagen(int(v["dagen"])), scheppen(int(v["nieuw"]))],
 			"regel2": "📦 In de kast: %s. Genoeg?" % scheppen(int(v["voorraad"])),
 			"keuze_titel": "is er genoeg voer?",
 			"keuzes": _checkin_keuzes()})
+	elif int(v["stap"]) >= 4:
+		# Step 4 without the beds game (it could not start): the beds game's
+		# own sum, asked at the desk — the room's sleepers plus him.  No bed
+		# and no star before the right answer (R2).
+		var kamer := str(v["kamer"])
+		var slapers := int(v.get("slapers", 0))
+		_ci_kaart = Ui.somkaart(plek, "%d + 1 =" % slapers, {
+			"id": "ci_som", "door": CHECKIN, "kamer": "receptie",
+			"goed": slapers + 1, "liever": [slapers, slapers + 2], "min": 0,
+			"max_getal": slapers + 5, "zaad": _ci_zaad_van(v),
+			"hoog": _ci_hoog(), "icoon": "🛏", "volg": volg, "dier": gid,
+			"regel": _bed_regel(kamer, slapers),
+			"regel2": BED_ERBIJ % g["naam"], "keuze_titel": "hoeveel bedden?",
+			"on_ok": func(n, _k) -> void: antwoord_bed(-1 if n == null else int(n))})
 	else:
 		# Step 3 — a room, not a bed (owner, 2026-09-24): only the rooms where one
 		# more animal still fits, a free bed or floor for a new one.
@@ -802,9 +854,12 @@ func _naar_balie(gast_id: String) -> void:
 
 ## A room was chosen for the guest at the desk: step 4, and the beds game
 ## "Verdeel bedden over de kamers" (`games/bedden`, games-a.md §3) starts at the
-## desk for this guest and this room.  A registry without that game (a narrowed
-## test) does not leave the check-in stuck: he gets the room's free bed, or a
-## new one, at once.
+## desk for this guest and this room.  When that game cannot start (a narrowed
+## registry, a scene that will not build) the check-in does not get stuck and
+## does not give anything away either: the beds game's own sum comes at the
+## desk (`_bed_zonder_spel`), and only its right answer gives the bed and the
+## star (owner, 2026-10-08: "het moet niet mogelijk zijn om rekenen over te
+## slaan").
 func kies_kamer(kamer_id: String) -> bool:
 	var v = State.s["checkin"]
 	if v == null or int(v["stap"]) != 3:
@@ -812,8 +867,15 @@ func kies_kamer(kamer_id: String) -> bool:
 	if State.plek_in(kamer_id) <= 0:
 		paint_checkin()               # out of date: offer what fits now
 		return false
+	# after a miss in the beds game the open question is that room's question:
+	# an emptier room may not take its place (R2)
+	var vast := str(v.get("vast", ""))
+	if not vast.is_empty() and vast != kamer_id and State.plek_in(vast) > 0:
+		paint_checkin()
+		return false
 	v["kamer"] = kamer_id
 	v["stap"] = 4
+	v["los"] = 0
 	if _ci_kaart != null:
 		_ci_kaart.weg()
 		_ci_kaart = null
@@ -824,7 +886,44 @@ func kies_kamer(kamer_id: String) -> bool:
 		return true
 	return _bed_zonder_spel(kamer_id)
 
+## The beds sum without the beds game: "In kamer 1 slapen al 2 dieren" /
+## "Boef komt erbij. Hoeveel bedden?", `2 + 1 =`, at the desk.  The question is
+## stored in the check-in (`los`, `slapers`, `fouten4`), so a reload, a new day
+## or a change of N brings the same one back; a miss is only the sad guest.
 func _bed_zonder_spel(kamer_id: String) -> bool:
+	var v = State.s["checkin"]
+	if v == null:
+		return false
+	v["los"] = 1
+	if str(v.get("los_kamer", "")) != kamer_id:
+		v["los_kamer"] = kamer_id
+		v["slapers"] = State.slapers_in(kamer_id).size()
+		v["fouten4"] = 0
+		v["t4"] = Time.get_ticks_msec()
+	State.bewaar()
+	paint_checkin()
+	return true
+
+## The answer to the beds sum of `_bed_zonder_spel`.  Right: the room's free bed
+## or a new one, and `wijs_bed` ends the check-in (bed, star, board).  Wrong:
+## nothing but the disappointed guest — the same question stays.
+func antwoord_bed(n: int) -> void:
+	var v = State.s["checkin"]
+	if v == null or not _ci_los(v) or n < 0:
+		return
+	var kamer := str(v["kamer"])
+	if n != int(v.get("slapers", 0)) + 1:
+		v["fouten4"] = int(v.get("fouten4", 0)) + 1
+		_teleurgesteld(str(v["gastId"]))
+		State.bewaar()
+		return
+	var t4 := int(v.get("t4", v.get("t0", Time.get_ticks_msec())))
+	State.tel(int(v.get("fouten4", 0)) == 0, Time.get_ticks_msec() - t4)
+	Snd.ja()
+	_geef_bed(kamer)
+
+## The bed of the right answer: the room's free one, or a new one on its floor.
+func _geef_bed(kamer_id: String) -> bool:
 	var slot := str(State.bed_vrij(kamer_id).get("slot", ""))
 	if slot.is_empty():
 		var p := State.bed_plek(kamer_id)
@@ -835,16 +934,48 @@ func _bed_zonder_spel(kamer_id: String) -> bool:
 		return false
 	return true
 
+## Is step 4 the check-in's own beds sum (the beds game could not start)?
+func _ci_los(v) -> bool:
+	if v == null or int(v.get("stap", 0)) < 4 or int(v.get("los", 0)) != 1:
+		return false
+	return not str(v.get("kamer", "")).is_empty()
+
+## The beds game left a missed question for this guest in its drawer: that
+## room stays the check-in's room until the question is answered (R2).
+func _bedden_vast(v) -> void:
+	if v == null:
+		return
+	var d := State.spel_data(BEDDEN_SPEL)
+	if str(d.get("gast", "")) != str(v["gastId"]) or int(d.get("missers", 0)) <= 0:
+		return
+	if not str(d.get("kamer", "")).is_empty():
+		v["vast"] = str(d["kamer"])
+
+## The first line of the beds sum, as the beds game words it.
+func _bed_regel(kamer_id: String, slapers: int) -> String:
+	var r = Rooms.get_kamer(kamer_id)
+	var naam: String = str(r.naam) if r != null else kamer_id
+	var waar := UiTekst.in_kamer(kamer_id, naam)
+	waar = waar.substr(0, 1).to_upper() + waar.substr(1)
+	if slapers <= 0:
+		return BED_NIEMAND % waar
+	if slapers == 1:
+		return BED_EEN % waar
+	return BED_VEEL % [waar, slapers]
+
 ## The beds game stopped before the room had its beds (`⬅ Terug`, another game
 ## started): the check-in is not over.  The guest comes back to his place at the
 ## desk and waits there, and the room question is up again — never a guest lost,
-## never a check-in that cannot go on (owner, 2026-09-24).
+## never a check-in that cannot go on (owner, 2026-09-24).  A question the beds
+## game saw missed keeps its room (`vast`, R2).
 func checkin_terug() -> void:
 	var v = State.s["checkin"]
 	if v == null:
 		return
 	if int(v["stap"]) >= 4:
 		v["stap"] = 3
+		_bedden_vast(v)
+	v["los"] = 0
 	var gid := str(v["gastId"])
 	var d = World.dier(gid)
 	if d != null:
@@ -940,6 +1071,11 @@ func _wolk_weg(id: String) -> void:
 ## A full bowl feeds ALL guests of that room.  A guest waiting for 🛁/🏊/🎁
 ## keeps its own wish: it got that wish because a game exists for it, and the
 ## child should not lose it by filling the bowl first.
+##
+## The food in the bowl is what the voerkar's sums put there, so eating it is
+## the world's business — but the tap itself is no maths, so it pays no star
+## and ticks no card (owner, 2026-10-08: "het moet niet mogelijk zijn om
+## rekenen over te slaan"): the voerkar game gave its own star for the sums.
 func tik_bak(kamer_id: String, slot_id: String) -> void:
 	var niveau := _bak_stand(kamer_id, slot_id)
 	var gasten: Array = []
@@ -958,8 +1094,6 @@ func tik_bak(kamer_id: String, slot_id: String) -> void:
 			ids.append(str(g["id"]))
 		World.feed(ids)
 		Ui.toast("Smakelijk eten! 😋", "happy")
-		Econ.sterren(1, "voeren")
-		taak_af("voer")
 		State.bewaar()
 		render()
 		return
@@ -968,16 +1102,135 @@ func tik_bak(kamer_id: String, slot_id: String) -> void:
 		return
 	Ui.toast("🍪 Vul eerst de voerkar", "kind")
 
-## The play basket: the animal runs to it and dances.
+## The play basket.  Since 2026-10-08 (owner: "het moet niet mogelijk zijn om
+## rekenen over te slaan") it asks a small count first, on the basket: how many
+## balls the animals that want to play take out (`mand_som`).  Only the right
+## answer lets them run to it and play — the 🧶 wish, the star for taking part
+## and the board's card.  A wrong one is the sad animal and the same question,
+## which stays until it is answered, through a night and a reload (R2).
+const MAND := "mand"            ## owner of the basket's card, and its drawer in the save
+const MAND_ELK := "%d dieren pakken elk %d balletjes"   ## "4 dieren pakken elk 10 balletjes" 6 / 32
+const MAND_KEER := "%s pakt 2 keer %d balletjes"       ## "Stampertje pakt 2 keer 10 balletjes" 6 / 35
+const MAND_VRAAG := "Hoeveel balletjes samen?"         ## 3 / 24
+const MAND_TITEL := "hoeveel balletjes?"
+
 func tik_mand(kamer_id: String) -> void:
-	var mp := decor_plek(kamer_id, "mand")
+	var hier := _mand_spelers(kamer_id)
+	if hier.is_empty():
+		Ui.toast("🧶 Straks samen spelen", "kind")
+		return
+	var vraag := mand_vraag(kamer_id)
+	# a question that was missed stays the question, whoever wants to play now;
+	# one that was not missed yet follows the room as it is
+	if vraag.is_empty() or int(vraag.get("fouten", 0)) == 0:
+		var g0: Dictionary = hier[0]
+		vraag = mand_som(hier.size(), State.band(), int(State.s["dag"]), str(g0.get("naam", "")))
+		vraag["fouten"] = 0
+		vraag["t0"] = Time.get_ticks_msec()
+		vraag["dier"] = str(g0["id"])
+		vraag["zaad"] = (hash("mand_som") % 100003) + int(State.s["dag"]) * 17
+		State.spel_data(MAND)[kamer_id] = vraag
+		State.bewaar()
+	_mand_kaart(kamer_id)
+
+## The animals of this room that want to play and have not played yet.
+func _mand_spelers(kamer_id: String) -> Array:
 	var hier: Array = []
 	for g in State.s["gasten"]:
 		if str(g.get("kamer", "")) == kamer_id and str(g.get("behoefte", "")) == "spelen" \
 				and not g.get("blij", false):
 			hier.append(g)
+	return hier
+
+## The open basket question of this room, or {}.
+func mand_vraag(kamer_id: String) -> Dictionary:
+	var d := State.spel_data(MAND)
+	var v = d.get(kamer_id, null)
+	return v if v is Dictionary else {}
+
+## The basket's count for `w` animals (1..4) in group `band` on day `dag` — one
+## scale rule, T = k·m with m the players (two grabs for a lone animal, so a
+## lone animal is still a sum):
+##   groep 3  2 + 2 + 2 (each takes 2; to 8), alone: 3 + 3 (doubling to 10)
+##   groep 4  m × k, k in the tables of 2, 5 and 10
+##   groep 5  m × k, k in the tables of 3, 4, 6, 7, 8 and 9
+## Keys: som, goed, m, k, regel, regel2, liever.
+func mand_som(w: int, band: int, dag: int, naam: String) -> Dictionary:
+	var n := clampi(w, 1, 8)
+	var m := maxi(2, n)
+	var k: int
+	var som: String
+	if band <= 3:
+		k = 2 if n >= 2 else [2, 3, 4, 5][posmod(dag, 4)]
+		var delen: PackedStringArray = []
+		for i in m:
+			delen.append(str(k))
+		som = " + ".join(delen) + " ="
+	else:
+		var tafels: Array = [2, 5, 10] if band == 4 else [3, 4, 6, 7, 8, 9]
+		k = int(tafels[posmod(dag + n, tafels.size())])
+		som = "%d × %d =" % [m, k]
+	var goed := m * k
+	var liever: Array = []
+	for x in [goed + k, goed - k, m + k]:
+		if int(x) > 0 and int(x) != goed and not liever.has(int(x)):
+			liever.append(int(x))
+	return {"som": som, "goed": goed, "m": m, "k": k, "w": n,
+		"regel": MAND_ELK % [n, k] if n >= 2 else MAND_KEER % [naam, k],
+		"regel2": MAND_VRAAG, "liever": liever}
+
+## The question on the basket, from the drawer — the same card every time.
+func _mand_kaart(kamer_id: String) -> void:
+	var vraag := mand_vraag(kamer_id)
+	if vraag.is_empty() or not scherm_klaar():
+		return
+	var mp := decor_plek(kamer_id, "mand")
+	if mp.is_empty():
+		return
+	# a save hands numbers back as floats: the strip wants whole numbers
+	var liever: Array = []
+	for x in vraag.get("liever", []):
+		liever.append(int(x))
+	Ui.somkaart(mp, str(vraag["som"]), {
+		"id": "mand_som", "door": MAND, "kamer": kamer_id,
+		"goed": int(vraag["goed"]), "liever": liever, "min": 1,
+		"max": 2, "zaad": int(vraag.get("zaad", 0)), "hoog": 26, "icoon": "🧶",
+		"dier": str(vraag.get("dier", "")),
+		"regel": str(vraag["regel"]), "regel2": str(vraag["regel2"]),
+		"keuze_titel": MAND_TITEL,
+		"on_ok": func(n, _k) -> void: mand_antwoord(kamer_id, -1 if n == null else int(n))})
+	World.vuil()
+
+## The answer on the basket's strip.  Right: they play (`_mand_speel`).  Wrong:
+## the strip already made the animal sad (`Ui.misser`); the question stays.
+func mand_antwoord(kamer_id: String, n: int) -> void:
+	var vraag := mand_vraag(kamer_id)
+	if vraag.is_empty() or n < 0:
+		return
+	if n != int(vraag["goed"]):
+		vraag["fouten"] = int(vraag.get("fouten", 0)) + 1
+		Snd.zacht()
+		State.bewaar()
+		return
+	var t0 := int(vraag.get("t0", Time.get_ticks_msec()))
+	State.tel(int(vraag.get("fouten", 0)) == 0, maxi(0, Time.get_ticks_msec() - t0))
+	State.spel_data(MAND).erase(kamer_id)
+	# the card AND its strip (a card's own `weg`), and its miss bubble
+	var kaart = Ui.kaart_van("mand_som")
+	if kaart != null:
+		kaart.weg()
+	Hits.wis_eigenaar(MAND)
+	Snd.ja()
+	_mand_speel(kamer_id)
+
+## The play itself, after the right count: the animals run to the basket and
+## dance; the wish, one star for taking part and the board's card.
+func _mand_speel(kamer_id: String) -> void:
+	var mp := decor_plek(kamer_id, "mand")
+	var hier := _mand_spelers(kamer_id)
 	if hier.is_empty():
-		Ui.toast("🧶 Straks samen spelen", "kind")
+		State.bewaar()
+		render()
 		return
 	for i in hier.size():
 		var g: Dictionary = hier[i]
@@ -1230,11 +1483,19 @@ func toon_avond() -> void:
 
 ## Start the bill for one guest.  The guest walks to the desk itself: its
 ## family is waiting there.
+##
+## A bill that is already open is put back on the desk as it stands — never
+## started over: a second tap on the family, the lamp again or a new evening
+## would otherwise wipe its misses and its counted coins and hand out the same
+## question as if it were new (R2).
 func reken_af(id: String) -> void:
 	var g := State.gast_van(id)
 	if g.is_empty():
 		return
 	Hits.wis_eigenaar(AVOND)
+	if Econ.rekening_bezig():
+		Econ.herstel_rekening()
+		return
 	if str(g.get("waar", "")) != "receptie":
 		g["waar"] = "receptie"
 		var w := _balieplek()

@@ -1274,12 +1274,13 @@ func _keur_deurbordjes(wat: String, kader: Vector2) -> Dictionary:
 					% [wat, id, str(hart), str(deur)])
 	return tel
 
-## The corridor during the voerkar, the trolley held: pushed through the
-## kitchen door it stands in the middle of the corridor, right in front of the
-## Kamer 1 door on a tablet — the owner's picture.  The door signs keep their
-## places (on the door, or over the lintel where the trolley stands in the
-## opening), and the trolley's button and its bubble give way to them: every
-## invariant of `_keur` holds with all of them on screen.
+## The corridor during the voerkar ride (wave 2, owner 2026-10-08: "rekenen
+## moet minstens 50% van de interactie zijn").  The trolley is no button any
+## more and borrows no door: after the right answer to its load sum it rolls
+## through the kitchen door by itself and stands in the corridor.  No door sign
+## there is the voerkar's, and every sign that IS on the glass keeps every
+## invariant of `_keur_deurbordjes`.  (Until wave 2 the child tapped the
+## corridor door with the trolley held, and three borrowed signs stood there.)
 func test_deurbordjes_in_de_gang_met_de_voerkar() -> void:
 	var bewaard: Dictionary = State.s.duplicate(true)
 	var kar_voor: Dictionary = World.ding("kar")
@@ -1308,51 +1309,27 @@ func test_deurbordjes_in_de_gang_met_de_voerkar() -> void:
 		for _f in 3:
 			await boom.process_frame
 		gelijk(Games.actief(), "voerkar", "%s: de voerkar draait" % str(maat))
-		# a tap on the corridor door takes the trolley along, held
-		var deur := Hits.spot("deur_keuken_gang")
-		waar(deur != null, "%s: de gangdeur staat er" % str(maat))
-		if deur != null:
-			(deur.knoop as BaseButton).emit_signal("pressed")
+		# the right answer to the load sum: the trolley rolls into the corridor
+		var spel = Games._knoop
+		var strook := Hits.spot("vk_lading_keuzes")
+		waar(spel != null and strook != null, "%s: de som van de kar staat er" % str(maat))
+		if spel != null and strook != null:
+			var knop = strook.knoop.get_node_or_null("Rij/Kn%d" % int(spel.K["lading_goed"]))
+			waar(knop != null, "%s: het goede getal staat op de strook" % str(maat))
+			if knop != null:
+				(knop as BaseButton).emit_signal("pressed")
 		for _f in 3:
 			await boom.process_frame
 		gelijk(World.kamer_nu(), "gang", "%s: de camera staat in de gang" % str(maat))
 		gelijk(str(World.ding("kar").get("kamer", "")), "gang", "%s: de kar ook" % str(maat))
-		var kar := Hits.spot("karhot")
-		waar(kar != null and kar.knoop.visible, "%s: de kar is een knop" % str(maat))
-		if kar != null:
-			# held, the cart says the next step itself: one bubble (owner,
-			# 2026-09-24: "Verwerk deze twee teksten in een bubbeltje")
-			gelijk(str((kar.knoop as Button).text), "🛒 Je duwt de kar\n👉 Tik op een deur",
-				"%s: en je hebt hem vast" % str(maat))
+		waar(Hits.spot("karhot") == null, "%s: de kar is geen knop" % str(maat))
+		for id in Hits.lijst():
+			var s := Hits.spot(id)
+			waar(s == null or s.geleend_door != "voerkar", "%s: %s is niet van de voerkar" % [str(maat), id])
 		var dbg := Hits.debug()
 		waar(not dbg.has("vk_zeg"), "%s: geen los wolkje naast de kar" % str(maat))
-		var tel := _keur_deurbordjes("%s gang, kar vast" % str(maat), h["kader"])
-		# three: kamer 1, kamer 2 and the kitchen — the stairs' sign steps aside
-		# while the game runs, the trolley does not take the stairs (2026-09-24)
-		gelijk(int(tel["deur"]) + int(tel["latei"]), 3, "%s: drie deurbordjes in de gang" % str(maat))
-		if maat == Vector2i(1024, 768) and dbg.has("karhot") and dbg.has("deur_gang_kamer1"):
-			# the owner's picture: the trolley stands in the Kamer 1 opening, so
-			# that sign goes over the lintel — and so do ALL signs of the room,
-			# at the same height ("geen consistente plaats", 2026-09-24)
-			var kar_vlak: Rect2 = dbg["karhot"]["vlak"]
-			var k1: Rect2 = dbg["deur_gang_kamer1"]["vlak"]
-			waar(kar_vlak.intersects(k1), "de kar staat voor de deur van kamer 1")
-			for id in ["deur_gang_kamer1", "deur_gang_kamer2", "deur_gang_keuken"]:
-				if dbg.has(id):
-					gelijk(str(dbg[id]["deurplek"]), "latei", "%s hangt boven de latei" % id)
-		# one height per room: never on the door here and over the lintel there.
-		# Not on the phone: its corridor's four doors are closer together than
-		# two signs over their lintels are wide, so only a mix fits there.
-		var hoogtes := {}
-		for id in dbg.keys():
-			if str(id).begins_with("deur_gang_") and dbg[id].has("deurplek"):
-				var r: Rect2 = dbg[id]["rect"]
-				var v: Rect2 = dbg[id]["vlak"]
-				hoogtes["%s|%d" % [str(dbg[id]["deurplek"]), roundi((r.position.y - v.position.y) / 52.0)]] = true
-		waar(maat.x < 600 or hoogtes.size() <= 1 or not hoogtes.keys().any(func(k): return str(k).begins_with("deur|")),
-			"%s: de bordjes van de gang hangen niet deels op en deels boven hun deur (%s)"
-				% [str(maat), str(hoogtes.keys())])
-		_keur(Vector2(h["kader"]), "%s gang, kar vast" % str(maat))
+		var _tel := _keur_deurbordjes("%s gang, de kar rijdt" % str(maat), h["kader"])
+		_keur(Vector2(h["kader"]), "%s gang, de kar rijdt" % str(maat))
 		Games.stop()
 		for _f in 2:
 			await boom.process_frame

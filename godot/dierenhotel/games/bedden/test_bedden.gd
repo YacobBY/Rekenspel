@@ -695,3 +695,80 @@ func test_bron_draagt_de_letterlijke_teksten() -> void:
 	for oud in ["Bedden op rij", "Zet de bedden op rij", "Wolkje", "tel mee", "Hoeveel bedden heb je nodig?",
 			"welterusten"]:
 		waar(not bron.contains('"%s"' % oud), "de oude tekst %s is weg" % oud)
+
+# ------------------------------------------- golf 2: rekenen eerst (R1, R2)
+
+var _teller := {"reken": 0, "spel": 0}
+
+## Every tap the test performs, labelled the way R1 counts it: an answer on a
+## maths strip is "reken", everything else "spel".  The room choice of the
+## check-in is the tap that opens this game: it is not counted (R1).
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller.get(soort, 0)) + 1
+
+## R1 (wave 2, owner: "rekenen moet minstens 50% van de interactie zijn"): from
+## the room choice that opens it to the guest in bed, the beds game needs one
+## tap — the number on the strip (a miss is a maths tap too) — for an empty
+## hotel and a nearly full one, in every group.
+func test_rekenaandeel() -> void:
+	for geval in [[0, 0, "kamer1", true], [1, 0, "kamer1", false], [2, 1, "kamer2", false],
+			[3, 3, "kamer2", true]]:
+		var in1: int = geval[0]
+		var in2: int = geval[1]
+		var kamer: String = geval[2]
+		var mis: bool = geval[3]
+		_teller = {"reken": 0, "spel": 0}
+		_op()
+		_hotel(in1, in2, true)
+		var wat := "%d + %d gasten, groep %d, %s" % [in1, in2, State.band(), kamer]
+		var gid := _gid()
+		waar(await _kies_kamer(kamer), "%s: de kamer gekozen (de ingangstik)" % wat)
+		var goed := State.slapers_in(kamer).size() + 1
+		if mis:
+			_tel("reken")
+			waar(_druk("bd_som_keuzes", "Kn%d" % (goed + 1)), "%s: te veel" % wat)
+			waar(not World.slaapt(gid), "%s: een misser geeft geen bed" % wat)
+			waar(await _wacht(func() -> bool: return Hits.spot("bd_som_keuzes") != null, 4.0),
+				"%s: de vraag komt terug" % wat)
+		_tel("reken")
+		waar(_druk("bd_som_keuzes", "Kn%d" % goed), "%s: goed" % wat)
+		waar(World.slaapt(gid), "%s: hij ligt in zijn bed" % wat)
+		var reken := int(_teller["reken"])
+		var spel := int(_teller["spel"])
+		waar(reken >= spel + 1, "%s: R1 reken %d >= spel %d + 1" % [wat, reken, spel])
+		await _af()
+
+## R2 (wave 2): after a miss, `⬅ Terug` brings the room question back — and
+## choosing an emptier room (an empty one asks `0 + 1`) may not swap the missed
+## sum for an easier one.  The open question comes back unchanged, in its own
+## room, with the same four numbers, until it is answered right.
+func test_een_gemiste_vraag_blijft_bij_een_andere_kamer() -> void:
+	# merged GE (bedden keeps the room of an open question) with GF (the hotel
+	# offers only that room): the emptier room is simply not on offer any more
+	_op()
+	_hotel(2, 0, true)
+	var gid := _gid()
+	waar(await _kies_kamer("kamer1"), "kamer 1 gekozen")
+	var k := _kaart("bd_som")
+	gelijk(k.som_label.text if k != null else "", "2 + 1 =", "de vraag van kamer 1")
+	var keuzes := _knoppen("bd_som_keuzes")
+	waar(_druk("bd_som_keuzes", "Kn2"), "te weinig")
+	gelijk(int(_d().get("missers", 0)), 1, "een misser")
+	Games.stop()                          # ⬅ Terug
+	var v = State.s["checkin"]
+	gelijk(int(v["stap"]) if v != null else 0, 3, "terug bij de kamervraag")
+	Hits.plaats()
+	# the hotel no longer offers the emptier room after a miss (`Hotel._bedden_vast`):
+	# kamer 2 cannot be picked, by a tap or by a direct call; only kamer 1 comes back
+	waar(not _druk("ci_som_keuzes", "Kkamer2"), "de lege kamer 2 staat niet op de strook")
+	waar(not Hotel.kies_kamer("kamer2"), "en kies_kamer weigert kamer 2")
+	waar(await _kies_kamer("kamer1"), "kamer 1 opnieuw gekozen")
+	k = _kaart("bd_som")
+	gelijk(k.som_label.text if k != null else "", "2 + 1 =", "dezelfde vraag, niet 0 + 1")
+	gelijk(str(_knoppen("bd_som_keuzes")), str(keuzes), "met dezelfde vier getallen")
+	gelijk(int(_d().get("missers", 0)), 1, "de misser telt nog")
+	gelijk(str(State.s["checkin"]["kamer"]), "kamer1", "de check-in volgt de open vraag")
+	waar(_druk("bd_som_keuzes", "Kn3"), "goed")
+	waar(World.slaapt(gid), "hij slaapt")
+	gelijk(str(State.gast_van(gid).get("kamer", "")), "kamer1", "in kamer 1, de kamer van zijn vraag")
+	await _af()

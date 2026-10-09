@@ -112,7 +112,19 @@ func start(_c: SpelCtx) -> void:
 	var hervat := not (S.is_empty() or g.is_empty() or int(S["dag"]) != dag
 			or int(S["N"]) != n or int(S["band"]) != band or _stap() == "af")
 	var weg := ""
-	if hervat and not wil.is_empty() and wil != _gast_id():
+	# An open question that had a miss comes back UNCHANGED after any exit —
+	# another day, another hotel size or band, the game bar's animal switch
+	# (wave 2, R2): the sky is seeded on the turn's own band, N, number and
+	# seed (`_beurt_uit`), so it is the same sky.  The picked animal may take
+	# over the telescope; the question stays.
+	if open_vraag(S):
+		hervat = true
+		if not wil.is_empty() and wil != _gast_id():
+			weg = _gast_id()
+			S["gast"] = wil
+		elif g.is_empty():
+			S["gast"] = str((kies[posmod(dag + n, kies.size())] as Dictionary).get("id", ""))
+	elif hervat and not wil.is_empty() and wil != _gast_id():
 		weg = _gast_id()
 		hervat = false
 	if not hervat:
@@ -196,6 +208,12 @@ static func _beurt_uit(st: Dictionary) -> Dictionary:
 	return Beurt.maak(int(st.get("band", 3)), int(st.get("N", 1)), int(st.get("nr", 0)),
 		int(st.get("zaad", Beurt.ZAAD)))
 
+## A saved turn whose sum is still asked and was already answered wrong at
+## least once: it may not be swapped for an easier or a fresh one (R2).
+static func open_vraag(st: Dictionary) -> bool:
+	return not st.is_empty() and str(st.get("stap", "")) == "som" \
+		and int(st.get("missers", 0)) > 0
+
 func _stap() -> String:
 	return str(S.get("stap", ""))
 
@@ -258,6 +276,9 @@ func _toon() -> void:
 		"id": KAART_ID, "kamer": KAMER, "hoog": KAART_HOOG, "icoon": Beurt.ICOON,
 		"regel": str(B["regel"]), "goed": goed, "liever": B["liever"], "min": 1,
 		"max": Beurt.cijfers(goed), "dier": _gast_id(), "titel": "de sterren",
+		# the strip's seed is the turn's own day, not today's (`Ui._getal_keuzes`
+		# takes today): an open question keeps its four numbers across a new day
+		"zaad": (hash(KAART_ID) % 100003) + int(S["dag"]) * 17,
 		"on_ok": _antwoord,
 	})
 	_meld()

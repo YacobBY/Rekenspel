@@ -142,24 +142,45 @@ func _wacht(s: float) -> void:
 	var boom := Engine.get_main_loop() as SceneTree
 	await boom.create_timer(s).timeout
 
-## Choose `aantal` animals and "Klaar", then wait for the money question.
+## `aantal` animals on the photo: the booth is set to take that many
+## (`zet_aantal`), the first walks in by itself, the test picks the others and
+## answers every "what does it cost now?" on the way right — except the last
+## one, which is left open (stap `som`, all of them inside).  The animals on
+## the photo, in order.
 func _kies_er(aantal: int) -> Array[String]:
-	var gekozen: Array[String] = []
-	for i in aantal:
+	var spel := _spel()
+	if spel != null:
+		spel.zet_aantal(aantal)
+	for _i in Beurt.MAX_DIEREN:
+		if (_stand().get("dieren", []) as Array).size() >= aantal:
+			break
 		var vrij := _dieren_op_de_strook()
 		if vrij.is_empty():
 			fout("geen dier meer op de strook")
-			return gekozen
-		gekozen.append(vrij[0])
+			break
 		_druk("Kd_" + vrij[0])
-	if _strook().has("Kklaar"):
-		_druk("Kklaar")
-	await _wacht(Spel.SOM_S + MARGE)
+		await _wacht(Spel.SOM_S + MARGE)
+		var nu := (_stand().get("dieren", []) as Array).size()
+		if nu < aantal:
+			_druk("Kn%d" % (nu * _prijs_nu()))
+			await _wacht(Spel.SOM_S + MARGE)
+	var gekozen: Array[String] = []
+	for id in _stand().get("dieren", []):
+		gekozen.append(str(id))
 	return gekozen
 
+## The open cost of a full photo answered right, then the money: the right
+## handful of coins and notes (`Kg<bedrag>`) — the photo is taken.
+func _betaal_goed(goed: int) -> void:
+	_druk("Kn%d" % goed)
+	await _wacht(Spel.SOM_S + MARGE)
+	gelijk(str(_stand().get("stap", "")), "betaal", "de foto is vol: nu het geld")
+	_druk("Kg%d" % goed)
+
+## A button on the strip that is NOT the right amount (an amount or a handful).
 func _foute_keuze(goed: int) -> String:
 	for k in _strook():
-		if k != "Kn%d" % goed:
+		if k != "Kn%d" % goed and k != "Kg%d" % goed:
 			return k
 	return ""
 
@@ -218,6 +239,20 @@ func test_de_prijs_en_de_som() -> void:
 						{"min": 1, "max": 99, "liever": Beurt.liever(aantal, p)})
 					gelijk(vier.size(), 4, "%s: vier bedragen" % wat)
 					waar(vier.has(goed), "%s: het goede bedrag staat erbij" % wat)
+					# the money: four real handfuls, exactly one of them right
+					var geld := Spel.Geld.betaal_keuzes(goed, band, Beurt.zaad(n, band, dag, aantal) + 7)
+					gelijk(geld.size(), 4, "%s: vier handjes geld" % wat)
+					var raak := 0
+					for st in geld:
+						waar((st as Array).size() <= 4, "%s: hooguit vier stuks geld (%s)" % [wat, str(st)])
+						if Spel.Geld.tel(st) == goed:
+							raak += 1
+					gelijk(raak, 1, "%s: precies één handje is het goede bedrag" % wat)
+				# how many go on the photo: two to four, never more than may go
+				for pool in range(2, 6):
+					var k := Beurt.aantal(n, band, dag, pool)
+					waar(k >= Beurt.MIN_DIEREN and k <= mini(Beurt.MAX_DIEREN, maxi(2, pool)),
+						"%s: %d dieren op de foto bij %d die mogen" % [wat, k, pool])
 		waar(gezien.size() >= 3, "band %d: de prijs verschilt van dag tot dag (%s)" % [band, str(gezien.keys())])
 
 ## Every sentence the child reads fits the card rules (HOTEL.md §9) and every
@@ -226,11 +261,11 @@ func test_elke_zin_past() -> void:
 	if Ui.thema == null or Ui.thema.default_font == null:
 		Ui._bouw_thema(17)
 	for zin in ["%s %s" % [Beurt.ICOON, Beurt.T_KIES], "%s %s" % [Beurt.ICOON_GELD, Beurt.T_SOM],
-			"%s %s" % [Beurt.ICOON_AF, Beurt.T_AF]]:
+			"%s %s" % [Beurt.ICOON_GELD, Beurt.T_BETAAL], "%s %s" % [Beurt.ICOON_AF, Beurt.T_AF]]:
 		waar(Ui.keur_regel(SPEL, zin), "past: %s" % zin)
 	var alles: Array = [Beurt.ICOON, Beurt.ICOON_GELD, Beurt.ICOON_AF, Beurt.ICOON_WEG, Beurt.T_KNOP,
-		Beurt.T_KIES, Beurt.T_KLAAR, Beurt.T_SOM, Beurt.T_AF, Beurt.T_WEG, Beurt.T_LEEG, Beurt.T_BLIJ,
-		"😍", "€0123456789?"]
+		Beurt.T_KIES, Beurt.T_SOM, Beurt.T_BETAAL, Beurt.T_AF, Beurt.T_WEG, Beurt.T_LEEG, Beurt.T_BLIJ,
+		"😍", "€0123456789?+"]
 	for kind in Hotel.DIER_ICOON:
 		alles.append(str(Hotel.DIER_ICOON[kind]))
 	for band in [3, 4, 5]:
@@ -240,9 +275,10 @@ func test_elke_zin_past() -> void:
 
 # ------------------------------------------------------------ een hele beurt
 
-## A whole turn per band through the real strips: choose animals (at least
-## two: "Klaar" only comes with the second), they walk to the booth, the money
-## question, the right amount — the photo and one star.
+## A whole turn per band through the real strips: the first animal goes by
+## itself, the child chooses the others — and after every one "what does the
+## photo cost now?" — they walk into the booth, and when it is full the money:
+## the right handful of coins — the photo and one star.
 func test_een_beurt_per_band() -> void:
 	for geval in [[2, 3, 2], [4, 4, 3], [8, 5, 4]]:
 		var n: int = geval[0]
@@ -252,56 +288,63 @@ func test_een_beurt_per_band() -> void:
 		_wereld(n, band)
 		var sterren := int(State.s["sterren"])
 		waar(Games.start(SPEL), "band %d: het spel start" % band)
+		_spel().zet_aantal(aantal)
+		gelijk(int(_stand().get("aantal", 0)), aantal, "band %d: %d dieren op deze foto" % [band, aantal])
 		var prijs := Beurt.prijs(n, band, 2)
 		gelijk(str(_stand().get("stap", "")), "kies", "band %d: eerst kiezen wie er op de foto gaat" % band)
 		gelijk(_kaart_tekst("Kolom/Regel"), "📸 " + Beurt.T_KIES, "band %d: de vraag" % band)
-		gelijk(_dieren_op_de_strook().size(), mini(n, Beurt.MAX_DIEREN), "band %d: de dieren op de strook" % band)
-		waar(not _strook().has("Kklaar"), "band %d: nog geen Klaar: er moeten er minstens twee op" % band)
-		# the screen: two empty frames, each with the price per animal under it
+		var eerste := str((_stand().get("dieren", []) as Array)[0])
+		waar(not _dieren_op_de_strook().has(eerste), "band %d: het eerste dier gaat vanzelf" % band)
+		gelijk(_dieren_op_de_strook().size(), mini(n, Beurt.MAX_DIEREN) - 1, "band %d: de anderen op de strook" % band)
+		waar(not _strook().has("Kklaar"), "band %d: geen Klaar: het hokje is vol als het vol is" % band)
+		# the screen: two frames, each with the price per animal under it
 		var sch := _scherm()
 		waar(sch != null, "band %d: het scherm van het hokje staat groot in beeld" % band)
 		if sch != null:
-			gelijk(sch.vakken, 2, "band %d: twee lege vakjes" % band)
-			gelijk(sch.dieren.size(), 0, "band %d: nog niemand" % band)
+			gelijk(sch.vakken, 2, "band %d: twee vakjes" % band)
 			gelijk(sch.prijs, prijs, "band %d: de prijs per dier staat eronder" % band)
-		var eerste := _dieren_op_de_strook()[0]
-		_druk("Kd_" + eerste)
-		waar(not _dieren_op_de_strook().has(eerste), "band %d: wie gekozen is, gaat van de strook" % band)
-		waar(not _strook().has("Kklaar"), "band %d: met één dier nog geen Klaar" % band)
-		var d = World.dier(eerste)
-		waar(d != null and d.kamer == KAMER, "band %d: het dier loopt naar het hokje" % band)
 		var gekozen: Array[String] = [eerste]
 		for i in aantal - 1:
 			var vrij := _dieren_op_de_strook()
 			if vrij.is_empty():
+				fout("band %d: geen dier meer op de strook" % band)
 				break
 			gekozen.append(vrij[0])
 			_druk("Kd_" + vrij[0])
-		if aantal < mini(n, Beurt.MAX_DIEREN):
-			waar(_strook().has("Kklaar"), "band %d: vanaf twee dieren mag het: Klaar" % band)
-			_druk("Kklaar")
-		# on the screen only once they step into the booth
-		sch = _scherm()
-		if sch != null:
-			gelijk(sch.dieren.size(), 0, "band %d: nog niemand in het hokje" % band)
-		gelijk(str(_stand().get("dieren", [])), str(gekozen), "band %d: de keuze is bewaard" % band)
-		await _wacht(Spel.SOM_S + MARGE)
-		gelijk(str(_stand().get("stap", "")), "som", "band %d: nu het geld" % band)
-		sch = _scherm()
-		if sch != null:
-			gelijk(sch.dieren.size(), aantal, "band %d: %d dieren op het scherm" % [band, aantal])
-			gelijk(sch.vakken, aantal, "band %d: een vakje per dier" % band)
-		for i in gekozen.size():
-			var dier = World.dier(gekozen[i])
-			var plek: Vector2 = Spel.PLEKKEN[i]
-			waar(dier != null and dier.kamer == KAMER and Vector2(dier.x, dier.z).distance_to(plek) <= 3.0,
-				"band %d: %s staat bij het hokje" % [band, gekozen[i]])
-			waar(World.verstopt(gekozen[i]), "band %d: %s zit in het hokje" % [band, gekozen[i]])
-		gelijk(_kaart_tekst("Kolom/Regel"), "💶 " + Beurt.T_SOM, "band %d: hoeveel geld erin moet" % band)
-		gelijk(_kaart_tekst("Kolom/Rij/Som"), Beurt.som(aantal, prijs, band), "band %d: de som" % band)
+			waar(not _dieren_op_de_strook().has(vrij[0]), "band %d: wie gekozen is, gaat van de strook" % band)
+			var d = World.dier(vrij[0])
+			waar(d != null and d.kamer == KAMER, "band %d: het dier loopt naar het hokje" % band)
+			gelijk(str(_stand().get("dieren", [])), str(gekozen), "band %d: de keuze is bewaard" % band)
+			gelijk(str(_stand().get("stap", "")), "som", "band %d: na elk dier een som" % band)
+			await _wacht(Spel.SOM_S + MARGE)
+			# everybody inside, then: what does the photo cost now?
+			for j in gekozen.size():
+				var dier = World.dier(gekozen[j])
+				var plek: Vector2 = Spel.PLEKKEN[j]
+				waar(dier != null and dier.kamer == KAMER and Vector2(dier.x, dier.z).distance_to(plek) <= 3.0,
+					"band %d: %s staat bij het hokje" % [band, gekozen[j]])
+				waar(World.verstopt(gekozen[j]), "band %d: %s zit in het hokje" % [band, gekozen[j]])
+			sch = _scherm()
+			if sch != null:
+				gelijk(sch.dieren.size(), gekozen.size(), "band %d: %d dieren op het scherm" % [band, gekozen.size()])
+				gelijk(sch.vakken, gekozen.size(), "band %d: een vakje per dier" % band)
+			gelijk(_kaart_tekst("Kolom/Regel"), "💶 " + Beurt.T_SOM, "band %d: wat kost de foto nu" % band)
+			gelijk(_kaart_tekst("Kolom/Rij/Som"), Beurt.som(gekozen.size(), prijs, band), "band %d: de som" % band)
+			var nu := gekozen.size() * prijs
+			gelijk(_strook().size(), 4, "band %d: vier bedragen" % band)
+			waar(_strook().has("Kn%d" % nu), "band %d: het goede bedrag staat erbij (%s)" % [band, str(_strook())])
+			_druk("Kn%d" % nu)
+			await _wacht(Spel.SOM_S + MARGE)
+			if gekozen.size() < aantal:
+				gelijk(str(_stand().get("stap", "")), "kies", "band %d: er kan er nog één bij" % band)
+		# full: the money, four handfuls of coins and notes
 		var goed := aantal * prijs
-		gelijk(_strook().size(), 4, "band %d: vier bedragen" % band)
-		waar(_strook().has("Kn%d" % goed), "band %d: het goede bedrag staat erbij (%s)" % [band, str(_strook())])
+		gelijk(str(_stand().get("stap", "")), "betaal", "band %d: het hokje is vol, nu het geld" % band)
+		gelijk(_kaart_tekst("Kolom/Regel"), "💶 " + Beurt.T_BETAAL, "band %d: welk geld erin gaat" % band)
+		gelijk(_kaart_tekst("Kolom/Rij/Som"), Beurt.euro(goed), "band %d: het bedrag" % band)
+		gelijk(_strook().size(), 4, "band %d: vier handjes geld" % band)
+		waar(_strook().has("Kg%d" % goed), "band %d: het goede geld staat erbij (%s)" % [band, str(_strook())])
+		gelijk(int(State.s["sterren"]), sterren, "band %d: nog geen ster voor het betalen" % band)
 		# the shutter comes after the countdown (3 × TEL_S), so listen to the
 		# band itself until then
 		var gehoord: Array[String] = []
@@ -310,7 +353,7 @@ func test_een_beurt_per_band() -> void:
 		Snd._wakker = true
 		Snd._uit = false
 		Snd.gespeeld.connect(hoor)
-		_druk("Kn%d" % goed)
+		_druk("Kg%d" % goed)
 		gelijk(str(_stand().get("stap", "")), "af", "band %d: betaald" % band)
 		gelijk(int(State.s["sterren"]), sterren + 1, "band %d: één ster voor het meedoen" % band)
 		await _wacht(3.0 * Spel.TEL_S + MARGE)
@@ -325,21 +368,36 @@ func test_een_beurt_per_band() -> void:
 		gelijk(int(_stand().get("missers", -1)), 0, "band %d: geen missers" % band)
 		_af()
 
-## Four animals: the strip is empty then, so the money question comes at once —
-## no "Klaar" needed; and "Klaar" never works with one animal.
+## Never one animal, never more than the booth takes: the first goes by
+## itself, a pick is always followed by its sum (a second pick before it is
+## answered does nothing), and a full booth goes to the money.
 func test_vier_dieren_en_nooit_een() -> void:
 	_op()
 	_wereld(6, 0)
 	waar(Games.start(SPEL), "het spel start")
 	var spel := _spel()
-	var eerste := _dieren_op_de_strook()[0]
-	_druk("Kd_" + eerste)
-	spel.klaar()
-	gelijk(str(_stand().get("stap", "")), "kies", "met één dier geen foto")
-	for i in 3:
+	spel.zet_aantal(4)
+	gelijk((_stand().get("dieren", []) as Array).size(), 1, "het eerste dier gaat vanzelf")
+	var vrij := _dieren_op_de_strook()
+	gelijk(vrij.size(), 3, "drie anderen op de strook")
+	_druk("Kd_" + vrij[0])
+	gelijk(str(_stand().get("stap", "")), "som", "na het dier eerst de som")
+	spel.kies_dier(vrij[1])
+	gelijk((_stand().get("dieren", []) as Array).size(), 2, "zonder antwoord komt er niemand bij")
+	await _wacht(Spel.SOM_S + MARGE)
+	var prijs := _prijs_nu()
+	for i in 2:
+		_druk("Kn%d" % ((_stand()["dieren"] as Array).size() * prijs))
+		await _wacht(Spel.SOM_S + MARGE)
+		gelijk(str(_stand().get("stap", "")), "kies", "er kan er nog één bij")
 		_druk("Kd_" + _dieren_op_de_strook()[0])
-	gelijk(str(_stand().get("stap", "")), "som", "vier dieren: meteen naar het geld")
+		await _wacht(Spel.SOM_S + MARGE)
 	gelijk((_stand().get("dieren", []) as Array).size(), Beurt.MAX_DIEREN, "vier op de foto")
+	_druk("Kn%d" % (Beurt.MAX_DIEREN * prijs))
+	await _wacht(Spel.SOM_S + MARGE)
+	gelijk(str(_stand().get("stap", "")), "betaal", "vier dieren: het hokje is vol, nu het geld")
+	spel.kies_dier(vrij[2])
+	gelijk((_stand().get("dieren", []) as Array).size(), Beurt.MAX_DIEREN, "er past er niet nog één in")
 	_af()
 
 ## A wrong amount sends them out of the booth, as in every shop of the street:
@@ -406,38 +464,43 @@ func test_verkeerd_geld_stuurt_ze_weg() -> void:
 		var d = World.dier(gekozen[i])
 		waar(d != null and Vector2(d.x, d.z).distance_to(Spel.PLEKKEN[i]) <= 3.0, "%s staat weer bij het hokje" % gekozen[i])
 		waar(World.verstopt(gekozen[i]), "%s zit weer in het hokje" % gekozen[i])
-	_druk("Kn%d" % goed)
+	await _betaal_goed(goed)
 	gelijk(str(_stand().get("stap", "")), "af", "nu goed betaald")
 	gelijk(int(State.s["sterren"]), sterren + 1, "de ster komt voor het meedoen")
 	_af()
 
-## A reload in the middle of choosing keeps who was chosen; floats from the JSON
-## are numbers again; the next day is a new photo.
+## A reload in the middle of choosing keeps who is on the photo and how many go
+## on it; floats from the JSON are numbers again; the next day is a new photo.
 func test_herladen_hervat_de_beurt() -> void:
 	_op()
 	_wereld(4, 4)
 	waar(Games.start(SPEL), "het spel start")
-	var eerste := _dieren_op_de_strook()[0]
-	_druk("Kd_" + eerste)
+	_spel().zet_aantal(3)
+	var eerste := str((_stand().get("dieren", []) as Array)[0])
 	Games.stop()
-	gelijk(str(_stand().get("dieren", [])), str([eerste]), "de keuze is bewaard")
+	gelijk(str(_stand().get("dieren", [])), str([eerste]), "het eerste dier is bewaard")
 	waar(Games.start(SPEL), "opnieuw gestart")
 	gelijk(str(_stand().get("stap", "")), "kies", "verder met kiezen")
-	waar(not _dieren_op_de_strook().has(eerste), "wie al gekozen was, staat niet meer op de strook")
+	gelijk(int(_stand().get("aantal", 0)), 3, "en er gaan er nog steeds drie op")
+	waar(not _dieren_op_de_strook().has(eerste), "wie al op de foto staat, staat niet meer op de strook")
 	await _wacht(Spel.STAP_IN_S + MARGE)
 	var sch := _scherm()
 	waar(sch != null and sch.dieren.size() == 1, "en staat weer op het scherm, in het hokje")
 	var st: Dictionary = State.spel_data(SPEL)["stand"]
 	st["missers"] = 0.0
 	st["N"] = 4.0
+	st["aantal"] = 3.0
+	st["prijs"] = float(Beurt.prijs(4, 4, 2))
 	Games.stop()
 	waar(Games.start(SPEL), "na een JSON-ronde")
 	gelijk(typeof(_stand()["missers"]), TYPE_INT, "missers is weer een geheel getal")
+	gelijk(typeof(_stand()["aantal"]), TYPE_INT, "aantal is weer een geheel getal")
 	gelijk(str(_stand().get("dieren", [])), str([eerste]), "de keuze is er nog")
 	Games.stop()
 	State.s["dag"] = 3
 	waar(Games.start(SPEL), "de volgende dag")
-	gelijk((_stand().get("dieren", []) as Array).size(), 0, "een nieuwe foto begint leeg")
+	gelijk((_stand().get("dieren", []) as Array).size(), 1, "een nieuwe foto begint met één dier")
+	gelijk(int(_stand().get("dag", 0)), 3, "van vandaag")
 	_af()
 
 ## One animal with a bed: the booth says there are too few guests and closes.
@@ -484,11 +547,11 @@ func _probe_veld(regel: String, naam: String) -> String:
 func test_een_dier_stapt_het_hokje_in() -> void:
 	_op()
 	_wereld(4, 4)
-	waar(Games.start(SPEL), "het spel start")
 	var gehoord: Array[String] = []
 	var was := _luister_aan(gehoord)
-	var eerste := _dieren_op_de_strook()[0]
-	_druk("Kd_" + eerste)
+	# the first animal of the photo goes by itself
+	waar(Games.start(SPEL), "het spel start")
+	var eerste := str((_stand().get("dieren", []) as Array)[0])
 	var d = World.dier(eerste)
 	waar(d != null and d.kamer == KAMER and Vector2(d.x, d.z).distance_to(Spel.PLEKKEN[0]) <= 3.0,
 		"het dier staat bij het hokje")
@@ -520,13 +583,13 @@ func test_aftellen_klik_en_weer_naar_buiten() -> void:
 	_wereld(4, 4)
 	waar(Games.start(SPEL), "het spel start")
 	var gekozen := await _kies_er(2)
-	gelijk(str(_stand().get("stap", "")), "som", "nu het geld")
+	gelijk(str(_stand().get("stap", "")), "som", "nu wat de foto kost")
 	for id in gekozen:
 		waar(World.verstopt(id), "%s zit in het hokje" % id)
 	var goed := 2 * Beurt.prijs(4, 4, 2)
 	var gehoord: Array[String] = []
 	var was := _luister_aan(gehoord)
-	_druk("Kn%d" % goed)
+	await _betaal_goed(goed)
 	var sch := _scherm()
 	gelijk(sch.tel_getal if sch != null else -1, 3, "meteen een 3 op het scherm")
 	var spel := _spel()
@@ -757,11 +820,21 @@ func test_op_vier_schermen() -> void:
 		var gekozen := await _kies_er(3)
 		for _f in 4:
 			await boom.process_frame
-		_keur(kader.size, "%s betalen" % str(maat))
+		_keur(kader.size, "%s wat kost het" % str(maat))
 		gelijk(_strook().size(), 4, "%s: vier bedragen op de strook" % str(maat))
+		_keur_scherm("%s wat kost het" % str(maat))
+		# right: the money, four handfuls of coins and notes
+		var goed := 3 * Beurt.prijs(4, 4, 2)
+		_druk("Kn%d" % goed)
+		await _wacht(Spel.SOM_S + MARGE)
+		for _f in 4:
+			await boom.process_frame
+		gelijk(str(_stand().get("stap", "")), "betaal", "%s: nu het geld" % str(maat))
+		_keur(kader.size, "%s betalen" % str(maat))
+		gelijk(_strook().size(), 4, "%s: vier handjes geld op de strook" % str(maat))
 		var b := _keur_scherm("%s betalen" % str(maat))
 		# a wrong amount: the card goes, the maths bar lets go, they come out
-		_druk(_foute_keuze(3 * Beurt.prijs(4, 4, 2)))
+		_druk(_foute_keuze(goed))
 		for _f in 4:
 			await boom.process_frame
 		gelijk(Games.actief(), SPEL, "%s: ze moeten nog weglopen" % str(maat))
@@ -844,3 +917,147 @@ func _keur(kader: Vector2, wat: String) -> void:
 			continue
 		waar(r.size.x >= 44.0 and r.size.y >= 44.0, "%s: %s is een tikdoel" % [wat, id])
 	waar(eigen >= 2, "%s: het spel staat op het scherm (%d)" % [wat, eigen])
+
+# ------------------------------------------- R2: een misser blijft staan
+# The owner (2026-10-08): "het moet niet mogelijk zijn om rekenen over te
+# slaan".  A money question that had a miss comes back UNCHANGED after every
+# exit — also when a new day begins, a guest arrives (N) or the band moves.
+# Before 2026-10-09 each of these threw the turn away: a new photo, a new price
+# (red log: tmp/log/r2-rood-foto.log).  The booth has no animal of the turn on
+# the game bar (`ctx.speelt("")`), so there is no switch to close here.
+
+## The price per animal of the running turn, as the game has it.
+func _prijs_nu() -> int:
+	var spel := _spel()
+	return int(spel.opzet().get("prijs", 0)) if spel != null else 0
+
+## Choose until the first money question is on screen, the way the turn leads
+## there (an animal at a time; "Klaar" from the second one on, where it exists).
+func _naar_de_geldvraag() -> void:
+	for _i in 6:
+		if str(_stand().get("stap", "")) != "kies":
+			break
+		if _strook().has("Kklaar") and (_stand().get("dieren", []) as Array).size() >= 2:
+			_druk("Kklaar")
+			continue
+		var vrij := _dieren_op_de_strook()
+		if vrij.is_empty():
+			break
+		_druk("Kd_" + vrij[0])
+	await _wacht(Spel.SOM_S + MARGE)
+
+## Into the booth, to the money, one WRONG amount, and wait until they are out
+## and the game closed.  {dieren, stap, keuzes, som} of that question.
+func _foto_misser() -> Dictionary:
+	waar(Games.start(SPEL), "het hokje start")
+	await _naar_de_geldvraag()
+	var st := _stand()
+	var uit := {"dieren": str(st.get("dieren", [])), "stap": str(st.get("stap", "")),
+		"keuzes": str(_strook()), "som": _kaart_tekst("Kolom/Rij/Som")}
+	gelijk(str(uit["stap"]), "som", "een geldvraag staat open")
+	var goed := (st.get("dieren", []) as Array).size() * _prijs_nu()
+	_druk(_foute_keuze(goed))
+	await _wacht(Spel.SIP_S + Spel.WEG_WACHT + 0.8)
+	gelijk(Games.actief(), "", "na de misser is het hokje dicht")
+	gelijk(int(_stand().get("missers", 0)), 1, "de misser is bewaard")
+	return uit
+
+## Back to the booth: the same animals, the same question, the same sum and the
+## same four amounts in the same order.
+func _zelfde_geldvraag(voor: Dictionary, wat: String) -> void:
+	Games.hersteek()
+	waar(Games.start(SPEL), "terug naar het hokje (%s)" % wat)
+	await _wacht(Spel.SOM_S + MARGE)
+	var st := _stand()
+	gelijk(str(st.get("dieren", [])), voor["dieren"], "dezelfde dieren (%s)" % wat)
+	gelijk(str(st.get("stap", "")), voor["stap"], "dezelfde vraag (%s)" % wat)
+	gelijk(_kaart_tekst("Kolom/Rij/Som"), voor["som"], "dezelfde som (%s)" % wat)
+	gelijk(str(_strook()), voor["keuzes"], "dezelfde vier bedragen (%s)" % wat)
+	gelijk(int(st.get("missers", 0)), 1, "de misser telt nog (%s)" % wat)
+
+func test_r2_misser_blijft_na_een_nieuwe_dag() -> void:
+	_op()
+	_wereld(4, 4)
+	var voor: Dictionary = await _foto_misser()
+	Hotel.morgen()
+	gelijk(int(State.s["dag"]), 3, "het is de volgende dag")
+	await _zelfde_geldvraag(voor, "nieuwe dag")
+	_af()
+
+func test_r2_misser_blijft_na_een_gast_erbij() -> void:
+	_op()
+	_wereld(4, 4)
+	var voor: Dictionary = await _foto_misser()
+	var gasten: Array = State.s["gasten"]
+	var g: Dictionary = State.gasten_pool()[gasten.size()]
+	g["kamer"] = ""
+	g["bed"] = ""
+	g["waar"] = "receptie"
+	gasten.append(g)
+	World.sync(gasten)
+	gelijk(State.n_gasten(), 5, "een gast erbij")
+	await _zelfde_geldvraag(voor, "N 5")
+	_af()
+
+func test_r2_misser_blijft_na_een_andere_band() -> void:
+	_op()
+	_wereld(4, 4)
+	var voor: Dictionary = await _foto_misser()
+	State.s["kunnen"] = 2
+	gelijk(State.band(), 3, "de band zakt naar groep 3")
+	await _zelfde_geldvraag(voor, "band 3")
+	# answered right now: the photo goes on with the price it began with
+	var goed := (_stand().get("dieren", []) as Array).size() * _prijs_nu()
+	gelijk(_prijs_nu(), Beurt.prijs(4, 4, 2), "de prijs van de beurt zelf")
+	_druk("Kn%d" % goed)
+	await _wacht(Spel.SOM_S + MARGE)
+	waar(str(_stand().get("stap", "")) in ["kies", "betaal"], "goed beantwoord: verder")
+	_af()
+
+# ------------------------------------------------- R1: het rekenaandeel
+
+## Counted by the rule of 2026-10-08 (R1): an answer on a maths strip is
+## "reken", choosing an animal is "spel"; the tap that opened the booth is not
+## counted, the first animal goes by itself.
+var _teller := {"reken": 0, "spel": 0}
+
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller[soort]) + 1
+
+## The owner (2026-10-08): "rekenen moet minstens 50% van de interactie zijn".
+## A whole photo in groep 3, 4 and 5, a small and a large hotel, and every
+## size the booth can take (two to four), through the real strips:
+## reken >= spel + 1, so with the tap that opened the booth maths is still at
+## least half.
+func test_rekenaandeel() -> void:
+	for geval in [[3, 2], [3, 3], [4, 4], [4, 6], [5, 7], [5, 8]]:
+		var band: int = geval[0]
+		var n: int = geval[1]
+		for aantal in range(Beurt.MIN_DIEREN, mini(n, Beurt.MAX_DIEREN) + 1):
+			var wat := "groep %d, %d gasten, %d op de foto" % [band, n, aantal]
+			_op()
+			_wereld(n, band)
+			_teller = {"reken": 0, "spel": 0}
+			waar(Games.start(SPEL), "%s: start" % wat)
+			_spel().zet_aantal(aantal)
+			for _i in 12:
+				var st := _stand()
+				var stap := str(st.get("stap", ""))
+				var nu := (st.get("dieren", []) as Array).size()
+				if stap == "kies":
+					_druk("Kd_" + _dieren_op_de_strook()[0])
+					_tel("spel")
+				elif stap == "som":
+					_druk("Kn%d" % (nu * _prijs_nu()))
+					_tel("reken")
+				elif stap == "betaal":
+					_druk("Kg%d" % (nu * _prijs_nu()))
+					_tel("reken")
+				else:
+					break
+				await _wacht(Spel.SOM_S + MARGE)
+			gelijk(str(_stand().get("stap", "")), "af", "%s: de foto is genomen" % wat)
+			gelijk((_stand().get("dieren", []) as Array).size(), aantal, "%s: zoveel op de foto" % wat)
+			waar(int(_teller["reken"]) >= int(_teller["spel"]) + 1,
+				"%s: rekenen %d >= spel %d + 1" % [wat, int(_teller["reken"]), int(_teller["spel"])])
+			_af()

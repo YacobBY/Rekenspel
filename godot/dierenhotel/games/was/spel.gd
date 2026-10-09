@@ -7,6 +7,14 @@ extends MiniGame
 ## grow into a real bar chart.  Once the pile is empty one question card joins
 ## the crates and the sum is about that chart.
 ##
+## Wave 2 (owner: "rekenen moet minstens 50% van de interactie zijn"): the pile
+## SORTS ITSELF.  Sorting by hand was 9 … 20 taps of matching a pictogram — no
+## number in any of them — against one to three sums; the chart now grows piece
+## by piece while the child watches (`_sorteer_vanzelf`), and every tap of the
+## child is an answer.  The pile and the crate plates stay (the chart needs its
+## plates, the opening sum of group 5 needs the pile) but are not a toy any
+## more, and the end card closes by itself instead of waiting for "👍 klaar".
+##
 ## What is ported unchanged: the numbers (`Sommen.Was.*`), every Dutch string,
 ## the never-punishing rule, and the two layout rules C1 and C2 of §4.6.  The
 ## help ladder is GONE (owner, 2026-09-24: "Nee geef geen hulp na fouten.
@@ -63,7 +71,15 @@ const GROND := 0.347                     ## the ground line: round(190 * 0.347) 
 ## every record on every tap and would put a loose `hoog: 3` straight back to 0.
 const WIP := [[0.140, 2], [0.060, 1], [0.060, 0]]
 
+## The pile sorts itself (wave 2): the first piece this long after the sorting
+## begins, then one piece every SORTEER_S; the end card stays AF_S, then the
+## game closes itself.
+const SORTEER_EERST := 1.0
+const SORTEER_S := 0.15
+const AF_S := 3.4
+
 var _s: Dictionary = {}
+var _sorteert := false        ## `_sorteer_vanzelf` is running
 var _kaart: Ui.Kaart = null
 var _kader_af: Callable = Callable()
 var _voet := WasSoorten.VOET
@@ -131,6 +147,8 @@ func start(_c: SpelCtx) -> void:
 	_regel_indeling()
 	State.bewaar()
 	_meld("start")
+	if _stap_nu() == "sorteren":
+		_sorteer_vanzelf()
 
 func stop() -> void:
 	_wip_krat = -1
@@ -158,7 +176,14 @@ func _herstel(bewaard, n: int, band: int, dag: int) -> Dictionary:
 	var b: Dictionary = bewaard
 	if str(b.get("stap", "")) == "af" or not b.has("rij") or not b.has("vak"):
 		return {}
-	if int(b.get("dag", -1)) != dag or int(b.get("N", -1)) != n or int(b.get("band", -1)) != band:
+	# A question that was answered wrong and is still open comes back UNCHANGED
+	# (wave 2, R2) — also on another day, with another N or band: the turn keeps
+	# its own day, N and band, so the chart and the question stay the same.
+	if open_misser(b):
+		dag = int(b.get("dag", dag))
+		n = int(b.get("N", n))
+		band = int(b.get("band", band))
+	elif int(b.get("dag", -1)) != dag or int(b.get("N", -1)) != n or int(b.get("band", -1)) != band:
 		return {}
 	var rij := _ints(b.get("rij", []))
 	var vak := _ints(b.get("vak", []))
@@ -173,6 +198,13 @@ func _herstel(bewaard, n: int, band: int, dag: int) -> Dictionary:
 		"i": i, "vak": vak, "hand": int(b.get("hand", -1)),
 		"stap": _stap_van(str(b.get("stap", "")), band),
 		"missers": maxi(0, int(b.get("missers", 0))), "ster": int(b.get("ster", 0))}
+
+## Does this saved turn hold a question that was answered wrong and is still
+## open?  (`missers` counts the misses on the question that is open: it goes
+## back to 0 with every right answer.)  Then nothing may replace it (wave 2, R2).
+static func open_misser(b: Dictionary) -> bool:
+	return str(b.get("stap", "")) in ["vraag0", "vraag1", "vraag2"] \
+			and int(b.get("missers", 0)) > 0
 
 ## Only group 5 opens with a question; the others start sorting at once.
 static func _eerste_stap(band: int) -> String:
@@ -323,11 +355,9 @@ func _teken() -> void:
 	_zet_decor()
 	_teken_kratten()
 	var stap := _stap_nu()
-	if stap == "sorteren":
-		_teken_berg()
-	elif stap == "vraag0":
-		# The pile has to be SEEN for the question to be about it, but it may
-		# not be touched yet: the child answers first and sorts after.
+	if stap == "sorteren" or stap == "vraag0":
+		# The pile has to be SEEN — for the opening question to be about it, and
+		# to watch it sort itself — but it is never a toy (wave 2)
 		_teken_berg(true)
 	else:
 		_berg_weg()
@@ -373,6 +403,9 @@ func _teken_kratten() -> void:
 			# as the HTML's `vast: true` meant (games-b.md §4.6).
 			"op": "rand", "vast": true, "kind": "drop", "drop": SLEEP,
 			"data": {"i": idx}, "prio": 16,
+			# the pile sorts itself (wave 2): a tap on a plate does nothing,
+			# so it is no step of the turn — a free tap at most
+			"vrij": true,
 			"titel": "krat met %s: %d %s" % [str(so["naam"]), n,
 				"blokje" if n == 1 else "blokjes"],
 			"aan": func(_spot) -> void: _leg_in(idx),
@@ -392,16 +425,17 @@ func _plaat_tekst(i: int, tier: int) -> String:
 ## ("🧺 26 nog te sorteren") and what you hold belongs to your hands
 ## ("🧦 twee sokken"): together in one button a child read it as "🧦 26 twee
 ## sokken" (games-b.md §4.7).
-func _teken_berg(stil := false) -> void:
+func _teken_berg(_oud := true) -> void:
+	# wave 2: the pile sorts itself, so it is always "stil" — seen, not dragged
+	var stil := true
 	var stuks := _stuks_over()
 	var per := _per()
 	ctx.hotspots.bron(DECOR_BERG, {
 		"id": HOT_BERG, "kamer": KAMER, "icoon": BERG_ICOON,
 		# `aantal: 0` is what makes a source undraggable (`UiBron._get_drag_data`),
-		# so during the opening sum the child can look at the pile and read it,
-		# but not yet empty it.
+		# so the child can look at the pile and read it, but not empty it.
 		"aantal": 0 if stil else stuks, "hand": 0,
-		"hoog": 18.0, "prio": 11, "klas": "hotwolk",
+		"hoog": 18.0, "prio": 11, "klas": "hotwolk", "vrij": true,
 		"titel": _berg_titel(stuks, per, stil),
 		# dragging picks up on the way: the drag starts on the pile, so the top
 		# piece is already in your hand when you arrive at the crate
@@ -463,13 +497,12 @@ func _kleed_berg(stuks: int, per: int, stil := false) -> void:
 	var pil_h := 0.0 if stil else greep.get_combined_minimum_size().y
 	b.custom_minimum_size = Vector2(UiThema.HOT, float(UiThema.HOT) + pil_h)
 
-## The pile's tooltip carries its count only where the pile itself shows it.
-func _berg_titel(stuks: int, per: int, stil: bool) -> String:
-	if stil:
-		return "berg met %d stuks was, kijk er goed naar" % stuks
+## The pile's tooltip carries its count only where the pile itself shows it
+## (group 5): in group 4 that count is the answer to `Hoeveel stuks samen?`.
+func _berg_titel(stuks: int, _per_: int, _stil: bool) -> String:
 	if _toont_aantal():
-		return "berg met %d stuks was, tik om er %d te pakken" % [stuks, per]
-	return "berg met was, tik om er %d te pakken" % per
+		return "berg met %d stuks was, kijk er goed naar" % stuks
+	return "berg met was, kijk er goed naar"
 
 func _hand_tekst() -> String:
 	var so := WasSoorten.soort(_hand())
@@ -536,20 +569,10 @@ func _weeg_legenda(bodem: float) -> void:
 
 # ------------------------------------------------------------------ sorteren
 
+## A tap on the pile (or the start of a drag).  Since wave 2 the pile sorts
+## itself: a finger takes nothing from it.
 func _pak() -> bool:
-	if ctx == null or _s.is_empty() or _stap_nu() != "sorteren":
-		return false
-	var rij: Array = _s["rij"]
-	var i := int(_s["i"])
-	if i >= rij.size():
-		return false
-	if _hand() < 0:
-		_s["hand"] = int(rij[i])
-		ctx.snd.tik()
-		State.bewaar()
-	_teken()
-	_meld("pak")
-	return true
+	return false
 
 func _sleep_in(i: int) -> void:
 	# whoever drags picks up on the way
@@ -564,11 +587,9 @@ func _leg_in(i: int) -> bool:
 	var rij: Array = _s["rij"]
 	if int(_s["i"]) >= rij.size():
 		return false
-	# An empty hand on a crate does nothing: the pile lights up for a moment so
-	# the child sees where to start.
+	# An empty hand on a crate does nothing (wave 2: the child's finger never
+	# holds a piece — the pile sorts itself; no sound, no light, no step)
 	if _hand() < 0:
-		ctx.snd.zacht()
-		_wijs_berg_aan()
 		return false
 	var soort := _hand()
 	_s["hand"] = -1
@@ -591,6 +612,37 @@ func _leg_in(i: int) -> bool:
 		_meld("sorteer")
 	return soort == i
 
+## One piece from the top of the pile into its own crate: the step of
+## `_sorteer_vanzelf`, and a test hook.
+func sorteer_een() -> bool:
+	if ctx == null or _s.is_empty() or _stap_nu() != "sorteren":
+		return false
+	var rij: Array = _s["rij"]
+	var i := int(_s["i"])
+	if i >= rij.size():
+		return false
+	_s["hand"] = int(rij[i])
+	return _leg_in(int(rij[i]))
+
+## The pile sorts itself (wave 2): a moment after the sorting begins, one piece
+## every SORTEER_S into its own crate — the bar chart grows while the child
+## watches — and when the pile is empty the question comes
+## (`_klaar_met_sorteren`).  A reload goes on from where it was.
+func _sorteer_vanzelf() -> void:
+	if _sorteert:
+		return
+	_sorteert = true
+	var eerst := true
+	while ctx != null and not _s.is_empty() and _stap_nu() == "sorteren":
+		if not await na(SORTEER_EERST if eerst else SORTEER_S):
+			return
+		eerst = false
+		if ctx == null or _s.is_empty() or _stap_nu() != "sorteren":
+			break
+		if not sorteer_een():
+			break
+	_sorteert = false
+
 ## Sort the whole pile correctly — the test hook of the HTML (`doe('sorteer')`).
 func sorteer_alles() -> int:
 	var veilig := 0
@@ -600,17 +652,6 @@ func sorteer_alles() -> int:
 		_s["hand"] = int((_s["rij"] as Array)[int(_s["i"])])
 		_leg_in(int(_s["hand"]))
 	return 0 if _s.is_empty() else int(_s["i"])
-
-func _wijs_berg_aan() -> void:
-	var b := Ui.bron_van(HOT_BERG)
-	if b == null:
-		return
-	b.add_theme_stylebox_override("normal",
-		UiThema.vulling(UiThema.vlak(UiThema.WOLK_HULP, 16, 2, UiThema.WIT), 10, 6))
-	if not await na(0.32):
-		return
-	if is_instance_valid(b):
-		b.remove_theme_stylebox_override("normal")
 
 ## A piece in the wrong crate, seen: the same `🔄 Nog een keer` as every miss
 ## in the hotel, at that crate, for as long as a miss pauses a strip.  This
@@ -679,11 +720,15 @@ func _vraag_kaart() -> Ui.Kaart:
 	var band := int(_s.get("band", 3))
 	_t0 = Time.get_ticks_msec()
 	if _stap_nu() == "af":
+		# no "👍 klaar" any more (wave 2): a tap without a number; the card
+		# stays AF_S and the game closes itself, like every other game
 		_kaart = ctx.ui.somkaart(obj, "", {
 			"id": HOT_KAART, "kamer": KAMER, "hoog": KAART_HOOG, "icoon": "✅",
-			"regel": "Alles gesorteerd!", "keuze_titel": "klaar",
-			"keuzes": [{"id": "ok", "icoon": "👍", "tekst": "klaar",
-				"kies": func(_id, _k) -> void: ctx.sluit()}]})
+			"regel": "Alles gesorteerd!"})
+		# a card without a strip carries an answer box: a ✓ in it, never an
+		# empty box that looks like one more question
+		if _kaart != null:
+			_kaart.klaar()
 		_regel_indeling()
 		return _kaart
 	# Group 5's opening sum (N8), before a single piece moves: the pile says
@@ -697,9 +742,11 @@ func _vraag_kaart() -> Ui.Kaart:
 		_regel_indeling()
 		return _kaart
 	if band == 3:
+		# reading the chart is the maths of group 3: the strip of piles counts
+		# as maths (wave 2, R4)
 		_kaart = ctx.ui.somkaart(obj, "", {
 			"id": HOT_KAART, "kamer": KAMER, "hoog": KAART_HOOG, "icoon": "📊",
-			"regel": "Welke stapel is het hoogst?",
+			"regel": "Welke stapel is het hoogst?", "reken": true,
 			"keuze_titel": "kies een stapel", "keuzes": _keuze_strook()})
 		_regel_indeling()
 		return _kaart
@@ -745,6 +792,7 @@ func _kies(n: int) -> bool:
 	var goed := n == _hoogste_idx()
 	ctx.state.tel(goed, Time.get_ticks_msec() - _t0)
 	if goed:
+		ctx.reken_goed()
 		ctx.snd.ja()
 		if _kaart != null:
 			_kaart.klaar()                 # klaar() writes the ✓ itself
@@ -807,17 +855,25 @@ func _volgende() -> void:
 	if _stap_nu() != bestemming:
 		return
 	if bestemming == "sorteren":
-		# The card steps aside for the pile: from here the crates are the toy.
+		# The card steps aside for the pile, and the pile sorts itself.
 		if _kaart != null:
 			_kaart.weg()
 			_kaart = null
 		_teken()
 		_regel_indeling()
 		_meld("sorteer")
+		_sorteer_vanzelf()
 		return
 	_vraag_kaart()
 	_teken()
 	_meld("af" if _stap_nu() == "af" else "vraag")
+	if bestemming != "af":
+		return
+	if not await na(AF_S):
+		return
+	if ctx == null or _s.is_empty() or _stap_nu() != "af":
+		return
+	ctx.sluit()
 
 func _ster() -> bool:
 	if _s.is_empty() or int(_s.get("ster", 0)) != 0:

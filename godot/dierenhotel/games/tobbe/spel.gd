@@ -19,9 +19,17 @@ extends MiniGame
 ##     "uitleggen door te laten zien").  Het cijfer óp de tobbe blijft.
 ##   * `setTimeout` wordt `await na()`, dus `stop()` ruimt elke wachttijd op.
 ##
+## Rekenen eerst (wave 2, eigenaar 2026-10-08: "het moet niet mogelijk zijn om
+## rekenen over te slaan en rekenen moet minstens 50% van de interactie zijn"):
+## het splitskraantje dat voor het kind halveerde is weg (het kind giet de
+## helften zelf over), de ✓ om te bevestigen is weg (de verdeling wordt vanzelf
+## nagekeken zodra ze af is, `_bouw_klaar`), en het baden gaat vanzelf
+## (`_baad_zelf`: geen tik per dier).  Een gemiste vraag blijft staan, ook op
+## een nieuwe dag of bij een andere N of band (`start`).
+##
 ## Een misser helpt niet (eigenaar 2026-09-24: "Nee geef geen hulp na fouten.
 ## Kinderen moeten zelf leren rekenen").  Een fout getal op de somkaart, een
-## ✓ bij een scheve verdeling, een tobbe die overloopt: een zacht geluid en
+## scheve verdeling, een tobbe die overloopt: een zacht geluid en
 ## `🔄 Nog een keer` (bij de kaart; wie in de tuin staat kijkt teleurgesteld
 ## als er sop overloopt) — en verder niets: geen telregel, geen wolkje met wat
 ## er nog bij moet of waar de rest heen moet, geen buurvrouw Els met
@@ -117,6 +125,8 @@ func _nieuwe_stand(n: int, band: int, dag: int) -> Dictionary:
 		"tob": tobbes, "kan": 0, "inbad": inbad, "hand": 1,
 		"missers": 0, "lijn": 0, "wens": 0, "ster": 0,
 		"mors": -1, "tel": 0, "zeg": {}, "t0": 0,
+		# misses on the question that is open now (wave-2 rule R2)
+		"mis": 0,
 	}
 
 ## Een stand die uit de savegame komt is door JSON gegaan: elk getal is dan een
@@ -125,7 +135,7 @@ func _nieuwe_stand(n: int, band: int, dag: int) -> Dictionary:
 func _normaliseer(st: Dictionary) -> Dictionary:
 	for sleutel in ["dag", "N", "band", "n0", "perDier", "basis", "T", "M", "per",
 			"rest", "rek", "kan", "hand", "missers", "lijn", "wens",
-			"ster", "mors", "tel", "t0"]:
+			"ster", "mors", "tel", "t0", "mis"]:
 		st[sleutel] = int(st.get(sleutel, 0))
 	st["soort"] = str(st.get("soort", "eerlijk"))
 	st["stap"] = str(st.get("stap", "vullen"))
@@ -330,9 +340,15 @@ func start(_c: SpelCtx) -> void:
 		_s = _normaliseer((oud as Dictionary).duplicate(true))
 	else:
 		_s = {}
-	if _s.is_empty() or int(_s.get("T", 0)) == 0 or str(_s.get("stap", "")) == "af" \
-			or int(_s.get("dag", 0)) != dag or int(_s.get("N", 0)) != n \
-			or int(_s.get("band", 0)) != band:
+	# a question that was missed comes back unchanged after a new day or a
+	# change of N or band — never an easier recipe in its place (wave-2 rule R2)
+	var mis_open := not _s.is_empty() and int(_s.get("mis", 0)) > 0 \
+			and int(_s.get("T", 0)) > 0 \
+			and (str(_s.get("stap", "")) == "vraag" or str(_s.get("stap", "")) == "vullen")
+	if not mis_open and (_s.is_empty() or int(_s.get("T", 0)) == 0
+			or str(_s.get("stap", "")) == "af"
+			or int(_s.get("dag", 0)) != dag or int(_s.get("N", 0)) != n
+			or int(_s.get("band", 0)) != band):
 		_s = _nieuwe_stand(n, band, dag)
 	d["stand"] = _s
 	_s["t0"] = Time.get_ticks_msec()
@@ -347,6 +363,7 @@ func start(_c: SpelCtx) -> void:
 	if str(_s["stap"]) == "baden":
 		_bubbels()
 		_haal_baders()              # a reload in the bath step: who is still away comes
+		_baad_zelf()
 
 ## Zeepbellen boven wie in bad zit, zolang de badstap duurt (review plan
 ## pijler 4).  Eén lus tegelijk; `na()` stopt hem met het spel.
@@ -460,7 +477,9 @@ func _teken() -> void:
 		_meld()
 		return
 	_teken_som()
-	_teken_kraan()
+	# no splitskraantje any more (owner, 2026-10-08: "het moet niet mogelijk
+	# zijn om rekenen over te slaan"): one tap on it halved the tub FOR the
+	# child; now the child pours the halves itself, a scoop at a time
 	if _kan_nodig():
 		_teken_kan()
 	# één korte regel: het recept van vandaag, zolang er nog niets staat
@@ -470,16 +489,15 @@ func _teken() -> void:
 			"x": float(k.get("x", _rij_punt()["x"])), "z": float(k.get("z", _rij_punt()["z"])),
 			"hoog": 26.0, "icoon": "🧴", "getal": int(_s["T"]),
 			"tekst": _mv(int(_s["M"]), "tobbe", "tobbes"), "prio": 9})
-	var klaar := _gereedschap_punt(GEREEDSCHAP["klaar"])
-	ctx.hotspots.maak({
-		"id": "tb_klaar", "kamer": KAMER, "x": klaar["x"], "z": klaar["z"], "y": 0.0,
-		"op": "onder", "obj": "tobbe", "icoon": "✓", "label": "klaar", "prio": 13,
-		"titel": "zo is het goed", "aan": func(_spot) -> void: _check()})
+	# no ✓ to confirm any more (wave 2): the distribution is checked by itself
+	# the moment it is complete (`_bouw_klaar`) — the last scoop IS the answer
 	var opnieuw := _gereedschap_punt(GEREEDSCHAP["opnieuw"])
-	if int(_s["rek"]) < int(_s["T"]) or _iets_in_de_tobbes():
+	if _niet_begin():
 		ctx.hotspots.maak({
 			"id": "tb_opnieuw", "kamer": KAMER, "x": opnieuw["x"], "z": opnieuw["z"], "y": 0.0,
 			"op": "onder", "obj": "tobbe", "icoon": "🔄", "label": "opnieuw", "prio": 7,
+			# re-arranging is an in-game free action (wave-2 rule R4)
+			"vrij": true,
 			"titel": "opnieuw beginnen", "aan": func(_spot) -> void: _leeg()})
 	_teken_zeg()
 	World.vuil()
@@ -507,6 +525,9 @@ func _teken_tobbes() -> void:
 			"id": "tb_kuip%d" % i, "kamer": KAMER,
 			"x": float(_p[i]["x"]), "z": float(_p[i]["z"]), "y": _kuip_hoog(),
 			"kind": "drop", "drop": "tobbe", "data": {"tob": i},
+			# a scoop into a tub builds the quantity that is checked against
+			# the share: a graded manipulative (wave-2 rule R4)
+			"reken": not vol,
 			"val": func(lading: Dictionary, data: Dictionary) -> void: _val(lading, data),
 			"icoon": "💦" if mors else "🫧",
 			"label": ("%d %s" % [n, beestjes]).strip_edges(),
@@ -528,6 +549,8 @@ func _teken_rek() -> void:
 		# prio 11 in plaats van 10: zonder het rek is er geen sop en dus geen
 		# beurt, dus het rek gaat vóór het kraantje (zie het kannetje)
 		"aantal": rek, "hand": int(_s["hand"]) if rek > 0 else 0, "prio": 11,
+		# picking the size of a handful is a free action (wave-2 rule R4)
+		"vrij": true,
 		"titel": "rek met %s, pak %d" % [_mv(rek, "schepje", "schepjes"), int(_s["hand"])],
 		"tik": func(_spot) -> void: _wissel_hand(),
 		"sleep": "tobbe", "data": {"wat": "schep"},
@@ -554,19 +577,13 @@ func _teken_som() -> void:
 	if _kaart != null:
 		_kaart.zet(str(totaal))
 
-func _teken_kraan() -> void:
-	var plek := _gereedschap_punt(GEREEDSCHAP["kraan"])
-	ctx.hotspots.maak({
-		"id": "tb_kraan", "kamer": KAMER, "x": plek["x"], "z": plek["z"], "y": 0.0,
-		"op": "onder", "obj": "tobbe", "icoon": "🚰", "label": "halveren", "prio": 9,
-		"titel": "splitskraantje: halveren", "aan": func(_spot) -> void: _kraantje()})
-
 func _teken_kan() -> void:
 	var plek := _gereedschap_punt(GEREEDSCHAP["kan"])
 	ctx.hotspots.maak({
 		"id": "tb_kan", "kamer": KAMER, "x": plek["x"], "z": plek["z"], "y": 0.0,
 		"op": "onder", "obj": "tobbe", "icoon": "🫗", "label": str(int(_s["kan"])),
 		"kind": "drop", "drop": "tobbe", "data": {"tob": "kan"},
+		"reken": true,
 		"val": func(lading: Dictionary, data: Dictionary) -> void: _val(lading, data),
 		# prio 12, niet de 9 van games-a.md §6.4: het kannetje draagt bij een rest
 		# een DEEL VAN DE SOM, net als een tobbe. Gemeten in de browser (band 5,
@@ -574,7 +591,7 @@ func _teken_kan() -> void:
 		# de zestien plekken per kamer, waarna het kannetje als eerste wegviel en
 		# het kind de som niet meer kón afmaken.
 		"prio": 12, "titel": "kannetje: %d" % int(_s["kan"]),
-		"aan": func(_spot) -> void: _schep("kan", int(_s["hand"]))})
+		"aan": func(_spot) -> void: _tik_kan()})
 
 ## Eén vaste boodschapplek boven de tobbes: het kind weet waar het praatje komt.
 func _teken_zeg() -> void:
@@ -653,10 +670,12 @@ func _antwoord(n, goed: int, k) -> void:
 		# `🔄 Nog een keer` en zet dezelfde vier getallen terug; de kaart en de
 		# tobbes blijven precies zoals ze waren, en wie in de tuin staat is sip
 		_s["missers"] = int(_s["missers"]) + 1
+		_s["mis"] = int(_s.get("mis", 0)) + 1
 		ctx.snd.zacht()
 		_bewaar()
 		_teleurgesteld()
 		return
+	_s["mis"] = 0
 	k.zet(str(int(n)))
 	k.klaar()
 	ctx.snd.ja()
@@ -720,6 +739,7 @@ func _schep(doel, k: int) -> void:
 			return
 	_bewaar()
 	_teken()
+	_bouw_klaar()
 
 ## Tikken op een tobbe terwijl het rek leeg is: dan giet je van deze tobbe over
 ## naar de leegste — zo kun je ook zonder kraantje eerlijk verdelen.
@@ -737,70 +757,61 @@ func _giet(i: int) -> void:
 	_s["mors"] = -1
 	_zeg(null)
 	ctx.snd.plop(1)
-	if int(_s["tob"][doel]) > _rand_van_de_tobbe():
+	# halving by pouring: more than the share in the other tub is a miss of its
+	# own (`_bouw_klaar`), never a spill onto the rack that had nothing on it
+	if str(_s["soort"]) != "half" and int(_s["tob"][doel]) > _rand_van_de_tobbe():
 		_overloop(doel)
 		return
 	_bewaar()
 	_teken()
+	_bouw_klaar()
 
 func _tik_tobbe(i: int) -> void:
 	if _s.is_empty():
 		return
-	if str(_s["stap"]) == "baden":
-		_volgende_in_bad(i)
-		return
 	if str(_s["stap"]) != "vullen":
+		# the bath fills itself since wave 2 (`_baad_zelf`): a tap on a tub then
+		# does nothing, so no tap of play can replace the maths
 		return
 	if int(_s["rek"]) > 0:
 		_schep(i, int(_s["hand"]))
 	else:
 		_giet(i)
 
-## Het splitskraantje: de volste tobbe wordt gehalveerd naar de leegste.
-func _kraantje() -> void:
+## Het kannetje: van het rek als daar nog sop ligt, anders uit de volste tobbe
+## (zo komt bij `half` de rest erin — vroeger deed het splitskraantje dat).
+func _tik_kan() -> void:
 	if _s.is_empty() or str(_s["stap"]) != "vullen":
+		return
+	if int(_s["rek"]) > 0:
+		_schep("kan", int(_s["hand"]))
 		return
 	var bron := 0
 	for i in range(1, int(_s["M"])):
 		if int(_s["tob"][i]) > int(_s["tob"][bron]):
 			bron = i
-	var doel := -1
-	for i in int(_s["M"]):
-		if i != bron and (doel < 0 or int(_s["tob"][i]) < int(_s["tob"][doel])):
-			doel = i
-	if doel < 0 or int(_s["tob"][bron]) < 2:
+	var k: int = mini(int(_s["hand"]), int(_s["tob"][bron]))
+	if k <= 0:
 		ctx.snd.zacht()
-		_zeg({"icoon": "🚰", "tekst": "eerst sop erin"})
-		_teken()
 		return
-	var m := int(_s["tob"][bron])
-	@warning_ignore("integer_division")
-	var h := m / 2
-	var r := m - 2 * h
-	if r != 0 and int(_s["band"]) < 5:
-		# even/oneven, groep 3: halveren mag hier niet met een rest.  Er komt
-		# geen uitleg bij (eigenaar 2026-09-24): de kraan werkt gewoon niet, en
-		# dat laat `🔄 Nog een keer` zien
-		ctx.snd.zacht()
-		ctx.ui.misser(_kaart, "")
-		return
-	_s["tob"][bron] = h
-	_s["tob"][doel] = int(_s["tob"][doel]) + h
-	_s["kan"] = int(_s["kan"]) + r
+	_s["tob"][bron] = int(_s["tob"][bron]) - k
+	_s["kan"] = int(_s["kan"]) + k
 	_s["mors"] = -1
-	ctx.snd.plop(2)
-	if r != 0:
-		_zeg({"icoon": "🫗", "getal": r, "tekst": "blijft over", "klas": ""})
-	else:
-		_zeg({"icoon": "🚰", "getal": h, "tekst": "en %d" % h, "klas": "goed"})
+	_zeg(null)
+	ctx.snd.plop(1)
 	_bewaar()
 	_teken()
-	if int(_s["tob"][bron]) > _rand_van_de_tobbe():
-		_overloop(bron)
+	_bouw_klaar()
 
-func _leeg() -> void:
-	if _s.is_empty():
-		return
+## Staat er iets anders dan aan het begin van het verdelen?
+func _niet_begin() -> bool:
+	if str(_s["soort"]) == "half":
+		return int(_s["tob"][0]) != int(_s["T"]) or int(_s["kan"]) > 0
+	return int(_s["rek"]) < int(_s["T"]) or _iets_in_de_tobbes()
+
+## Het sop terug waar de beurt begon: op het rek, of bij `half` in de eerste
+## tobbe.  Dezelfde opdracht, niets meer en niets minder.
+func _terug_naar_begin() -> void:
 	for i in int(_s["M"]):
 		_s["tob"][i] = 0
 	_s["kan"] = 0
@@ -809,6 +820,42 @@ func _leeg() -> void:
 		_s["tob"][0] = int(_s["T"])
 		_s["rek"] = 0
 	_s["mors"] = -1
+
+## De verdeling wordt vanzelf nagekeken zodra ze af is (wave 2, eigenaar
+## 2026-10-08: rekenen is de helft van de interactie) — er is geen ✓ meer om
+## te bevestigen, het laatste schepje IS het antwoord:
+##   * vanaf het rek (`eerlijk`, `dubbel`): zodra het rek leeg is;
+##   * in twee helften (`half`): zodra de andere tobbe en het kannetje hun deel
+##     hebben, of zodra er MEER in staat dan het deel — dan is er te veel
+##     overgegoten.
+## Goed → `_geslaagd`; fout → `_mis`: een misser zonder hulp, en het sop gaat
+## terug naar het begin.
+func _bouw_klaar() -> void:
+	if _s.is_empty() or str(_s["stap"]) != "vullen":
+		return
+	if str(_s["soort"]) != "half":
+		if int(_s["rek"]) > 0:
+			return
+		_check()
+		return
+	var per := int(_s["per"])
+	var af := int(_s["kan"]) == int(_s["rest"])
+	for i in range(1, int(_s["M"])):
+		if int(_s["tob"][i]) > per:
+			_mis()
+			return
+		if int(_s["tob"][i]) != per:
+			af = false
+	if int(_s["kan"]) > int(_s["rest"]):
+		_mis()
+		return
+	if af:
+		_check()
+
+func _leeg() -> void:
+	if _s.is_empty():
+		return
+	_terug_naar_begin()
 	_zeg(null)
 	ctx.snd.terug()
 	_bewaar()
@@ -825,6 +872,7 @@ func _overloop(i: int) -> void:
 	_s["rek"] = int(_s["rek"]) + int(_s["tob"][i])
 	_s["tob"][i] = 0
 	_s["missers"] = int(_s["missers"]) + 1
+	_s["mis"] = int(_s.get("mis", 0)) + 1
 	_s["mors"] = i
 	ctx.snd.zacht()
 	_zeg(null)
@@ -844,10 +892,6 @@ func _check() -> void:
 	if int(_s["rek"]) > 0:
 		_mis()
 		return
-	for i in int(_s["M"]):
-		if int(_s["tob"][i]) > int(_s["per"]):
-			_overloop(i)
-			return
 	var gelijk := true
 	for i in range(1, int(_s["M"])):
 		if int(_s["tob"][i]) != int(_s["tob"][0]):
@@ -861,9 +905,14 @@ func _check() -> void:
 ## ✓ bij een verdeling die niet klopt: een misser, en niets wat verklapt wat er
 ## mis is — niet hoeveel er nog op het rek ligt, niet "even hoog", niet waar de
 ## rest heen moet (eigenaar 2026-09-24).
+##
+## Sinds 2026-10-08 gaat het sop daarbij terug naar het begin (het rek, of bij
+## `half` de eerste tobbe): de verdeling is nagekeken zodra ze af was, dus er
+## valt niets meer bij te schuiven — dezelfde opdracht begint opnieuw.
 func _mis() -> void:
 	_s["missers"] = int(_s["missers"]) + 1
-	_s["mors"] = -1
+	_s["mis"] = int(_s.get("mis", 0)) + 1
+	_terug_naar_begin()
 	ctx.snd.zacht()
 	_bewaar()
 	_teken()
@@ -883,9 +932,14 @@ func _geslaagd() -> void:
 	_s["stap"] = "baden"
 	_s["lijn"] = 1
 	_s["mors"] = -1
+	_s["mis"] = 0
 	_zeg(null)
-	# het water is klaar: wie in bad moet komt er zelf aan lopen
+	# de verdeling klopt: een goed antwoord met een gebouwde hoeveelheid (R4)
+	ctx.reken_goed()
+	# het water is klaar: wie in bad moet komt er zelf aan lopen, en gaat er
+	# zelf in (wave 2: geen tik per dier meer)
 	_haal_baders()
+	_baad_zelf()
 	# Het adaptieve signaal telt hier al mee; de STER hoort bij de hele ronde en
 	# valt pas als de gasten gebaad hebben — anders krijgt één ronde twee sterren.
 	ctx.state.tel(int(_s["missers"]) == 0, Time.get_ticks_msec() - int(_s["t0"]))
@@ -945,44 +999,21 @@ func _teken_baden() -> void:
 	_teken_tobbes()
 	_teken_som()
 	var wacht := _wachtenden()
-	for g in wacht.slice(0, 3):
-		var id := str(g["id"])
-		var d := World.dier(id)
-		# his button comes when he is there, not while he still walks in
-		if d == null or d.kamer != KAMER or Games.verwacht_dier(id):
-			continue
-		ctx.hotspots.maak({
-			"id": "tb_dier" + id, "kamer": KAMER, "x": d.x, "z": d.z, "y": 34.0,
-			"icoon": _ico(g), "label": str(g.get("naam", "")),
-			"klas": "hotbron", "prio": 11, "titel": "%s wil in bad" % str(g.get("naam", "")),
-			"volg": func() -> Dictionary:
-				var q := World.dier(id)
-				return {} if q == null else {"x": q.x, "z": q.z, "y": 34.0, "kamer": q.kamer},
-			# ÉÉN tik-afhandelaar; het slepen zit op de tobbe, niet hier.  Wie je
-			# aantikt gaat in bad, in de leegste tobbe (eigenaar, 2026-09-23: het
-			# kind kiest met welk dier het speelt).  Tot dan ging bij elke tik de
-			# EERSTE wachtende erin, ook als je een ander dier aantikte — de HTML
-			# deed dat ook, maar daar kon je het dier zelf nog naar een tobbe
-			# slepen, en dat slepen is in de poort nooit meegekomen.
-			"aan": func(_spot) -> void: _in_bad(id, _leegste())})
+	# no button per animal any more (wave 2: a tap per animal was play, not
+	# maths): who is in the garden goes into the emptiest tub by himself
+	# (`_baad_zelf`), one after another
 	var rij := _rij_punt()
 	if str(_s["stap"]) == "af":
+		# only words now: the game closes by itself (`_klaar_met_baden`)
 		ctx.ui.wolk({"id": "tb_af", "kamer": KAMER, "x": rij["x"], "z": rij["z"],
 			"hoog": 34.0, "icoon": "⭐", "tekst": "blinkend schoon", "klas": "goed",
-			"prio": 13, "tik": func(_spot) -> void: ctx.sluit()})
+			"prio": 13})
 	elif not wacht.is_empty() and (_s.get("zeg", {}) as Dictionary).is_empty():
 		# één praatje tegelijk
 		ctx.ui.wolk({"id": "tb_bad", "kamer": KAMER, "x": rij["x"], "z": rij["z"],
 			"hoog": 34.0, "icoon": "🛁", "getal": wacht.size(),
 			"tekst": "mag in de tobbe" if wacht.size() == 1 else "mogen in de tobbe",
 			"prio": 10})
-	if str(_s["stap"]) == "baden" and (wacht.is_empty() or _alle_tobbes_vol()) \
-			and not _in_bad_ids().is_empty():
-		var klaar := _gereedschap_punt(GEREEDSCHAP["klaar"])
-		ctx.hotspots.maak({
-			"id": "tb_klaar", "kamer": KAMER, "x": klaar["x"], "z": klaar["z"], "y": 0.0,
-			"op": "onder", "obj": "tobbe", "icoon": "✓", "label": "klaar", "prio": 13,
-			"titel": "klaar met badderen", "aan": func(_spot) -> void: _klaar_met_baden()})
 	_teken_zeg()
 
 ## Wie in bad moet en nog elders in het hotel is, loopt naar de tobbes, en zijn
@@ -1063,6 +1094,50 @@ func _in_bad(id: String, i) -> void:
 	if int(_s["wens"]) != 0 and (_moet_nog_in_bad().is_empty() or _alle_tobbes_vol()):
 		_straks_klaar()
 
+## Het baden gaat vanzelf (wave 2, eigenaar 2026-10-08: "rekenen moet minstens
+## 50% van de interactie zijn"): een tik per dier en een ✓ "klaar met
+## badderen" waren spel, geen rekenen.  Wie in de tuin staat en mag, gaat één
+## voor één in de leegste tobbe; wie nog onderweg is, wordt gehaald.  Zijn
+## alle tobbes vol of wacht er niemand meer, dan is het klaar.  Komt er na
+## `BAD_GEDULD` s niemand meer bij, dan ook — het water was eerlijk verdeeld,
+## dus de ster hoort erbij.
+const BAD_TIK := 0.7
+const BAD_GEDULD := 25.0
+var _baadt := false
+
+func _baad_zelf() -> void:
+	if _baadt or _p.is_empty():
+		return
+	_baadt = true
+	var p0: Dictionary = _p[0]
+	var plek := Vector2(maxf(12.0, float(p0["x"]) - 16.0), float(p0["z"]))
+	var gehaald := {}
+	var geduld := 0.0
+	while actief and not _s.is_empty() and str(_s["stap"]) == "baden":
+		if _alle_tobbes_vol() or (_wachtenden().is_empty() and not _in_bad_ids().is_empty()):
+			_klaar_met_baden()
+			break
+		var wie := ""
+		for g in _wachtenden():
+			var id := str(g["id"])
+			var d := World.dier(id)
+			if d != null and d.kamer == KAMER and not Games.verwacht_dier(id):
+				wie = id
+				break
+			if not gehaald.has(id) and d != null and d.kamer != KAMER:
+				gehaald[id] = true
+				_haal_bader(id, plek)
+		if not wie.is_empty():
+			_in_bad(wie, _leegste())
+			geduld = 0.0
+		elif geduld >= BAD_GEDULD:
+			_klaar_met_baden(true)
+			break
+		if not await na(BAD_TIK):
+			break
+		geduld += BAD_TIK
+	_baadt = false
+
 func _wolkje_weg_straks() -> void:
 	if not await na(2.6):
 		return
@@ -1078,8 +1153,10 @@ func _straks_klaar() -> void:
 		return
 	_klaar_met_baden()
 
-func _klaar_met_baden() -> void:
-	if _s.is_empty() or str(_s["stap"]) != "baden" or _in_bad_ids().is_empty():
+func _klaar_met_baden(leeg_mag := false) -> void:
+	if _s.is_empty() or str(_s["stap"]) != "baden":
+		return
+	if _in_bad_ids().is_empty() and not leeg_mag:
 		return
 	_s["stap"] = "af"
 	_zeg(null)
@@ -1110,6 +1187,21 @@ static func _probe_aan() -> bool:
 			return true
 	return false
 
+## Web only: where this game's own buttons stand after a redraw, in the form
+## `tools/speel.js` taps (`[probe] tb_kuip0=<rect>`).  The shell reports the
+## hotel's buttons only at boot and after a ride, so without this the tubs of
+## the filling step could not be played there (wave 2).
+func _meld_knoppen() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if not actief or _s.is_empty():
+		return
+	for id in Hits.lijst():
+		var s := Hits.spot(id)
+		if s == null or s.door != ctx.id or not is_instance_valid(s.knoop) or not s.knoop.visible:
+			continue
+		print("[probe] ", id, "=", (s.knoop as Control).get_global_rect())
+
 func stand() -> Dictionary:
 	return _s.duplicate(true)
 
@@ -1117,6 +1209,8 @@ func plekken() -> Array:
 	return _p.duplicate(true)
 
 func _meld() -> void:
+	if OS.has_feature("web"):
+		_meld_knoppen()
 	if not _probe:
 		return
 	print("[probe] tobbe stand=", JSON.stringify({

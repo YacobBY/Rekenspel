@@ -14,8 +14,12 @@ extends RefCounted
 ## munten en briefjes (€1, €2, €5, €10, €20, €50, €100).
 ##
 ##   kraampjes (hoeden, sjaals, en de souvenirkraam `kraam`)  één ding kiezen,
-##       dan groep 3: precies betalen tot €9 · groep 4: precies betalen tot €19 ·
-##       groep 5: betalen met €50, hoeveel terug?
+##       dan groep 3: precies betalen tot €9, en wat er over is van de €10 in
+##       de beurs · groep 4: precies betalen tot €19, en wat er over is van de
+##       €20 · groep 5: halve prijs (de prijzen zijn even), dan betalen met €50,
+##       hoeveel terug?  Twee sommen per ding (eigenaar, 2026-10-08: "rekenen
+##       moet minstens 50% van de interactie zijn": kiezen is één tik, rekenen
+##       twee).
 ##   schoenen   per schoentje, één per poot (4, de gans 2), dan
 ##       "hoeveel kosten 4 gympjes?" (groep 3 verdubbelen tot 8, groep 4 de
 ##       tafels tot 20, groep 5 tot 36), dan precies betalen (3, 4) of terug (5)
@@ -49,6 +53,11 @@ const WAREN := {
 ## Munten en briefjes per groep, groot naar klein.
 const GELD := {3: [10, 5, 2, 1], 4: [20, 10, 5, 2, 1], 5: [50, 20, 10, 5, 2, 1]}
 
+## What an animal has in its purse at a stall in groep 3 and 4 (the step
+## `over`): the price always fits in it — €10 for prices up to €9 (groep 3:
+## splitting 10), €20 up to €19 (groep 4: within 20).
+const BEURS := {3: 10, 4: 20}
+
 # ------------------------------------------------------------ de kindtekst
 
 const T_KIES := "Wat kiest %s?"                          ## 3 woorden
@@ -57,6 +66,7 @@ const T_SOM_DOOS := "Hoeveel samen met het doosje?"      ## 5 woorden, 29 tekens
 const T_HALF := "Halve prijs! Hoeveel is dat?"           ## 5 woorden, 28 tekens
 const T_BETAAL := "Met welk geld betaal je %s?"          ## 6 woorden
 const T_TERUG := "%s betaalt %s. Hoeveel terug?"          ## 5 woorden
+const T_OVER := "%s had %s. Hoeveel over?"                ## 5 woorden, 33 tekens
 const T_AF := "%s draagt nu %s %s!"                      ## 5-6 woorden
 const T_WEG := "Dat klopt niet"                          ## 3 woorden
 const T_LEEG := "nog geen gasten"
@@ -95,14 +105,19 @@ static func opzet(winkel: String, n: int, band: int, dag: int) -> Dictionary:
 		var r := int(rnd.volgende() * 4.0)
 		var p := prijs(winkel, b, k, gasten, r)
 		# two things on one counter never cost the same, except shoes in groep 3
-		# (€1 or €2 a shoe is all there is)
+		# (€1 or €2 a shoe is all there is); a price that steps by 5 or by 2
+		# keeps doing so, also round the top of the range
 		var bereik := _bereik(winkel, b)
-		var stap := 5 if winkel == "luxe" and b == 4 else (2 if winkel == "luxe" and b == 5 else 1)
+		var stap := 1
+		if winkel == "luxe" and b == 4:
+			stap = 5
+		elif b == 5 and winkel != "schoenen":
+			stap = 2
 		var rondjes := 0
 		while gezien.has(p) and not (winkel == "schoenen" and b == 3) and rondjes < 40:
 			p -= stap
 			if p < int(bereik[0]):
-				p = int(bereik[1])
+				p = int(bereik[1]) - (int(bereik[1]) - int(bereik[0])) % stap
 			rondjes += 1
 		gezien[p] = true
 		waren.append({"naam": str(namen[i]), "prijs": p})
@@ -139,6 +154,10 @@ static func prijs(winkel: String, b: int, k: int, n: int, r: int) -> int:
 			return lo + (k * n + r) % (hi - lo + 1)
 		"schoenen":
 			return lo + (k * n + r) % (hi - lo + 1)
+	if b == 5:
+		# even, 12 … 38: a stall in groep 5 sells at half price (`stappen`),
+		# and half of it is whole euros
+		return lo + 2 * ((k * n + r) % (int((hi - lo) / 2) + 1))
 	return mini(hi, lo + (k * n + r) % (hi - lo + 1))
 
 # ------------------------------------------------------------ de toonbank
@@ -171,7 +190,10 @@ static func te_koop(o: Dictionary, eigen: Array, toon: int) -> Array:
 
 # ------------------------------------------------------------ de stappen
 
-## The steps of a turn after the choice, in order.
+## The steps of a turn, in order: the choice, then at least two sums in every
+## shop and every groep (owner, 2026-10-08: maths at least half of the taps —
+## the choice is one tap).  A stall: groep 3/4 pay exactly, then what is left
+## in the purse (`over`); groep 5 half price, then the change from €50.
 static func stappen(winkel: String, band: int) -> Array:
 	var b := groep(band)
 	match winkel:
@@ -183,7 +205,10 @@ static func stappen(winkel: String, band: int) -> Array:
 			if b == 4:
 				return ["kies", "som", "terug"]
 			return ["kies", "half", "som", "terug"]
-	return ["kies", "betaal" if b <= 4 else "terug"]
+	return ["kies", "betaal", "over"] if b <= 4 else ["kies", "half", "terug"]
+
+## The steps that are a sum (an answer strip of numbers or of money).
+const REKENSTAPPEN := ["som", "half", "betaal", "terug", "over"]
 
 static func volgende(winkel: String, band: int, stap: String) -> String:
 	var lijst := stappen(winkel, band)
@@ -204,15 +229,16 @@ static func prijs_van(o: Dictionary, naam: String) -> int:
 	return int(waar_van(o, naam).get("prijs", 0))
 
 ## Everything a turn asks, from the shop, the thing and the animal's kind.
-##   {prijs, poten, half, som, totaal, briefje, terug}
+##   {prijs, poten, half, som, totaal, briefje, terug, beurs, over}
 ##   totaal = what has to be paid; briefje = the note the animal pays with in
-##   a "terug" step; terug = the change.
+##   a "terug" step; terug = the change; beurs = the purse at a stall in
+##   groep 3/4 and over = what is left in it after paying ("over" step).
 static func sommen(o: Dictionary, naam: String, kind: String) -> Dictionary:
 	var winkel := str(o["winkel"])
 	var b := int(o["band"])
 	var p := prijs_van(o, naam)
 	var uit := {"prijs": p, "poten": poten(kind), "half": 0, "som": p, "totaal": p,
-		"briefje": 0, "terug": 0}
+		"briefje": 0, "terug": 0, "beurs": 0, "over": 0}
 	if winkel == "schoenen":
 		uit["som"] = p * int(uit["poten"])
 		uit["totaal"] = uit["som"]
@@ -223,6 +249,14 @@ static func sommen(o: Dictionary, naam: String, kind: String) -> Dictionary:
 			basis = int(uit["half"])
 		uit["som"] = basis + int(o["doosje"])
 		uit["totaal"] = uit["som"]
+	elif b >= 5:
+		# a stall in groep 5: half price (its prices are even, `prijs`)
+		uit["half"] = int(p / 2)
+		uit["totaal"] = uit["half"]
+	else:
+		# a stall in groep 3/4: the purse, and what is left of it
+		uit["beurs"] = int(BEURS.get(b, 20))
+		uit["over"] = int(uit["beurs"]) - p
 	# the smallest note that is MORE than the bill, so there is always change
 	# (groep 5 pays with €50 or €100, never with a note that just fits)
 	var t := int(uit["totaal"])
@@ -244,6 +278,8 @@ static func goed(stap: String, s: Dictionary) -> int:
 			return int(s["terug"])
 		"betaal":
 			return int(s["totaal"])
+		"over":
+			return int(s.get("over", 0))
 	return 0
 
 ## The slips a child really makes, for the answer strip (`Afleiders.vier`).
@@ -261,6 +297,9 @@ static func liever(stap: String, s: Dictionary, o: Dictionary) -> Array:
 		"terug":
 			# the price itself, and ten off
 			return [int(s["totaal"]), int(s["terug"]) + 10, int(s["terug"]) - 10]
+		"over":
+			# the price itself, and one off when counting on to the purse
+			return [int(s["totaal"]), int(s["over"]) + 1, int(s["over"]) - 1]
 	return []
 
 # ------------------------------------------------------------ het betalen
@@ -345,4 +384,7 @@ static func kaart(stap: String, o: Dictionary, naam: String, s: Dictionary, gast
 		"terug":
 			return [T_TERUG % [gast, euro(int(s["briefje"]))],
 				"%s − %s =" % [euro(int(s["briefje"])), euro(int(s["totaal"]))]]
+		"over":
+			return [T_OVER % [gast, euro(int(s["beurs"]))],
+				"%s − %s =" % [euro(int(s["beurs"])), euro(int(s["totaal"]))]]
 	return [T_AF % [gast, str(w.get("lid", "de")), str(w.get("naam", naam))], ""]

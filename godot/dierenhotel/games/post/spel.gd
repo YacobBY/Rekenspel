@@ -162,10 +162,19 @@ func start(_c: SpelCtx) -> void:
 	# animal: another one's is dropped (`weg`).
 	var hervat := not (S.is_empty() or int(S["dag"]) != dag or int(S["N"]) != n
 			or int(S["band"]) != band or _stap() == "af")
+	# A letter that was already put in a wrong hole stays on top of the pile
+	# after any exit — another day, another hotel size or band (wave 2, R2):
+	# the pile is seeded on the turn's own band, N, day and round, so it is
+	# rebuilt from the save, never from today.
+	if open_brief(S):
+		hervat = true
 	var weg := ""
 	if hervat and not wil.is_empty() and wil != _gast_id():
+		# the game bar's animal switch: the picked animal takes over the cart,
+		# the pile and its progress stay (wave 2, R2 — it used to start the
+		# same pile again at letter 0)
 		weg = _gast_id()
-		hervat = false
+		S["gast"] = wil
 	if not hervat:
 		# a finished pile is followed by a fresh one on the same day
 		var ronde := 0
@@ -178,7 +187,7 @@ func start(_c: SpelCtx) -> void:
 		S["gast"] = _kies_postbode(kies, wil, n, dag)
 	d["stand"] = S
 	ctx.speelt(_gast_id())
-	O = Beurt.maak(band, n, dag, int(S["ronde"]))
+	O = Beurt.maak(int(S["band"]), int(S["N"]), int(S["dag"]), int(S["ronde"]))
 	S["i"] = clampi(int(S["i"]), 0, (O["brieven"] as Array).size())
 	_t0 = Time.get_ticks_msec()
 	_kaart = null
@@ -266,6 +275,12 @@ static func _normaliseer(st: Dictionary) -> Dictionary:
 	var stap := str(st.get("stap", "sorteer"))
 	st["stap"] = stap if stap in ["sorteer", "af"] else "sorteer"
 	return st
+
+## A saved pile whose top letter was already put in a wrong hole: that letter
+## may not be swapped for a fresh pile (R2).
+static func open_brief(st: Dictionary) -> bool:
+	return not st.is_empty() and str(st.get("stap", "")) == "sorteer" \
+		and int(st.get("pog", 0)) > 0
 
 func _stap() -> String:
 	return str(S.get("stap", ""))
@@ -514,6 +529,8 @@ func _kies(j: int) -> void:
 	_bezig = true
 	S["pog"] = 0
 	S["i"] = int(S["i"]) + 1
+	# a right answer on a choice strip (not a `goed: n` strip): the game says so
+	ctx.reken_goed()
 	ctx.snd.brief()
 	ctx.snd.ja()
 	if _kaart != null:

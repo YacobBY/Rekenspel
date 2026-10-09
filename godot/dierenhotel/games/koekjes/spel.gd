@@ -150,7 +150,20 @@ func start(_c: SpelCtx) -> void:
 	var hervat := not (S.is_empty() or g.is_empty() or int(S["dag"]) != dag
 			or int(S["N"]) != n or int(S["band"]) != band or _stap() != "som")
 	var weg := ""
-	if hervat and not wil.is_empty() and wil != _gast_id():
+	# An open question that had a miss comes back UNCHANGED after any exit —
+	# another day, another hotel size or band, the game bar's animal switch
+	# (wave 2, R2): the sum is seeded on the turn's own day, N and band, so it
+	# is rebuilt from the save, never from today.  The picked animal may take
+	# over the tray; the question stays.
+	var open := open_vraag(S)
+	if open:
+		hervat = true
+		if not wil.is_empty() and wil != _gast_id():
+			weg = _gast_id()
+			S["gast"] = wil
+		elif g.is_empty():
+			S["gast"] = str((kies[(dag + n) % kies.size()] as Dictionary).get("id", ""))
+	elif hervat and not wil.is_empty() and wil != _gast_id():
 		weg = _gast_id()
 		hervat = false
 	if not hervat:
@@ -158,7 +171,7 @@ func start(_c: SpelCtx) -> void:
 		S = _nieuwe_stand(g, n, band, dag)
 	d["stand"] = S
 	ctx.speelt(_gast_id())
-	B = Beurt.maak(n, band, dag)
+	B = Beurt.maak(int(S["N"]), int(S["band"]), int(S["dag"]))
 	_t0 = Time.get_ticks_msec()
 	_kaart = null
 	_kaart_stap = ""
@@ -221,6 +234,12 @@ static func _normaliseer(st: Dictionary) -> Dictionary:
 	var stap := str(st.get("stap", "som"))
 	st["stap"] = stap if stap in ["som", "bak", "af"] else "som"
 	return st
+
+## A saved turn whose sum is still asked and was already answered wrong at
+## least once: it may not be swapped for an easier or a fresh one (R2).
+static func open_vraag(st: Dictionary) -> bool:
+	return not st.is_empty() and str(st.get("stap", "")) == "som" \
+		and int(st.get("missers", 0)) > 0
 
 func _stap() -> String:
 	return str(S.get("stap", ""))
@@ -303,6 +322,9 @@ func _kaart_neer() -> void:
 		o["goed"] = int(B["goed"])
 		o["liever"] = B["liever"]
 		o["min"] = 1
+		# the strip's seed is the turn's own day, not today's (`Ui._getal_keuzes`
+		# takes today): an open question keeps its four numbers across a new day
+		o["zaad"] = (hash(KAART_ID) % 100003) + int(S["dag"]) * 17
 		o["on_ok"] = _antwoord
 		if B.has("regel2"):
 			o["regel2"] = str(B["regel2"])

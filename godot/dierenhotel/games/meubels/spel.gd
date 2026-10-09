@@ -37,8 +37,25 @@ extends MiniGame
 ##    spel loopt, LEENT de plaatsstap de deur- en trapbordjes van de kamer waar
 ##    je bent (`_leen_deuren`, zoals de voerkar), met hun eigen tik: zo kies je
 ##    de kamer voor je meubel of je schilderij door erheen te lopen (U7).
+##
+## DE REKENWACHT (golf 2, eigenaar: "het moet niet mogelijk zijn om rekenen over
+## te slaan en rekenen moet minstens 50% van de interactie zijn"):
+##  * elke aankoop vraagt rekenen, ook één ding en ook groep 3 (`beurt.gd`):
+##    [som] → genoeg? → munten leggen → [wisselgeld, groep 4/5 altijd] → hoeveel
+##    houd je over?  Pas daarna gaan de munten uit de kassa en komt het meubel;
+##  * de munten liggen als strook ONDER de bon (`reken: true`): één tik = één
+##    munt op de toonbank, geen buidel meer om door te klikken, geen ✔ Klaar —
+##    de stapel wordt gekeurd zodra hij de prijs haalt;
+##  * groep 4/5: het tweede ding op het lijstje rekent meteen af;
+##  * de versiering met sterren loopt dezelfde weg (genoeg? → houd je over?);
+##  * na het neerzetten van het laatste stuk gaat het spel vanzelf dicht;
+##  * een open vraag met een misser komt na elke uitgang ONVERANDERD terug
+##    (`q.open`, ook na een nieuwe dag of een andere band), en na een misser is
+##    er geen weg terug naar het boek om iets goedkopers te kiezen;
+##  * oppakken, draaien, « munt terug, ▸ meer en de buideltik zijn `vrij`.
 
 const MODELLEN := preload("res://games/meubels/modellen.gd")
+const BEURT := preload("res://games/meubels/beurt.gd")
 
 # --------------------------------------------------------- alle kinderteksten
 # games-a.md §5.9, letterlijk (architecture.md §1.1 F3).
@@ -60,7 +77,6 @@ const T_SAMEN := "Hoeveel euro is dat samen?"
 const T_TERUG_VRAAG := "Hoeveel krijg je terug?"
 const T_LEG_MUNTEN := "Leg de 🪙 munten op de toonbank"
 const T_TIK_GETAL := "tik een getal"
-const T_KLAAR_TELLEN := "klaar met tellen"
 const T_MUNT_TERUG := "een munt terugpakken"
 const T_TERUG_BOEK := "terug naar het meubelboek"
 const T_TERUG := "terug"
@@ -79,6 +95,15 @@ const T_KAMERS_VOL := "alle kamers vol"
 ## vierde verzoek krijgt dit antwoord.
 const T_EERST := "leg eerst iets neer"
 const WACHT_MAX := 3
+## De vragen die er met de Rekenwacht bij kwamen (`beurt.gd`).  Elke zin ≤ 8
+## woorden en ≤ 40 tekens (HOTEL.md §9, `Ui.keur_regel`).
+const T_GENOEG_VRAAG := "Je hebt %s. Is dat genoeg?"
+const T_OVER_ZIN := "Je hebt %s, het kost %s"
+const T_OVER_VRAAG := "Hoeveel houd je over?"
+const T_STER_PRIJS := "Dit kost %d ⭐"
+const W_GENOEG := "Genoeg"
+const W_TE_WEINIG := "Te weinig"
+const T_MUNT_LEG := "munt van %d euro op de toonbank"
 
 ## De woorden naast de pictogrammen op de knoppen in de wereld.  HOTEL.md §9:
 ## "een pictogram staat altijd in hetzelfde wolkje als zijn woord of getal";
@@ -92,7 +117,6 @@ const WACHT_MAX := 3
 ## schil.
 const W_HIER := "Hier"
 const W_MEER := "Meer"
-const W_KLAAR := "Klaar"
 const W_TERUG := "Terug"
 const W_BOEK := "Boek"
 const W_DRAAIEN := "Draaien"
@@ -100,10 +124,9 @@ const W_OPPAKKEN := "Oppakken"
 
 const VAK_MAX := 4          ## hooguit vier ✨-vakjes tegelijk in beeld
 const VAK_AF := 24          ## en die liggen minstens 24 voxels uit elkaar
-const MUNTSOORT := [1, 2, 5, 10]
 
 # ------------------------------------------------------------------- de stand
-var _view := "boek"          ## kassa | boek | wereld | betaal | plaats
+var _view := "boek"          ## kassa | boek | wereld | betaal | plaats | klaar
 var _tab := "meubels"        ## meubels | versiering
 var _lijst: Array[String] = []
 var _spaar: Dictionary = {}  ## {icoon, nodig, heb} — de spaarchip boven het blad
@@ -155,7 +178,11 @@ func definitie() -> Dictionary:
 		"kan": func(s: Dictionary) -> bool:
 			if int(s.get("munten", 0)) > 0 or int(s.get("sterren", 0)) >= 1:
 				return true
-			var w = ((s.get("spel", {}) as Dictionary).get("meubels", {}) as Dictionary).get("wacht", null)
+			var laatje := (s.get("spel", {}) as Dictionary).get("meubels", {}) as Dictionary
+			# R2: een open vraag met een misser moet altijd terug kunnen komen
+			if typeof(laatje.get("open", null)) == TYPE_DICTIONARY:
+				return true
+			var w = laatje.get("wacht", null)
 			return typeof(w) == TYPE_DICTIONARY \
 				and not ((w as Dictionary).get("nog", []) as Array).is_empty(),
 		"stub": false,
@@ -185,8 +212,20 @@ func start(_c: SpelCtx) -> void:
 		_verbonden = true
 	print("[probe] mb=start band=", ctx.state.band(), " munten=", _munten(),
 		" wacht=", _nog().size())
+	# R2 (Rekenwacht): een open vraag met een misser komt ONVERANDERD terug —
+	# na ⬅ Terug, een andere taak, een herlaad, een nieuwe dag of een andere
+	# band.  Dat gaat vóór alles: ook vóór het boek en vóór de kassavraag.
+	var open = q.get("open", null)
+	if typeof(open) == TYPE_DICTIONARY and str((open as Dictionary).get("soort", "")) == "kassa":
+		_kassa_vraag(open as Dictionary)
+		return
+	if typeof(open) == TYPE_DICTIONARY and str((open as Dictionary).get("soort", "")) == "betaal":
+		_betaal_herstel(open as Dictionary)
+		return
+	q.erase("open")
 	# Al betaald maar nog niet neergezet (ook na "Verder spelen")?  Dan mag dat
-	# eerst een plekje krijgen: daar is immers al voor gerekend.
+	# eerst een plekje krijgen: daar is immers al voor gerekend — dit is het
+	# slot van die betaalde beurt, geen nieuwe beloning.
 	if not _nog().is_empty():
 		_plaats()
 	elif _munten() <= 0:
@@ -374,12 +413,22 @@ func _op_kamer(kamer_id: String) -> void:
 # het goede antwoord gaat het boek open.
 # ==================================================================================
 
-func _kassa_vraag() -> void:
+func _kassa_vraag(open: Dictionary = {}) -> void:
 	_view = "kassa"
 	_bet = {}
 	# de echte munten uit de buidel: `Sommen.buidel` legt ze zo neer dat elk
 	# bedrag eronder ook precies te betalen is (dezelfde munten als straks).
-	_kas = {"munten": ctx.econ.buidel(_munten()), "pog": 0, "kaart": null}
+	_kas = {"munten": ctx.econ.buidel(_munten()), "pog": 0, "kaart": null,
+		"dag": int(ctx.state.s.get("dag", 1))}
+	if not open.is_empty():
+		# R2: na een misser dezelfde munten, dezelfde vier knoppen — ook als er
+		# intussen munten bij kwamen of een nieuwe dag begon
+		var munten: Array = []
+		for c in open.get("munten", []):
+			munten.append(int(c))
+		_kas["munten"] = munten
+		_kas["pog"] = int(open.get("pog", 0))
+		_kas["dag"] = int(open.get("dag", _kas["dag"]))
 	_blad_stil = true
 	Ui.blad_dicht()                              # de wereld is het speelvlak
 	_blad_stil = false
@@ -402,7 +451,7 @@ func _kassa_teken() -> void:
 	# geldknop draagt zijn eenheid: 🪙 €7, niet 💰 7 (HOTEL.md §9).
 	var kaart := ctx.ui.somkaart(_kaart_obj(), "💰 =", {
 		"id": "mb_kas", "kamer": "receptie", "max": _cijfers(goed), "icoon": "💰",
-		"vlak": _kaart_vlak(), "regel": T_HOEVEEL,
+		"vlak": _kaart_vlak(), "regel": T_HOEVEEL, "reken": true,
 		"keuzes": _munt_keuzes(goed), "keuze_titel": T_TIK_GETAL})
 	_kas["kaart"] = kaart
 
@@ -422,7 +471,7 @@ func _kassa_teken() -> void:
 		"id": "mb_buidel", "kamer": "receptie", "hoog": 10.0, "prio": 10,
 		"op": "aan", "obj": "mb_geldbuidel",
 		"icoon": "💰", "label": "", "aantal": munten.size(), "hand": 0,
-		"titel": T_BUIDEL % munten.size(), "sleep": "",
+		"titel": T_BUIDEL % munten.size(), "sleep": "", "vrij": true,
 		"tik": func(_s) -> void:
 			ctx.snd.munt()
 			_kassa_teken()})
@@ -442,7 +491,9 @@ func _munt_keuzes(goed: int) -> Array:
 	var liever: Array[int] = [munten.size()]
 	if not munten.is_empty():
 		liever.append(int(munten[0]))          # alleen de grootste munt geteld
-	var dag := int(ctx.state.s.get("dag", 1))
+	# de dag van de VRAAG, niet van vandaag: na een misser en een nieuwe dag
+	# staan dezelfde vier knoppen er weer (R2)
+	var dag := int(_kas.get("dag", ctx.state.s.get("dag", 1)))
 	var zaad := (hash("mb_kas") % 100003) + dag * 17
 	var uit: Array = []
 	for g in Afleiders.vier(goed, zaad, {"min": 1,
@@ -473,11 +524,17 @@ func _kas_ok(n: int) -> void:
 		_kas["pog"] = int(_kas["pog"]) + 1
 		ctx.snd.zacht()
 		ctx.ui.misser(_kas.get("kaart"), "")
+		# R2: deze vraag komt na elke uitgang onveranderd terug
+		_q()["open"] = {"soort": "kassa", "munten": (_kas["munten"] as Array).duplicate(),
+			"pog": int(_kas["pog"]), "dag": int(_kas["dag"])}
+		State.bewaar()
 		return
 	var kaart = _kas.get("kaart")
 	if kaart != null:
 		kaart.som("💰 = %s" % _eur(goed))
 		kaart.klaar()                          # het vinkje, de strook gaat weg
+	ctx.reken_goed()
+	_q().erase("open")
 	ctx.snd.ja()
 	var b: Dictionary = World.mik("kassa", "receptie")
 	_wolk({"kamer": "receptie", "x": float(b.get("x", 60)), "z": float(b.get("z", 20))},
@@ -498,8 +555,13 @@ func _na_kassa() -> void:
 ## Stap 0: met een lege buidel valt er niets te tellen — dan meteen het boek en
 ## een wolkje dat zegt waarom.  Een som met `goed = 0` zou vier afleiders rond
 ## nul opleveren, en dat is geen vraag maar een raadsel.
+##
+## Rekenwacht: zonder munten valt er alleen versiering met sterren te halen,
+## dus het boek opent meteen op die bladzijde — en elke sticker vraagt zelf
+## rekenen (genoeg? → hoeveel houd je over?), er is niets te krijgen zonder.
 func _geen_munten() -> void:
 	_q()["view"] = "boek"
+	_tab = "versiering"
 	_boek()
 	_wolk(_hier(), {"id": "mb_geen", "icoon": "💰", "tekst": T_GEEN_MUNTEN,
 		"klas": "hulp", "hoog": 26.0, "prio": 11})
@@ -514,6 +576,7 @@ func _meld_kassa() -> void:
 	for id in ["mb_kas", "mb_munten", "mb_buidel"]:
 		var s := Hits.spot(id)
 		if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
+			print("[probe] knop ", id, "=", s.knoop.get_global_rect())
 			print("[probe] mb=hot ", id, "=", s.knoop.get_global_rect(),
 				" dekking=", "%.2f" % Hits.dekking(id))
 	_meld_keuzes(_kas.get("kaart"))
@@ -615,8 +678,9 @@ func _blad_meubels(inhoud: Array[Control], bron: Array = Sommen.Meubels.WINKEL,
 				"%s %d euro erbij" % [str(w["naam"]), prijs],
 				func() -> void: _op_lijstje(type)))
 		else:
-			var kan := prijs <= _munten()
-			delen.append(_knop("k_%s" % type, "🛒" if kan else "💛",
+			# Rekenwacht: het kaartje zegt niet meer zelf of je genoeg hebt (🛒
+			# of 💛) — dat is nu de vraag bij de kassa ("Heb je genoeg?")
+			delen.append(_knop("k_%s" % type, "🛒",
 				"%s kopen, %d euro" % [str(w["naam"]), prijs],
 				func() -> void: _koop([type])))
 		rooster.add_child(_kaartje(delen, compact))
@@ -644,7 +708,6 @@ func _blad_versiering(q: Dictionary, inhoud: Array[Control]) -> void:
 	rooster.alignment = FlowContainer.ALIGNMENT_CENTER
 	rooster.add_theme_constant_override("h_separation", 6)
 	rooster.add_theme_constant_override("v_separation", 6)
-	var sterren := _sterren()
 	for v in Sommen.Meubels.VERSIERING:
 		var sleutel := str(v["sleutel"])
 		var nodig := int(v["ster"])
@@ -654,7 +717,8 @@ func _blad_versiering(q: Dictionary, inhoud: Array[Control]) -> void:
 			_chip("⭐ %d" % nodig, UiThema.LILA)]
 		if heb > 0:
 			delen.append(_chip("%d×" % heb, UiThema.MUNT))
-		delen.append(_knop("v_%s" % sleutel, "🛒" if nodig <= sterren else "💛",
+		# net als de meubels: of je genoeg sterren hebt is de vraag bij de kassa
+		delen.append(_knop("v_%s" % sleutel, "🛒",
 			"%s kopen voor %d sterren" % [str(v["naam"]), nodig],
 			func() -> void: _koop_versiering(sleutel)))
 		rooster.add_child(_kaartje(delen))
@@ -713,6 +777,7 @@ func _meld_blad(blad: UiBlad) -> void:
 func _meld_knop_in(kind: Node) -> void:
 	if kind is Button:
 		print("[probe] mb=knop ", kind.name, "=", (kind as Control).get_global_rect())
+		print("[probe] bladknop ", kind.name, "=", (kind as Control).get_global_rect())
 		return
 	for k in kind.get_children():
 		_meld_knop_in(k)
@@ -766,7 +831,11 @@ func _kaartje(delen: Array[Control], compact := false) -> PanelContainer:
 		kolom.add_child(c)
 	return p
 
-func _knop(id: String, tekst: String, titel: String, aan: Callable) -> Button:
+## Een knop van het boek zelf.  Die hangt niet aan `Hits`, dus de Rekenwacht
+## ziet hem alleen via `Reken.laat_door` (de poort voor de eigen knoppen van een
+## spel): elke tik telt als spel, en een `vrij` knop (bladeren door de tabs)
+## wacht op rekenen als het budget op is.
+func _knop(id: String, tekst: String, titel: String, aan: Callable, vrij := false) -> Button:
 	var b := Button.new()
 	b.name = "K" + id
 	b.text = tekst
@@ -775,14 +844,17 @@ func _knop(id: String, tekst: String, titel: String, aan: Callable) -> Button:
 	b.clip_text = false
 	b.add_theme_font_size_override("font_size", _maat("knop"))
 	b.pressed.connect(func() -> void:
+		if not Reken.laat_door("spel", "meubels:" + id, b, vrij):
+			return
 		Snd.tik()
 		aan.call())
 	return b
 
 func _tabknop(welke: String, tekst: String, titel: String) -> Button:
-	var b := _knop("tab_" + welke, tekst, titel, func() -> void:
+	var wissel := func() -> void:
 		_tab = welke
-		_boek_teken())
+		_boek_teken()
+	var b := _knop("tab_" + welke, tekst, titel, wissel, true)   # bladeren: vrij spel
 	if _tab == welke:
 		b.theme_type_variation = "KnopGroot"
 	return b
@@ -801,16 +873,22 @@ func _op_lijstje(type: String) -> void:
 		return
 	_lijst.append(type)
 	_spaar = {}
+	if _lijst.size() >= _max_lijst():
+		# Rekenwacht: een vol lijstje rekent meteen af — 🛒 Afrekenen was een
+		# tik zonder rekenen (bevestigen), het lijstje zegt zelf dat het klaar is
+		_koop(_lijst.duplicate())
+		return
 	_boek_teken()
 
 ## Te weinig geld: één wolkje met de prijs en wat je hebt.  Het meubel blijft
 ## in het boek staan om voor te sparen; er gaat niets op slot.
-func _tekort(totaal: int) -> void:
-	_spaar = {"icoon": "💛", "nodig": _eur(totaal), "heb": _eur(_munten())}
-	_boek_teken()
-	ctx.snd.zacht()
+## Rekenwacht: dit wolkje komt nu pas NA het goede antwoord "💛 Te weinig" bij
+## de kassa — het kind zegt het zelf, het boek zegt het niet meer vooraf.
+func _tekort(totaal: int, heb: int) -> void:
+	_spaar = {"icoon": "💛", "nodig": _eur(totaal), "heb": _eur(heb)}
+	_boek()
 	_wolk(_hier(), {"id": "mb_spaar", "icoon": "💛", "getal": _eur(totaal),
-		"tekst": "je hebt %s" % _eur(_munten()), "klas": "hulp",
+		"tekst": "je hebt %s" % _eur(heb), "klas": "hulp",
 		"hoog": 26.0, "prio": 11})
 	ctx.wereld.vuil()
 
@@ -838,31 +916,50 @@ func _kamers_vol() -> void:
 	ctx.wereld.vuil()
 	_wolk_straks("mb_bedvol", 2.4)
 
+## Rekenwacht: een sticker kost sterren, en die gaan pas af na twee goede
+## antwoorden bij de kassa — "Heb je genoeg?" en "Hoeveel houd je over?".  Wie
+## te weinig heeft zegt dat zelf ("💛 Te weinig") en krijgt het spaarwolkje.
 func _koop_versiering(sleutel: String) -> void:
-	var q := _q()
 	var v := _versier(sleutel)
 	if v.is_empty():
 		return
-	var nodig := int(v["ster"])
-	var sterren := _sterren()
-	if nodig > sterren:
-		_spaar = {"icoon": "⭐", "nodig": nodig, "heb": sterren}
-		_boek_teken()
-		ctx.snd.zacht()
-		_wolk(_hier(), {"id": "mb_spaar", "icoon": "⭐", "getal": nodig,
-			"tekst": "je hebt %d" % sterren, "klas": "hulp", "hoog": 26.0, "prio": 11})
-		ctx.wereld.vuil()
-		return
-	ctx.econ.sterren(-nodig, "versiering")     # `state.ster(-n, 'versiering')`
+	_betaal_start([sleutel], int(v["ster"]), "ster", _sterren())
+
+## Te weinig sterren — gezegd door het kind zelf, bij de kassa.
+func _ster_tekort(nodig: int, heb: int) -> void:
+	_spaar = {"icoon": "⭐", "nodig": nodig, "heb": heb}
+	_boek()
+	ctx.snd.zacht()
+	_wolk(_hier(), {"id": "mb_spaar", "icoon": "⭐", "getal": nodig,
+		"tekst": "je hebt %d" % heb, "klas": "hulp", "hoog": 26.0, "prio": 11})
+	ctx.wereld.vuil()
+
+## Twee goede antwoorden: nu pas gaan de sterren af en komt de sticker in het
+## bakje (alleen versiering — er hangt verder niets aan).
+func _betaald_ster() -> void:
+	var q := _q()
+	var sleutel := str((_bet["types"] as Array)[0])
+	var v := _versier(sleutel)
+	var nodig := int(_bet["totaal"])
+	var missers := _missers()
+	ctx.econ.sterren(-mini(nodig, maxi(0, _sterren())), "versiering")
+	ctx.state.tel(missers == 0, Time.get_ticks_msec() - _t0)
 	var bak: Dictionary = q["versiering"]
 	bak[sleutel] = int(bak.get(sleutel, 0)) + 1
+	q.erase("open")
 	_spaar = {}
+	_bet = {}
 	State.bewaar()
 	Hotel.render()
-	_boek_teken()
-	_wolk(_hier(), {"id": "mb_af", "icoon": str(v["icoon"]), "getal": "+1",
-		"klas": "goed", "hoog": 26.0, "prio": 11})
+	_leeg_wereld()
+	var b: Dictionary = World.mik("kassa", "receptie")
+	_wolk({"kamer": "receptie", "x": float(b.get("x", 60)), "z": float(b.get("z", 20))},
+		{"id": "mb_af", "icoon": str(v.get("icoon", "⭐")), "getal": "+1",
+		"klas": "goed", "hoog": 30.0, "prio": 12})
+	print("[probe] mb=sticker ", sleutel, " missers=", missers,
+		" sterren=", _sterren())
 	ctx.wereld.vuil()
+	_klaar_dicht(1.6)
 
 # ==================================================================================
 # DE WERELDPAGINA — je eigen meubels (games-a.md §5.8)
@@ -904,6 +1001,7 @@ func _mijn_meubel_knoppen() -> void:
 				ctx.hotspots.maak({"id": "mbdraai_%s" % id, "kamer": kamer_id,
 					"x": x + 8.0, "z": z - 8.0, "y": 14.0,
 					"icoon": "🔄", "label": W_DRAAIEN, "titel": T_DRAAIEN, "prio": 8,
+					"vrij": true,              # herschikken: vrij spel (Rekenwacht)
 					"aan": func(_s) -> void: _draai(id, kamer_id, x, z)})
 			# een schilderij hangt aan de muur: het knopje naast het lijstje
 			var aan_wand := Rooms.plek_soort(type) == "wand"
@@ -914,6 +1012,7 @@ func _mijn_meubel_knoppen() -> void:
 				"y": float(Rooms.WAND_Y) + Rooms.WAND_HOOG / 2.0 if aan_wand else 14.0,
 				"icoon": "📦", "label": W_OPPAKKEN,
 				"titel": "%s oppakken" % _naam_van(type), "prio": 8,
+				"vrij": true,                  # herschikken: vrij spel (Rekenwacht)
 				"aan": func(_s) -> void: _pak_op(id, type, kamer_id, x, z)})
 
 func _mijn(id: String) -> Dictionary:
@@ -1004,35 +1103,109 @@ func _slaapt(kamer_id: String, x: float, z: float) -> void:
 func _koop(types: Array) -> void:
 	if types.is_empty():
 		return
-	var tot := _totaal_van(types)
-	if tot > _munten():
-		_tekort(tot)
-		return
 	if not _bedden_passen(types):
 		_kamers_vol()
 		return
-	var cap := Sommen.Meubels.buidel_cap(tot, _munten(), _band())
+	# Rekenwacht: ook met te weinig geld gaat het naar de kassa — "Heb je
+	# genoeg?" is daar de eerste vraag, en "💛 Te weinig" is dan het goede
+	# antwoord (vroeger zei het kaartje dat zelf, zonder rekenen)
+	_betaal_start(types, _totaal_van(types), "munt", _munten())
+
+## De pogingen per stap: samen de missers van één aankoop (`State.tel`).
+const POGINGEN := ["som_pog", "gen_pog", "tel_pog", "wis_pog", "over_pog"]
+
+## Eén aankoop begint: het boek gaat dicht, de kassa is het speelvlak.  Alles
+## wat de vraag maakt staat in `_bet` — de band, wat je had, de dag (het zaad
+## van de strook) en de munten in je hand — zodat een misser hem onveranderd
+## kan bewaren (`_bewaar_open`).  `valuta`: "munt" (meubels, decoratie) of
+## "ster" (versiering: geen toonbank, geen wisselgeld).
+func _betaal_start(types: Array, totaal: int, valuta: String, heb: int) -> void:
+	var band := _band()
+	var soorten: Array = []
+	for t in types:
+		soorten.append(str(t))
+	var hand: Array = []
+	if valuta == "munt":
+		for c in ctx.econ.buidel(Sommen.Meubels.buidel_cap(totaal, heb, band)):
+			hand.append(int(c))
 	_spaar = {}
 	_view = "betaal"
 	_t0 = Time.get_ticks_msec()
-	var soorten: Array[String] = []
-	for t in types:
-		soorten.append(str(t))
 	_bet = {
-		"types": soorten, "totaal": tot,
-		"stap": "som" if soorten.size() > 1 else "munten",
-		"hand": ctx.econ.buidel(cap), "bank": [] as Array[int],
-		"som_pog": 0, "tel_pog": 0, "wis_pog": 0,
-		"rest": _munten() - cap,
-		"kaart": null, "soort": 1,
+		"valuta": valuta, "types": soorten, "totaal": totaal, "heb": heb,
+		"band": band, "dag": int(ctx.state.s.get("dag", 1)),
+		"stap": BEURT.eerste(band, soorten.size(), valuta),
+		"hand": hand, "bank": [], "kaart": null,
 	}
-	_kies_soort(1)
+	for k in POGINGEN:
+		_bet[k] = 0
+	_q().erase("open")
+	print("[probe] mb=koop ", valuta, " ", soorten, " totaal=", totaal, " heb=", heb,
+		" stappen=", BEURT.stappen(band, soorten.size(), valuta))
+	_naar_kassa()
+
+## R2: na een misser en een uitgang staat precies dezelfde vraag er weer — op
+## dezelfde stap, met dezelfde munten in je hand en op de toonbank, dezelfde
+## band en hetzelfde zaad, ook als er intussen een dag of een gast bij kwam.
+func _betaal_herstel(open: Dictionary) -> void:
+	var types: Array = []
+	for t in open.get("types", []):
+		types.append(str(t))
+	var hand: Array = []
+	for c in open.get("hand", []):
+		hand.append(int(c))
+	var bank: Array = []
+	for c in open.get("bank", []):
+		bank.append(int(c))
+	_spaar = {}
+	_view = "betaal"
+	_t0 = Time.get_ticks_msec()
+	_bet = {
+		"valuta": str(open.get("valuta", "munt")), "types": types,
+		"totaal": int(open.get("totaal", 0)), "heb": int(open.get("heb", 0)),
+		"band": int(open.get("band", _band())), "dag": int(open.get("dag", 1)),
+		"stap": str(open.get("stap", BEURT.GENOEG)), "hand": hand, "bank": bank,
+		"kaart": null,
+	}
+	for k in POGINGEN:
+		_bet[k] = int(open.get(k, 0))
+	print("[probe] mb=herstel stap=", _bet["stap"], " missers=", _missers())
+	_naar_kassa()
+
+func _naar_kassa() -> void:
 	_blad_stil = true
 	Ui.blad_dicht()                              # de wereld is nu het speelvlak
 	_blad_stil = false
-	Hotel.naar_kamer("receptie")
+	if ctx.wereld.actief() != "receptie":
+		Hotel.naar_kamer("receptie")
 	ctx.snd.tik()
 	_betaal_teken()
+
+func _missers() -> int:
+	var n := 0
+	for k in POGINGEN:
+		n += int(_bet.get(k, 0))
+	return n
+
+## R2: zodra deze aankoop een misser heeft staat hij in het laatje, en bij elke
+## stap opnieuw — een uitgang brengt dan precies de open vraag terug.  Zonder
+## misser blijft het laatje leeg: dan begint de volgende beurt bij de kassa.
+func _bewaar_open() -> void:
+	if _bet.is_empty() or _missers() == 0:
+		return
+	var open := {"soort": "betaal"}
+	for k in _bet:
+		if str(k) == "kaart":
+			continue
+		var v = _bet[k]
+		open[k] = (v as Array).duplicate() if typeof(v) == TYPE_ARRAY else v
+	_q()["open"] = open
+	State.bewaar()
+
+## Het zaad van een getallenstrook: dat van `Ui` zelf, maar met de dag van de
+## VRAAG — na een nieuwe dag dezelfde vier getallen (R2).
+func _zaad(id: String) -> int:
+	return (hash(id) % 100003) + int(_bet.get("dag", 1)) * 17
 
 # ------------------------------------------------------------------- munten
 
@@ -1049,27 +1222,32 @@ func _som(munten: Array) -> int:
 		t += int(c)
 	return t
 
-## Welke muntsoort heb je in je hand?  Tikken op de buidel gaat naar de
-## volgende soort die je nog hebt (`kiesSoort` loopt cyclisch door [1,2,5,10]).
-func _kies_soort(vanaf: int) -> int:
-	var i := MUNTSOORT.find(vanaf)
-	if i < 0:
-		i = 0
-	for k in MUNTSOORT.size():
-		var v: int = MUNTSOORT[(i + k) % MUNTSOORT.size()]
-		if _heeft(v) > 0:
-			_bet["soort"] = v
-			return v
-	_bet["soort"] = 0
-	return 0
+## De muntstrook onder de bon: één knop per muntsoort die je nog in je hand
+## hebt (hooguit vier: €1, €2, €5, €10), pictogram én bedrag.  Eén tik legt die
+## munt op de toonbank — geen buidel meer om eerst door te klikken.
+func _munt_strook() -> Array:
+	var uit: Array = []
+	for v in BEURT.muntsoorten(_bet.get("hand", [])):
+		var waarde: int = v
+		uit.append({"id": "m%d" % waarde, "icoon": "💶" if waarde >= 10 else "🪙",
+			"tekst": _eur(waarde), "kort": _eur(waarde),
+			"titel": T_MUNT_LEG % waarde,
+			"kies": func(_k, _kaart) -> void: _leg_neer(waarde)})
+	return uit
 
-func _volgende_soort() -> void:
-	if _bet.is_empty():
-		return
-	var i := MUNTSOORT.find(int(_bet["soort"]))
-	_kies_soort(MUNTSOORT[(i + 1) % MUNTSOORT.size()])
-	ctx.snd.tik()
-	_betaal_teken()
+## "Heb je genoeg?": twee knoppen, pictogram én woord.
+func _genoeg_keuzes() -> Array:
+	return [
+		{"id": "ja", "icoon": "✅", "tekst": W_GENOEG, "kort": W_GENOEG, "titel": W_GENOEG,
+			"kies": func(_k, _kaart) -> void: _genoeg_ok(true)},
+		{"id": "nee", "icoon": "💛", "tekst": W_TE_WEINIG, "kort": W_TE_WEINIG,
+			"titel": W_TE_WEINIG,
+			"kies": func(_k, _kaart) -> void: _genoeg_ok(false)},
+	]
+
+## Wat je hebt, als woord op een kaart: "€9" of "6 ⭐".
+func _heb_tekst(n: int) -> String:
+	return "%d⭐" % n if str(_bet.get("valuta", "munt")) == "ster" else _eur(n)
 
 # ----------------------------------------------------------------- het beeld
 
@@ -1079,99 +1257,105 @@ func _betaal_teken() -> void:
 	var stap := str(_bet["stap"])
 	var types: Array = _bet["types"]
 	var totaal := int(_bet["totaal"])
+	var heb := int(_bet["heb"])
+	var ster := str(_bet["valuta"]) == "ster"
+	var icoon := "🛒" if types.size() > 1 else (
+		str(_versier(str(types[0])).get("icoon", "⭐")) if ster
+		else str(_artikel(str(types[0])).get("icoon", "🛒")))
 	ctx.hotspots.wis_alles()
 	_bet["kaart"] = null
 	_decor_betaal()
 
-	if stap == "som":
-		var prijzen := PackedStringArray()
-		for t in types:
-			prijzen.append(_eur(int(_artikel(str(t))["prijs"])))
-		var p0 := int(_artikel(str(types[0]))["prijs"])
-		var p1 := int(_artikel(str(types[types.size() - 1]))["prijs"])
-		var kaart := ctx.ui.somkaart(_kaart_obj(), " + ".join(prijzen) + " =", {
-			"id": "mb_som", "kamer": "receptie", "max": 2, "icoon": "🛒",
-			"goed": totaal, "liever": [absi(p0 - p1), maxi(p0, p1), totaal + 1],
-			"vlak": _kaart_vlak(),
-			"regel": _som_zin(types), "regel2": T_SAMEN,
-			"on_ok": func(n) -> void: _som_ok(n)})
-		_bet["kaart"] = kaart
-	elif stap == "wissel":
-		var betaald := _som(_bet["bank"])
-		var kaart := ctx.ui.somkaart(_kaart_obj(),
-			"%s − %s =" % [_eur(betaald), _eur(totaal)], {
-			"id": "mb_wissel", "kamer": "receptie", "max": 2,
-			"goed": betaald - totaal, "liever": [totaal, betaald, betaald - totaal + 1],
-			"hoog": 26.0, "icoon": "👛", "vlak": _kaart_vlak(),
-			"regel": "Je gaf %s, het kost %s" % [_eur(betaald), _eur(totaal)],
-			"regel2": T_TERUG_VRAAG,
-			"on_ok": func(n) -> void: _wissel_ok(n)})
-		_bet["kaart"] = kaart
-	else:
-		# De prijs als afgevinkt sommenkaartje.  De pictogram-som ("🪑 =")
-		# staat er nooit zonder zin erboven (HOTEL.md §9).
-		var kaart := ctx.ui.somkaart(_kaart_obj(), _iconen(types) + " =", {
-			"id": "mb_bon", "kamer": "receptie", "pad": false, "hoog": 24.0,
-			"vlak": _kaart_vlak(),
-			"icoon": "🛒" if types.size() > 1 else str(_artikel(str(types[0]))["icoon"]),
-			"regel": _prijs_zin(types, totaal), "regel2": T_LEG_MUNTEN})
-		_bet["kaart"] = kaart
-		kaart.zet(_eur(totaal))
+	var kaart = null
+	match stap:
+		BEURT.SOM:
+			var prijzen := PackedStringArray()
+			for t in types:
+				prijzen.append(_eur(int(_artikel(str(t))["prijs"])))
+			var p0 := int(_artikel(str(types[0]))["prijs"])
+			var p1 := int(_artikel(str(types[types.size() - 1]))["prijs"])
+			kaart = ctx.ui.somkaart(_kaart_obj(), " + ".join(prijzen) + " =", {
+				"id": "mb_som", "kamer": "receptie", "max": 2, "icoon": "🛒",
+				"goed": totaal, "liever": [absi(p0 - p1), maxi(p0, p1), totaal + 1],
+				"zaad": _zaad("mb_som"), "vlak": _kaart_vlak(),
+				"regel": _som_zin(types), "regel2": T_SAMEN,
+				"on_ok": func(n) -> void: _som_ok(n)})
+		BEURT.GENOEG:
+			# de vergelijking die het kaartje in het boek vroeger zelf maakte
+			kaart = ctx.ui.somkaart(_kaart_obj(),
+				("⭐ %d" % heb) if ster else ("💰 %s" % _eur(heb)), {
+				"id": "mb_genoeg", "kamer": "receptie", "icoon": icoon,
+				"vlak": _kaart_vlak(), "reken": true,
+				"regel": (T_STER_PRIJS % totaal) if ster else _prijs_zin(types, totaal),
+				"regel2": T_GENOEG_VRAAG % _heb_tekst(heb),
+				"keuzes": _genoeg_keuzes()})
+		BEURT.MUNTEN:
+			# de bon: de prijs staat op de somregel zelf ("🛏💡 = €8") — een kaart
+			# met een strook heeft geen antwoordvakje, en "🛏💡 =" zonder iets
+			# erachter leek een open som (gezien in de speelronde); de munten
+			# liggen eronder als strook, en de pictogram-som staat er nooit
+			# zonder zin erboven
+			kaart = ctx.ui.somkaart(_kaart_obj(), "%s = %s" % [_iconen(types), _eur(totaal)], {
+				"id": "mb_bon", "kamer": "receptie", "hoog": 24.0,
+				"vlak": _kaart_vlak(), "reken": true, "icoon": icoon,
+				"regel": _prijs_zin(types, totaal), "regel2": T_LEG_MUNTEN,
+				"keuzes": _munt_strook(), "keuze_titel": T_LEG_MUNTEN})
+			kaart.zet(_eur(totaal))
+		BEURT.WISSEL:
+			var betaald := _som(_bet["bank"])
+			kaart = ctx.ui.somkaart(_kaart_obj(),
+				"%s − %s =" % [_eur(betaald), _eur(totaal)], {
+				"id": "mb_wissel", "kamer": "receptie", "max": 2,
+				"goed": BEURT.wissel(betaald, totaal), "min": 0,
+				"liever": BEURT.wissel_liever(betaald, totaal), "zaad": _zaad("mb_wissel"),
+				"hoog": 26.0, "icoon": "👛", "vlak": _kaart_vlak(),
+				"regel": "Je gaf %s, het kost %s" % [_eur(betaald), _eur(totaal)],
+				"regel2": T_TERUG_VRAAG,
+				"on_ok": func(n) -> void: _wissel_ok(n)})
+		BEURT.OVER:
+			kaart = ctx.ui.somkaart(_kaart_obj(),
+				("⭐ %d − %d =" % [heb, totaal]) if ster
+				else ("%s − %s =" % [_eur(heb), _eur(totaal)]), {
+				"id": "mb_over", "kamer": "receptie", "max": BEURT.cijfers(heb),
+				"goed": BEURT.over(heb, totaal), "min": 0,
+				"liever": BEURT.over_liever(heb, totaal), "zaad": _zaad("mb_over"),
+				"hoog": 26.0, "icoon": "⭐" if ster else "💰", "vlak": _kaart_vlak(),
+				"regel": T_OVER_ZIN % [_heb_tekst(heb), _heb_tekst(totaal)],
+				"regel2": T_OVER_VRAAG,
+				"on_ok": func(n) -> void: _over_ok(n)})
+	_bet["kaart"] = kaart
 
-	# de toonbank: sleep de munten hierheen, het bedrag staat erop.  Tikken
-	# legt de munt die je in je hand hebt neer — zo kun je ook zonder slepen.
-	var geteld := _som(_bet["bank"])
-	var bank := Rooms.plek("receptie", 0.55, 0.75)
-	ctx.hotspots.maak({"id": "mb_bank", "kamer": "receptie",
-		"x": float(bank["x"]), "z": float(bank["z"]), "y": 10.0,
-		"icoon": "🧾", "label": _eur(geteld), "prio": 11,
-		"kind": "drop", "drop": "mbbank", "klas": "hotbron",
-		"titel": "de toonbank: %s" % _eur(geteld),
-		"val": func(_lading, _data) -> void: _leg_neer(int(_bet.get("soort", 0))),
-		"aan": func(_s) -> void: _leg_neer(int(_bet.get("soort", 0)))})
+	if stap == BEURT.MUNTEN:
+		# de toonbank: het bedrag dat er nu op ligt, op het voorwerp zelf
+		var geteld := _som(_bet["bank"])
+		var bank := Rooms.plek("receptie", 0.55, 0.75)
+		ctx.ui.wolk({"id": "mb_bank", "kamer": "receptie",
+			"x": float(bank["x"]), "z": float(bank["z"]), "hoog": 10.0, "prio": 11,
+			"op": "aan", "obj": "mb_toonbank",
+			"icoon": "🧾", "getal": _eur(geteld), "tekst": "",
+			"klas": "hotbron", "titel": "de toonbank: %s" % _eur(geteld)})
 
-	# je geldbuidel: de munt die je in je hand hebt staat erop, met hoeveel je
-	# er nog van hebt.  Tikken pakt de volgende muntsoort.
-	var soort := int(_bet["soort"])
-	if soort > 0:
-		var buidel := _buidel_plek()
-		ctx.hotspots.bron({"x": float(buidel["x"]), "z": float(buidel["z"])}, {
-			"id": "mb_buidel", "kamer": "receptie", "hoog": 10.0, "prio": 10,
-			"op": "aan", "obj": "mb_geldbuidel",
-			# `UiBron` tekent alleen het pictogram, geen label: de waarde van de
-			# munt gaat er dus IN, zodat het kind ziet wat het in zijn hand heeft
-			# (HOTEL.md §9: een pictogram staat altijd bij zijn getal).
-			"icoon": ("💶" if soort >= 10 else "🪙") + _eur(soort),
-			"label": _eur(soort), "aantal": _heeft(soort), "hand": 0,
-			"titel": "munt van %d euro (%d in je buidel)" % [soort, _heeft(soort)],
-			"sleep": "" if stap == "som" else "mbbank",
-			"tik": func(_s) -> void: _volgende_soort()})
-
-	# klaar met tellen, en een munt terugpakken
-	# both stand AT the counter they are about: "klaar" on its right, the way
-	# back in front of it (they stood at the far end of the desk and in the
-	# front corner, owner 2026-09-23)
-	var ok_plek := Rooms.plek("receptie", 0.75, 0.77)
-	var terug_plek := Rooms.plek("receptie", 0.55, 0.92)
-	if stap != "som":
-		ctx.hotspots.maak({"id": "mb_ok", "kamer": "receptie",
-			"x": float(ok_plek["x"]), "z": float(ok_plek["z"]), "y": 8.0,
-			"icoon": "✔", "label": W_KLAAR, "klas": "hotwolk goed", "prio": 10,
-			"titel": T_KLAAR_TELLEN,
-			"aan": func(_s) -> void: _klaar_met_tellen()})
-	if not (_bet["bank"] as Array).is_empty():
+	# « een munt terugpakken (vrij spel), of — zolang er niets ligt en er nog
+	# geen misser was — 📖 terug naar het boek.  Na een misser is er geen weg
+	# terug naar iets goedkopers (R2).
+	# rechts van de toonbank, waar ✔ Klaar stond: vóór de toonbank hangt het
+	# bedrag dat erop ligt
+	var terug_plek := Rooms.plek("receptie", 0.75, 0.77)
+	if stap == BEURT.MUNTEN and not (_bet["bank"] as Array).is_empty():
 		ctx.hotspots.maak({"id": "mb_terug", "kamer": "receptie",
 			"x": float(terug_plek["x"]), "z": float(terug_plek["z"]), "y": 6.0,
 			"icoon": "«", "label": W_TERUG, "klas": "hotwolk", "prio": 9,
-			"titel": T_MUNT_TERUG,
+			"titel": T_MUNT_TERUG, "vrij": true,
 			"aan": func(_s) -> void: _munt_terug()})
-	else:
-		# Niets neergelegd?  Dan is dit de weg terug naar het boek.
+	elif _missers() == 0 and (_bet["bank"] as Array).is_empty() \
+			and stap in [BEURT.SOM, BEURT.GENOEG, BEURT.MUNTEN]:
 		ctx.hotspots.maak({"id": "mb_boek", "kamer": "receptie",
 			"x": float(terug_plek["x"]), "z": float(terug_plek["z"]), "y": 6.0,
 			"icoon": "📖", "label": W_BOEK, "klas": "hotgame", "prio": 9,
 			"titel": T_TERUG_BOEK,
-			"aan": func(_s) -> void: _boek()})
+			"aan": func(_s) -> void:
+				_lijst = []
+				_boek()})
 	ctx.wereld.vuil()
 	_meld_betaal()
 
@@ -1241,11 +1425,12 @@ func _meld_betaal() -> void:
 	if not await na(0.1) or not _bet.has("stap"):
 		return
 	print("[probe] mb=betaal stap=", _bet["stap"], " totaal=", _bet["totaal"],
-		" bank=", _som(_bet["bank"]), " soort=", _bet["soort"])
-	for id in ["mb_som", "mb_wissel", "mb_bon", "mb_bank", "mb_buidel", "mb_ok",
+		" heb=", _bet["heb"], " bank=", _som(_bet["bank"]), " missers=", _missers())
+	for id in ["mb_som", "mb_genoeg", "mb_bon", "mb_wissel", "mb_over", "mb_bank",
 			"mb_terug", "mb_boek"]:
 		var s := Hits.spot(id)
 		if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
+			print("[probe] knop ", id, "=", s.knoop.get_global_rect())
 			print("[probe] mb=hot ", id, "=", s.knoop.get_global_rect(),
 				" dekking=", "%.2f" % Hits.dekking(id))
 	_meld_keuzes(_bet.get("kaart"))
@@ -1257,6 +1442,7 @@ func _meld_keuzes(kaart) -> void:
 	var strook := Hits.spot(str(kaart.strook_id))
 	if strook == null or not is_instance_valid(strook.knoop):
 		return
+	print("[probe] knop ", kaart.strook_id, "=", strook.knoop.get_global_rect())
 	var rij := strook.knoop.get_node_or_null("Rij")
 	if rij == null:
 		return
@@ -1265,42 +1451,98 @@ func _meld_keuzes(kaart) -> void:
 
 # ------------------------------------------------------------- de handelingen
 
+## Eén munt van `v` euro uit je hand op de toonbank: een gekeurde handeling
+## (R1: rekenen).  Haalt de stapel de prijs, dan keurt het spel hem meteen —
+## er is geen ✔ Klaar meer om op te tikken.
 func _leg_neer(v: int) -> void:
-	if _bet.is_empty() or str(_bet["stap"]) == "som" or v <= 0:
+	if not actief or _bet.is_empty() or str(_bet["stap"]) != BEURT.MUNTEN or v <= 0:
 		return
+	var kaart = _bet.get("kaart")
+	if kaart != null and kaart.pauze:
+		return                                   # de misserpauze loopt nog
 	var hand: Array = _bet["hand"]
-	for i in hand.size():
-		if int(hand[i]) == v:
-			hand.remove_at(i)
-			(_bet["bank"] as Array).append(v)
-			if str(_bet["stap"]) == "wissel":
-				_bet["stap"] = "munten"
-				_bet["wis_pog"] = 0
-			if _heeft(v) == 0:
-				_kies_soort(v)                # die soort is op: pak de volgende
-			ctx.snd.munt()
-			_betaal_teken()
-			return
-	# geen munt van deze soort meer: pak de volgende, zonder gemopper
-	_kies_soort(v)
-	_betaal_teken()
+	var i := hand.find(v)
+	if i < 0:
+		return
+	hand.remove_at(i)
+	(_bet["bank"] as Array).append(v)
+	ctx.snd.munt()
+	var gelegd := _som(_bet["bank"])
+	var uitkomst := BEURT.leg(gelegd, int(_bet["totaal"]), int(_bet["band"]))
+	if uitkomst == "nog":
+		_bewaar_open()
+		_betaal_teken()
+		return
+	if uitkomst == "te_veel":
+		# groep 3: te veel is een misser zonder hulp (eigenaar 2026-09-24) — de
+		# stapel gaat terug in je hand en dezelfde bon blijft staan (R2)
+		_bet["tel_pog"] = int(_bet["tel_pog"]) + 1
+		ctx.snd.zacht()
+		ctx.ui.misser(kaart, "")
+		ctx.hotspots.weg("mb_boek")        # R2: na een misser niet meer terug
+		_alles_terug()
+		_bewaar_open()
+		_na_te_veel()
+		return
+	# precies, of meer in groep 4/5 (dan volgt het wisselgeld): goed gelegd
+	if kaart != null:
+		kaart.klaar()
+	ctx.reken_goed()
+	ctx.snd.ja()
+	_volgende_stap()
 
+func _alles_terug() -> void:
+	var hand: Array = _bet["hand"]
+	for c in _bet["bank"]:
+		hand.append(int(c))
+	(_bet["bank"] as Array).clear()
+	hand.sort()
+	hand.reverse()
+
+## Na de pauze van de misser staat dezelfde bon er weer, met een lege toonbank.
+func _na_te_veel() -> void:
+	if not await na(Ui.MIS_PAUZE + 0.1):
+		return
+	if not _bet.is_empty() and str(_bet["stap"]) == BEURT.MUNTEN:
+		_betaal_teken()
+
+## « een munt terugpakken: vrij spel, er hangt geen beloning aan.
 func _munt_terug() -> void:
+	if _bet.is_empty() or str(_bet["stap"]) != BEURT.MUNTEN:
+		return
 	var bank: Array = _bet.get("bank", [])
-	if _bet.is_empty() or bank.is_empty():
+	if bank.is_empty():
 		return
 	var hand: Array = _bet["hand"]
 	hand.append(bank.pop_back())
 	hand.sort()
 	hand.reverse()
-	if str(_bet["stap"]) == "wissel":
-		_bet["stap"] = "munten"
-		_bet["wis_pog"] = 0
 	ctx.snd.terug()
+	_bewaar_open()
 	_betaal_teken()
 
+## De volgende stap van de aankoop (`beurt.gd`), of: betaald.
+func _volgende_stap() -> void:
+	var stap := BEURT.volgende(str(_bet["stap"]), int(_bet["band"]),
+		(_bet["types"] as Array).size(), str(_bet["valuta"]))
+	if stap.is_empty():
+		if str(_bet["valuta"]) == "ster":
+			_betaald_ster()
+		else:
+			_betaald()
+		return
+	_bet["stap"] = stap
+	_bewaar_open()
+	_na_stap()
+
+func _na_stap() -> void:
+	if not await na(0.45):
+		return
+	if not _bet.is_empty():
+		_betaal_teken()
+
 func _som_ok(n) -> void:
-	if _bet.is_empty():
+	if _bet.is_empty() or str(_bet["stap"]) != BEURT.SOM:
 		return
 	if n == null:
 		_tip_getal()
@@ -1310,20 +1552,51 @@ func _som_ok(n) -> void:
 		if kaart != null:
 			kaart.zet(_eur(int(n)))
 			kaart.klaar()
-		_bet["stap"] = "munten"
 		ctx.snd.ja()
-		_na_som()
+		_volgende_stap()
 		return
 	# geen hulp (eigenaar 2026-09-24): `Ui` zet de strook even op slot met
 	# `🔄 Nog een keer`; de kaart wordt niet opnieuw gebouwd, dus die pauze houdt
 	_bet["som_pog"] = int(_bet["som_pog"]) + 1
 	ctx.snd.zacht()
+	_bewaar_open()
+	ctx.hotspots.weg("mb_boek")        # R2: na een misser niet meer terug
 
-func _na_som() -> void:
-	if not await na(0.45):
+## "Heb je genoeg?"  Goed is goed, ook "💛 Te weinig": dan is er niets
+## gekocht en gaat er niets af — het spaarwolkje, en terug naar het boek.
+func _genoeg_ok(ja: bool) -> void:
+	if not actief or _bet.is_empty() or str(_bet["stap"]) != BEURT.GENOEG:
 		return
-	if not _bet.is_empty() and str(_bet["stap"]) == "munten":
-		_betaal_teken()
+	var kaart = _bet.get("kaart")
+	if kaart != null and kaart.pauze:
+		return
+	var heb := int(_bet["heb"])
+	var totaal := int(_bet["totaal"])
+	if ja != BEURT.genoeg(heb, totaal):
+		_bet["gen_pog"] = int(_bet["gen_pog"]) + 1
+		ctx.snd.zacht()
+		ctx.ui.misser(kaart, "")
+		_bewaar_open()
+		ctx.hotspots.weg("mb_boek")        # R2: na een misser niet meer terug
+		return
+	if kaart != null:
+		kaart.klaar()
+	ctx.reken_goed()
+	ctx.snd.ja()
+	if ja:
+		_volgende_stap()
+		return
+	var ster := str(_bet["valuta"]) == "ster"
+	ctx.state.tel(_missers() == 0, Time.get_ticks_msec() - _t0)
+	_q().erase("open")
+	_lijst = []
+	_bet = {}
+	State.bewaar()
+	print("[probe] mb=te-weinig totaal=", totaal, " heb=", heb)
+	if ster:
+		_ster_tekort(totaal, heb)
+	else:
+		_tekort(totaal, heb)
 
 func _tip_getal() -> void:
 	var b: Dictionary = World.mik("kassa", "receptie")
@@ -1331,63 +1604,64 @@ func _tip_getal() -> void:
 		{"id": "mb_tip", "icoon": "☝", "tekst": T_TIK_GETAL, "klas": "hulp", "hoog": 34.0})
 	ctx.wereld.vuil()
 
-func _klaar_met_tellen() -> void:
-	if _bet.is_empty():
-		return
-	if str(_bet["stap"]) == "wissel":
-		var kaart = _bet["kaart"]
-		_wissel_ok(null if kaart == null else kaart.getal())
-		return
-	var t := _som(_bet["bank"])
-	var p := int(_bet["totaal"])
-	if t == p:
-		_betaald(0)
-		return
-	if t < p:                                   # nog niet genoeg
-		_bet["tel_pog"] = int(_bet["tel_pog"]) + 1
-		_mis_betaal()
-		return
-	if Sommen.Meubels.wisselgeld(_band()):      # groep 4/5: wisselgeld uitrekenen
-		_bet["stap"] = "wissel"
-		_bet["wis_pog"] = 0
-		_betaal_teken()
-		return
-	# groep 3 rekent nog geen wisselgeld: precies leggen, munt terugpakken mag
-	_bet["tel_pog"] = int(_bet["tel_pog"]) + 1
-	_mis_betaal()
-
-## "Klaar" terwijl het bedrag op de toonbank niet klopt: een zacht geluid en
-## `🔄 Nog een keer` bij de kassa, en de bon blijft zoals hij was — niets over
-## hoeveel er nog bij moet of hoeveel te veel het is (eigenaar 2026-09-24).
-func _mis_betaal() -> void:
-	ctx.snd.zacht()
-	ctx.ui.misser(_bet.get("kaart"), "")
-
 func _wissel_ok(n) -> void:
-	if _bet.is_empty():
+	if _bet.is_empty() or str(_bet["stap"]) != BEURT.WISSEL:
 		return
-	var goed := _som(_bet["bank"]) - int(_bet["totaal"])
 	if n == null:
 		_tip_getal()
 		return
+	var goed := BEURT.wissel(_som(_bet["bank"]), int(_bet["totaal"]))
 	if int(n) == goed:
-		_betaald(goed)
+		var kaart = _bet["kaart"]
+		if kaart != null:
+			kaart.zet(_eur(goed))
+			kaart.klaar()
+		ctx.snd.ja()
+		_volgende_stap()
 		return
 	# geen hulp (eigenaar 2026-09-24): de pauze van `Ui` en dezelfde vier getallen
 	_bet["wis_pog"] = int(_bet["wis_pog"]) + 1
 	ctx.snd.zacht()
+	_bewaar_open()
+	ctx.hotspots.weg("mb_boek")        # R2: na een misser niet meer terug
+
+## "Hoeveel houd je over?" — de laatste vraag; pas daarna is er betaald.
+func _over_ok(n) -> void:
+	if _bet.is_empty() or str(_bet["stap"]) != BEURT.OVER:
+		return
+	if n == null:
+		_tip_getal()
+		return
+	var goed := BEURT.over(int(_bet["heb"]), int(_bet["totaal"]))
+	if int(n) == goed:
+		var kaart = _bet["kaart"]
+		if kaart != null:
+			kaart.zet(_heb_tekst(goed))
+			kaart.klaar()
+		ctx.snd.ja()
+		_volgende_stap()
+		return
+	_bet["over_pog"] = int(_bet["over_pog"]) + 1
+	ctx.snd.zacht()
+	_bewaar_open()
+	ctx.hotspots.weg("mb_boek")        # R2: na een misser niet meer terug
 
 ## Betaald!  De munten gaan uit de kassa, het meubel gaat in de doos en er is
-## één ster voor het meedoen — nooit voor goed rekenen (F5).
-func _betaald(wissel: int) -> void:
+## één ster voor het meedoen — nooit voor goed rekenen (F5).  Pas hier, na de
+## laatste goede som (R2).
+func _betaald() -> void:
 	var q := _q()
 	var types: Array = _bet["types"]
 	var totaal := int(_bet["totaal"])
-	var missers := int(_bet["som_pog"]) + int(_bet["tel_pog"]) + int(_bet["wis_pog"])
-	ctx.econ.geef_munt(-totaal)
+	var wissel := maxi(0, _som(_bet["bank"]) - totaal)
+	var missers := _missers()
+	# nooit onder nul: een vraag die na een misser terugkwam terwijl er
+	# intussen in een winkel betaald werd
+	ctx.econ.geef_munt(-mini(totaal, maxi(0, _munten())))
 	ctx.state.tel(missers == 0, Time.get_ticks_msec() - _t0)
-	_zet_nog(types.duplicate())
+	_zet_nog(_nog() + types.duplicate())
 	q["gekocht"] = int(q.get("gekocht", 0)) + types.size()
+	q.erase("open")
 	_lijst = []
 	_bet = {}
 	ctx.snd.tover()
@@ -1414,6 +1688,18 @@ func _na_betaald() -> void:
 		return
 	ctx.ui.wolk_weg("mb_af")
 	_plaats()
+
+## Rekenwacht: het laatste stuk staat (of de sticker is in het bakje) — het
+## spel gaat vanzelf dicht, er is geen ✖ meer nodig.  Even wachten, zodat het
+## wolkje gezien wordt.  Wie meer wil kopen tikt het boek opnieuw aan, en dan
+## begint de beurt weer bij de kassa.
+func _klaar_dicht(seconden: float) -> void:
+	_view = "klaar"
+	if not await na(seconden):
+		return
+	if _view == "klaar":
+		print("[probe] mb=dicht")
+		ctx.sluit()
 
 # ==================================================================================
 # BLADZIJDE 3 — NEERZETTEN OP HET VOXELRASTER (games-a.md §5.7)
@@ -1538,7 +1824,7 @@ func _plaats_teken() -> void:
 		ctx.hotspots.maak({"id": "mb_meer", "kamer": nu,
 			"x": float(v["x"]), "z": float(v["z"]), "y": float(v.get("y", 0.0)),
 			"icoon": "▸", "label": W_MEER, "klas": "hotwolk", "prio": 8,
-			"titel": T_MEER,
+			"titel": T_MEER, "vrij": true,     # bladeren: vrij spel (Rekenwacht)
 			"aan": func(_s) -> void:
 				_vak_offset = (_vak_offset + vak_max) % aantal
 				ctx.snd.tik()
@@ -1571,6 +1857,7 @@ func _meld_plaats(kamer_id: String, vakken: int) -> void:
 			continue
 		var s := Hits.spot(id)
 		if s != null and is_instance_valid(s.knoop) and s.knoop.visible:
+			print("[probe] knop ", id, "=", s.knoop.get_global_rect())
 			print("[probe] mb=hot ", id, "=", s.knoop.get_global_rect(),
 				" dekking=", "%.2f" % Hits.dekking(id))
 
@@ -1676,8 +1963,12 @@ func _zet_neer(kamer_id: String, x: float, z: float) -> void:
 	Hotel.render()
 	print("[probe] mb=neer type=", type, " kamer=", kamer_id,
 		" bedden=", ctx.state.max_gasten(), " nog=", _nog().size())
-	if _nog().is_empty():
-		_boek()
+	var leeg := _nog().is_empty()
+	if leeg:
+		# Rekenwacht: de doos is leeg — geen ✖ meer nodig, het spel gaat zo
+		# vanzelf dicht (`_klaar_dicht`, hieronder na het wolkje)
+		_view = "klaar"
+		_leeg_wereld()
 	else:
 		_plaats_teken()
 	# feedback als pictogram + getal: een bed betekent een gast erbij
@@ -1690,7 +1981,10 @@ func _zet_neer(kamer_id: String, x: float, z: float) -> void:
 			{"id": "mb_neer", "icoon": str(w["icoon"]), "getal": "✓",
 			"klas": "goed", "hoog": 22.0, "prio": 12})
 	ctx.wereld.vuil()
-	_wolk_straks("mb_neer", 2.4)
+	if leeg:
+		_klaar_dicht(2.0)
+	else:
+		_wolk_straks("mb_neer", 2.4)
 
 func _bezet(kamer_id: String, x: float, z: float) -> void:
 	ctx.snd.zacht()

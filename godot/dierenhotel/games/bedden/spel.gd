@@ -151,6 +151,17 @@ func start(_c: SpelCtx) -> void:
 	_gast = str(v["gastId"])
 	_kamer = str(v["kamer"])
 	var d := _d()
+	# An open question that had a miss comes back UNCHANGED (wave 2, R2): after
+	# `⬅ Terug` the check-in asks for a room again, and picking an emptier room
+	# (an empty one is `0 + 1`) would swap the missed sum for an easier one.
+	# The guest keeps the room of his open question as long as it still has a
+	# place for him; the check-in's choice follows it.
+	if str(d.get("gast", "")) == _gast and int(d.get("open", 0)) > 0 \
+			and not str(d.get("kamer", "")).is_empty() and str(d["kamer"]) != _kamer \
+			and State.plek_in(str(d["kamer"])) > 0:
+		print("[probe] bedden open_vraag kamer=", str(d["kamer"]), " gekozen=", _kamer)
+		_kamer = str(d["kamer"])
+		v["kamer"] = _kamer
 	if str(d.get("gast", "")) != _gast or str(d.get("kamer", "")) != _kamer:
 		d.clear()
 		d["gast"] = _gast
@@ -249,6 +260,7 @@ func _op_antwoord(n: int) -> void:
 		_goed()
 	else:
 		d["missers"] = _missers() + 1
+		d["open"] = 1                 # this question was missed: it stays (R2)
 		State.bewaar()
 		_mis(n)
 
@@ -259,6 +271,7 @@ func _op_antwoord(n: int) -> void:
 ## he walks to it — the camera along — and hops in.
 func _goed() -> void:
 	ctx.state.tel(_missers() == 0, Time.get_ticks_msec() - _t0)
+	_d()["open"] = 0                  # answered right: nothing open any more
 	var slot := ""
 	var vrij := State.vrije_bedden(_kamer)
 	if not vrij.is_empty():

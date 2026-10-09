@@ -211,11 +211,13 @@ func test_eerlijk_verdelen_slaagt() -> void:
 	gelijk(str(d["stand"]["stap"]), "baden", "en dat staat in de savegame")
 	_af()
 
-## Who you tap goes into the bath (owner, 2026-09-23: "een methode om te
-## wisselen met welk dier je de spellen speelt").  Tobbe has no animal of the
-## turn — the sum is about soap and tubs — so it gets no button on the game
-## bar; the child picks who bathes by tapping that animal.  Until then every
-## tap on any waiting animal bathed the FIRST one in the queue.
+## The bath fills itself since wave 2 (owner, 2026-10-08: "rekenen moet
+## minstens 50% van de interactie zijn"): a tap per animal was play, not maths.
+## Who stands in the garden goes into the emptiest tub by himself, one after
+## another, with bubbles — there is no button per animal any more, and a tap on
+## a tub during the bath does nothing.  Tobbe has no animal of the turn, so no
+## button on the game bar either.  (Until wave 2 the child tapped every animal
+## into the bath — owner 2026-09-23.)
 func test_wie_je_aantikt_gaat_in_bad() -> void:
 	_op()
 	var gasten := _gasten(3, 1, 3)
@@ -226,29 +228,41 @@ func test_wie_je_aantikt_gaat_in_bad() -> void:
 		return
 	gelijk(Games.speler(), "", "tobbe heeft geen dier van de beurt")
 	gelijk(Games.spelers().size(), 0, "en dus geen dierknop op de spelbalk")
-	# the sum is done: everybody with a bed may bathe, and they stand in the garden
-	spel._s["stap"] = "baden"
 	for i in gasten.size():
 		World.zet(str(gasten[i]["id"]), "tuin", 60.0 + 10.0 * i, 110.0)
-	spel._teken()
-	var tweede := str(gasten[1]["id"])
-	var spot := Hits.spot("tb_dier" + tweede)
-	waar(spot != null and is_instance_valid(spot.knoop), "%s heeft een eigen knopje" % tweede)
-	var hoor: Array[String] = []
-	if spot != null and is_instance_valid(spot.knoop):
-		hoor = Snd.luister(func() -> void: (spot.knoop as BaseButton).pressed.emit())
+	# the share is right: the water is ready and the bath step begins
+	var st: Dictionary = spel._s
+	st["stap"] = "vullen"
+	st["rek"] = 0
+	for i in int(st["M"]):
+		st["tob"][i] = int(st["per"])
+	st["kan"] = int(st["rest"])
+	spel._check()
+	gelijk(str(spel._s["stap"]), "baden", "de badstap")
+	for g in gasten:
+		waar(Hits.spot("tb_dier" + str(g["id"])) == null, "geen knopje voor %s" % str(g["id"]))
+	waar(Hits.spot("tb_klaar") == null, "en geen ✓ om het baden af te ronden")
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	while spel._in_bad_ids().size() < mini(gasten.size(), 2 * int(st["M"])) \
+			and Time.get_ticks_msec() - t0 < 6000:
+		await boom.process_frame
 	var erin: Array = spel._in_bad_ids()
-	waar(erin.has(tweede), "wie je aantikt, gaat in bad (%s)" % str(erin))
-	waar(hoor.has("bubbel"), "met belletjes in de tobbe (%s)" % str(hoor))
-	waar(not erin.has(str(gasten[0]["id"])), "en niet de eerste van het rijtje")
+	gelijk(erin.size(), mini(gasten.size(), 2 * int(st["M"])), "iedereen in de tuin ging vanzelf in bad (%s)" % str(erin))
+	spel._tik_tobbe(0)
+	gelijk(spel._in_bad_ids().size(), erin.size(), "een tik op een tobbe doet in de badstap niets")
+	t0 = Time.get_ticks_msec()
+	while str(spel._s["stap"]) != "af" and Time.get_ticks_msec() - t0 < 6000:
+		await boom.process_frame
+	gelijk(str(spel._s["stap"]), "af", "en daarna is het vanzelf klaar")
 	_af()
 
 ## Eigenaar, 2026-09-23: "Zorg dat de minigame pas begint wanneer het dier er
-## is."  Na de som lopen de badgasten van elders naar de tobbes; hun knopje
-## komt pas als ze er staan, en tot dan hangt het hotelwolkje "komt eraan" met
-## `👀 Volg` aan de tuindeur — ook tijdens het spel.  Wie meeloopt en met hem
-## terugkomt, vindt de kaart van de tobbes weer op haar plek, en het knopje
-## werkt.
+## is."  Na de som lopen de badgasten van elders naar de tobbes en tot ze er
+## staan hangt het hotelwolkje "komt eraan" met `👀 Volg` aan de tuindeur — ook
+## tijdens het spel.  Wie meeloopt en met hem terugkomt, vindt de kaart van de
+## tobbes weer op haar plek.  Sinds wave 2 gaat hij er dan vanzelf in (geen
+## knopje per dier meer).
 func test_een_badgast_van_elders_komt_eraan() -> void:
 	_op()
 	var rust_voor := Ui.rust_modus()
@@ -276,7 +290,7 @@ func test_een_badgast_van_elders_komt_eraan() -> void:
 	spel._check()
 	gelijk(str(spel._s["stap"]), "baden", "de badstap")
 	waar(Games.verwacht_dier(id), "het spel wacht op de badgast")
-	waar(Hits.spot("tb_dier" + id) == null, "zijn knopje is er nog niet")
+	waar(not spel._in_bad_ids().has(id), "hij zit nog niet in bad")
 	waar(_komt_eraan_in_beeld(id), "zijn wolkje 'komt eraan' hangt aan de tuindeur")
 	var som = Hits.spot("tb_som")
 	waar(som != null and som.knoop.visible, "de kaart van de tobbes staat er")
@@ -304,11 +318,11 @@ func test_een_badgast_van_elders_komt_eraan() -> void:
 		and r.position.y >= -0.01 and r.end.y <= _laag.size.y + 0.01,
 		"opnieuw neergelegd, binnen het kader (%s)" % str(r))
 	waar(_tik_tot_hij_staat(id, "tuin"), "hij loopt naar de tobbes")
-	waar(await _staat_er_binnen("tb_dier" + id, 1500), "hij staat er: zijn knopje")
-	var knop = Hits.spot("tb_dier" + id)
-	if knop != null:
-		(knop.knoop as BaseButton).pressed.emit()
-	waar(spel._in_bad_ids().has(id), "en dat werkt: hij gaat in bad")
+	var boom := Engine.get_main_loop() as SceneTree
+	var t0 := Time.get_ticks_msec()
+	while not spel._in_bad_ids().has(id) and Time.get_ticks_msec() - t0 < 3000:
+		await boom.process_frame
+	waar(spel._in_bad_ids().has(id), "hij staat er: hij gaat vanzelf in bad")
 	World.pauzeer(false)
 	Ui.zet_rust_modus(rust_voor)
 	_af()
@@ -436,8 +450,9 @@ func test_geen_hulp_na_een_fout() -> void:
 	gelijk(str(spel._s["stap"]), "baden", "een goede verdeling: iedereen mag in bad")
 	_af()
 
-## Too full: the soap goes back on the rack and the guests in the garden look
-## disappointed (`sip`) — they no longer laugh, and no bubble says "te vol".
+## Too full: the share is checked, it is wrong, and the guests in the garden
+## look disappointed (`sip`) — no bubble says "te vol".  Since wave 2 the soap
+## then goes back where the turn began (the rack): the same share is asked again.
 func test_te_vol_is_een_teleurstelling() -> void:
 	_op()
 	var gasten := _gasten(2, 1, 3)
@@ -453,12 +468,12 @@ func test_te_vol_is_een_teleurstelling() -> void:
 	waar(_tik_keuze(int(s["per"])), "eerst de som")
 	var id := str(gasten[0]["id"])
 	World.zet(id, "tuin", 40.0, 100.0)
-	# everything scooped, one tub one too full: ✓ finds it overflowing
+	# everything scooped, one tub one too full: the check finds it wrong
 	spel._s["rek"] = 0
 	spel._s["tob"][0] = int(s["per"]) + 1
 	spel._check()
 	gelijk(int(spel._s["tob"][0]), 0, "de volle tobbe is leeg")
-	gelijk(int(spel._s["rek"]), int(s["per"]) + 1, "het sop is terug op het rek")
+	gelijk(int(spel._s["rek"]), int(s["T"]), "al het sop is terug op het rek")
 	gelijk(int(spel._s["missers"]), 1, "een misser")
 	waar(is_sip(id), "de gast in de tuin kijkt teleurgesteld")
 	waar(mis_wolk("tb_som"), "🔄 Nog een keer")
@@ -563,7 +578,10 @@ func test_een_goed_antwoord_verdeelt_niet_zelf() -> void:
 
 # --------------------------------------------------------------- 5. teksten
 
-## Every §6.6 literal is in the source, verbatim.
+## Every §6.6 literal is in the source, verbatim — except the four that hung on
+## the ✓ "zo is het goed" / "klaar met badderen" and on the splitskraantje
+## ("eerst sop erin", "blijft over"): those three tools are gone since wave 2
+## (owner, 2026-10-08: "het moet niet mogelijk zijn om rekenen over te slaan").
 func test_alle_teksten_staan_er_woordelijk() -> void:
 	var f := FileAccess.open("res://games/tobbe/spel.gd", FileAccess.READ)
 	waar(f != null, "de bron is leesbaar")
@@ -571,10 +589,8 @@ func test_alle_teksten_staan_er_woordelijk() -> void:
 		return
 	var bron := f.get_as_text()
 	for zin in ["nog geen gasten", "geen plek", "Verdeel het eerlijk", "Zo is het goed!",
-			"zo is het goed", "klaar met badderen",
 			"opnieuw beginnen", "morgen dubbel", "Hoeveel samen?", "in twee helften",
-			"Hoeveel in elke helft?", "rek is leeg", "blijft over",
-			"eerst sop erin", "even hoog",
+			"Hoeveel in elke helft?", "rek is leeg", "even hoog",
 			"%d schepjes, %d tobbes", "Hoeveel in elke tobbe?", "de som van het sop",
 			"wil in bad", "zit vol", "lekker warm", "mag in de tobbe",
 			"mogen in de tobbe", "blinkend schoon"]:
@@ -584,6 +600,9 @@ func test_alle_teksten_staan_er_woordelijk() -> void:
 			"hoort hierin", "erbij", "ieder evenveel", "zoveel hoort erin",
 			"zoveel blijft over", "hotspook"]:
 		waar(not bron.contains('"%s"' % weg), "geen hulp na een misser meer: %s" % weg)
+	# and the tools that did the work or skipped it (wave 2)
+	for weg in ["splitskraantje: halveren", "klaar met badderen", "zo is het goed"]:
+		waar(not bron.contains('"%s"' % weg), "weg sinds wave 2: %s" % weg)
 
 ## De openingszin van `eerlijk` past bij ELK recept dat de bevroren kern kan
 ## maken (HOTEL.md §9: <= 8 woorden en <= 40 tekens), en elk teken zit in het
@@ -681,3 +700,163 @@ func test_dekking_in_vier_kaders() -> void:
 		waar(eigen >= 3, "%s: het spel staat op het scherm (%d knoppen)" % [str(maat), eigen])
 		await _schil_af(h)
 	State.s = bewaard
+
+# ------------------------------------------- 7. rekenen eerst (wave 2, 2026-10-08)
+
+## Wave-2 rule R1 (owner, 2026-10-08: "rekenen moet minstens 50% van de
+## interactie zijn"): a whole turn tap by tap, the tap that opened the game not
+## counted.  The opening sum is maths (one wrong and one right tap); every
+## scoop into a tub or the jug builds the share that is checked by itself, so
+## it is maths too (a graded manipulative); there is no ✓, no kraantje and no
+## tap per animal any more — so there is no play tap at all on this path.
+var _teller := {"reken": 0, "spel": 0}
+
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller.get(soort, 0)) + 1
+
+## Build the right share the way a child does it with the default handful of
+## one: from the rack scoop by scoop into every tub and the rest into the jug,
+## or for `half` pour from the first tub into the second and the rest into the
+## jug.  Every tap is counted as maths.
+func _bouw_goed(spel) -> void:
+	var s: Dictionary = spel._s
+	var per := int(s["per"])
+	var rest := int(s["rest"])
+	if str(s["soort"]) == "half":
+		for _k in per:
+			_tel("reken")
+			spel._tik_tobbe(0)
+		for _k in rest:
+			_tel("reken")
+			spel._tik_kan()
+		return
+	for i in int(s["M"]):
+		for _k in per:
+			_tel("reken")
+			spel._tik_tobbe(i)
+	for _k in rest:
+		_tel("reken")
+		spel._tik_kan()
+
+func _rekenaandeel(opzet: Dictionary, soort: String, n_gasten := -1) -> void:
+	_teller = {"reken": 0, "spel": 0}
+	var o := opzet.duplicate()
+	if n_gasten > 0:
+		o["gasten"] = n_gasten
+	var spel = _begin(o, soort)
+	if spel == null:
+		_af()
+		return
+	var wat := "band %d, %s, %d gasten" % [int(o["band"]), soort, int(o["gasten"])]
+	var s: Dictionary = spel._s
+	var fout := _fout_getal(_juist(s))
+	_tel("reken")
+	waar(_tik_keuze(fout), "%s: een fout getal" % wat)
+	await _wacht_mispauze()
+	_tel("reken")
+	waar(_tik_keuze(_juist(s)), "%s: het goede getal" % wat)
+	gelijk(str(spel._s["stap"]), "vullen", "%s: nu verdelen" % wat)
+	waar(Hits.spot("tb_klaar") == null and Hits.spot("tb_kraan") == null,
+		"%s: geen ✓ en geen kraantje" % wat)
+	_bouw_goed(spel)
+	gelijk(str(spel._s["stap"]), "baden", "%s: de verdeling is vanzelf nagekeken" % wat)
+	var r := int(_teller["reken"])
+	var sp := int(_teller["spel"])
+	waar(r >= sp + 1, "%s: rekenen %d >= spel %d + 1" % [wat, r, sp])
+	_af()
+
+func test_rekenaandeel_band_3() -> void:
+	for soort in Sommen.Tobbe.soorten(3):
+		await _rekenaandeel(OPZET[0], str(soort))
+	await _rekenaandeel(OPZET[0], str(Sommen.Tobbe.soorten(3)[0]), 1)
+
+func test_rekenaandeel_band_4() -> void:
+	for soort in Sommen.Tobbe.soorten(4):
+		await _rekenaandeel(OPZET[1], str(soort))
+	await _rekenaandeel(OPZET[1], str(Sommen.Tobbe.soorten(4)[0]), 8)
+
+func test_rekenaandeel_band_5() -> void:
+	for soort in Sommen.Tobbe.soorten(5):
+		await _rekenaandeel(OPZET[2], str(soort))
+	await _rekenaandeel(OPZET[2], str(Sommen.Tobbe.soorten(5)[0]), 8)
+
+## R2 (the splitskraantje): `half` has no tap that halves for the child any
+## more — the child pours the halves itself, and the rest into the jug.  More
+## in the jug than the rest is a miss without help, and the soap goes back into
+## the first tub: the same question.  (Until wave 2 one tap on 🚰 did it.)
+func test_halveren_doet_het_kind_zelf() -> void:
+	var spel = _begin(OPZET[2], "half")
+	if spel == null:
+		_af()
+		return
+	var s: Dictionary = spel._s
+	waar(_tik_keuze(_juist(s)), "het goede getal")
+	gelijk(str(spel._s["stap"]), "vullen", "nu verdelen")
+	await _wacht_mispauze()          # the tools are drawn a moment after the answer
+	waar(Hits.spot("tb_kraan") == null, "er is geen kraantje dat het voordoet")
+	waar(Hits.spot("tb_kan") != null, "wel het kannetje (groep 5)")
+	var t := int(s["T"])
+	var per := int(s["per"])
+	var rest := int(s["rest"])
+	for _k in rest + 1:
+		spel._tik_kan()
+	gelijk(int(spel._s["missers"]), 1, "te veel in het kannetje: een misser")
+	gelijk(int(spel._s["mis"]), 1, "op de open vraag")
+	gelijk(int(spel._s["tob"][0]), t, "al het sop staat weer in de eerste tobbe")
+	gelijk(int(spel._s["kan"]), 0, "en het kannetje is leeg")
+	gelijk(str(spel._s["stap"]), "vullen", "dezelfde opdracht")
+	await _wacht_mispauze()
+	for _k in per:
+		spel._tik_tobbe(0)
+	for _k in rest:
+		spel._tik_kan()
+	gelijk(str(spel._s["stap"]), "baden", "precies de helft overgegoten: goed")
+	_af()
+
+## R2 (the ✓): the share is checked by itself the moment it is complete — there
+## is no ✓ to press — and a wrong share sends the soap back to the rack.
+func test_de_verdeling_wordt_vanzelf_nagekeken() -> void:
+	var spel = _begin(OPZET[0], "eerlijk")
+	if spel == null:
+		_af()
+		return
+	var s: Dictionary = spel._s
+	waar(_tik_keuze(_juist(s)), "het goede getal")
+	waar(Hits.spot("tb_klaar") == null, "er is geen ✓ om te bevestigen")
+	var t := int(s["T"])
+	# everything into the first tub that fits under its rim, the rest into the second
+	var rand: int = int(s["per"]) + 2
+	var in_een: int = mini(t, rand)
+	for _k in in_een:
+		spel._tik_tobbe(0)
+	for _k in t - in_een:
+		spel._tik_tobbe(1)
+	gelijk(int(spel._s["missers"]), 1, "een scheve verdeling is een misser")
+	gelijk(int(spel._s["rek"]), t, "en al het sop is terug op het rek")
+	gelijk(str(spel._s["stap"]), "vullen", "dezelfde opdracht")
+	await _wacht_mispauze()
+	_bouw_goed(spel)
+	gelijk(str(spel._s["stap"]), "baden", "de goede verdeling slaagt vanzelf")
+	_af()
+
+## R2: a missed question survives a new day with more guests (until wave 2 a
+## stand of another day, N or band became a fresh — maybe easier — recipe).
+func test_een_gemiste_vraag_blijft_na_een_nieuwe_dag() -> void:
+	_op()
+	_gasten(3, 1, 3)
+	waar(Games.start(ID), "het spel start")
+	var spel = _spel()
+	if spel == null:
+		_af()
+		return
+	var voor: Dictionary = spel.stand()
+	waar(_tik_keuze(_fout_getal(_juist(voor))), "een fout getal")
+	Games.stop()
+	_gasten(5, 2, 3)
+	waar(Games.start(ID), "de volgende dag, met meer gasten")
+	var na: Dictionary = _spel().stand()
+	gelijk(str(na["soort"]), str(voor["soort"]), "dezelfde soort")
+	gelijk(int(na["T"]), int(voor["T"]), "dezelfde T")
+	gelijk(int(na["M"]), int(voor["M"]), "dezelfde M")
+	gelijk(str(na["stap"]), "vraag", "en dezelfde vraag")
+	_af()

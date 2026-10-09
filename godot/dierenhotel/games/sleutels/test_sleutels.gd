@@ -1286,3 +1286,116 @@ func test_de_haakjes_blijven_aan_de_muur() -> void:
 	State.s = bewaard
 	Ui.set("_scherm", scherm_terug)
 	Ui.zet_rust_modus(rust_voor)
+
+
+# ------------------------------------------- golf 2: rekenen eerst (R1, R2)
+
+var _teller := {"reken": 0, "spel": 0}
+
+## Every tap the test performs, labelled the way R1 counts it: the number on
+## the strip and hanging the key on an empty hook — checked against its number,
+## a wrong hook is a miss without help (`reken: true`) — are maths.
+func _tel(soort: String) -> void:
+	_teller[soort] = int(_teller.get(soort, 0)) + 1
+
+## R1 (wave 2, owner: "rekenen moet minstens 50% van de interactie zijn"): a
+## whole board, from the start (the entry tap not counted), in every group and
+## for a small and a large hotel: per key the number on the strip and the key
+## on its hook, both maths — a miss on the strip and on a hook too.
+func test_rekenaandeel() -> void:
+	for geval in [[2, 3, 3, "strook"], [3, 3, 3, ""], [4, 3, 4, ""], [6, 3, 4, "strook"],
+			[7, 4, 5, "haak"], [8, 4, 5, ""]]:
+		var n: int = geval[0]
+		var band: int = geval[2]
+		var mis: String = geval[3]
+		var wat := "groep %d, %d gasten" % [band, n]
+		_teller = {"reken": 0, "spel": 0}
+		_op()
+		_wereld(n, int(geval[1]))
+		gelijk(State.band(), band, "%s: de band" % wat)
+		waar(Games.start(ID), "%s: het spel start" % wat)
+		var p := _bord()
+		var sleutels: Array = p.get("sleutels", [])
+		waar(sleutels.size() >= 1, "%s: er is minstens een sleutel" % wat)
+		for k in sleutels.size():
+			var s: Dictionary = sleutels[int(p["nu"])]
+			if k == 0 and mis == "strook":
+				_tel("reken")
+				_kies_fout()
+				gelijk(str(_bord().get("stap", "")), "reken", "%s: een misser kiest niets" % wat)
+				await _wacht_mispauze()
+			_tel("reken")
+			waar(await _beantwoord(), "%s: het getal van sleutel %d" % [wat, k + 1])
+			if k == 0 and mis == "haak":
+				# the key dragged onto the wrong hook: on another EMPTY hook that
+				# is checked against its number — maths (`reken: true`); a plate
+				# with a number is a free action (a tap reads it aloud), so a
+				# drop there counts as play — counted the strict way here
+				var fout_i := _fout_haakje(p, [])
+				var haken: Array = ((p["borden"] as Array)[int(s["bord"])] as Dictionary)["haken"]
+				var leeg := fout_i >= 0 and bool((haken[fout_i] as Dictionary).get("blanco", false))
+				_tel("reken" if leeg else "spel")
+				await _hang(fout_i, true)
+				waar(not bool(s["op"]), "%s: aan het verkeerde haakje hangt niets" % wat)
+				gelijk(int(s.get("mis", 0)), 1, "%s: een misser" % wat)
+				await _wacht_mispauze()
+			_tel("reken")
+			await _hang(int(s["haak"]), k % 2 == 0)
+			waar(bool(s["op"]), "%s: sleutel %d hangt" % [wat, int(s["nummer"])])
+		waar(bool(_bord().get("klaar", false)), "%s: het bord is af" % wat)
+		var reken := int(_teller["reken"])
+		var spel := int(_teller["spel"])
+		waar(reken >= spel + 1, "%s: R1 reken %d >= spel %d + 1" % [wat, reken, spel])
+		Games.stop()
+		_af()
+
+
+## R2 (wave 2): a key whose number was answered wrong comes back UNCHANGED
+## after any exit — a new day, another band, another hotel size, the animal on
+## the game bar picking somebody who had no key yet — on the same board with
+## the same four numbers; only when it hangs does the board go on.
+func test_een_gemiste_sleutel_komt_onveranderd_terug() -> void:
+	_op()
+	var gasten := _wereld(5, 3)
+	waar(Games.start(ID), "het spel start")
+	var p := _bord()
+	var sig := str(p["sig"])
+	var nummer := _nummer_nu()
+	var rij := str((_spel() as Node).debug()["rij_tekst"])
+	var keuzes: Array[String] = []
+	for k in _strook().get_children():
+		keuzes.append(str(k.name))
+	var laatste := str(gasten[gasten.size() - 2]["id"])
+	_kies_fout()
+	gelijk(int(_bord().get("missers", 0)), 1, "een misser")
+	await _wacht_mispauze()
+	for stap in ["een nieuwe dag", "een andere band", "een gast minder", "het dier op de balk"]:
+		Games.stop()
+		match stap:
+			"een nieuwe dag":
+				State.s["dag"] = 2
+			"een andere band":
+				State.s["kunnen"] = 2
+				gelijk(State.band(), 3, "nu groep 3")
+			"een gast minder":
+				(State.s["gasten"] as Array).pop_back()
+				Hotel.herstel_wereld()
+			_:
+				State.s["speler"] = laatste
+		waar(Games.start(ID), "%s: het spel start" % stap)
+		gelijk(str(_bord().get("sig", "")), sig, "%s: hetzelfde bord" % stap)
+		gelijk(int(_bord().get("nu", -1)), 0, "%s: dezelfde sleutel" % stap)
+		gelijk(_nummer_nu(), nummer, "%s: met hetzelfde nummer" % stap)
+		gelijk(str(_bord().get("stap", "")), "reken", "%s: de vraag staat nog open" % stap)
+		gelijk(str((_spel() as Node).debug()["rij_tekst"]), rij, "%s: dezelfde rij" % stap)
+		var nu: Array[String] = []
+		if _strook() != null:
+			for k in _strook().get_children():
+				nu.append(str(k.name))
+		gelijk(str(nu), str(keuzes), "%s: dezelfde vier getallen" % stap)
+	var s: Dictionary = (_bord()["sleutels"] as Array)[0]
+	await _hang(int(s["haak"]))
+	waar(bool(s["op"]), "nu hangt hij")
+	gelijk(int(_bord()["nu"]), 1, "en het bord gaat verder")
+	State.s.erase("speler")
+	_af()
