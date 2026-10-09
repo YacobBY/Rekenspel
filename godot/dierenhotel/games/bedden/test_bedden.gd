@@ -711,8 +711,10 @@ func _tel(soort: String) -> void:
 ## tap — the number on the strip (a miss is a maths tap too) — for an empty
 ## hotel and a nearly full one, in every group.
 func test_rekenaandeel() -> void:
+	# VA (2026-10-09): two groep-5 cases (seven guests, `kunnen` 4) next to the
+	# groep-3 and groep-4 ones, so every group is measured by the real Rekenwacht
 	for geval in [[0, 0, "kamer1", true], [1, 0, "kamer1", false], [2, 1, "kamer2", false],
-			[3, 3, "kamer2", true]]:
+			[3, 3, "kamer2", true], [4, 3, "kamer2", true, 4], [3, 4, "kamer1", false, 4]]:
 		var in1: int = geval[0]
 		var in2: int = geval[1]
 		var kamer: String = geval[2]
@@ -720,9 +722,16 @@ func test_rekenaandeel() -> void:
 		_teller = {"reken": 0, "spel": 0}
 		_op()
 		_hotel(in1, in2, true)
+		if geval.size() > 4:
+			State.s["kunnen"] = int(geval[4])
+			State.herbereken()
+			gelijk(State.band(), 5, "%d + %d gasten: groep 5" % [in1, in2])
 		var wat := "%d + %d gasten, groep %d, %s" % [in1, in2, State.band(), kamer]
 		var gid := _gid()
+		_va_begin()
 		waar(await _kies_kamer(kamer), "%s: de kamer gekozen (de ingangstik)" % wat)
+		# the entry tap (the room on the check-in strip) is not part of the turn
+		var va_b := Reken.budget()
 		var goed := State.slapers_in(kamer).size() + 1
 		if mis:
 			_tel("reken")
@@ -736,6 +745,7 @@ func test_rekenaandeel() -> void:
 		var reken := int(_teller["reken"])
 		var spel := int(_teller["spel"])
 		waar(reken >= spel + 1, "%s: R1 reken %d >= spel %d + 1" % [wat, reken, spel])
+		_va_eind(wat, _teller, va_b)
 		await _af()
 
 ## R2 (wave 2): after a miss, `⬅ Terug` brings the room question back — and
@@ -772,3 +782,31 @@ func test_een_gemiste_vraag_blijft_bij_een_andere_kamer() -> void:
 	waar(World.slaapt(gid), "hij slaapt")
 	gelijk(str(State.gast_van(gid).get("kamer", "")), "kamer1", "in kamer 1, de kamer van zijn vraag")
 	await _af()
+
+# ------------------------------------------- VA: de echte Rekenwacht (R1)
+
+## VA (2026-10-09): next to the in-test counter, the REAL classifier.  Every
+## turn starts from a fresh Rekenwacht with half a budget (so a right answer
+## has room to pay back); after the turn `Reken.beurt()` must hold R1 by
+## itself, agree with the counter tap for tap, and show that a right answer
+## paid back (`Reken.goed` fired and the budget rose over the turn).
+const VA_BUDGET := 6
+
+func _va_begin() -> int:
+	Reken.voor_test()
+	for _i in Reken.BUDGET_MAX - VA_BUDGET:
+		Reken.tik("spel", "test:va")
+	return Reken.budget()
+
+func _va_eind(wat: String, teller: Dictionary, budget_voor: int) -> void:
+	var b := Reken.beurt()
+	var r := int(b["reken"])
+	var s := int(b["spel"])
+	print("[VA] %s: reken=%d spel=%d goed=%d budget=%d->%d" % [wat, r, s, int(b["goed"]),
+		budget_voor, Reken.budget()])
+	waar(r >= s + 1, "%s: Reken.beurt() reken %d >= spel %d + 1" % [wat, r, s])
+	gelijk(r, int(teller["reken"]), "%s: Reken.beurt().reken = de teller" % wat)
+	gelijk(s, int(teller["spel"]), "%s: Reken.beurt().spel = de teller" % wat)
+	waar(int(b["goed"]) >= 1, "%s: Reken.goed() vuurde" % wat)
+	waar(Reken.budget() > budget_voor, "%s: het budget steeg (%d -> %d)" % [wat, budget_voor,
+		Reken.budget()])

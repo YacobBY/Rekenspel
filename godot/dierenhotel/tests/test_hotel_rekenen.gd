@@ -535,27 +535,56 @@ func test_rekening_misser_overleeft_opnieuw_tikken_morgen_en_herladen() -> void:
 ## checked against the bill) is "reken"; choosing a room or `✔ klaar` is "spel";
 ## the tap that opened it (the bell, the family) does not count.  For groep 3,
 ## 4 and 5 and a small and a large hotel: reken ≥ spel + 1.
+## VA (2026-10-09): every tap goes through the real strip or button (the
+## Rekenwacht classifies it — a call to `Hotel.antwoord1`/`Econ.leg_neer` would
+## bypass it), and the real counters agree: `Reken.totaal()` grows by exactly
+## the taps counted here, holds R1 by itself, and a right answer pays back.
 func test_rekenaandeel_checkin_en_rekening() -> void:
+	var laag := _scherm()
+	var rust := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
 	for band in [3, 4, 5]:
 		for n in [0, 3, 7]:
 			_voor()
+			World.naar("receptie")
 			State.s["kunnen"] = band
 			State.herbereken()
 			_gasten(n)
+			var wat := "groep %d, %d gasten" % [band, n]
 			var tel := {"reken": 0, "spel": 0}
-			var v := _naar_kamerstap()
-			if v.is_empty():
-				fout("groep %d, %d gasten: geen check-in" % [band, n])
+			var b0 := _va_begin()
+			var t0 := Reken.totaal()
+			State.s["scoops"] = 20
+			State.s["levering"] = 4
+			Hotel.bel()                             # the bell opened it: not counted
+			var v = State.s["checkin"]
+			if v == null:
+				fout("%s: geen check-in" % wat)
 				continue
-			tel["reken"] += 2                       # vraag 1 en vraag 2
+			Hits.plaats()
+			_open("ci_som")
+			waar(_druk("ci_som_keuzes", "Kn%d" % int(v["nieuw"])), "%s: vraag 1 getikt" % wat)
+			tel["reken"] += 1
+			gelijk(int(v["stap"]), 2, "%s: vraag 1 goed" % wat)
+			Hits.plaats()
+			_open("ci_som")
+			waar(_druk("ci_som_keuzes", "K" + Sommen.vergelijk(int(v["dagen"]), int(v["nieuw"]),
+				int(v["voorraad"]))), "%s: vraag 2 getikt" % wat)
+			tel["reken"] += 1
+			gelijk(int(v["stap"]), 3, "%s: vraag 2 goed" % wat)
+			Hits.plaats()
 			var kamers := State.kamers_met_plek()
-			Hotel.kies_kamer(str(kamers[0]))
+			_open("ci_som")
+			waar(_druk("ci_som_keuzes", "K" + str(kamers[0])), "%s: de kamer getikt" % wat)
 			tel["spel"] += 1                        # de kamer
-			Hotel.antwoord_bed(int(v["slapers"]) + 1)
-			tel["reken"] += 1                       # de beddensom
-			gelijk(State.s["checkin"], null, "groep %d, %d gasten: ingecheckt" % [band, n])
-			waar(tel["reken"] >= tel["spel"] + 1,
-				"groep %d, %d gasten: check-in R1 %s" % [band, n, tel])
+			gelijk(int(v["stap"]), 4, "%s: de beddensom" % wat)
+			Hits.plaats()
+			_open("ci_som")
+			waar(_druk("ci_som_keuzes", "Kn%d" % (int(v["slapers"]) + 1)), "%s: de beddensom getikt" % wat)
+			tel["reken"] += 1
+			gelijk(State.s["checkin"], null, "%s: ingecheckt" % wat)
+			waar(tel["reken"] >= tel["spel"] + 1, "%s: check-in R1 %s" % [wat, tel])
+			_va_eind(wat + ", check-in", tel, t0, b0)
 			# the bill for that guest, as the evening asks it
 			var gid := str(v["gastId"])
 			var g := State.gast_van(gid)
@@ -565,23 +594,84 @@ func test_rekenaandeel_checkin_en_rekening() -> void:
 			g["betaald"] = geld["betaald"]
 			State.s["uitcheck"] = [gid]
 			var rt := {"reken": 0, "spel": 0}
-			Hotel.reken_af(gid)
-			await Econ.som_ok(int(Econ.rekening_stand()["totaal"]))
+			b0 = _va_begin()
+			t0 = Reken.totaal()
+			Hotel.reken_af(gid)                     # the tap on the family: not counted
+			Hits.plaats()
+			var totaal := int(Econ.rekening_stand()["totaal"])
+			_open("rek_som")
+			waar(_druk("rek_som_keuzes", "Kn%d" % totaal), "%s: de som van de rekening" % wat)
 			rt["reken"] += 1
-			while Econ.geteld() < int(Econ.rekening_stand()["totaal"]):
-				Econ.leg_neer()
-				rt["reken"] += 1
-			var wissel := Econ.geteld() > int(Econ.rekening_stand()["totaal"])
-			await Econ.klaar_met_tellen()
-			rt["spel"] += 1
+			waar(await _wacht_spot("rek_buidel"), "%s: de buidel staat er" % wat)
+			for _munt in 40:
+				if Econ.geteld() >= totaal:
+					break
+				if not _tik_spot("rek_buidel"):
+					break
+				rt["reken"] += 1                    # a coin on the counter
+			var wissel := Econ.geteld() > totaal
+			waar(_tik_spot("rek_ok"), "%s: ✔ klaar" % wat)
+			rt["spel"] += 1                         # confirming
 			if wissel:
-				await Econ.wissel_ok(Econ.geteld() - int(Econ.rekening_stand()["totaal"]))
+				waar(await _wacht_spot("rek_wissel_keuzes"), "%s: het wisselgeld" % wat)
+				_open("rek_wissel")
+				waar(_druk("rek_wissel_keuzes", "Kn%d" % (Econ.geteld() - totaal)),
+					"%s: het wisselgeld getikt" % wat)
 				rt["reken"] += 1
-			waar(not Econ.rekening_bezig(), "groep %d, %d gasten: afgerekend" % [band, n])
-			waar(rt["reken"] >= rt["spel"] + 1,
-				"groep %d, %d gasten: rekening R1 %s" % [band, n, rt])
+			for _i in 100:
+				if not Econ.rekening_bezig():
+					break
+				await (Engine.get_main_loop() as SceneTree).process_frame
+			waar(not Econ.rekening_bezig(), "%s: afgerekend" % wat)
+			waar(rt["reken"] >= rt["spel"] + 1, "%s: rekening R1 %s" % [wat, rt])
+			_va_eind(wat + ", rekening", rt, t0, b0)
 			Econ.rekening_stop()
+			World.weg(gid)
+	Ui.zet_rust_modus(rust)
+	await _scherm_weg(laag)
 	_schoon()
+
+## VA: the real Rekenwacht.  Half a budget first, so a right answer has room
+## to pay back.
+const VA_BUDGET := 6
+
+func _va_begin() -> int:
+	Reken.voor_test()
+	for _i in Reken.BUDGET_MAX - VA_BUDGET:
+		Reken.tik("spel", "test:va")
+	return Reken.budget()
+
+## No game runs at the desk, so `Reken.beurt()` stays still: the totals tell.
+func _va_eind(wat: String, tel: Dictionary, t0: Dictionary, budget_voor: int) -> void:
+	var t1 := Reken.totaal()
+	var r := int(t1["reken"]) - int(t0["reken"])
+	var s := int(t1["spel"]) - int(t0["spel"])
+	var g := int(t1["goed"]) - int(t0["goed"])
+	print("[VA] %s: reken=%d spel=%d goed=%d budget=%d->%d" % [wat, r, s, g, budget_voor,
+		Reken.budget()])
+	waar(r >= s + 1, "%s: Reken.totaal() reken %d >= spel %d + 1" % [wat, r, s])
+	gelijk(r, int(tel["reken"]), "%s: de Rekenwacht telt de rekentikken zoals de teller" % wat)
+	gelijk(s, int(tel["spel"]), "%s: de Rekenwacht telt de speltikken zoals de teller" % wat)
+	waar(g >= 1, "%s: Reken.goed() vuurde" % wat)
+	waar(Reken.budget() > budget_voor, "%s: het budget steeg (%d -> %d)" % [wat, budget_voor,
+		Reken.budget()])
+	gelijk(int(t1["geweigerd"]), int(t0["geweigerd"]), "%s: geen tik geweigerd" % wat)
+
+func _wacht_spot(id: String, seconden := 4.0) -> bool:
+	var boom := Engine.get_main_loop() as SceneTree
+	var tot := Time.get_ticks_msec() + int(seconden * 1000.0)
+	while Hits.spot(id) == null and Time.get_ticks_msec() < tot:
+		await boom.process_frame
+	return Hits.spot(id) != null
+
+## A tap on a hotspot's own button, as a child does it.
+func _tik_spot(id: String) -> bool:
+	var s := Hits.spot(id)
+	if s == null or not is_instance_valid(s.knoop) or not (s.knoop is BaseButton):
+		fout("%s staat er niet om te tikken" % id)
+		return false
+	(s.knoop as BaseButton).pressed.emit()
+	return true
 
 ## Leave the hotel as a fresh game: a band-5 hotel full of guests left behind
 ## unlocks games whose resting props (the spiegel's easel) then stand in the
@@ -592,3 +682,42 @@ func _schoon() -> void:
 	State.start_gekozen()
 	Rooms.herstel()
 	World.sync(Hotel.alle_dieren())
+
+## VA (2026-10-09), red before the fix in `Reken.soort_van`: every button of the
+## bill counted as maths through its owner, so `✔ klaar` (confirming, play by
+## R1) was maths and the real count disagreed with the design.  Now only the
+## marked buttons are maths — the purse (its `reken: true` reaches `Hits`
+## since `Ui.bron` passes it on) and the counter — and `✔ klaar` is play; during
+## a rekenmoment every button of the bill still goes through.
+func test_rekening_alleen_de_munten_zijn_rekenen() -> void:
+	_voor()
+	var laag := _scherm()
+	var rust := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	World.naar("receptie")
+	var g := _gast_weg()
+	World.zet("boef", "receptie", 60.0, 60.0, {"kind": "hond", "naam": "Boef"})
+	Econ.rekening({"gast": g, "fam": "Bakker", "nachten": 4, "prijs": 2,
+		"totaal": 8, "betaald": 10})
+	Hits.plaats()
+	_open("rek_som")
+	waar(_druk("rek_som_keuzes", "Kn8"), "de som van de rekening")
+	waar(await _wacht_spot("rek_buidel"), "de buidel staat er")
+	for id in ["rek_buidel", "rek_bank", "rek_ok"]:
+		waar(Hits.spot(id) != null, "%s staat er" % id)
+	if Hits.spot("rek_ok") != null and Hits.spot("rek_buidel") != null:
+		gelijk(Reken.soort_van(Hits.spot("rek_buidel")), "reken", "een munt uit de buidel is rekenen")
+		gelijk(Reken.soort_van(Hits.spot("rek_bank")), "reken", "een munt op de toonbank is rekenen")
+		gelijk(Reken.soort_van(Hits.spot("rek_ok")), "spel", "✔ klaar is bevestigen: spel")
+		# the budget runs out: the bill's own buttons stay allowed (and are not counted)
+		for _i in Reken.BUDGET_MAX + 1:
+			Reken.tik("spel", "test:va")
+		waar(not Reken.vrij(), "een rekenmoment")
+		var geweigerd := int(Reken.totaal()["geweigerd"])
+		waar(_tik_spot("rek_buidel"), "een munt")
+		waar(_tik_spot("rek_ok"), "✔ klaar")
+		gelijk(int(Reken.totaal()["geweigerd"]), geweigerd, "niets van de rekening is geweigerd")
+	World.weg("boef")
+	Ui.zet_rust_modus(rust)
+	await _scherm_weg(laag)
+	_schoon()

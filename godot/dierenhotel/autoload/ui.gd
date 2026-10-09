@@ -869,6 +869,12 @@ func bron(obj: Variant, o: Dictionary) -> String:
 		# a source that IS a thing in the room (the purse) hangs at it like a
 		# button does (`op: "aan"` with its `obj`)
 		"op": o.get("op", "auto"), "obj": o.get("obj", ""),
+		# the rekenwacht's marks travel along (VA, 2026-10-09): until then a
+		# source dropped them, so the bill's purse (`reken: true`) only counted
+		# as maths through its owner and the games' `vrij: true` sources (the
+		# tobbe rack, the meubels purse, the key, the laundry pile) were never
+		# refused once the budget was out
+		"reken": bool(o.get("reken", false)), "vrij": bool(o.get("vrij", false)),
 	})
 	return id
 

@@ -1770,6 +1770,7 @@ func _rekenaandeel(band: int, n: int, dag: int) -> void:
 	State.s["dag"] = dag
 	State.s["kunnen"] = band - 1
 	State.herbereken()
+	var va_b := _va_begin()
 	Games.start(SPEL)
 	Hits.plaats()
 	var spel := _spel()
@@ -1798,6 +1799,7 @@ func _rekenaandeel(band: int, n: int, dag: int) -> void:
 	var r := int(_teller["reken"])
 	var s := int(_teller["spel"])
 	waar(r >= s + 1, "band %d, %d gasten: rekenen %d >= spel %d + 1" % [band, n, r, s])
+	_va_eind("voerkar band %d, %d gasten" % [band, n], _teller, va_b)
 	Ui.zet_rust_modus(false)
 	_af()
 
@@ -1840,3 +1842,31 @@ func test_een_gemiste_vraag_blijft_ook_morgen() -> void:
 		gelijk(_lading_tekst(), voor, "dezelfde kaart")
 		gelijk(str(_getallen_op(LADING)), str(getallen), "met dezelfde vier getallen")
 	_af()
+
+# ------------------------------------------- VA: de echte Rekenwacht (R1)
+
+## VA (2026-10-09): next to the in-test counter, the REAL classifier.  Every
+## turn starts from a fresh Rekenwacht with half a budget (so a right answer
+## has room to pay back); after the turn `Reken.beurt()` must hold R1 by
+## itself, agree with the counter tap for tap, and show that a right answer
+## paid back (`Reken.goed` fired and the budget rose over the turn).
+const VA_BUDGET := 6
+
+func _va_begin() -> int:
+	Reken.voor_test()
+	for _i in Reken.BUDGET_MAX - VA_BUDGET:
+		Reken.tik("spel", "test:va")
+	return Reken.budget()
+
+func _va_eind(wat: String, teller: Dictionary, budget_voor: int) -> void:
+	var b := Reken.beurt()
+	var r := int(b["reken"])
+	var s := int(b["spel"])
+	print("[VA] %s: reken=%d spel=%d goed=%d budget=%d->%d" % [wat, r, s, int(b["goed"]),
+		budget_voor, Reken.budget()])
+	waar(r >= s + 1, "%s: Reken.beurt() reken %d >= spel %d + 1" % [wat, r, s])
+	gelijk(r, int(teller["reken"]), "%s: Reken.beurt().reken = de teller" % wat)
+	gelijk(s, int(teller["spel"]), "%s: Reken.beurt().spel = de teller" % wat)
+	waar(int(b["goed"]) >= 1, "%s: Reken.goed() vuurde" % wat)
+	waar(Reken.budget() > budget_voor, "%s: het budget steeg (%d -> %d)" % [wat, budget_voor,
+		Reken.budget()])

@@ -717,7 +717,9 @@ func _tel(soort: String) -> void:
 ## Build the right share the way a child does it with the default handful of
 ## one: from the rack scoop by scoop into every tub and the rest into the jug,
 ## or for `half` pour from the first tub into the second and the rest into the
-## jug.  Every tap is counted as maths.
+## jug.  Every tap is counted as maths.  VA (2026-10-09): every scoop goes
+## through the tub's or the jug's REAL button (`Hits` -> the Rekenwacht), not
+## through `spel._tik_tobbe` — a direct call would bypass the classifier.
 func _bouw_goed(spel) -> void:
 	var s: Dictionary = spel._s
 	var per := int(s["per"])
@@ -725,24 +727,33 @@ func _bouw_goed(spel) -> void:
 	if str(s["soort"]) == "half":
 		for _k in per:
 			_tel("reken")
-			spel._tik_tobbe(0)
+			_schep_knop("tb_kuip0")
 		for _k in rest:
 			_tel("reken")
-			spel._tik_kan()
+			_schep_knop("tb_kan")
 		return
 	for i in int(s["M"]):
 		for _k in per:
 			_tel("reken")
-			spel._tik_tobbe(i)
+			_schep_knop("tb_kuip%d" % i)
 	for _k in rest:
 		_tel("reken")
-		spel._tik_kan()
+		_schep_knop("tb_kan")
+
+## A tap on a tub or the jug as the child does it: the hotspot's own button.
+func _schep_knop(id: String) -> void:
+	var k := Hits.spot(id)
+	if k == null or not is_instance_valid(k.knoop) or not (k.knoop is BaseButton):
+		fout("%s staat er niet om te tikken" % id)
+		return
+	(k.knoop as BaseButton).pressed.emit()
 
 func _rekenaandeel(opzet: Dictionary, soort: String, n_gasten := -1) -> void:
 	_teller = {"reken": 0, "spel": 0}
 	var o := opzet.duplicate()
 	if n_gasten > 0:
 		o["gasten"] = n_gasten
+	var va_b := _va_begin()
 	var spel = _begin(o, soort)
 	if spel == null:
 		_af()
@@ -763,6 +774,7 @@ func _rekenaandeel(opzet: Dictionary, soort: String, n_gasten := -1) -> void:
 	var r := int(_teller["reken"])
 	var sp := int(_teller["spel"])
 	waar(r >= sp + 1, "%s: rekenen %d >= spel %d + 1" % [wat, r, sp])
+	_va_eind("tobbe " + wat, _teller, va_b)
 	_af()
 
 func test_rekenaandeel_band_3() -> void:
@@ -859,4 +871,66 @@ func test_een_gemiste_vraag_blijft_na_een_nieuwe_dag() -> void:
 	gelijk(int(na["T"]), int(voor["T"]), "dezelfde T")
 	gelijk(int(na["M"]), int(voor["M"]), "dezelfde M")
 	gelijk(str(na["stap"]), "vraag", "en dezelfde vraag")
+	_af()
+
+# ------------------------------------------- VA: de echte Rekenwacht (R1)
+
+## VA (2026-10-09): next to the in-test counter, the REAL classifier.  Every
+## turn starts from a fresh Rekenwacht with half a budget (so a right answer
+## has room to pay back); after the turn `Reken.beurt()` must hold R1 by
+## itself, agree with the counter tap for tap, and show that a right answer
+## paid back (`Reken.goed` fired and the budget rose over the turn).
+const VA_BUDGET := 6
+
+func _va_begin() -> int:
+	Reken.voor_test()
+	for _i in Reken.BUDGET_MAX - VA_BUDGET:
+		Reken.tik("spel", "test:va")
+	return Reken.budget()
+
+func _va_eind(wat: String, teller: Dictionary, budget_voor: int) -> void:
+	var b := Reken.beurt()
+	var r := int(b["reken"])
+	var s := int(b["spel"])
+	print("[VA] %s: reken=%d spel=%d goed=%d budget=%d->%d" % [wat, r, s, int(b["goed"]),
+		budget_voor, Reken.budget()])
+	waar(r >= s + 1, "%s: Reken.beurt() reken %d >= spel %d + 1" % [wat, r, s])
+	gelijk(r, int(teller["reken"]), "%s: Reken.beurt().reken = de teller" % wat)
+	gelijk(s, int(teller["spel"]), "%s: Reken.beurt().spel = de teller" % wat)
+	waar(int(b["goed"]) >= 1, "%s: Reken.goed() vuurde" % wat)
+	waar(Reken.budget() > budget_voor, "%s: het budget steeg (%d -> %d)" % [wat, budget_voor,
+		Reken.budget()])
+
+## VA (2026-10-09), red before the fix in `Ui.bron`: the rack is marked
+## `vrij: true` (picking the size of a handful is an in-game free action, R4),
+## but a source dropped that mark, so once the budget was out the rack still
+## took every tap.  Now the free tap waits for the maths, like free play, and
+## the maths itself (the answer on the strip) is never refused.
+func test_het_rek_is_een_vrije_tik_die_op_het_rekenen_wacht() -> void:
+	var spel = _begin(OPZET[0], "eerlijk")
+	if spel == null:
+		_af()
+		return
+	Hits.plaats()
+	var rek := Hits.spot("tb_rek")
+	waar(rek != null, "het rek staat er")
+	if rek == null:
+		_af()
+		return
+	waar(rek.vrij, "het rek is een vrije tik (vrij: true komt door Ui.bron heen)")
+	gelijk(Reken.soort_van(rek), "spel", "en telt als spel")
+	# the budget runs out inside the game
+	for _i in Reken.BUDGET_MAX:
+		Reken.tik("spel", "test:va")
+	waar(Reken.budget() <= 0, "het budget is op")
+	var hand := int(spel._s["hand"])
+	var geweigerd := int(Reken.totaal()["geweigerd"])
+	(rek.knoop as BaseButton).pressed.emit()
+	gelijk(int(Reken.totaal()["geweigerd"]), geweigerd + 1, "de tik op het rek wordt geweigerd")
+	gelijk(int(spel._s["hand"]), hand, "en de hand blijft zoals hij was")
+	# the answer on the strip is maths: never refused
+	var s: Dictionary = spel._s
+	waar(_tik_keuze(_juist(s)), "het goede getal")
+	gelijk(str(spel._s["stap"]), "vullen", "het rekenen gaat gewoon door")
+	gelijk(int(Reken.totaal()["geweigerd"]), geweigerd + 1, "het antwoord is niet geweigerd")
 	_af()

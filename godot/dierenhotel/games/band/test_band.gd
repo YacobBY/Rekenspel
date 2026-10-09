@@ -979,6 +979,7 @@ func test_rekenaandeel() -> void:
 		_op()
 		_wereld(n, band, dag)
 		var o := Beurt.opzet(n, band, dag)
+		var va_b := _va_begin()
 		var t0 := Time.get_ticks_msec()
 		waar(Games.start(SPEL), "%s: het spel start" % wat)
 		waar(await _wacht_op_kaart(minf(Beurt.duur(o), Beurt.KAART_NA_S) + 1.0), "%s: de kaart vraagt" % wat)
@@ -1000,6 +1001,7 @@ func test_rekenaandeel() -> void:
 		var reken := int(_teller["reken"])
 		var spel := int(_teller["spel"])
 		waar(reken >= spel + 1, "%s: R1 reken %d >= spel %d + 1" % [wat, reken, spel])
+		_va_eind("band " + wat, _teller, va_b)
 		_af()
 
 ## No free replay as an answer to a miss (no help after a miss): a question
@@ -1072,3 +1074,31 @@ func test_een_gemiste_vraag_komt_onveranderd_terug() -> void:
 	gelijk(int(_stand().get("missers", -1)), 0, "een nieuwe beurt")
 	gelijk(int(_stand().get("dag", -1)), dag + 1, "van vandaag")
 	_af()
+
+# ------------------------------------------- VA: de echte Rekenwacht (R1)
+
+## VA (2026-10-09): next to the in-test counter, the REAL classifier.  Every
+## turn starts from a fresh Rekenwacht with half a budget (so a right answer
+## has room to pay back); after the turn `Reken.beurt()` must hold R1 by
+## itself, agree with the counter tap for tap, and show that a right answer
+## paid back (`Reken.goed` fired and the budget rose over the turn).
+const VA_BUDGET := 6
+
+func _va_begin() -> int:
+	Reken.voor_test()
+	for _i in Reken.BUDGET_MAX - VA_BUDGET:
+		Reken.tik("spel", "test:va")
+	return Reken.budget()
+
+func _va_eind(wat: String, teller: Dictionary, budget_voor: int) -> void:
+	var b := Reken.beurt()
+	var r := int(b["reken"])
+	var s := int(b["spel"])
+	print("[VA] %s: reken=%d spel=%d goed=%d budget=%d->%d" % [wat, r, s, int(b["goed"]),
+		budget_voor, Reken.budget()])
+	waar(r >= s + 1, "%s: Reken.beurt() reken %d >= spel %d + 1" % [wat, r, s])
+	gelijk(r, int(teller["reken"]), "%s: Reken.beurt().reken = de teller" % wat)
+	gelijk(s, int(teller["spel"]), "%s: Reken.beurt().spel = de teller" % wat)
+	waar(int(b["goed"]) >= 1, "%s: Reken.goed() vuurde" % wat)
+	waar(Reken.budget() > budget_voor, "%s: het budget steeg (%d -> %d)" % [wat, budget_voor,
+		Reken.budget()])

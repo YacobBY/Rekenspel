@@ -314,6 +314,7 @@ func _r1_beurt(types: Array, tab: String, wat: String) -> void:
 	var totaal := 0
 	for t in types:
 		totaal += int(Spel._artikel(str(t))["prijs"])
+	var va_b := _va_begin()
 	waar(Games.start("meubels"), "%s: het spel start" % wat)
 	await _tel_frames()
 	waar(_typ("mb_kas", heb), "%s: de kassavraag" % wat)
@@ -346,6 +347,7 @@ func _r1_beurt(types: Array, tab: String, wat: String) -> void:
 	waar(int(_r1["reken"]) >= int(_r1["spel"]) + 1,
 		"%s: R1 reken %d >= spel %d + 1" % [wat, _r1["reken"], _r1["spel"]])
 	print("[r1] ", wat, " reken=", _r1["reken"], " spel=", _r1["spel"])
+	_va_eind("meubels " + wat, _r1, va_b)
 
 ## Een sticker met sterren: kassavraag (als er munten zijn) → ⭐-tab → kiezen →
 ## genoeg → over.
@@ -354,6 +356,7 @@ func _r1_sticker(sleutel: String, wat: String) -> void:
 	var munten := int(State.s["munten"])
 	var sterren := int(State.s["sterren"])
 	var nodig := int(Spel._versier(sleutel)["ster"])
+	var va_b := _va_begin()
 	waar(Games.start("meubels"), "%s: het spel start" % wat)
 	await _tel_frames()
 	if munten > 0:
@@ -373,6 +376,7 @@ func _r1_sticker(sleutel: String, wat: String) -> void:
 	waar(int(_r1["reken"]) >= int(_r1["spel"]) + 1,
 		"%s: R1 reken %d >= spel %d + 1" % [wat, _r1["reken"], _r1["spel"]])
 	print("[r1] ", wat, " reken=", _r1["reken"], " spel=", _r1["spel"])
+	_va_eind("meubels " + wat, _r1, va_b)
 
 # ==================================================================================
 # 1. registratie en ontgrendeling
@@ -2057,3 +2061,31 @@ func _strook_namen(kaart_id: String) -> String:
 	for k in _strook_knoppen(kaart_id):
 		uit.append("%s:%s" % [str((k as Node).name), (k as Button).text])
 	return ",".join(uit)
+
+# ------------------------------------------- VA: de echte Rekenwacht (R1)
+
+## VA (2026-10-09): next to the in-test counter, the REAL classifier.  Every
+## turn starts from a fresh Rekenwacht with half a budget (so a right answer
+## has room to pay back); after the turn `Reken.beurt()` must hold R1 by
+## itself, agree with the counter tap for tap, and show that a right answer
+## paid back (`Reken.goed` fired and the budget rose over the turn).
+const VA_BUDGET := 6
+
+func _va_begin() -> int:
+	Reken.voor_test()
+	for _i in Reken.BUDGET_MAX - VA_BUDGET:
+		Reken.tik("spel", "test:va")
+	return Reken.budget()
+
+func _va_eind(wat: String, teller: Dictionary, budget_voor: int) -> void:
+	var b := Reken.beurt()
+	var r := int(b["reken"])
+	var s := int(b["spel"])
+	print("[VA] %s: reken=%d spel=%d goed=%d budget=%d->%d" % [wat, r, s, int(b["goed"]),
+		budget_voor, Reken.budget()])
+	waar(r >= s + 1, "%s: Reken.beurt() reken %d >= spel %d + 1" % [wat, r, s])
+	gelijk(r, int(teller["reken"]), "%s: Reken.beurt().reken = de teller" % wat)
+	gelijk(s, int(teller["spel"]), "%s: Reken.beurt().spel = de teller" % wat)
+	waar(int(b["goed"]) >= 1, "%s: Reken.goed() vuurde" % wat)
+	waar(Reken.budget() > budget_voor, "%s: het budget steeg (%d -> %d)" % [wat, budget_voor,
+		Reken.budget()])

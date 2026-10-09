@@ -219,7 +219,12 @@ func laat_door_spot(s, drop := false) -> bool:
 func soort_van(s) -> String:
 	if s == null:
 		return "spel"
-	return "reken" if bool(s.reken) or str(s.door) == REKENING else "spel"
+	# VA (2026-10-09): only a spot marked `reken: true` is maths.  The bill's
+	# maths buttons (the purse, the counter) carry that mark themselves — a
+	# source keeps it since `Ui.bron` passes it on — while its `✔ klaar` is
+	# confirming, which R1 counts as play: it was maths only through its owner.
+	# During a rekenmoment every button of the bill stays allowed (`_altijd`).
+	return "reken" if bool(s.reken) else "spel"
 
 ## The gate is shut where the child is: the room bar and the door signs dim.
 func dimt() -> bool:
