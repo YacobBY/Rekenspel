@@ -505,6 +505,19 @@ func test_de_rekenknop_op_vier_schermen() -> void:
 			if str(id) != Reken.KNOP and (Hits.debug()[id]["rect"] as Rect2).intersects(r):
 				anderen += 1
 		gelijk(anderen, 0, "%s: er ligt niets op de knop" % str(maat))
+		# a refused tap on the stairs: the bubble stands at the button, on
+		# every screen, whole and inside the frame
+		waar(_druk(Hotel.trap_knop_id("receptie", "op")), "%s: tik op de trap" % str(maat))
+		await _frames(3)
+		var w: Dictionary = Hits.debug().get(Reken.WOLK, {})
+		waar(not w.is_empty(), "%s: de wolk staat in het kader" % str(maat))
+		if not w.is_empty():
+			var wr: Rect2 = w["rect"]
+			waar(Rect2(Vector2.ZERO, kader.size).encloses(wr), "%s: helemaal binnen het kader (%s)"
+				% [str(maat), str(wr)])
+			waar(not wr.intersects(r), "%s: niet op de knop" % str(maat))
+			waar(not bool(w.get("krap", true)), "%s: niet krap" % str(maat))
+			waar((Hits.spot(Reken.WOLK).knoop as Control).visible, "%s: zichtbaar" % str(maat))
 		# gone with a wipe, back the next frames (a hotel switch does this)
 		Hits.wis_alles()
 		await _frames(3)
