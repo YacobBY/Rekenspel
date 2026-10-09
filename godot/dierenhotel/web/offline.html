@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="nl">
+	<head>
+		<meta charset="utf-8">
+		<!-- dierenhotel-offline (W2, 2026-10-09): what the service worker shows
+		     when the game is not in its cache yet and there is no network
+		     (export_presets.cfg, progressive_web_app/offline_page).  Once the
+		     game has been played online one time it starts offline by itself. -->
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+		<meta name="color-scheme" content="light">
+		<meta name="theme-color" content="#FFF7EC">
+		<title>Dierenhotel</title>
+		<style>
+html, body {
+	margin: 0;
+	height: 100%;
+	background-color: #FFF7EC;
+	overscroll-behavior: none;
+}
+
+body {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+	color: #5A4636;
+	font-family: system-ui, Roboto, "Noto Sans", "Segoe UI", Arial, sans-serif;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+main {
+	max-width: 440px;
+	padding: 24px 22px;
+	border-radius: 26px;
+	background-color: #FFFDF8;
+	box-shadow: 0 6px 18px rgba(138, 117, 102, 0.25);
+	text-align: center;
+}
+
+.beeld {
+	font-size: 76px;
+	line-height: 1.1;
+}
+
+.zin {
+	margin: 12px 0 0;
+	font-size: 22px;
+	font-weight: 700;
+}
+
+.zin2 {
+	margin: 8px 0 0;
+	font-size: 20px;
+}
+
+button {
+	min-width: 220px;
+	min-height: 56px;
+	margin-top: 20px;
+	padding: 12px 24px;
+	border: 0;
+	border-radius: 18px;
+	background-color: #F2915B;
+	color: #FFFFFF;
+	font: inherit;
+	font-size: 22px;
+	font-weight: 700;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+		</style>
+	</head>
+	<body>
+		<main role="alert">
+			<div class="beeld" aria-hidden="true">🐾</div>
+			<p class="zin">📶 Even geen internet</p>
+			<p class="zin2">🔄 Probeer het zo weer</p>
+			<button type="button">🔄 Opnieuw</button>
+		</main>
+		<script>
+document.querySelector('button').addEventListener('click', function () {
+	window.location.reload();
+});
+// back online: try again by itself
+window.addEventListener('online', function () {
+	window.location.reload();
+});
+		</script>
+	</body>
+</html>

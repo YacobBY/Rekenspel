@@ -12,6 +12,7 @@
 //   node tools/kiek.js --kamer zwembad
 //   node tools/kiek.js --kamer zwembad --tik spel_zwembad --wacht 4000
 //   node tools/kiek.js --kamer tuin --band 4 --viewport 360x740@3:telefoon
+//   node tools/kiek.js --kamer receptie --viewport pixel7        # an Android phone
 //
 // Needs a fresh export first: tools/export.sh (about 60–90 s).  The script
 // refuses to run when build/web/index.html is missing and warns when it is
@@ -49,9 +50,26 @@ function hulp() {
                       --kamer zet er kamerNu in (bv. een hotel vol gekochte bedden)
   --uit MAP           uitvoermap (standaard $DH_LOG_DIR/kiek of /tmp/dierenhotel-log/kiek)
   --viewport BxH[@dpr][:naam]   standaard 1024x768@2:ipad-land
+  --viewport TOESTEL  een Android-toestel: ${Object.keys(APPARATEN).join(' | ')}
+                      (aanraakscherm, Android-Chrome als user agent)
   --url URL           bestaande server gebruiken in plaats van build/web zelf te serveren
   --playwright PAD    map van de playwright-module`);
 }
+
+// Android devices (W2, 2026-10-09): `--viewport pixel7` and friends.  Each is
+// a touch screen with the user agent Chrome on Android sends today (reduced:
+// "Android 10; K"; a tablet has no "Mobile"); the BxH[@dpr][:naam] form and the
+// default stay as they were.  Keep this table the same in kiek.js, speel.js
+// and probe.js.  [breed, hoog, dpr, telefoon]
+const APPARATEN = {
+  pixel7: [412, 915, 2.625, true],
+  'pixel7-land': [915, 412, 2.625, true],
+  'galaxy-a': [360, 800, 3, true],
+  'galaxy-tab': [1280, 800, 1.5, false],
+  'galaxy-tab-staand': [800, 1280, 1.5, false],
+};
+const androidUA = (telefoon, versie) => 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
+  + `(KHTML, like Gecko) Chrome/${String(versie).split('.')[0]}.0.0.0 ${telefoon ? 'Mobile ' : ''}Safari/537.36`;
 
 // ---------------------------------------------------------------- argumenten
 const argv = process.argv.slice(2);
@@ -83,9 +101,15 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--playwright') opt.playwright = v();
   else { console.error(`onbekende optie: ${a}`); hulp(); process.exit(2); }
 }
-const vm = opt.viewport.match(/^(\d+)x(\d+)(?:@([\d.]+))?(?::(.+))?$/);
-if (!vm) { console.error(`FOUT: viewport "${opt.viewport}" moet BxH[@dpr][:naam] zijn`); process.exit(2); }
-const PROFIEL = { naam: vm[4] || `${vm[1]}x${vm[2]}`, viewport: { width: +vm[1], height: +vm[2] }, dsf: vm[3] ? +vm[3] : 2 };
+const toestel = APPARATEN[opt.viewport];
+const vm = toestel ? null : opt.viewport.match(/^(\d+)x(\d+)(?:@([\d.]+))?(?::(.+))?$/);
+if (!toestel && !vm) {
+  console.error(`FOUT: viewport "${opt.viewport}" moet BxH[@dpr][:naam] zijn, of een toestel: ${Object.keys(APPARATEN).join(', ')}`);
+  process.exit(2);
+}
+const PROFIEL = toestel
+  ? { naam: opt.viewport, viewport: { width: toestel[0], height: toestel[1] }, dsf: toestel[2], android: { telefoon: toestel[3] } }
+  : { naam: vm[4] || `${vm[1]}x${vm[2]}`, viewport: { width: +vm[1], height: +vm[2] }, dsf: vm[3] ? +vm[3] : 2, android: null };
 
 function laadChromium() {
   const kandidaten = [];
@@ -248,9 +272,14 @@ const midden = (l) => {
     headless: true,
     args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'],
   });
-  const ctx = await browser.newContext({
+  const ctxOpties = {
     viewport: PROFIEL.viewport, deviceScaleFactor: PROFIEL.dsf, hasTouch: true, isMobile: true,
-  });
+  };
+  if (PROFIEL.android) {
+    ctxOpties.screen = { ...PROFIEL.viewport };
+    ctxOpties.userAgent = androidUA(PROFIEL.android.telefoon, browser.version());
+  }
+  const ctx = await browser.newContext(ctxOpties);
   const page = await ctx.newPage();
   const logs = [], errors = [];
   page.on('console', (m) => { logs.push(`${m.type()}: ${m.text()}`); if (m.type() === 'error') errors.push(m.text()); });

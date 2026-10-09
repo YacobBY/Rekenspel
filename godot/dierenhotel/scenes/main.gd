@@ -51,6 +51,9 @@ var _telefoon := false
 var intro: UiIntro = null
 ## The start sheet with the hotels, when there was a hotel to come back to.
 var startblad: UiStartblad = null
+## W2 web (2026-10-09): the browser around the game — back button, safe
+## areas, storage, wake lock (ui/web.gd).  Only in the web export, else null.
+var web: UiWeb = null
 
 func _ready() -> void:
 	Ui.registreer_lagen(knoplaag, naamlaag, toastlaag, bladlaag, vanglaag, balklaag)
@@ -94,6 +97,13 @@ func _ready() -> void:
 	# deferred — and only for the room the child is actually looking at.
 	World.bak_veranderd.connect(_bak_gewijzigd)
 
+	# --- W2 web (2026-10-09): one UiWeb, only in the web export (ui/web.gd) ---
+	if OS.has_feature("web"):
+		web = UiWeb.new()
+		web.shell = self
+		add_child(web)
+		web.randen_veranderd.connect(_pas_shell)
+	# --- einde W2 web ---
 	_op_venster()
 	_pas_shell()
 	# `geen_start` is set by the headless layout test, which drops this shell
@@ -482,6 +492,15 @@ func _pas_shell() -> void:
 		var win := get_window()
 		breed = float(win.content_scale_size.x)
 		hoog = float(win.content_scale_size.y)
+	# --- W2 web: a layout made for a wider screen (a phone turned back to
+	# portrait, a browser window made narrower) holds `Scherm` wider than the
+	# viewport by its own minimum size, and the shell then kept laying out for
+	# the old width.  Never measure more than the viewport shows. ---
+	var zicht := scherm.get_viewport_rect().size
+	if zicht.x >= 1.0 and zicht.y >= 1.0:
+		breed = minf(breed, zicht.x)
+		hoog = minf(hoog, zicht.y)
+	# --- einde W2 web ---
 	var landschap := breed > hoog
 	var compact := landschap and hoog < LAAG_LANDSCHAP
 	# A phone in portrait: the chrome and the room bar together took 304 of 740
@@ -574,6 +593,10 @@ func _marge(l: int, t: int, r: int, b: int) -> void:
 ## as position = (left, top) and size = (right, bottom); on the web export the
 ## `viewport-fit=cover` meta of §7.2 is what makes them non-zero.
 func _veilige_randen() -> Rect2:
+	# --- W2 web: in the browser the insets are CSS env(safe-area-inset-*) ---
+	if web != null and web.actief:
+		return web.randen()
+	# --- einde W2 web ---
 	var scherm_rect := DisplayServer.screen_get_usable_rect()
 	var veilig := DisplayServer.get_display_safe_area()
 	if veilig.size.x <= 0 or veilig.size.y <= 0:

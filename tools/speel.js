@@ -8,6 +8,7 @@
 //   node tools/speel.js --kamer kamer1 --band 4 --toon
 //   node tools/speel.js --kamer kamer1 --band 4 --doe "spel_bedden; wacht 2000; bd_som_keuze0"
 //   node tools/speel.js --kamer gang --band 4 --doe "spel_wekker; wk_uur; wk_uur; wk_klaar" --uit tmp/speel
+//   node tools/speel.js --viewport galaxy-a --band 4 --doe "bel; wacht 4500; terug; herlaad; Kverder; draai"
 //
 // `--toon` speelt niets: het komt de kamer binnen en drukt af wat er te tikken
 // valt.  Begin daarmee; de id's uit die lijst zijn de stappen van `--doe`.
@@ -47,6 +48,10 @@ function hulp() {
                       vw:<id> (het voorwerp van een geleende hotelknop: het
                       bakje of de deuropening zelf, niet de knop),
                       of "wacht <ms>"
+                      en de browser zelf: "terug" (de terugknop/-veeg van de
+                      browser), "herlaad" (de pagina opnieuw, ZONDER de gezaaide
+                      opslag: wat bewaard is moet terugkomen), "draai" (het
+                      scherm een kwartslag: breedte en hoogte wisselen)
   --toon              speel niets; meld alleen wat er in deze kamer te tikken valt
   --stap-wacht MS     wachttijd na elke tik voor de foto (standaard 1800)
   --band 3|4|5        aantal gasten/kunnen dat die band oplevert (standaard 3)
@@ -54,9 +59,26 @@ function hulp() {
   --dag N             dagnummer in de opslag (standaard 1)
   --uit MAP           uitvoermap (standaard $DH_LOG_DIR/speel of tmp/log/speel)
   --viewport BxH[@dpr][:naam]   standaard 1024x768@2:ipad-land
+  --viewport TOESTEL  een Android-toestel: ${Object.keys(APPARATEN).join(' | ')}
+                      (aanraakscherm, Android-Chrome als user agent)
   --url URL           bestaande server gebruiken in plaats van build/web zelf te serveren
   --playwright PAD    map van de playwright-module`);
 }
+
+// Android-toestellen (W2, 2026-10-09): `--viewport pixel7` enzovoort.  Elk is
+// een aanraakscherm met de user agent die Chrome op Android nu stuurt (ingekort:
+// "Android 10; K"; een tablet zonder "Mobile"); de vorm BxH[@dpr][:naam] en de
+// standaard blijven zoals ze waren.  Houd deze tabel gelijk in kiek.js, speel.js
+// en probe.js.  [breed, hoog, dpr, telefoon]
+const APPARATEN = {
+  pixel7: [412, 915, 2.625, true],
+  'pixel7-land': [915, 412, 2.625, true],
+  'galaxy-a': [360, 800, 3, true],
+  'galaxy-tab': [1280, 800, 1.5, false],
+  'galaxy-tab-staand': [800, 1280, 1.5, false],
+};
+const androidUA = (telefoon, versie) => 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
+  + `(KHTML, like Gecko) Chrome/${String(versie).split('.')[0]}.0.0.0 ${telefoon ? 'Mobile ' : ''}Safari/537.36`;
 
 // ---------------------------------------------------------------- argumenten
 const argv = process.argv.slice(2);
@@ -84,9 +106,15 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--playwright') opt.playwright = v();
   else { console.error(`onbekende optie: ${a}`); hulp(); process.exit(2); }
 }
-const vm = opt.viewport.match(/^(\d+)x(\d+)(?:@([\d.]+))?(?::(.+))?$/);
-if (!vm) { console.error(`FOUT: viewport "${opt.viewport}" moet BxH[@dpr][:naam] zijn`); process.exit(2); }
-const PROFIEL = { naam: vm[4] || `${vm[1]}x${vm[2]}`, viewport: { width: +vm[1], height: +vm[2] }, dsf: vm[3] ? +vm[3] : 2 };
+const toestel = APPARATEN[opt.viewport];
+const vm = toestel ? null : opt.viewport.match(/^(\d+)x(\d+)(?:@([\d.]+))?(?::(.+))?$/);
+if (!toestel && !vm) {
+  console.error(`FOUT: viewport "${opt.viewport}" moet BxH[@dpr][:naam] zijn, of een toestel: ${Object.keys(APPARATEN).join(', ')}`);
+  process.exit(2);
+}
+const PROFIEL = toestel
+  ? { naam: opt.viewport, viewport: { width: toestel[0], height: toestel[1] }, dsf: toestel[2], android: { telefoon: toestel[3] } }
+  : { naam: vm[4] || `${vm[1]}x${vm[2]}`, viewport: { width: +vm[1], height: +vm[2] }, dsf: vm[3] ? +vm[3] : 2, android: null };
 const STAPPEN = opt.doe.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
 
 function laadChromium() {
@@ -224,9 +252,14 @@ const midden = (l) => {
     headless: true,
     args: ['--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'],
   });
-  const ctx = await browser.newContext({
+  const ctxOpties = {
     viewport: PROFIEL.viewport, deviceScaleFactor: PROFIEL.dsf, hasTouch: true, isMobile: true,
-  });
+  };
+  if (PROFIEL.android) {
+    ctxOpties.screen = { ...PROFIEL.viewport };
+    ctxOpties.userAgent = androidUA(PROFIEL.android.telefoon, browser.version());
+  }
+  const ctx = await browser.newContext(ctxOpties);
   const page = await ctx.newPage();
   const logs = [], errors = [];
   page.on('console', (m) => { logs.push(`${m.type()}: ${m.text()}`); if (m.type() === 'error') errors.push(m.text()); });
@@ -302,6 +335,58 @@ const midden = (l) => {
       await page.waitForTimeout(parseInt(pauze[1], 10));
       console.log(`\nstap ${nr - 2}: wacht ${pauze[1]} ms`);
       await foto(`${nr}-wacht`);
+      continue;
+    }
+    // De browser zelf (W2, 2026-10-09).  `terug`: de terugknop of -veeg van
+    // Android, ⬅ van een desktopbrowser.  Het spel moet blijven staan en doen
+    // wat ⬅ Terug doet; ui/web.gd meldt `[probe] web terug=<actie>`.
+    if (/^terug$/i.test(stap)) {
+      await page.goBack({ waitUntil: 'commit', timeout: 4000 }).catch(() => null);
+      await page.waitForTimeout(opt.stapWacht);
+      const f = await foto(`${nr}-terug`);
+      console.log(`\nstap ${nr - 2}: terug (de terugknop van de browser)  →  ${path.basename(f)}`);
+      if (!page.url().startsWith(url)) {
+        await stop(`stap ${nr - 2} "terug": de browser verliet het spel (nu op ${page.url()})`);
+      }
+      const stand = await page.evaluate(() => (window.dhWeb ? window.dhWeb.stand() : 'geen dhWeb'));
+      console.log('  browser: ' + stand);
+      const m = meldingenSinds(merk);
+      if (m.length) console.log('  meldingen:\n    ' + m.slice(-8).join('\n    '));
+      merk = logs.length;
+      continue;
+    }
+    // `herlaad`: de pagina opnieuw, ZONDER de gezaaide `?opslag=` — wat het
+    // spel bewaarde moet uit de opslag van de browser terugkomen (startblad).
+    if (/^herlaad$/i.test(stap)) {
+      const voor = logs.length;
+      await page.goto(url, { waitUntil: 'load' });
+      const klaar = await wacht(() => logs.slice(voor).find((l) => l.includes('[probe] klaar')), 90000);
+      const f = await foto(`${nr}-herlaad`);
+      console.log(`\nstap ${nr - 2}: herlaad zonder gezaaide opslag  →  ${path.basename(f)}`);
+      if (!klaar) await stop(`stap ${nr - 2} "herlaad": "[probe] klaar" bleef uit na de herlaad`);
+      const m = meldingenSinds(voor).filter((l) => /^(opslag=|hotels=|stand=|web )/.test(l));
+      if (m.length) console.log('  meldingen:\n    ' + m.slice(-8).join('\n    '));
+      merk = logs.length;
+      continue;
+    }
+    // `draai`: het toestel een kwartslag (breedte en hoogte wisselen; een
+    // mobiel profiel krijgt ook de schermstand mee).
+    if (/^draai$/i.test(stap)) {
+      const vp = page.viewportSize();
+      await page.setViewportSize({ width: vp.height, height: vp.width });
+      await page.waitForTimeout(opt.stapWacht);
+      const f = await foto(`${nr}-draai-${vp.height}x${vp.width}`);
+      const canvas = await page.evaluate(() => {
+        const c = document.querySelector('canvas');
+        const r = c.getBoundingClientRect();
+        return `${c.width}x${c.height} (css ${Math.round(r.width)}x${Math.round(r.height)}),`
+          + ` venster ${innerWidth}x${innerHeight}, ${screen.orientation ? screen.orientation.type : '?'}`;
+      });
+      console.log(`\nstap ${nr - 2}: draai naar ${vp.height}x${vp.width}  →  ${path.basename(f)}`);
+      console.log('  canvas: ' + canvas);
+      const m = meldingenSinds(merk);
+      if (m.length) console.log('  meldingen:\n    ' + m.slice(-8).join('\n    '));
+      merk = logs.length;
       continue;
     }
     // `veeg chip:<naam> <dx>`: een echte vinger die vanaf die chip dx

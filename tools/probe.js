@@ -28,6 +28,7 @@
 //   node tools/probe.js                                   # both iPad profiles
 //   node tools/probe.js http://127.0.0.1:8642/index.html
 //   node tools/probe.js --viewport 360x740@3:telefoon --viewport 1024x768@2
+//   node tools/probe.js --viewport pixel7 --viewport galaxy-tab   # Android devices
 //   node tools/probe.js --eis boot,hotel,tik              # only these steps gate
 //   node tools/probe.js --uit /tmp/probe-shots
 //
@@ -54,15 +55,32 @@ function hulp() {
   console.log(`gebruik: node tools/probe.js [url] [opties]
 
   --viewport BxH[@dpr][:naam]  herhaalbaar; standaard 1024x768@2:ipad-land en 768x1024@2:ipad-port
+  --viewport TOESTEL           een Android-toestel: ${Object.keys(APPARATEN).join(' | ')}
+                               (altijd aanraakscherm, Android-Chrome als user agent)
   --uit MAP                    screenshots + rapport.json (standaard $DH_LOG_DIR/probe)
   --eis LIJST                  welke stappen mogen falen: ${STAPPEN.join(',')}; "geen" zet ze uit
   --knop ID                    tik deze hotspot aan in plaats van de eerste die reageert
   --wacht MS                   maximale wachttijd op "[probe] klaar" (standaard 30000)
   --geen-scan                  zoek de knop van het startblad niet met een tastende scan
-  --geen-touch                 muisprofiel in plaats van een aanraakscherm
+  --geen-touch                 muisprofiel in plaats van een aanraakscherm (tikt met de muis)
   --zichtbaar                  chromium met venster (debuggen)
   --playwright PAD             map van de playwright-module`);
 }
+
+// Android devices (W2, 2026-10-09): `--viewport pixel7` and friends.  Each is
+// a touch screen with the user agent Chrome on Android sends today (reduced:
+// "Android 10; K"; a tablet has no "Mobile"); the BxH[@dpr][:naam] form and the
+// two default profiles stay as they were.  Keep this table the same in
+// kiek.js, speel.js and probe.js.  [breed, hoog, dpr, telefoon]
+const APPARATEN = {
+  pixel7: [412, 915, 2.625, true],
+  'pixel7-land': [915, 412, 2.625, true],
+  'galaxy-a': [360, 800, 3, true],
+  'galaxy-tab': [1280, 800, 1.5, false],
+  'galaxy-tab-staand': [800, 1280, 1.5, false],
+};
+const androidUA = (telefoon, versie) => 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 '
+  + `(KHTML, like Gecko) Chrome/${String(versie).split('.')[0]}.0.0.0 ${telefoon ? 'Mobile ' : ''}Safari/537.36`;
 
 // ---------------------------------------------------------------- argumenten
 const argv = process.argv.slice(2);
@@ -106,11 +124,18 @@ for (const e of eisen) {
 }
 
 function leesViewport(spec) {
+  const t = APPARATEN[spec];
+  if (t) {
+    return { naam: spec, viewport: { width: t[0], height: t[1] }, dsf: t[2], android: { telefoon: t[3] } };
+  }
   const m = spec.match(/^(\d+)x(\d+)(?:@([\d.]+))?(?::(.+))?$/);
-  if (!m) { console.error(`FOUT: viewport "${spec}" moet BxH[@dpr][:naam] zijn`); process.exit(2); }
+  if (!m) {
+    console.error(`FOUT: viewport "${spec}" moet BxH[@dpr][:naam] zijn, of een toestel: ${Object.keys(APPARATEN).join(', ')}`);
+    process.exit(2);
+  }
   const b = parseInt(m[1], 10), h = parseInt(m[2], 10);
   const dsf = m[3] ? parseFloat(m[3]) : 2;
-  return { naam: m[4] || `${b}x${h}@${dsf}`, viewport: { width: b, height: h }, dsf: dsf };
+  return { naam: m[4] || `${b}x${h}@${dsf}`, viewport: { width: b, height: h }, dsf: dsf, android: null };
 }
 const PROFIELEN = viewportArgs.length
   ? viewportArgs.map(leesViewport)
@@ -182,11 +207,21 @@ function opVoorkeur(knoppen) {
   let stuk = 0;
 
   for (const p of PROFIELEN) {
-    const ctx = await browser.newContext({
+    // an Android device is always a touch screen, whatever --geen-touch says
+    const vinger = touch || !!p.android;
+    const ctxOpties = {
       viewport: p.viewport, deviceScaleFactor: p.dsf,
-      hasTouch: touch, isMobile: touch,
-    });
+      hasTouch: vinger, isMobile: vinger,
+    };
+    if (p.android) {
+      ctxOpties.screen = { ...p.viewport };
+      ctxOpties.userAgent = androidUA(p.android.telefoon, browser.version());
+    }
+    const ctx = await browser.newContext(ctxOpties);
     const page = await ctx.newPage();
+    // a finger on a touch profile, the mouse otherwise (--geen-touch had no
+    // touchscreen to tap with and failed on its first tap)
+    const tik = (x, y) => (vinger ? page.touchscreen.tap(x, y) : page.mouse.click(x, y));
     const logs = [], errors = [], warnings = [], failed = [];
     page.on('console', m => {
       const t = m.type(), txt = m.text();
@@ -209,7 +244,7 @@ function opVoorkeur(knoppen) {
     // one tap, and everything the shell said about it
     const tikOp = async (punt, wacht = 1600) => {
       const n0 = logs.length;
-      await page.touchscreen.tap(punt.x, punt.y);
+      await tik(punt.x, punt.y);
       await page.waitForTimeout(wacht);
       const nieuw = logs.slice(n0);
       return { nieuw, tikken: nieuw.map(l => l.match(TIK)).filter(Boolean) };
@@ -358,7 +393,7 @@ function opVoorkeur(knoppen) {
     } else if (bladknoppen.length && wereldKnop) {
       const doel = midden(bladknoppen[0].vlak);
       const voorKnop = logs.length;
-      await page.touchscreen.tap(doel.x, doel.y);
+      await tik(doel.x, doel.y);
       await page.waitForTimeout(900);
       // "Verder spelen" restores a SAVED day, so the hotel lays its buttons out
       // again; the shell reprints them and the confirming tap uses that fresh
@@ -394,7 +429,7 @@ function opVoorkeur(knoppen) {
       }
       for (const punt of punten) {
         verderPogingen++;
-        await page.touchscreen.tap(punt.x, punt.y);
+        await tik(punt.x, punt.y);
         await page.waitForTimeout(150);
         const r = await tikOp(midden(wereldKnop.vlak), 250);
         if (r.tikken.length >= 1) { verderPunt = punt; break; }
@@ -419,7 +454,7 @@ function opVoorkeur(knoppen) {
     if (klachten.length) stuk++;
 
     rapport.push({
-      profiel: p.naam, url, viewport: p.viewport, dsf: p.dsf, touch,
+      profiel: p.naam, url, viewport: p.viewport, dsf: p.dsf, touch: vinger, android: !!p.android,
       bootMs, canvas, banner, errors, warnings: warnings.length, failed,
       krap, dekking_max: dekking, stap, eisen, klachten,
       tik_knop: gekozen ? gekozen.id : null, tik_pogingen: pogingen,

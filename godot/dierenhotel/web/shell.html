@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="nl">
+	<head>
+		<meta charset="utf-8">
+		<!-- dierenhotel-shell (W2, 2026-10-09): the page around the web export,
+		     for phones and tablets (Android first) and desktop browsers alike.
+		     Generic web standards only — no user-agent sniffing.  Godot fills the
+		     $GODOT_… placeholders at export (export_presets.cfg,
+		     html/custom_html_shell); tools/export.sh checks the marker above. -->
+		<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+		<meta name="color-scheme" content="light">
+		<meta name="theme-color" content="#FFF7EC">
+		<meta name="mobile-web-app-capable" content="yes">
+		<meta name="application-name" content="Dierenhotel">
+		<meta name="description" content="Rekenen in een dierenhotel, voor groep 3 tot 5.">
+		<title>$GODOT_PROJECT_NAME</title>
+		<style>
+html, body, #canvas {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+/* One fixed sheet the size of what is visible: no scrolling, so no
+   pull-to-refresh and no bounce; 100dvh follows the Android URL bar. */
+html {
+	height: 100%;
+	background-color: #FFF7EC;
+	overscroll-behavior: none;
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+}
+
+body {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	height: 100dvh;
+	overflow: hidden;
+	overscroll-behavior: none;
+	/* no pinch zoom, no double-tap zoom, no panning: every finger is the game's */
+	touch-action: none;
+	/* no text selection, no tap flash, no long-press selection */
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+	/* the game's own background, so a resize or a rotation never shows black */
+	background-color: #FFF7EC;
+	color: #5A4636;
+	font-family: system-ui, Roboto, "Noto Sans", "Segoe UI", Arial, sans-serif;
+}
+
+#canvas {
+	display: block;
+	touch-action: none;
+	outline: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+#canvas:focus {
+	outline: none;
+}
+
+/* The loading sheet: the app icon, a bar and one line. */
+#status {
+	position: absolute;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	gap: 18px;
+	background-color: $GODOT_SPLASH_COLOR;
+	visibility: hidden;
+	padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+	box-sizing: border-box;
+}
+
+#status-beeld {
+	width: 104px;
+	height: 104px;
+	pointer-events: none;
+}
+
+#status-progress {
+	width: min(64vw, 320px);
+	height: 14px;
+	accent-color: #F2915B;
+}
+
+#status-zin {
+	margin: 0;
+	font-size: 20px;
+	font-weight: 600;
+	color: #8A7566;
+}
+
+/* A message instead of a black page or an English error: picture first,
+   short lines (HOTEL.md §9: <= 8 words and <= 40 characters each). */
+#melding {
+	position: fixed;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+	background-color: #FFF7EC;
+}
+
+#melding[hidden], #melding [hidden] {
+	display: none;
+}
+
+#melding .kaart {
+	max-width: 440px;
+	padding: 24px 22px;
+	border-radius: 26px;
+	background-color: #FFFDF8;
+	box-shadow: 0 6px 18px rgba(138, 117, 102, 0.25);
+	text-align: center;
+}
+
+#melding .beeld {
+	font-size: 76px;
+	line-height: 1.1;
+}
+
+#melding .zin {
+	margin: 12px 0 0;
+	font-size: 22px;
+	font-weight: 700;
+	line-height: 1.3;
+}
+
+#melding .zin2 {
+	margin: 8px 0 0;
+	font-size: 20px;
+	line-height: 1.3;
+}
+
+#melding button {
+	min-width: 220px;
+	min-height: 56px;
+	margin-top: 20px;
+	padding: 12px 24px;
+	border: 0;
+	border-radius: 18px;
+	background-color: #F2915B;
+	color: #FFFFFF;
+	font: inherit;
+	font-size: 22px;
+	font-weight: 700;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+#melding .klein {
+	margin: 16px 0 0;
+	font-size: 13px;
+	color: #8A7566;
+	-webkit-user-select: text;
+	user-select: text;
+}
+		</style>
+		$GODOT_HEAD_INCLUDE
+	</head>
+	<body>
+		<canvas id="canvas">
+			🐾 Deze browser kan niet tekenen.
+		</canvas>
+
+		<noscript>
+			<p style="font-size:22px;text-align:center;margin-top:40vh">🐾 Zet JavaScript aan om te spelen.</p>
+		</noscript>
+
+		<div id="status">
+			<img id="status-beeld" alt="" width="104" height="104">
+			<progress id="status-progress"></progress>
+			<p id="status-zin">🐾 Het hotel gaat open…</p>
+		</div>
+
+		<div id="melding" role="alert" hidden>
+			<div class="kaart">
+				<div class="beeld" aria-hidden="true">🐾</div>
+				<p class="zin" id="melding-zin"></p>
+				<p class="zin2" id="melding-zin2"></p>
+				<p class="zin2" id="melding-zin3"></p>
+				<button type="button" id="melding-knop"></button>
+				<p class="klein" id="melding-klein"></p>
+			</div>
+		</div>
+
+		<script>
+// Before the engine, in plain ES5 (a browser too old for the engine must still
+// get a message, not a blank page): the page's own safety nets.
+// `window.dhShell` is their face (tools/speel.js reads `dhShell.geluid()`);
+// ui/web.gd owns `window.dhWeb`.
+(function () {
+	'use strict';
+	var dh = window.dhShell = window.dhShell || {};
+
+	// A message instead of a black page or an English error.  Each line:
+	// pictogram first, <= 8 words, <= 40 characters (HOTEL.md §9).
+	var TEKST = {
+		webgl: ['🙈 Dit scherm kan het hotel niet tonen', '🌐 Probeer een andere browser', '🔄 Of werk deze browser bij', '🔄 Opnieuw'],
+		laden: ['📶 Het hotel laadt niet', '🔄 Kijk of er internet is', '', '🔄 Opnieuw'],
+		slaap: ['😴 Het hotel viel even in slaap', '👆 Tik om verder te spelen', '', '▶ Verder spelen']
+	};
+	dh.teksten = TEKST;
+	function zet(id, tekst) {
+		var el = document.getElementById(id);
+		el.textContent = tekst;
+		el.hidden = tekst === '';
+	}
+	dh.toon = function (soort, klein) {
+		var t = TEKST[soort] || TEKST.laden;
+		zet('melding-zin', t[0]);
+		zet('melding-zin2', t[1]);
+		zet('melding-zin3', t[2]);
+		zet('melding-klein', klein || '');
+		var knop = document.getElementById('melding-knop');
+		knop.textContent = t[3];
+		knop.onclick = function () { window.location.reload(); };
+		var melding = document.getElementById('melding');
+		melding.hidden = false;
+		melding.setAttribute('data-soort', soort);
+		dh.melding = soort;
+		console.log('[probe] web melding=' + soort + (klein ? ' detail=' + klein : ''));
+	};
+	dh.verberg = function (soort) {
+		if (dh.melding === soort) {
+			document.getElementById('melding').hidden = true;
+			dh.melding = '';
+		}
+	};
+
+	// Every AudioContext the engine makes is kept here, so the page can put the
+	// sound to sleep while it is hidden (a phone in a pocket plays nothing) and
+	// wake it when it is back.  Godot itself only resumes on the next tap.
+	dh.audio = [];
+	var Echt = window.AudioContext;
+	if (typeof Echt === 'function') {
+		var Gevangen = function (opties) {
+			var ctx = arguments.length ? new Echt(opties) : new Echt();
+			dh.audio.push(ctx);
+			return ctx;
+		};
+		Gevangen.prototype = Echt.prototype;
+		window.AudioContext = Gevangen;
+	}
+	dh.geluid = function () {
+		var s = [];
+		for (var i = 0; i < dh.audio.length; i++) {
+			s.push(dh.audio[i].state);
+		}
+		return s.join('/') || 'geen';
+	};
+	var geschorst = [];
+	function meldGeluid(waarom) {
+		console.log('[probe] web ' + waarom + ' geluid=' + dh.geluid());
+	}
+	document.addEventListener('visibilitychange', function () {
+		var i;
+		if (document.visibilityState === 'hidden') {
+			for (i = 0; i < dh.audio.length; i++) {
+				if (dh.audio[i].state === 'running') {
+					geschorst.push(dh.audio[i]);
+					dh.audio[i].suspend().catch(function () {});
+				}
+			}
+			meldGeluid('zicht=weg');
+			return;
+		}
+		var wakker = geschorst;
+		geschorst = [];
+		if (!wakker.length) {
+			meldGeluid('zicht=terug');
+			return;
+		}
+		var wachten = [];
+		for (i = 0; i < wakker.length; i++) {
+			if (wakker[i].state !== 'closed') {
+				wachten.push(wakker[i].resume().catch(function () {}));
+			}
+		}
+		Promise.all(wachten).then(function () { meldGeluid('zicht=terug'); });
+	});
+
+	// A lost WebGL context (memory pressure, a long time in the background):
+	// Godot would show an English alert() and stay black.  A message with one
+	// button instead; the save is in the browser's storage, a reload goes on.
+	window.addEventListener('webglcontextlost', function (e) {
+		e.stopImmediatePropagation();
+		dh.toon('slaap', '');
+	}, true);
+
+	// No long-press menu anywhere (the canvas has Godot's own guard as well).
+	document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+}());
+		</script>
+		<script src="$GODOT_URL"></script>
+		<script>
+var GODOT_CONFIG = $GODOT_CONFIG;
+var GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
+var engine = null;
+
+(function () {
+	'use strict';
+	var dh = window.dhShell;
+	var statusOverlay = document.getElementById('status');
+	var statusProgress = document.getElementById('status-progress');
+	var initializing = true;
+	var geladen = false;
+	var laatsteVoortgang = Date.now();
+
+	// The engine script did not even run: a browser too old for it.
+	if (typeof window.Engine !== 'function') {
+		dh.toon('webgl', 'Ontbreekt: een nieuwere browser');
+		return;
+	}
+	engine = new window.Engine(GODOT_CONFIG);
+
+	// The loading picture is the app icon, which the service worker keeps offline.
+	document.getElementById('status-beeld').src = GODOT_CONFIG['executable'] + '.apple-touch-icon.png';
+
+	function verbergStatus() {
+		if (initializing) {
+			statusOverlay.parentNode.removeChild(statusOverlay);
+			initializing = false;
+		}
+	}
+
+	function displayFailureNotice(err) {
+		console.error(err);
+		var detail = '';
+		if (err instanceof Error) {
+			detail = err.message;
+		} else if (typeof err === 'string') {
+			detail = err;
+		}
+		verbergStatus();
+		dh.toon('laden', detail);
+	}
+
+	// What the browser lacks, in a few Dutch words for a grown-up.
+	function ontbrekend(missing) {
+		var woorden = [];
+		for (var i = 0; i < missing.length; i++) {
+			var m = missing[i];
+			if (m.indexOf('WebGL2') === 0) {
+				woorden.push('WebGL 2');
+			} else if (m.indexOf('Fetch') === 0) {
+				woorden.push('fetch');
+			} else if (m.indexOf('Secure Context') === 0) {
+				woorden.push('https');
+			} else {
+				woorden.push(m.split(' - ')[0]);
+			}
+		}
+		return 'Ontbreekt: ' + woorden.join(', ');
+	}
+
+	var missing = window.Engine.getMissingFeatures({
+		threads: GODOT_THREADS_ENABLED,
+	});
+	console.log('[probe] web webgl2=' + (window.Engine.isWebGLAvailable(2) ? 'ja' : 'nee') + ' ontbreekt=' + missing.length);
+
+	if (missing.length !== 0) {
+		if (GODOT_CONFIG['serviceWorker'] && GODOT_CONFIG['ensureCrossOriginIsolationHeaders'] && 'serviceWorker' in navigator) {
+			// Threads only (this export has none): a service worker can add the
+			// isolation headers, then the page reloads (Godot's own default shell).
+			var registratie;
+			try {
+				registratie = navigator.serviceWorker.getRegistration();
+			} catch (err) {
+				registratie = Promise.reject(new Error('Service worker registration failed.'));
+			}
+			Promise.race([
+				registratie.then(function (registration) {
+					if (registration != null) {
+						return Promise.reject(new Error('Service worker already exists.'));
+					}
+					return registration;
+				}).then(function () { return engine.installServiceWorker(); }),
+				new Promise(function (resolve) { setTimeout(resolve, 2000); })
+			]).then(function () {
+				window.location.reload();
+			}).catch(function (err) {
+				console.error('Error while registering service worker:', err);
+				dh.toon('webgl', ontbrekend(missing));
+			});
+		} else {
+			dh.toon('webgl', ontbrekend(missing));
+		}
+		return;
+	}
+
+	statusOverlay.style.visibility = 'visible';
+	// A download that fails ends in a promise nobody catches inside the engine's
+	// loader, and the bar would hang forever: say so instead.
+	window.addEventListener('unhandledrejection', function (e) {
+		if (initializing) {
+			displayFailureNotice(e.reason);
+		}
+	});
+	// ... and a download that stalls on a weak connection (the bar stays up;
+	// when the bytes come after all, the game starts and the message goes).
+	var waakhond = setInterval(function () {
+		if (!initializing || geladen) {
+			clearInterval(waakhond);
+			return;
+		}
+		if (Date.now() - laatsteVoortgang > 60000 && !dh.melding) {
+			dh.toon('laden', 'geen voortgang in 60 s');
+		}
+	}, 5000);
+	engine.startGame({
+		'onProgress': function (current, total) {
+			laatsteVoortgang = Date.now();
+			if (current > 0 && total > 0) {
+				statusProgress.value = current;
+				statusProgress.max = total;
+				geladen = current >= total;
+			} else {
+				statusProgress.removeAttribute('value');
+				statusProgress.removeAttribute('max');
+			}
+		}
+	}).then(function () {
+		verbergStatus();
+		dh.verberg('laden');
+		console.log('[probe] web gestart ms=' + Math.round(performance.now()));
+	}, displayFailureNotice);
+}());
+		</script>
+	</body>
+</html>

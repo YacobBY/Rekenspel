@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Dierenhotel Kwispelsteeg — the app icon as a MASKABLE icon (W2, 2026-10-09):
+       the bell and the paw of ../icon.svg, full bleed, everything that matters
+       inside the central circle of 80 % (the safe zone an Android launcher keeps
+       whatever shape it cuts).  icoon-maskable-192.png and -512.png are this file
+       rendered by Godot (Image.load_svg_from_string), see the W2 notes. -->
+  <rect width="128" height="128" fill="#FFB88C"/>
+  <g transform="translate(8.96 14) scale(0.86)">
+    <rect x="-20" y="76" width="168" height="80" fill="#F2915B"/>
+    <!-- the bell -->
+    <path d="M64 34c-19 0-34 15-34 34v10h68V68c0-19-15-34-34-34z" fill="#FFFDF8"/>
+    <rect x="22" y="78" width="84" height="12" rx="6" fill="#FFFDF8"/>
+    <rect x="22" y="86" width="84" height="5" rx="2.5" fill="#EAE0C8"/>
+    <circle cx="64" cy="27" r="8" fill="#F2C14E"/>
+    <!-- one paw print on the dome -->
+    <ellipse cx="64" cy="64" rx="10" ry="8.5" fill="#8A7566"/>
+    <circle cx="52" cy="52" r="4.2" fill="#8A7566"/>
+    <circle cx="63" cy="47" r="4.2" fill="#8A7566"/>
+    <circle cx="74" cy="52" r="4.2" fill="#8A7566"/>
+  </g>
+</svg>
