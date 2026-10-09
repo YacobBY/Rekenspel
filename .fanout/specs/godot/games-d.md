@@ -24,6 +24,8 @@ afwijkt staat het er met reden bij.  De getallen komen uit `games/_winkel/beurt.
 byte-gelijk).  *Nagerekend* = in `games/_winkel/test_winkel.gd` over alle winkels,
 groepen, N 1–10 en dagen 1–7 doorgerekend.
 
+**Rekenen ≥ 50 % (2026-10-09).** Eigenaar: *"Minigames mogen een klein extra spel element hebben maar het moet niet mogelijk zijn om rekenen over te slaan en rekenen moet minstens 50% van de interactie zijn."* Sinds `c72edf8` houdt elk spel per beurt **R1** (rekentikken ≥ andere tikken + 1, de tik die het spel opent niet meegeteld; groep 3/4/5, N 1–8) en **R2** (geen ster, munt, stuk of voortgang zonder goed antwoord; een vraag met een misser komt onveranderd terug na ⬅ Terug, een ander dier, herladen, een nieuwe dag of een andere N of groep). Onder de kop van elk spel hieronder staat een notitie "(2026-10-09, rekenen ≥ 50 %)" met de nieuwe beurt; waar de oudere tekst eronder iets anders zegt, wint die notitie. De Rekenwacht voor het hele hotel en de tabel per spel: `docs/REKENWACHT.md`; de regels voor wie bouwt: `AGENTS.md` §5.
+
 ---
 
 ## 1. De nakijkronde van de dieren (art/gasten.gd, autoload/world.gd)
@@ -170,6 +172,8 @@ dezelfde functies getekend als op het dier.  In rust staan ze op de toonbanken
 (`definitie().rust`), in een beurt zet het spel ze er zelf neer.
 
 ## 4. De winkels: `hoeden`, `sjaals`, `schoenen`, `kraam`, `luxe`
+
+**Notitie (2026-10-09, rekenen ≥ 50 %) — vult §4.2–4.5 en §4.7 aan.** Per beurt 1 andere tik (het ding kiezen) en 2 rekentikken (luxe in groep 5: 3). Hoeden, sjaals en souvenirs: groep 3 betalen (precies, ≤ €9) en dan **over**: "%s had %s. Hoeveel over?" (`Beurt.T_OVER`; beurs `BEURS` €10 in groep 3, €20 in groep 4, op de kaart zelf; somregel "€10 − €7 ="; vier getallen via `Afleiders.vier`, minimaal 1); groep 4 betalen (≤ €19) en over; groep 5 **halve prijs** (de prijzen zijn nu even, 12–38, zodat de helft hele euro's is) en wisselgeld van €50. Schoenen en luxe zijn ongewijzigd (al 1 : 2, luxe groep 5 1 : 3). Elke rekenkaart is `reken: true`; `ctx.reken_goed()` één keer per goed antwoord. R2: een rekenstap met een misser (`open_misser()`) wordt hervat ondanks een nieuwe dag, een gast erbij, een andere groep of de dierwissel op de spelbalk (vroeger begon dan een nieuwe, mogelijk goedkopere keuze); de beurt houdt haar eigen prijzen en dezelfde vier antwoorden (`Beurt.opzet(id, S.N, S.band, S.dag)`). Een beurt zonder misser begint op een nieuwe dag nog steeds vers; checkt het dier van de beurt uit, dan begint een nieuwe beurt. Bron: `.fanout/scratch/burn/GA.md`.
 
 Vijf spellen met één gedeeld spel `games/_winkel/winkel.gd` (`WinkelSpel`); elk spel
 zegt alleen wélke winkel het is (`winkel()`: kraam, plekken van de waren, waar de klant
@@ -327,6 +331,8 @@ world.md §1), `games/kraam/modellen.gd`, het slepen van munten en de `kr_`-knop
 
 ## 5. De paskamer (`paskamer`)
 
+**Notitie (2026-10-09, rekenen ≥ 50 %) — bewust vrij spel onder de Rekenwacht.** De paskamer houdt geen som, maar `definitie()` zegt `vrij: true`: tijdens een rekenmoment wordt de ingang geweigerd, en een open paskamer sluit als het tegoed op is. Ze geeft niets wat niet met rekenen betaald is (geen ster; alleen gekochte stukken). Reden: R1 zou per verkleedronde minstens twee sommen in de spiegel vragen, en een hele outfit (tot €45) gaat boven groep 3. Alternatief voor de eigenaar (niet gebouwd): per verandering "🪞 Wat kost alles samen?" in groep 4/5. Zie `docs/REKENWACHT.md` §5. Bron: `.fanout/scratch/burn/GA.md`.
+
 Voor de spiegel kiest het kind wat een dier draagt: één knop per slot waar het dier iets
 voor heeft (hooguit vier), elke tik het volgende stuk van dat slot, na het laatste niets
 ("🎩 Geen").  Het dier draagt het meteen, kijkt blij of kijkt even (`blijA` / `kijk`), en
@@ -334,6 +340,8 @@ de save onthoudt het.  Geen som en geen ster: aankleden is geen rekenen.  `kan`:
 met een bed heeft iets in zijn kast.  Regel "🪞 Wat trekt %s aan?".
 
 ## 5a. Het fotohokje (`foto`, eigenaar 2026-10-01)
+
+**Notitie (2026-10-09, rekenen ≥ 50 %) — vervangt het kiezen van alle dieren en "📸 Klaar".** Het hokje neemt vandaag k = 2..4 dieren (`Beurt.aantal`, uit N, groep, dag en pool, bewaard in de beurt). Het eerste dier (gekozen op de spelbalk, anders het eerste van de dag) stapt zelf in; het kind kiest de andere k − 1. Na elke keuze, als iedereen binnen zit: "💶 Hoeveel kost de foto nu?" (`T_SOM`, lopend totaal; groep 3 `€3 + €3 =`, groep 4/5 `2 × €3 =`). Vol hokje: "💶 Welk geld gooi je erin?" (`T_BETAAL`) met vier handjes munten en biljetten (de `betaal_keuzes` van de winkels, ≤ 4 stukken, 💶 in het lange en het korte woord). Goed → munten, aftellen, foto en ster als voorheen. Fout bij een van beide → de winkelregel (de dieren gaan eruit, dezelfde vraag bij terugkomst). `T_KLAAR` is weg. Per beurt k − 1 andere tikken en k rekentikken (1 : 2, 2 : 3, 3 : 4). De wens "minimaal 2 dieren … de prijs per dier daaronder … hoeveel geld je moet inwerpen" blijft; afwijking: het hokje bepaalt k. R2: een gemiste vraag wordt hervat ondanks een nieuwe dag, N of groep, met de prijs uit de beurt (`S.prijs`). Bron: `.fanout/scratch/burn/GA.md`.
 
 > "Ik wil bij de winkel ook graag een fotohokje maken waar je minimaal 2 dieren moet kiezen
 > die op de foto gaan en de prijs per dier daaronder en dan een hoe veel geld je moet

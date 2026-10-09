@@ -14,6 +14,8 @@ getallen komen uit de eigen generatoren `games/oogst/beurt.gd` en
 `core/sommen.gd` blijft byte-gelijk, R8); *Nagerekend* betekent: in de tests over
 alle banden, dagen 1–14 en hotelgroottes doorgerekend.
 
+**Rekenen ≥ 50 % (2026-10-09).** Eigenaar: *"Minigames mogen een klein extra spel element hebben maar het moet niet mogelijk zijn om rekenen over te slaan en rekenen moet minstens 50% van de interactie zijn."* Sinds `c72edf8` houdt elk spel per beurt **R1** (rekentikken ≥ andere tikken + 1, de tik die het spel opent niet meegeteld; groep 3/4/5, N 1–8) en **R2** (geen ster, munt, stuk of voortgang zonder goed antwoord; een vraag met een misser komt onveranderd terug na ⬅ Terug, een ander dier, herladen, een nieuwe dag of een andere N of groep). Onder de kop van elk spel hieronder staat een notitie "(2026-10-09, rekenen ≥ 50 %)" met de nieuwe beurt; waar de oudere tekst eronder iets anders zegt, wint die notitie. De Rekenwacht voor het hele hotel en de tabel per spel: `docs/REKENWACHT.md`; de regels voor wie bouwt: `AGENTS.md` §5.
+
 ---
 
 ## 1. De Kas (`kas`)
@@ -112,6 +114,8 @@ met de kas: 990 × 637, 734 × 788, 1170 × 669, 1170 × 629 (1536 × 760), 326 
 ---
 
 ## 2. G6 — AARDBEIEN PLUKKEN (`oogst`)
+
+**Notitie (2026-10-09, rekenen ≥ 50 %) — vervangt de plukknop `og_pluk` en "Pluk er nog %d" (§2.6, §2.8).** Na het tweede antwoord plukt de gast **zelf** (`_pluk_vanzelf`: 0,6 s na de kaart, dan één bes of één bakje per 0,2 s; "via de tien" blijft zichtbaar). De kaart zegt "🍓 Kijk, de bakjes worden vol" (`T_PLUKT`) en de somregel telt door (`32 + 5 = 37` … `32 + 8 = 40`), dus geen getal wordt verklapt. Per beurt 2 rekentikken en 0 andere (was tot 13 pluktikken in groep 5). R2: een gemiste vraag blijft na een nieuwe dag, een andere N of groep en een ander dier (alleen het dier wisselt). Bron: `.fanout/scratch/burn/GB.md`.
 
 ### 2.1 Verhaal
 
@@ -259,6 +263,8 @@ van de nieuwe (`test_het_kind_kiest_wie_er_plukt`).
 ---
 
 ## 3. G7 — GROENTEN WEGEN (`weeg`)
+
+**Notitie (2026-10-09, rekenen ≥ 50 %) — vervangt in §3.6–3.8 de vrije proefwegingen, de opmerkingen "nog te licht / te zwaar / precies", de knop "eraf" en de derde stap "Hoeveel kilo is …?" (`lees2`).** Stap 2 is een bouwvraag: "Leg %d kilo op de weegschaal" (`T_MAAK`, met het pictogram van de groente, bv. "🎃 Leg 13 kilo op de weegschaal") — het kind legt het gewicht met de gewichten op de strook (`reken: true`). Precies → de balk staat recht → `ctx.reken_goed()` → klaar ("De pompoen weegt 13 kilo!", `10 + 2 + 1 = 13`). Te zwaar, of de schaal vol (5) en nog te licht → `Ui.misser`; de balk toont het even, dan gaat de schaal leeg, dezelfde vraag. Per beurt 1 + het aantal gewichten rekentikken, 0 andere. Een oude opslag in `lees2` hervat als `leg` met een lege schaal. R2: een gemiste weging blijft na een nieuwe dag, een andere N of groep en een ander dier. Bron: `.fanout/scratch/burn/GB.md`.
 
 ### 3.1 Verhaal
 

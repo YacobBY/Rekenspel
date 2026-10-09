@@ -144,13 +144,27 @@ The design contract the code must keep serving (details: `ANALYSIS.md` §1,
    most four choices. There is **no keypad** (removed 2026-09-14).
 5. **Curriculum honesty** (`IDEAS.md`): 7×8 is groep 5, no comma money before
    groep 5, no column arithmetic, realistic euro denominations.
+6. **Maths comes first ("Rekenen gaat voor", owner 2026-10-09).** *"Zorg wel dat
+   rekenen altijd een prioriteit wordt en dat kinderen niet lang kunnen spelen
+   zonder te rekenen. Minigames mogen een klein extra spel element hebben maar het
+   moet niet mogelijk zijn om rekenen over te slaan en rekenen moet minstens 50%
+   van de interactie zijn."* Every tap and drop is counted once, as `reken` or
+   `spel`, by the `Reken` autoload (§4). Free play runs on a budget of 12 that
+   only right answers refill (each pays back the maths taps it took, misses
+   included, capped at 12), so `spel ≤ reken + 12` at every free step; 180 s of
+   active play without a right answer also ends it. Then, outside a game, a free
+   tap does nothing (the button shakes, a see-through bubble says
+   "➕ Eerst even rekenen!") and one big pulsing "➕ Rekenen" button at the foot
+   of the frame leads to the next sum — never a dead end, nothing taken away.
+   Inside a game every turn has at least one maths tap more than other taps (R1,
+   §5) and nothing can be skipped (R2, §5). For the owner: `docs/REKENWACHT.md`.
 
 ## 2. Repository layout
 
 ```
 godot/dierenhotel/        THE GAME (Godot 4.7.2, GDScript). Everything you edit is here.
-  project.godot           10 autoloads, GL Compatibility, 1024×768 canvas_items/expand
-  autoload/               Art Rooms Hits World Snd Ui State Econ Games Hotel (see §4)
+  project.godot           11 autoloads, GL Compatibility, 1024×768 canvas_items/expand
+  autoload/               Art Rooms Hits World Snd Ui State Econ Games Hotel Reken (see §4)
   core/sommen.gd          FROZEN number core, byte-identical to the HTML original (see §6)
   core/jsgetal.gd         JavaScript integer semantics, reproduced exactly
   spel/minigame.gd        MiniGame base class — the contract of every game (see §5)
@@ -162,7 +176,11 @@ godot/dierenhotel/        THE GAME (Godot 4.7.2, GDScript). Everything you edit 
                           tests; no spel.tscn, so the scan skips it (games-d.md)
   ui/                     kaart, keuzestrook, afleiders, wolk, hud, kamerbalk, blad, thema, teksten,
                           startblad + hotelkeuze (the start sheet with the three hotels) + hotelbestand
-                          (💾 Bewaar / 📂 Open: the web/desktop file glue) …
+                          (💾 Bewaar / 📂 Open: the web/desktop file glue), web (`UiWeb`: the
+                          browser glue — Android back = ⬅ Terug, safe areas, storage.persist,
+                          Wake Lock; only on the web) …
+  web/                    own HTML shell (shell.html), offline.html, the PWA icons (.gdignore:
+                          kept out of import and pck; export.sh fails if the shell is not used)
   hotel/prikbord.gd       task board (≤ 3 cards);  hotel/rekening.gd  the checkout bill
   scenes/main.gd          the shell (boots the world, owns the `[probe] …` lines)
   scenes/kamer.gd dier.gd vloer.gd wereldobject.gd   the room in view
@@ -196,15 +214,26 @@ main.py                   PyCharm leftover, ignore
 
 | command | does | time |
 |---|---|---|
-| `tools/test.sh` | whole headless suite, own `user://`, fails on ANY engine ERROR line | ≈ 16 min (887 tests, 2026-10-08) |
+| `tools/test.sh` | whole headless suite, own `user://`, fails on ANY engine ERROR line | ≈ 20–30 min (994 tests, 2026-10-09) |
 | `DH_TEST_FILTER=zwembad tools/test.sh` | only test files whose name contains the filter | 5–20 s |
 | `tools/import.sh` | headless import pass, gated on ERROR lines | ≈ 20 s |
 | `tools/export.sh` | release web export → `godot/dierenhotel/build/web/` (≈ 41 MB) | ≈ 60 s |
 | `tools/serve.sh [port]` | static server on 8642 for the export | — |
+| `tools/serve.sh --gzip [port]` | the same, but gzip on the fly + `max-age=600`, as GitHub Pages serves it (no brotli): the real download size of a phone | — |
 | `node tools/probe.js --viewport 1024x768@2:ipad --knop bel` | chromium finger probe of the export, screenshots + rapport.json | ≈ 60 s |
 | `node tools/kiek.js --kamer zwembad --tik spel_zwembad` | one screenshot of one room/game of the export (serves build/web itself, seeds a save) | ≈ 40 s |
 | `node tools/speel.js --kamer kamer1 --band 4 --toon` | list what is tappable in a room | ≈ 40 s |
 | `node tools/speel.js --kamer receptie --band 4 --doe "bel; wacht 4500; ci_som_keuzes#2/4"` | PLAY: tap a sequence, screenshot + report after every step | ≈ 60 s |
+| `node tools/speel.js --viewport galaxy-a --band 4 --doe "bel; wacht 4500; terug; herlaad; Kverder; draai"` | PLAY on an Android profile; browser steps `terug` (the browser back button/gesture), `herlaad` (reload WITHOUT the seeded `?opslag=`: the saved game must come back), `draai` (rotate: width and height swap) | ≈ 60 s |
+
+Android profiles (2026-10-09), the same table in `kiek.js`, `speel.js` and
+`probe.js`: `--viewport pixel7` (412×915), `pixel7-land` (915×412), `galaxy-a`
+(360×800), `galaxy-tab` (1280×800), `galaxy-tab-staand` (800×1280) — touch, an
+Android-Chrome user agent (a tablet without "Mobile"); the old `BxH[@dpr][:naam]`
+form and the defaults are unchanged. `probe.js` taps with the mouse when a
+profile has no touch (`--geen-touch` works again). Firefox is not installed for
+Playwright, so there is no `--browser firefox`. Parents' guide:
+`docs/SPELEN-OP-ANDROID.md`.
 
 Godot is `~/.local/bin/godot` (4.7.2.stable); set `GODOT=` if it is not on
 `PATH`. Export templates: `~/.local/share/godot/export_templates/4.7.2.stable/`.
@@ -245,7 +274,7 @@ matching spec section (`games-a.md` for bedden/sleutels/meubels/tobbe/voerkar,
 `DH_TEST_FILTER=<id> tools/test.sh` → run the full `tools/test.sh` before you
 report done. Add or adapt tests in the game's own test file.
 
-## 4. Architecture: the ten autoloads
+## 4. Architecture: the eleven autoloads
 
 All identifiers are Dutch. `x`/`z` are floor coordinates in voxels, `y` is
 height; rooms have walls at x = 0 and z = 0. Public functions listed are the
@@ -255,7 +284,7 @@ ones a game or a feature normally needs.
 |---|---|---|
 | `Art` | voxel models, baking to plates (`Plaat`), golden-image cache | `registreer_model(naam, fn)` (namespace with your game id), `model`, `plaat`, `bak`, `dier(kind, pose, g)` |
 | `Rooms` | the rooms as data (`Kamer`, `lijst()` counts them), doors, paths, furniture slots | `get_kamer(id)`, `plek(kamer, fx, fz)`, `deur`, `pad(van, naar)`, `om_het_water`, `meubel_zet/meubel_weg/meubels`, `slots/slot`, `vrij_vak`, `ingang(kamer)` (the receptie's front door, outside the door graph), floors: `etage(kamer)`, `etages()` (top down), `op_etage(e)`, `trap_kamers()`, `trap_kamer(e)`, `via_trap(van, naar)`, `trap_richtingen(k)` (`op`/`af`), `trap_richting(van, naar)`, `trap_naar(k, richting)` (exactly one floor), `trap_punt(k, richting)`, `buren(kamer)` |
-| `Hits` | the hotspot layer: buttons/drop targets on world objects, band grid, 0 % overlap; the hotel's buttons (doors, stairs, bell, board, game entries, bowls) choose their place against what stands STILL — a walking guest moves none of them, one who stands on a place for 8 ticks makes it step aside once (2026-09-24, `tests/test_knoppen_staan_stil.gd`); name plates give way to them; a hotspot made with `tik_vlak` (the hotel's bowls and doors, 2026-09-25) also takes a tap on its OBJECT — its catch area presses the button (`Hits.tik_onder`) | `maak(o)`, `weg(id)`, `wis_eigenaar(door)`, `leen/geef_terug`, `spot(id)`, `dekking(id)`, `lijst()`; signal `hotspot_getikt` |
+| `Hits` | the hotspot layer: buttons/drop targets on world objects, band grid, 0 % overlap; the hotel's buttons (doors, stairs, bell, board, game entries, bowls) choose their place against what stands STILL — a walking guest moves none of them, one who stands on a place for 8 ticks makes it step aside once (2026-09-24, `tests/test_knoppen_staan_stil.gd`); name plates give way to them; a hotspot made with `tik_vlak` (the hotel's bowls and doors, 2026-09-25) also takes a tap on its OBJECT — its catch area presses the button (`Hits.tik_onder`) | `maak(o)` (option `reken: true` = a maths tap/drop, a graded manipulative; `vrij: true` = an in-game free action, refused once the Rekenwacht budget is out; every tap and drop passes `Reken.laat_door_spot` first), `weg(id)`, `wis_eigenaar(door)`, `leen/geef_terug` (`geef_terug` restores the hotel's own `reken`/`vrij`), `spot(id)`, `dekking(id)`, `lijst()`; signal `hotspot_getikt` |
 | `World` | camera/room in view, guests (`Dier`), movement, decor, particles | `naar(kamer)`, `kamer_nu()`, `dier(id)`, `dieren(kamer)`, `await stappen(id, punten)`, `await ga(id, x, z)`, `reis(id, kamer)`, `kom_binnen(id, x, z)` (a new guest through the front door, per kind), `vlak_van_ingang()`, `slaap`, `pose`, `mood`, `decor(kamer, o)`, `decor_weg`, `zet_bak`, `spetter(kamer, x, z, n, kl)`, `scherm(x, z, y)`, `verberg_bed(kamer, slot)` (a free bed out of sight until the camera leaves the room); signals `kamer_veranderd`, `getekend`, `reis_gestart` |
 | `Snd` | 18 procedural sounds + per-room ambience loops, and per guest kind a sad and a happy sound (2026-09-24) | `tik plop ja hoera bel deur kar munt ster plons au klok hup tover dag brief terug zacht`, `ding` (the desk bell), `trap(op)` (four footfalls up or down the stairs to another floor), `sfeer(kamer)`, `dempt()`; `dier_sip(wie)` (plays in `Ui.misser` and when a shop sends an animal out, instead of `zacht`), `dier_blij(wie)` (follows every `ja()` for the animal of the turn); since 2026-10-01 every player plays its buffer `LUID_DB` (12 dB) louder (`volume_db`; buffers and the HTML oracle unchanged), and thirteen world sounds `klik kassa zwiep knabbel pluk gewicht sleutel plof sticker bubbel kleed(aan) avond` (`wereld_namen()`; coins earned, a sheet opening, eating at a bowl, the photo booth, …); tests listen via `gehoord()` or `luister(fn) -> Array[String]` |
 | `Ui` | cards, bubbles, strips, toasts, sheets, theme, text rules | `somkaart(obj, som, o)` (`reken: true` marks a maths card without a number answer or sum line), `wolk(o)`, `wolk_weg`, `getal_tag(obj, n)`, `bron(obj, o)`, `toast(tekst)`, `blad_open/blad_dicht`, `naamplaat`, `keur_regel(id, zin)`, `is_som(id)` (while a sum is on screen the room bar and the unborrowed door signs are hidden); `maak_knop` kind `"eigen"` = a game's own Control placed by `Hits` (the wekker's big clock) |
@@ -263,6 +292,7 @@ ones a game or a feature normally needs.
 | `Econ` | stars, coins, the bill | `sterren(n)`, `geef_munt(n)`, `buidel(totaal)`, `splits(n)`, `rekening(o)`; signals `sterren_veranderd`, `munten_veranderd` |
 | `Games` | registry of minigames, start/stop/supersede | `lijst()`, `definitie(id)`, `actief()`, `ontgrendeld(id)`, `start(id)`, `stop()`, `hersteek()`, `verhuis(kamer)` (the running game's room walks along with its animal); signals `spel_gestart`, `spel_gestopt` |
 | `Hotel` | day cycle, wishes, board, check-in, evening round, letters, hotel buttons | `start()`, `bel()`, `morgen()`, `avondronde()`, `taak_af(id)`, `spel_taken()`, `wens_af(gast, welke)`, `kies_kamer(kamer)` / `checkin_terug()` / `wijs_bed(kamer, bed, {loop})` (check-in steps 3–4), `komt_eraan()`, `volg(id)`, `stop_volgen()`, `hotspots()`, `naar_kamer(id)`, `neem_trap(van, richting)` (one floor up or down, no sheet); signal `trap_genomen(van, naar, richting)` (drives the probe line) |
+| `Reken` | the Rekenwacht ("maths guard", 2026-10-09, §1 rule 6), registered LAST: counts every tap/drop once as `reken` or `spel` where it is dispatched (Hits, answer strips, room bar, sheets, board cards, chrome, floor plan, game bar); the free budget (`BUDGET_MAX` 12, refilled only by right answers), the clock (`TIJD_MAX` 180 s of active play, `ACTIEF_S` 20 s), the rekenmoment (free taps refused, room bar + door signs dimmed to `DIM`, the big `reken_knop` "➕ Rekenen" at the foot) and the quick sum (`reken_som`: biscuits on the floor, "🍪 Hoeveel koekjes zie je?"); kept in `user://dierenhotel-reken.json`, OUTSIDE the hotels (reload, another or a new hotel reset nothing) | `tik(soort, bron)`, `goed(bron)` (Ui calls it for `goed: n` strips; games use `ctx.reken_goed()`), `vrij()`, `budget()`, `aandeel(venster)`, `beurt()` / `aandeel_beurt()` (`{reken, spel, goed}` since `Games.spel_gestart`, kept after stop), `mag(bron)`, `laat_door(soort, bron, knop, vrij_actie)` (THE gate for a game's own Button: `if not Reken.laat_door("spel", "<game>:<what>", knop): return`), `laat_door_spot(spot, drop)`, `soort_van(spot)`, `doe_rekenen()` (= the big button: top maths card on the board → guest at the desk → maths game in this room → quick sum), `snelle_som()`, `totaal()`, `probe_regel()`; signals `rekenmoment(aan)`, `veranderd`; test hooks `klok`, `verstrijk(s)`, `voor_test()`, `zet_wacht(aan)`, `lees_opnieuw()` |
 
 Rooms (`Rooms.lijst()`): `receptie` (desk top-right, stairs top-left, back door
 to the garden right of the desk), `gang`,
@@ -358,6 +388,44 @@ Rules (all enforced by review and by the tests):
   every game does this itself at the end of a turn (first-try semantics: `goed`
   is "zero misses", `ms` is measured from the turn's `_t0`).
 
+Maths first (2026-10-09, §1 rule 6; the full text is
+`.fanout/scratch/burn/golf2-regels.md`, the owner's view `docs/REKENWACHT.md`):
+
+- **R1 maths share.** Count the child's interactions inside one turn, from the
+  game's start, EXCLUDING the tap that opened the game: `reken ≥ spel + 1` for
+  groep 3, 4 and 5 and N = 1..8 (so with the entry tap maths is still ≥ 50 %).
+  `reken` = an answer tap on a maths strip, or a graded manipulative (building
+  or placing a quantity that is then checked against a number; a wrong build is
+  a miss without help). Everything else is `spel` (opening, choosing a piece,
+  animal or room, walking, doors, confirming, closing, decorating, replaying).
+  Get there by removing spel taps (auto-walk, auto-close, no ✓ confirm) and/or
+  turning a number-carrying step into a real question. One small non-maths
+  flourish per turn is fine while R1 holds. Every game proves R1 in its own
+  `test_rekenaandeel` (per band, a small and a large N).
+- **R2 no skipping.** No star, coin, item, bed, furniture, decoration, photo,
+  fulfilled wish, progress or ticked task before a right answer. A wrong answer
+  never advances the turn and never changes the question. A question with at
+  least one miss comes back UNCHANGED (same sum, same four choices in the same
+  order: seed the strip with the turn's own day, keep the turn's own N/band/day
+  in `ctx.data()`) after ⬅ Terug, another task card, the game bar's animal
+  switch, a reload, a new day (`Hotel.morgen`) and a change of N or band; and
+  after a miss the child cannot pick an easier option (a cheaper item, an
+  emptier room) instead.
+- **R4 marking.** Graded manipulatives get `reken: true` (`ctx.hotspots.maak`;
+  on a borrowed hotel button `ctx.hotspots.spot(id).reken = true`); a keuzes
+  card that is maths gets `reken: true` on `somkaart` (or a sum line). In-game
+  free actions (re-arranging, cosmetic taps, a replay beyond the first) get
+  `vrij: true`: they count as `spel` and are refused once the budget is out,
+  even inside the game. Call `ctx.reken_goed()` exactly once on every right
+  answer that is NOT a `goed: n` strip (those pay back centrally in `Ui`). A
+  game's own `Button` (not a hotspot) goes through
+  `Reken.laat_door("spel", "<game>:<what>", knop, vrij_actie)` (the meubelboek's
+  tabs and cards do).
+- A game with no maths at all declares `vrij: true` in `definitie()` (only
+  `paskamer`): its entry is refused during a rekenmoment and a running one
+  closes when the budget runs out. A maths game is never refused (the budget
+  may go below zero and is paid back by its sums).
+
 `ctx.ui.somkaart(obj, som, o)`: `o.regel` is MANDATORY — one plain Dutch
 sentence with a verb or question word, pictogram first, ≤ 8 words and ≤ 40
 characters (violations still draw but log a warning; `Ui.keur_regel` checks
@@ -420,6 +488,10 @@ reading at most `Sommen.Prng`): `_winkel`, `foto`, `spiegel`, `koekjes`, `band`,
 - The runner buffers stdout: a crash loses every `ok` line; bisect with
   `DH_TEST_FILTER=<file part>`.
 - Warnings (`push_warning`) are not failures.
+- The runner resets the Rekenwacht before every test (`Reken.voor_test()`: a
+  full budget, no clock, no moment, no file); a test that needs more than 12
+  free taps calls `Proef.rekenwacht_uit()`. `Reken.beurt()` gives the real
+  `{reken, spel, goed}` of the running turn.
 
 ## 8. Facts that cost time to rediscover (HANDOFF.md §7 + toolchain.md)
 
@@ -451,7 +523,18 @@ reading at most `Sommen.Prng`): `_winkel`, `foto`, `spiegel`, `koekjes`, `band`,
   for that reason.
 - Headless shell at 296×314 segfaults (pre-existing, no such device).
 
-## 9. Current state and backlog (2026-09-16; updated 2026-10-08)
+## 9. Current state and backlog (2026-09-16; updated 2026-10-09)
+
+- 2026-10-09: "rekenen voorop en Android" is on `main` — `59b6a21`, `4ecf8d4`,
+  `2d16e0e` (the Rekenwacht, `Reken`), `9d9c957` (browser/Android: back button,
+  touch, PWA, rotation fix, Android profiles in the tools), `c72edf8` (every
+  game R1/R2) — NOT pushed (`main` is 15 commits ahead of `origin/main` =
+  `8123d05` before the docs commit).  The integrated tree ran 991 goed, 3 fout;
+  the three (merge/test issues in `test_bedden`, `test_hits`, `test_hotel`) were
+  fixed and are green filtered; a confirming full suite on `c72edf8` was still
+  running when this was written.  Open items: PLAN.md §7 (2026-10-09, the OPEN
+  list); owner's summary `docs/STATUS-2026-10-08.md` (section "Ronde
+  2026-10-09").
 
 - 2026-10-08: the expansion of 2026-10-07 is on `main` — `312f1be` (four rooms +
   room decoration), `d20824f` (the four games playable), `0ee2813` (vos and varken,

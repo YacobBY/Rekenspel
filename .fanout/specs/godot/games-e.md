@@ -27,9 +27,13 @@ de spellen gebruikten ⭐, 💌, 🔔 en 🔄.  F1 zette 33 tekens in `fonts/tek
 stand, met de oude tussen haakjes.  `tests/test_tekens.gd`, `test_elke_zin_past` van elk spel en
 `Ui.mist_tekens` bewaken dat elk teken bestaat.
 
+**Rekenen ≥ 50 % (2026-10-09).** Eigenaar: *"Minigames mogen een klein extra spel element hebben maar het moet niet mogelijk zijn om rekenen over te slaan en rekenen moet minstens 50% van de interactie zijn."* Sinds `c72edf8` houdt elk spel per beurt **R1** (rekentikken ≥ andere tikken + 1, de tik die het spel opent niet meegeteld; groep 3/4/5, N 1–8) en **R2** (geen ster, munt, stuk of voortgang zonder goed antwoord; een vraag met een misser komt onveranderd terug na ⬅ Terug, een ander dier, herladen, een nieuwe dag of een andere N of groep). Onder de kop van elk spel hieronder staat een notitie "(2026-10-09, rekenen ≥ 50 %)" met de nieuwe beurt; waar de oudere tekst eronder iets anders zegt, wint die notitie. De Rekenwacht voor het hele hotel en de tabel per spel: `docs/REKENWACHT.md`; de regels voor wie bouwt: `AGENTS.md` §5.
+
 ---
 
 ## 1. Koekjes bakken (`koekjes`, bakkerij)
+
+**Notitie (2026-10-09, rekenen ≥ 50 %).** De beurt bleef 1 rekentik en 0 andere. R2: een gemiste som blijft na een nieuwe dag, een andere N of groep en de dierwissel (het gekozen dier neemt de plaat over, de som blijft); de som komt uit de bewaarde N, groep en dag, en de strook houdt dezelfde vier getallen (zaad = de dag van de beurt). Bron: `.fanout/scratch/burn/GE.md`.
 
 **De kamer.**  De bakkerij (etage 1, achter de keuken; world.md §1.10).  Tegen de achterwand
 links een stenen **oven** (30, 10), midden op de vloer een grote **bakkerstafel** (56, 50,
@@ -105,6 +109,8 @@ wordt opnieuw berekend, dus dezelfde); JSON-floats worden ints.
 
 ## 2. De dierenband (`band`, muziekkamer)
 
+**Notitie (2026-10-09, rekenen ≥ 50 %).** Eén antwoord en 0 andere tikken: de **eerste herhaling speelt vanzelf** (`_gratis_nog_eens`, 1,2 s na het eerste ritme; nooit na een misser) en elke tik op 🔁 is `vrij: true`. Niet gekozen: een ongemarkeerde eerste 🔁-tik (1 : 1, haalt R1 niet). R2 zoals bij koekjes; het ritme komt uit de bewaarde N, groep, dag en nummer. Bron: `.fanout/scratch/burn/GE.md`.
+
 **De kamer.**  De muziekkamer (etage 3, achter de speelzaal; world.md §1.10): warm hout, een rond
 perzikkleurig kleed als podium (zone `podium`, `mijd`).  Zolang er niet gespeeld wordt staan de
 vier rustspullen van het spel (`rust_band_*`, modellen uit `art/decor_muziek.gd`): trommel
@@ -177,6 +183,8 @@ liep het dier midden in het ritme weg — in de export gevonden), `test_een_lang
 
 ## 3. Sterren tellen (`sterren`, dakterras)
 
+**Notitie (2026-10-09, rekenen ≥ 50 %).** De beurt bleef 1 rekentik en 0 andere. R2 zoals bij koekjes; de hemel komt uit het bewaarde zaad. Bron: `.fanout/scratch/burn/GE.md`.
+
 **De kamer.**  Het dakterras (etage 4, de top van de toren, via de nieuwe trap omhoog van de
 speelzaal; world.md §1.10) is altijd **nacht** (`Kamer.nacht`): `scenes/vloer.gd` tekent een
 donkerblauwe lucht met sterren, een paar fonkelende en een maansikkel over het hele beeld (de
@@ -241,6 +249,8 @@ misser), `test_meteen_goed_en_een_tweede_beurt`, `test_herladen_toont_dezelfde_h
 ---
 
 ## 4. De post sorteren (`post`, postkamer)
+
+**Notitie (2026-10-09, rekenen ≥ 50 %).** Per brief één vakje op een `reken: true`-strook, 0 andere tikken; `ctx.reken_goed()` per goed vakje. R2: een gemiste brief (`pog > 0`) blijft na een andere dag, N of groep; de stapel komt uit de bewaarde groep, N, dag en ronde. De dierwissel houdt de stapel én de voortgang (vroeger: dezelfde stapel vanaf brief 0). Bron: `.fanout/scratch/burn/GE.md`.
 
 **De kamer.**  De postkamer (etage 0, achter de **kas**, niet achter de receptie; world.md
 §1.10): 96 × 88, houten vloer, pictogram 📮 (was 💌).  Langs de achterwand de **vakkenkast**

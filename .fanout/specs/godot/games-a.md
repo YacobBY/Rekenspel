@@ -14,6 +14,8 @@ JavaScript.
 **Doelpubliek.** Een Godot 4.7-ontwikkelaar die de JavaScript niet leest. Waar
 een gedrag afhangt van de curriculumband (groep 3 / 4 / 5) staat elke band apart.
 
+**Rekenen ≥ 50 % (2026-10-09).** Eigenaar: *"Minigames mogen een klein extra spel element hebben maar het moet niet mogelijk zijn om rekenen over te slaan en rekenen moet minstens 50% van de interactie zijn."* Sinds `c72edf8` houdt elk spel per beurt **R1** (rekentikken ≥ andere tikken + 1, de tik die het spel opent niet meegeteld; groep 3/4/5, N 1–8) en **R2** (geen ster, munt, stuk of voortgang zonder goed antwoord; een vraag met een misser komt onveranderd terug na ⬅ Terug, een ander dier, herladen, een nieuwe dag of een andere N of groep). Onder de kop van elk spel hieronder staat een notitie "(2026-10-09, rekenen ≥ 50 %)" met de nieuwe beurt; waar de oudere tekst eronder iets anders zegt, wint die notitie. De Rekenwacht voor het hele hotel en de tabel per spel: `docs/REKENWACHT.md`; de regels voor wie bouwt: `AGENTS.md` §5.
+
 ---
 
 ## 1. Het fundament dat de vijf spellen delen
@@ -388,6 +390,8 @@ munt(v, extra, id): het HTML-muntje ('note' bij 10 of 20, anders 'c<v>')
 
 ## 3. VERDEEL BEDDEN OVER DE KAMERS (`games/bedden`)
 
+**Notitie (2026-10-09, rekenen ≥ 50 %).** De beurt bleef 1 rekentik en 0 andere (de kamerkeuze in de check-in is de openingstik). Nieuw (R2): na een misser en ⬅ Terug blijft de vraag bij dezelfde kamer — `ctx.data().open` houdt de kamer vast en `State.s.checkin.kamer` volgt hem; stap 3 van de check-in biedt dan alleen die kamer aan (`Hotel._bedden_vast`; `kies_kamer` weigert een andere), dus geen legere kamer na een fout. Kan het spel niet starten, dan vraagt de balie dezelfde som zelf (`Hotel._bed_zonder_spel`, "slapers + 1 ="; bed en ster pas na het goede antwoord — vroeger kreeg de gast zonder som een bed). Open: is de kamer intussen vol, dan valt het spel terug op de gekozen kamer met een nieuwe vraag. Bron: `.fanout/scratch/burn/GE.md`, `GF.md`.
+
 **Eigenaarswensen 2026-09-24, letterlijk en in volgorde.** (1) "Waarom zijn er 5
 bedden nodig voor 1 dier?" — over het oude spel "Bedden op rij": zijn wolkje
 `🛏 5 bedden maken` hing boven één dier, en die 5 was een tafelsom (rijen ×
@@ -563,6 +567,8 @@ Proeflijnen: `[probe] spel=start id=bedden kamer=<k> gast=<id> slapers=<n>`,
 ---
 
 ## 4. HET SLEUTELBORD (`sleutels.js`)
+
+**Notitie (2026-10-09, rekenen ≥ 50 %).** Per sleutel twee rekentikken en nul andere: het getal kiezen op de strook, dan de sleutel aan een **leeg** haakje hangen in de hangstap — dat is nu een nagekeken handeling (`reken: true`, `ctx.reken_goed()` bij goed). Een bordje aantikken (voorlezen) en de sleutel aantikken zijn `vrij: true`; een drop op een genummerd bordje is een misser en telt als spel. R2: een bord waarvan de sleutel in de hand een misser had (strook of haakje) blijft na een nieuwe dag, een andere N, groep of ronde en de dierwissel; de strook houdt dezelfde vier getallen (zaad = de dag van de beurt). Bron: `.fanout/scratch/burn/GE.md`.
 
 ### 4.1 Verhaal, kamer, gast
 
@@ -852,6 +858,8 @@ knoppen terug, `Hotel.render()`.
 ---
 
 ## 5. HET MEUBELBOEK (`meubels.js`)
+
+**Notitie (2026-10-09, rekenen ≥ 50 %) — vervangt waar het botst de beurs, ✔ Klaar en de 🛒/💛-hint van §5.5–5.6 en de kinderteksten van §5.9.** De kassavraag aan het begin blijft. Daarna vraagt elke aankoop rekenen (`games/meubels/beurt.gd::stappen`): [som, bij 2 stuks in groep 4/5] → "Je hebt %s. Is dat genoeg?" (✅ Genoeg / 💛 Te weinig; "Te weinig" is goed als het niet genoeg is: een spaarwolkje, niets gekocht) → de munten zelf leggen: een strook `🪙 €1 / 🪙 €2 / 💶 €5 / 💶 €10` onder de bon, één tik is één munt op de toonbank (`reken: true`), geen ✔ Klaar — de stapel wordt nagekeken zodra hij de prijs haalt (precies → verder; te veel in groep 4/5 → wisselgeld; te veel in groep 3 → misser, munten terug in de hand) → "Hoeveel krijg je terug?" (groep 4/5, **altijd**, ook `€8 − €8 =`) → "Hoeveel houd je over?" (wat je had − de prijs). Munten, ster en stuk pas na het laatste goede antwoord. Weg: de beurs rondtikken, ✔ Klaar, de 🛒/💛-hint op de kaart (nu altijd 🛒 of +), de ✖ (het spel sluit zichzelf 2 s na het laatste stuk) en Afrekenen bij een vol lijstje. Versiering met sterren (⭐-tab) loopt via dezelfde toonbank (genoeg? → houd je over?, in sterren); zonder munten opent het boek op ⭐. Na een misser verdwijnt 📖 Boek (geen goedkoper ding); een open vraag met een misser staat in `ctx.data().open` en komt onveranderd terug (zelfde munten, zelfde knoppen). `vrij: true`: 📦 Oppakken, 🔄 Draaien, « munt terug, ▸ Meer, de tabs. Per aankoop 2–8 rekentikken tegen 1–5 andere. Bron: `.fanout/scratch/burn/GC.md`.
 
 ### 5.1 Verhaal, kamer, gast
 
@@ -1159,6 +1167,8 @@ fonts), `test_kamerdecoratie_vakjes_per_soort`, `test_kamerdecoratie_staat_achte
 
 ## 6. TOBBE-TIJD (`tobbe.js`)
 
+**Notitie (2026-10-09, rekenen ≥ 50 %) — vervangt in §6.5 het kraantje, de ✓ en het aantikken per dier.** De openingssom blijft. Daarna verdeelt het kind het sop zelf: schepjes per tobbe (eerlijk, dubbel) of bij `half` gieten tot de helft, de rest in de kan; tobbes en kan zijn `reken: true`. Geen kraantje dat voor het kind halveert (bij een leeg rek giet `_tik_kan` de rest uit de volste tobbe) en geen ✓: `_bouw_klaar` kijkt zelf na als het rek leeg is (eerlijk/dubbel) of als de tweede tobbe of de kan zijn deel haalt of voorbij is (half); fout → `_mis` (sop terug naar het begin, dezelfde vraag), goed → `ctx.reken_goed()`. Het bad gaat vanzelf (`_baad_zelf`: geen `tb_dier`-knoppen, geen ✓ "klaar met badderen"). Het rek (handmaat) en 🔄 opnieuw zijn `vrij: true`. De teksten die alleen op de verdwenen knoppen stonden ("zo is het goed", "klaar met badderen", "eerst sop erin", "blijft over") zijn weg. R2: een stand met een misser blijft na een nieuwe dag, een andere N of groep. Bron: `.fanout/scratch/burn/GD.md`.
+
 ### 6.1 Verhaal, kamer, gast
 
 Op het erf (de tuin) staan de tobbes. Uit het schuurrek (de kist) komen schepjes
@@ -1424,6 +1434,8 @@ Meervoud via `mv(n, enk, meerv)`, net als bij bedden.
 ---
 
 ## 7. DE VOERKAR (`voerkar.js`)
+
+**Notitie (2026-10-09, rekenen ≥ 50 %) — vervangt "doorduwen" (2026-09-20) en het tikken op kar, deur en bakje (2026-09-23/25) in §7.5–7.7.** Eerst de lading: "🍪 Hoeveel koekjes gaan op de kar?" = per × N (`4 × 10 =`, groep 3 `4 + 4 + 4 =`); een rest gaat nog steeds naar de snoeppot. Daarna rijdt de kar zelf (`_rijd_verder`, de camera mee): geen karknop, geen slepen, geen geleende deuren of bakjes; het getal staat op de kar (`_kar_getal`). Bij een bakje opent de som vanzelf; na het smullen wacht de kar tot de eters stilstaan (hooguit 6 s). Per beurt 1 + het aantal bakjes rekentikken en 0 andere. R2: `vraag_bak` bevriest som en goed antwoord; een gemiste bakjesvraag blijft bij `duw_naar` en over een nieuwe dag (de al gevoerde kamers van die beurt komen de volgende beurt). De oude tikteksten blijven als ongebruikte constanten (de woordelijke spectest leest ze). Het bakje in het hotel (`Hotel.tik_bak`) geeft geen ster en geen afgevinkt taakje meer: het voer is met deze sommen betaald, eten blijft. Bron: `.fanout/scratch/burn/GD.md`, `GF.md`.
 
 ### 7.1 Verhaal, kamer, gasten
 

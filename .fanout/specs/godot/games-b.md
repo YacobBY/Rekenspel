@@ -18,6 +18,8 @@ hoofdletters, spaties en het gebruikte minteken. Let op: de code gebruikt op
 sommenkaarten het **echte minteken U+2212 (`−`)**, niet het koppelteken; het
 teken `…` is U+2026, `€` is U+20AC.
 
+**Rekenen ≥ 50 % (2026-10-09).** Eigenaar: *"Minigames mogen een klein extra spel element hebben maar het moet niet mogelijk zijn om rekenen over te slaan en rekenen moet minstens 50% van de interactie zijn."* Sinds `c72edf8` houdt elk spel per beurt **R1** (rekentikken ≥ andere tikken + 1, de tik die het spel opent niet meegeteld; groep 3/4/5, N 1–8) en **R2** (geen ster, munt, stuk of voortgang zonder goed antwoord; een vraag met een misser komt onveranderd terug na ⬅ Terug, een ander dier, herladen, een nieuwe dag of een andere N of groep). Onder de kop van elk spel hieronder staat een notitie "(2026-10-09, rekenen ≥ 50 %)" met de nieuwe beurt; waar de oudere tekst eronder iets anders zegt, wint die notitie. De Rekenwacht voor het hele hotel en de tabel per spel: `docs/REKENWACHT.md`; de regels voor wie bouwt: `AGENTS.md` §5.
+
 ---
 
 ## 0. Gemeenschappelijke basis (geldt voor alle vijf de spellen)
@@ -276,6 +278,8 @@ vanaf zijn aankomst; PLAN N3 stap 1 (zwembad) en N11 (hinkel) zijn daarmee overr
 ---
 
 ## 1. G1 — HET ZWEMBAD (`zwembad`)
+
+**Notitie (2026-10-09, rekenen ≥ 50 %) — vervangt de eigenaarsregel van 2026-09-24 in §1.5 ("te kort → het dier zwemt zover … te veel → het mag maar `M` per keer … te ver → het bótst") en de bots van §1.7 en §1.11.** De nieuwere eigenaarswens wint: *"het moet niet mogelijk zijn om rekenen over te slaan"*. Een fout getal laat het dier **niet** zwemmen: `_kies` → `_mis` (sip in het water met `🔄 Nog een keer`, dezelfde kaart en dezelfde strook; na `MIS_S` drijft het weer). `leg` gaat alleen omhoog bij een goed antwoord; `mis_open` wordt bewaard. De bots (`_bots_en_terug`, `_spat_wand`, `_duizel`) is weg: hij was alleen via een fout antwoord te bereiken. Per beurt 1–2 rekentikken, 0 andere. R2: de dierwissel op de spelbalk houdt een baan met een open misser; herladen en een nieuwe dag hervatten met dezelfde vier getallen. Kaart `reken: true`, `ctx.reken_goed()` per goed antwoord. Bron: `.fanout/scratch/burn/GD.md`.
 
 ### 1.1 Verhaal, kamer en gast
 
@@ -805,6 +809,8 @@ Een beurt is **geldig** als `L`, `p` en `M` getallen zijn, `L > 0`,
 
 ## 2. G2 — DE WEKKERDIENST (`wekker`)
 
+**Notitie (2026-10-09, rekenen ≥ 50 %).** De beurt bleef gelijk: alle tikken (uur erbij of eraf, kwartier, 5 minuten, ✅, in groep 5 de uurvraag) staan op een `reken: true`-kaart; `ctx.reken_goed()` bij een goede ✅ en een goed uur. R2: een gemiste wens (`missers > 0`, of de nieuwe vlag `gemist` = een foute ✅, ook zonder draaien) blijft na een nieuwe dag, een andere N of groep, en als het kind een ander dier kiest (de wissel wordt genegeerd zolang de gemiste wens openstaat). Bron: `.fanout/scratch/burn/GE.md`.
+
 ### 2.1 Verhaal, kamer en gasten
 
 In de **gang** hangt aan de achterwand een grote halklok. De gasten slapen; het
@@ -1187,6 +1193,8 @@ gang.
 
 ## 3. G3 — HET HINKELPAD (`hinkel`)
 
+**Notitie (2026-10-09, rekenen ≥ 50 %) — vervangt "alleen maten die passen" voor de sprongstrook (§3.4) en in §3.8 "hoppen — ook bij een fout antwoord".** De sprongmaat is nu een rekenvraag: de strook houdt haar aantal knoppen, maar er staat altijd één maat op die de afstand **niet** deelt (de eigen maten van de groep, anders 3 of 4 in groep 4; een maat die deelt maar meer dan 10 sprongen kost komt er nooit op) — die kiezen is een misser (`_kies_sprong` → `_mis`). Een fout aantal sprongen wordt **niet** gesprongen: `_antwoord` → `_mis`, hij blijft staan, `pogingen` bevroren zodat dezelfde vier aantallen terugkomen. Per beurt 2 rekentikken, 0 andere. Na een misser zet `_mis` hem na 1,4 s terug in `wacht` en haalt `_houd_hinkelaar` hem terug als hij van zijn steen loopt (in de export gevonden: de volgende kaart kwam zonder strook). Het rekenen staat in `spel.gd` (`sprong_past`, `sprong_passend`, `_sprong_mis`, `sprong_keuzes`), niet in `core/sommen.gd`. De kindtekst "Kies je sprong" bleef. R2: een stand met `mis > 0` blijft na een andere dag, N of groep en de dierwissel. Bron: `.fanout/scratch/burn/GD.md`.
+
 ### 3.1 Verhaal, kamer en gast
 
 In de **tuin**, in de strook `Rooms.get('tuin').zones.hinkel` = `{x0: 24,
@@ -1552,6 +1560,8 @@ fase `hop` wordt teruggezet naar `sprong`.
 ---
 
 ## 4. G4 — DE WASMANDTOREN (`was`)
+
+**Notitie (2026-10-09, rekenen ≥ 50 %) — vervangt het sorteren met de hand (§4.7) en de 👍 klaar.** De berg sorteert **zichzelf** (`_sorteer_vanzelf`: het eerste stuk na 1,0 s, dan één per 0,15 s; het staafdiagram groeit terwijl het kind kijkt). De berg is nooit sleepbaar; een tik op de berg of op een kratbordje doet niets (`vrij: true`). Daarna de vragen over het diagram (§4.8): groep 3 één (de strook met stapels, `reken: true` + `ctx.reken_goed()`), groep 4 twee, groep 5 drie; 0 andere tikken. De eindkaart "Alles gesorteerd!" heeft geen 👍 klaar: een ✓ in het vakje, en na 3,4 s gaat ze vanzelf dicht. `Sommen.Was`, het diagram en de C1/C2-indeling zijn ongewijzigd. R2: `_herstel` houdt de bewaarde dag, N en groep, dus een gemiste vraag blijft na een nieuwe dag of een andere groep. (Het pad van de verkeerde krat en de grijphand zijn onbereikbaar maar staan nog in de code.) Bron: `.fanout/scratch/burn/GB.md`.
 
 ### 4.1 Verhaal en kamer
 
