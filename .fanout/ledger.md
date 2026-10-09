@@ -447,3 +447,21 @@ W5a | DONE_WITH_CONCERNS | Beurt.te_koop shared; Games rust_nu re-reads resting 
 W5e | DONE_WITH_CONCERNS | post: card at once, nearest helper walks in background, small plates on phones; 25 tests; suite 881/0 in worktree
 Lead: three patches applied with --3way (clean), full suite 887/0 (995 s), COMMIT 912f34d; export rebuilt. Meter 03:32Z: 5h 16 % / 7d 65 %. RUN CLOSED below 70 % — no further dispatch; fonly stays active.
 
+
+# Fanout Ledger — burn-credits: browser/Android + rekenen voorop (2026-10-08 22:30Z)
+BASELINE: 8e6720b | clean (untracked ANALYSIS.md MINIGAMES-RESEARCH.md) | lead seat now Opus 5.5 (explicit engine choice inside /burn-credits; fonly unaffected)
+Owner (verbatim): see .burn/journal.md. No questions (owner: "Stel geen vragen").
+## Plan
+W1 | 1 | implement | Rekenwacht core + hotel gating (main checkout) | fanout-worker-max
+W2 | 1 | implement | Browser/Android hardening + tools (worktree → patch) | fanout-worker-max
+S1-S3 | 1 | scout | per-game maths-share and skip-path audit (three game groups + hotel free play)
+G* | 2 | implement | per-game fixes from the audit on top of W1
+R/V | 3 | review + blind verify + docs
+## Attempts (burn run)
+W1 | 1 | fanout-worker-max | r1 | dispatched 22:35Z | agent a999b707ea19ec82d | main
+W2 | 1 | fanout-worker-max | r1 | dispatched 22:35Z | agent aaef627254f10eef2 | worktree → .fanout/scratch/burn/W2-web.diff
+S1/S2/S3 | 1 | fanout-scout | r1 | dispatched 22:35Z | a0607c1adf00f3a20 / a8770bb8343c7eacb / a67b80b0cc07213d4
+--- burn run results ---
+W1 DONE (59b6a21 4ecf8d4 2d16e0e) | W2 DONE_WITH_CONCERNS | GA–GF DONE/DWC | integration 9d9c957 + c72edf8 (suite 994/0) | VA DONE (9eb0f15, suite 1000/0) | VB DONE (307459d) | blind play verifier PASS_WITH_NOTES (F1, F2 medium) | F12 DWC → branch burn/f12-rekenwacht-lekken e130043 (filtered green, no full suite) | status a484e33
+RUN STOPPED 02:48Z: weekly reset at 03:00Z.
+
