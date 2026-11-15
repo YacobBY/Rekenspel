@@ -668,7 +668,9 @@ func test_bezit_en_lidwoord() -> void:
 
 func test_band_volgt_gasten_en_kunnen() -> void:
 	_voor()
-	gelijk(State.band(), 3, "zonder gasten band 3")
+	# the floor is band 4, end of groep 4 (owner, 2026-11-15)
+	gelijk(State.BAND_MIN, 4, "de laagste band is eind groep 4")
+	gelijk(State.band(), 4, "zonder gasten band 4")
 	var gasten: Array = []
 	for i in 7:
 		gasten.append(State.mk_gast("g%d" % i, "G%d" % i, "hond", "puppy", 1, "Spelen", 15))
@@ -678,7 +680,7 @@ func test_band_volgt_gasten_en_kunnen() -> void:
 	State.s["kunnen"] = 5
 	gelijk(State.band(), 5, "met kunnen 5 mag band 5")
 	State.s["gasten"] = []
-	gelijk(State.band(), 3, "N begrenst hem weer")
+	gelijk(State.band(), 4, "N begrenst hem weer, tot de vloer van band 4")
 
 func test_signaal_houdt_tien_items() -> void:
 	_voor()
