@@ -85,6 +85,8 @@ func _wereld(n: int, band: int, dag := 2) -> Array:
 	State.s["gasten"] = uit
 	World.sync(uit)
 	World.zet_dag(dag)
+	# a groep-3 setup lowers the band floor for this test (`State.BAND_MIN`)
+	State.vloer = mini(State.BAND_MIN, band)
 	gelijk(State.band(), band, "de band is %d bij %d gasten" % [band, n])
 	return uit
 
