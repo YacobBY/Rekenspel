@@ -17,7 +17,8 @@ const KADER := Vector2(990, 637)
 ## The three verified rows of games-b.md §3.4: N, band, day -> s, doel, k, n.
 const BANDEN := [
 	{"n": 2, "dag": 1, "kunnen": 3, "band": 3, "s": 1, "doel": 3, "k": 1, "hops": 2},
-	{"n": 5, "dag": 1, "kunnen": 3, "band": 4, "s": 10, "doel": 20, "k": 2, "hops": 5},
+	# 2026-11-15 (groep eind 4): band 4 starts between the tens and hops 3 too
+	{"n": 5, "dag": 1, "kunnen": 3, "band": 4, "s": 65, "doel": 80, "k": 3, "hops": 5},
 	{"n": 8, "dag": 1, "kunnen": 4, "band": 5, "s": 15, "doel": 35, "k": 2, "hops": 10},
 ]
 
@@ -221,6 +222,62 @@ func test_zonder_gasten_zegt_het_dat() -> void:
 
 # ============================================================ de hele beurt
 
+## 2026-11-15 (owner: "groep eind 4"): band 4 starts BETWEEN the tens (on a
+## five: 15, 25, …), hops forward on odd days and BACKWARD on even days, uses
+## hops of 3 and 4 too, and always crosses at least one ten.  Band 5 does the
+## same with every table, so it is never easier.
+func test_band_4_springt_over_de_tientallen_heen_en_terug() -> void:
+	var terug := 0
+	var maten_gezien := {}
+	for n in range(1, 9):
+		for dag in range(1, 9):
+			for band in [4, 5]:
+				var q := Sommen.Hinkel.beurt(n, band, dag)
+				var s := int(q["s"])
+				var doel := int(q["doel"])
+				var wat := "band %d N=%d dag %d: %d > %d" % [band, n, dag, s, doel]
+				waar(doel % 5 == 0 and s % 5 == 0, "%s: start en trap op een steen" % wat)
+				waar(doel > 0 and doel < 100 and s <= 100, "%s: op het pad" % wat)
+				gelijk(absi(doel - s), int(q["afstand"]), "%s: de afstand" % wat)
+				if band == 4:
+					waar(mini(s, doel) % 10 == 5, "%s: niet op een tiental" % wat)
+					waar(mini(s, doel) / 10 != maxi(s, doel) / 10,
+						"%s: over een tiental heen" % wat)
+					gelijk(doel < s, dag % 2 == 0, "%s: terug op een even dag" % wat)
+					if doel < s:
+						terug += 1
+					maten_gezien[int(q["sprong"])] = true
+	waar(terug > 0, "band 4 springt ook terug")
+	waar(maten_gezien.has(3) and maten_gezien.has(4), "band 4 springt ook 3 en 4 (%s)"
+		% str(maten_gezien.keys()))
+	gelijk(str(Sommen.Hinkel.BAND[4]["sprongen"]), str([2, 3, 4, 5, 10]), "de maten van band 4")
+
+## A backward turn, played through: the strip says "terug k" and the hops go
+## down the line to the staircase.
+func test_band_4_terug_hinkelen() -> void:
+	_op()
+	var node := await _speel(5, 2, 3)
+	if node == null:
+		await _af()
+		return
+	var st: Dictionary = node.proef_stand()
+	gelijk(int(st["band"]), 4, "band 4")
+	waar(int(st["doel"]) < int(st["s"]), "dag 2: de trap staat achter hem (%d > %d)"
+		% [int(st["s"]), int(st["doel"])])
+	for woord in _keuze_woorden():
+		waar(woord.contains("terug"), "de strook zegt terug (%s)" % woord)
+	var k := int(node.proef_maten()[0])
+	waar(_tik_keuze("k%d" % k), "een passende sprongmaat")
+	Hits.plaats()
+	@warning_ignore("integer_division")
+	var hops := (int(st["s"]) - int(st["doel"])) / k
+	waar(_tik_keuze("n%d" % hops), "het goede aantal")
+	Hits.plaats()
+	st = node.proef_stand()
+	gelijk(str(st["fase"]), "af", "hij staat op de trap")
+	gelijk(int(st["s"]), int(st["doel"]), "precies op het doel")
+	await _af()
+
 ## One full turn per band, driven through the choice strip: pick the hop size,
 ## pick the number of hops, land on the staircase, get the star.
 func test_beurt_op_band_3_4_en_5() -> void:
@@ -249,7 +306,7 @@ func test_beurt_op_band_3_4_en_5() -> void:
 		waar(maten.size() >= 1 and maten.size() <= 3,
 			"%s: hooguit drie sprongmaten (%s)" % [wat, str(maten)])
 		for k in maten:
-			gelijk((int(rij["doel"]) - int(rij["s"])) % int(k), 0,
+			gelijk(absi(int(rij["doel"]) - int(rij["s"])) % int(k), 0,
 				"%s: maat %d past precies" % [wat, int(k)])
 		for woord in _keuze_woorden():
 			waar(woord.contains("🪨") and woord.contains("sprong"),
@@ -260,7 +317,7 @@ func test_beurt_op_band_3_4_en_5() -> void:
 		# size of the verified row when it stands there, else the fitting one
 		var k := int(rij["k"]) if maten.has(int(rij["k"])) else int(maten[0])
 		@warning_ignore("integer_division")
-		var hops: int = (int(rij["doel"]) - int(rij["s"])) / k
+		var hops: int = absi(int(rij["doel"]) - int(rij["s"])) / k
 		waar(_tik_keuze("k%d" % k), "%s: de sprongmaat is aan te tikken" % wat)
 		Hits.plaats()
 		st = node.proef_stand()
@@ -381,7 +438,7 @@ func _fout_aantal(node: Node) -> int:
 ## he is short or too far, no counting line.  The right hops still finish.
 func test_geen_hulp_na_een_fout() -> void:
 	_op()
-	var node := await _speel(5, 1, 3)          # band 4: van 10 naar 20 met 2, 5 sprongen
+	var node := await _speel(5, 1, 3)          # band 4: van 65 naar 80 (2026-11-15)
 	if node == null:
 		await _af()
 		return
@@ -468,7 +525,7 @@ func test_herstel_uit_ctx_data() -> void:
 	if node == null:
 		await _af()
 		return
-	waar(_tik_keuze("k2"), "de sprongmaat is gekozen")
+	waar(_tik_keuze("k%d" % int(node.proef_maten()[0])), "de sprongmaat is gekozen")
 	Hits.plaats()
 	var voor: Dictionary = node.proef_stand()
 	Games.stop()
@@ -570,15 +627,16 @@ func test_gasten_naast_de_strook_en_terug() -> void:
 
 func test_het_kind_kiest_wie_er_hinkelt() -> void:
 	_op()
-	var node := await _speel(5, 1, 3)          # band 4: van 10 naar 20
+	var node := await _speel(5, 1, 3)          # band 4: van 65 naar 80
 	if node == null:
 		await _af()
 		return
+	var start_s := int(node.proef_stand()["s"])
 	gelijk(str(Games.spelers()), str(["hk0", "hk1", "hk2", "hk3", "hk4"]),
 		"wie mag hinkelen: iedereen met een bed, op volgorde")
 	var eerste := str(node.proef_stand()["gast"])
 	gelijk(Games.speler(), eerste, "het spel kiest zelf, zoals altijd")
-	waar(_tik_keuze("k2"), "de sprongmaat 2")
+	waar(_tik_keuze("k%d" % int(node.proef_maten()[0])), "een passende sprongmaat")
 	Hits.plaats()
 	gelijk(str(node.proef_stand()["fase"]), "aantal", "de tweede vraag staat er")
 	var sterren := int(State.s["sterren"])
@@ -590,7 +648,7 @@ func test_het_kind_kiest_wie_er_hinkelt() -> void:
 	var st: Dictionary = node.proef_stand()
 	gelijk(str(st["gast"]), volgende, "nu hinkelt het volgende dier")
 	gelijk(Games.speler(), volgende, "en de balk weet het")
-	gelijk(int(st["s"]), 10, "vanaf de start van het pad")
+	gelijk(int(st["s"]), start_s, "vanaf de start van het pad")
 	gelijk(str(st["fase"]), "sprong", "met de eerste vraag")
 	gelijk(int(st["missers"]), 0, "zonder missers")
 	gelijk(int(State.s["sterren"]), sterren, "er ging geen ster af")
@@ -1270,7 +1328,7 @@ func test_de_sprongmaat_is_een_echte_vraag() -> void:
 ## size on the strip fitted, so picking one was no maths at all.
 func test_een_sprong_die_niet_past_is_een_misser() -> void:
 	_op()
-	var node := await _speel(5, 1, 3)          # band 4: van 10 naar 20
+	var node := await _speel(5, 1, 3)          # band 4: van 65 naar 80 (2026-11-15)
 	if node == null:
 		await _af()
 		return
@@ -1297,7 +1355,8 @@ func test_een_gemiste_vraag_blijft_bij_een_wissel() -> void:
 		await _af()
 		return
 	var eerste := str(node.proef_stand()["gast"])
-	waar(_tik_keuze("k2"), "de sprongmaat 2")
+	var maat := int(node.proef_maten()[0])
+	waar(_tik_keuze("k%d" % maat), "een passende sprongmaat")
 	Hits.plaats()
 	var woorden := str(_keuze_woorden())
 	waar(_tik_keuze("n%d" % _fout_aantal(node)), "een fout aantal")
@@ -1307,7 +1366,7 @@ func test_een_gemiste_vraag_blijft_bij_een_wissel() -> void:
 	var st: Dictionary = node.proef_stand()
 	gelijk(str(st["gast"]), eerste, "hetzelfde dier, geen nieuw")
 	gelijk(str(st["fase"]), "aantal", "dezelfde vraag")
-	gelijk(int(st["sprong"]), 2, "met dezelfde sprongmaat")
+	gelijk(int(st["sprong"]), maat, "met dezelfde sprongmaat")
 	World.zet(eerste, "tuin", node.proef_dier_x(float(st["s"])), float(node.proef_pad_maat()["zDier"]))
 	Hits.plaats()
 	await _frames_hk(3)

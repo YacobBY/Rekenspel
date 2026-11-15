@@ -25,11 +25,14 @@ func test_zwembad_baan_varieert_bij_een_gast() -> void:
 		waar(gezien.size() >= 5, "band %d: acht dagen, minstens vijf lengtes (%s)" % [band, str(gezien.keys())])
 	gelijk(int(Sommen.Zwembad.baan(2, 3, 1)["L"]), 13, "twee gasten in band 3 rekenen als vanouds: 10 + 3")
 
+## 2026-11-15 (owner: "groep eind 4"): band 4 swims 51…95 m, band 5 101…175 m,
+## and M is just over half the lane with a bigger ones digit, so the second
+## card `L − M` always crosses the ten.
 func test_zwembad_baan() -> void:
 	var b := Sommen.Zwembad.baan(5, 4, 1)
 	gelijk(b["r"], 6, "baan(5,4,1).r = (5+1) mod 8")
-	gelijk(b["L"], 46, "baan(5,4,1).L")
-	gelijk(b["M"], 30, "baan(5,4,1).M")
+	gelijk(b["L"], 94, "baan(5,4,1).L: 46 < 51, dus de dag loopt door het venster")
+	gelijk(b["M"], 48, "baan(5,4,1).M: 94 − 48 = 46, over het tiental")
 	gelijk(b["stap"], 10, "baan(5,4,1).stap")
 	# the windows of the three bands over every reachable turn
 	var venster := {3: [999, 0], 4: [999, 0], 5: [999, 0]}
@@ -43,21 +46,24 @@ func test_zwembad_baan() -> void:
 				v[1] = maxi(v[1], int(q["L"]))
 				waar(int(q["L"]) <= 2 * int(q["M"]),
 					"baan(%d,%d,%d): L <= 2M, dus hoogstens twee etappes" % [n, band, dag])
-				if band == 5 and int(q["L"]) in [40, 50, 60, 70] and not ronde.has(int(q["L"])):
+				if band >= 4 and int(q["L"]) % 10 >= int(q["M"]) % 10 and not ronde.has(int(q["L"])):
 					ronde.append(int(q["L"]))
 	gelijk(str(venster[3]), "[8, 20]", "band 3: L-venster 8…20")
-	gelijk(str(venster[4]), "[21, 50]", "band 4: L-venster 21…50")
-	gelijk(str(venster[5]), "[31, 80]", "band 5: L-venster 31…80 (niet 76)")
-	gelijk(str(ronde), "[]", "band 5: 40, 50, 60 en 70 komen niet voor (+3-schuif)")
+	gelijk(str(venster[4]), "[51, 95]", "band 4: L-venster 51…95")
+	gelijk(str(venster[5]), "[101, 173]", "band 5: L-venster 101…175 (bereikt: 101…173)")
+	gelijk(str(ronde), "[]", "band 4/5: L − M gaat altijd over het tiental")
 
 ## games-b.md §1.4.  The spec prints the buttons but not the `leg` column;
 ## running the original in node settles it: the p = 0 rows are the FIRST choice
 ## of a turn (leg 0) and the p = M rows the second (leg 1).  Recorded here so
 ## nobody has to re-derive it.
 func test_zwembad_keuzes_de_kaart_van_de_eigenaar() -> void:
-	for rij in [[43, 30, 0, 4, 0, 30, "43,13,20,30"], [43, 30, 30, 4, 1, 13, "43,30,13,3"],
+	# band 3 keeps the G1-F1 order; band 4/5 (2026-11-15) put "ten too many" —
+	# the forgotten carry — right after the whole remainder
+	for rij in [[43, 30, 0, 4, 0, 30, "43,40,20,30"], [43, 30, 30, 4, 1, 13, "23,30,13,3"],
 			[14, 10, 0, 3, 0, 10, "14,10,4,20"], [14, 10, 10, 3, 1, 4, "14,4,10,3"],
-			[76, 40, 0, 5, 0, 40, "76,36,40,30"], [76, 40, 40, 5, 1, 36, "76,40,36,26"]]:
+			[76, 40, 0, 5, 0, 40, "76,50,40,30"], [76, 40, 40, 5, 1, 36, "46,40,36,26"],
+			[73, 37, 37, 4, 1, 36, "46,36,37,26"]]:
 		var q := Sommen.Zwembad.keuze_getallen(rij[0], rij[1], rij[2], rij[3], rij[4])
 		var d: Array[String] = []
 		for v in q["lijst"]:
@@ -101,11 +107,14 @@ func test_wekker_tijd_in_woorden() -> void:
 func test_wekker_beurten() -> void:
 	for rij in [[2, 3, 1, 0, "10:00", "7 uur", "10 uur", "zet", ""],
 			[3, 3, 2, 0, "13:00", "10 uur", "1 uur", "zet", ""],
-			[5, 4, 1, 0, "10:45", "half 7", "10 uur", "zet", ""],
-			[5, 4, 2, 1, "13:45", "kwart voor 11", "half 3", "zet", ""],
-			[8, 5, 1, 0, "10:57", "7 uur", "10 uur", "duur", "11,9,4,10"],
+			# 2026-11-15: band 4 asks the duration from a half hour, band 5 from a
+			# quarter past or to
+			[5, 4, 1, 0, "10:45", "half 8", "half 11", "duur", "11,9,4,10"],
+			[5, 4, 2, 1, "13:45", "half 12", "half 3", "duur", "1,8,2,3"],
+			[5, 4, 2, 0, "13:45", "half 10", "kwart over 1", "zet", ""],
+			[8, 5, 1, 0, "10:57", "kwart over 7", "kwart over 10", "duur", "11,9,4,10"],
 			[8, 5, 2, 0, "13:19", "5 voor 10", "half 2", "zet", ""],
-			[9, 5, 3, 0, "8:01", "5 uur", "8 uur", "duur", "2,8,9,7"]]:
+			[9, 5, 3, 0, "8:01", "kwart voor 6", "kwart voor 9", "duur", "2,8,9,7"]]:
 		var n: int = rij[0]
 		var band: int = rij[1]
 		var dag: int = rij[2]
@@ -127,9 +136,11 @@ func test_wekker_beurten() -> void:
 ## games-b.md §3.4, the whole "Nagerekend (verified)" table.
 func test_hinkel_beurten() -> void:
 	for rij in [[2, 3, 1, 1, 3, 1, 2, "1,2"], [3, 3, 3, 3, 7, 1, 4, "1,2"],
-			[5, 4, 1, 10, 20, 2, 5, "2,5,10"], [6, 4, 2, 20, 70, 10, 5, "5,10"],
-			[8, 5, 1, 15, 35, 2, 10, "2,4,5,10"], [9, 5, 2, 55, 95, 4, 10, "4,5,8,10"],
-			[10, 5, 4, 25, 95, 7, 10, "7,10"]]:
+			# 2026-11-15: band 4 starts between the tens, hops 3 and 4 too, and
+			# band 4/5 hop backwards on even days
+			[5, 4, 1, 65, 80, 3, 5, "3,5"], [6, 4, 2, 45, 15, 5, 6, "3,5,10"],
+			[8, 5, 1, 15, 35, 2, 10, "2,4,5,10"], [9, 5, 2, 95, 55, 4, 10, "4,5,8,10"],
+			[10, 5, 4, 95, 25, 7, 10, "7,10"]]:
 		var wat := "N=%d band=%d dag=%d" % [rij[0], rij[1], rij[2]]
 		var q := Sommen.Hinkel.beurt(rij[0], rij[1], rij[2])
 		gelijk(q["s"], rij[3], "%s: start" % wat)
@@ -157,10 +168,11 @@ func test_hinkel_keuze_getallen() -> void:
 ## games-b.md §4.3, the whole "Nagerekend (verified)" table.
 func test_was_getallen() -> void:
 	for rij in [[2, 3, 1, 2, 1, 5, 1, 2, "[3, 2]"], [3, 3, 2, 2, 0, 6, 1, 3, "[1, 2, 3]"],
-			[3, 3, 3, 2, 1, 7, 1, 3, "[2, 1, 4]"], [5, 4, 1, 4, 0, 20, 1, 3, "[8, 5, 7]"],
-			[6, 4, 2, 3, 1, 19, 1, 3, "[8, 6, 5]"], [8, 5, 1, 3, 2, 26, 2, 4, "[4, 5, 1, 3]"],
-			[9, 5, 2, 3, 1, 28, 2, 4, "[3, 4, 2, 5]"], [10, 5, 3, 3, 0, 30, 2, 4, "[6, 3, 2, 4]"],
-			[1, 5, 1, 10, 8, 18, 2, 3, "[3, 4, 2]"]]:
+			# 2026-11-15: group 4 in blocks of two up to 42, group 5 in fives up to 100
+			[3, 3, 3, 2, 1, 7, 1, 3, "[2, 1, 4]"], [5, 4, 1, 8, 2, 42, 2, 3, "[8, 6, 7]"],
+			[6, 4, 2, 6, 4, 40, 2, 3, "[8, 7, 5]"], [8, 5, 1, 12, 4, 100, 5, 4, "[6, 7, 3, 4]"],
+			[9, 5, 2, 10, 5, 95, 5, 4, "[4, 5, 3, 7]"], [10, 5, 3, 9, 0, 90, 5, 4, "[6, 4, 3, 5]"],
+			[1, 5, 1, 20, 15, 35, 5, 3, "[2, 4, 1]"]]:
 		var wat := "N=%d band=%d dag=%d" % [rij[0], rij[1], rij[2]]
 		var q := Sommen.Was.recept(rij[0], rij[1], rij[2])
 		gelijk(q["k"], rij[3], "%s: k" % wat)

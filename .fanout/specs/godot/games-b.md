@@ -358,6 +358,19 @@ prikbordkaartje 🏊 met `prio 1`, en het wenswolkje van de gast.
 
 ### 1.3 Het rekenen per band
 
+**Notitie (2026-11-15, eigenaar: "groep eind 4") — vervangt de band-4/5-regels hieronder.**
+`BANDEN = {3: {k 5, 8…20, M 10, plafond 20}, 4: {k 8, 51…95, plafond 100},
+5: {k 12, 101…175, plafond 200}}`. In band 4 en 5 is `M = max_van(L)` net meer dan
+de helft van de baan (`L/2 + 1` of hoger) met een eenheid 6…9 die **groter** is dan
+die van `L`, dus de tweede kaart `L − M` gaat altijd over het tiental (73 − 37 = 36;
+143 − 76 = 67) en een baan kost precies twee slagen. Een baan die op 9 eindigt
+schuift 2 m op (69 → 71); de oude +3-schuif van band 5 is weg. Meterstreep: 5 (L ≤ 20),
+10 (L ≤ 100), 20 (L > 100), `Sommen.Zwembad.stap_van`. De keuzes (§1.4) van band 4/5:
+`[r, juist + 10, M, juist − 10, L, r − M, juist ± 1…3]` — "de tien vergeten" staat
+direct na de hele rest; band 3 houdt de volgorde hieronder. Voorbeeld band 4, N = 5,
+dag 1: `5·8 + 6 = 46 < 51`, dus `L = 51 + (40 + 3) mod 45 = 94`, `M = 48`; kaart 2:
+`94 − 48 = 46`, op de strook ook 56 (de tien vergeten), 48 en 36.
+
 `baan(N, band, dag)`:
 
 ```
@@ -920,7 +933,15 @@ later op.
 
 De **startstand** van de klok is `doel − afstand`, modulo 12 uur.
 
-**De tijdsduurvraag (alleen band 5)**: `duur = (band ≥ 5) en ((dag + idx) mod 2 == 1)`.
+**Notitie (2026-11-15, eigenaar: "groep eind 4").** De tijdsduurvraag geldt nu voor
+band 4 én 5: `duur = (band ≥ 4) en ((dag + idx) mod 2 == 1)`. Het doel en de start
+staan op `duur_minuut`: band 4 op het halve uur ("half 8 + 3 uur = half 11"), band 5
+op kwart over (`(dag + idx) mod 4 == 1`) of kwart voor; de vier antwoordknoppen delen
+die minuut en zeggen hem in woorden (`half 11`, kort `10:30`). Op elke andere zetvraag
+van band 4/5 (`(dag + idx) mod 4 == 0`, `digitaal: 1` in de beurt) noemt de kaart de
+wektijd digitaal (`3:45`) in plaats van in woorden — het doel, nooit de stand van nu.
+
+**De tijdsduurvraag (alleen band 5 tot 2026-11-15)**: `duur = (band ≥ 5) en ((dag + idx) mod 2 == 1)`.
 Dan gaat het doel op een heel uur (`m = 0`), de klok start `uur` hele uren eerder,
 en de kaart vraagt eerst *"Hoe laat is hij wakker?"* met vier uurknoppen:
 
@@ -1295,6 +1316,15 @@ liever over het einde van de strook dan over het getal ernaast ("10" wijkt
 
 ### 3.4 De getallen per band
 
+**Notitie (2026-11-15, eigenaar: "groep eind 4").** Band 4: `sprongen [2, 3, 4, 5, 10]`
+en de start zoals band 5 **tussen de tientallen** (5, 15, 25, …; op een steen, dus het
+pad blijft 21 stenen). Band 4 en 5 hinkelen op een **even dag terug**: het trapje staat
+op het lage punt en hij begint op het hoge (`s = laag + afstand`, `doel = laag`). Zo gaat
+elke band-4-beurt over minstens één tiental heen, vooruit en achteruit, en komen 3 en 4
+als tafelsprongen voor. Nieuwe nagerekende rijen: N 5 band 4 dag 1 → 65 naar 80 met 3
+(maten 3, 5); N 6 band 4 dag 2 → 45 naar 15 met 5 (3, 5, 10); N 9 band 5 dag 2 → 95
+naar 55 met 4; N 10 band 5 dag 4 → 95 naar 25 met 7.
+
 ```
 beurt(N, band, dag):
     ruimte = E − stap                      // het doel ligt nooit op de laatste steen
@@ -1606,6 +1636,18 @@ zodra het spel loopt, dus de startknop hangt aan de wastobbe met een zetje naar
 de plek waar de berg straks ligt.
 
 ### 4.3 De getallen per band
+
+**Notitie (2026-11-15, eigenaar: "groep eind 4").** `BAND[4] = {plaf 42, soorten 3,
+per 2, kset 1…20}`, `BAND[5] = {plaf 100, soorten 4, per 5, kset 1…20}`: groep 4 sorteert
+in **blokjes van twee** (legenda `📦 Elk blokje is 2 stuks`), groep 5 in **blokjes van
+vijf** (`📦 Elk blokje is 5 stuks`). `T` is een veelvoud van `per`; de gelijkspelbreker
+is in groep 4/5 `(N + dag) mod 5` in plaats van `deel()`. De hoogste stapel blijft 8
+blokjes. Groep 4 vraagt nu eerst `'Hoeveel <hoogste> zijn het?'` (blokjes × 2, geen
+sombalk) en dan `'Hoeveel stuks samen?'` met sombalk `a + b + c =` (12 + 14 + 16 = 42: de
+som gaat meestal over het tiental). Groep 5: de opening `T / 5`, dan × 5, dan het
+verschil. Nagerekend: N 5 band 4 dag 1 → T 42, stapels 8, 6, 7 (16 + 12 + 14); N 8 band
+5 dag 1 → T 100, stapels 6, 7, 3, 4. Een oude groep-4-stand (per 1) houdt zijn oude
+vragen en strook (R2).
 
 ```
 BAND = { 3: {plaf: 12, soorten: 3, per: 1, kset: [1, 2]},

@@ -43,6 +43,8 @@ const HOT_LEGENDA := "ws_legenda"
 const HOT_KAART := "ws_vraag"
 const SLEEP := "krat"
 const LEGENDA := "📦 Elk blokje is 2 stuks"
+## The words for what a hand holds when a block is more than one piece.
+const GETAL_WOORD := {2: "twee", 5: "vijf"}
 ## The pile gets the broom.  The basket 🧺 is the pictogram of the kind
 ## "doeken" (`WasSoorten.LIJST[2]`), and a child who is asked "hoeveel
 ## doeken?" and sees 🧺 on the pile and 🧺 on the crate reads two different
@@ -305,17 +307,25 @@ func _antwoord_nu() -> int:
 	if int(_s.get("band", 3)) == 3:
 		return _hoogste_idx()
 	if _stap_nu() == "vraag1":
-		if int(_s["band"]) == 4:
+		if _oud_band4():
 			return _stuks(_hoogste_idx()) - _stuks(_laagste_idx())
-		return _stuks(_hoogste_idx())          # group 5: blocks x 2
+		return _stuks(_hoogste_idx())          # group 4/5: blocks x per
 	if int(_s["band"]) == 4:
 		return _samen()
 	return _stuks(_hoogste_idx()) - _stuks(_laagste_idx())
 
-## The opening sum of group 5: the whole pile in blocks of two.  `Sommen.Was`
-## guarantees an even `T` where `per == 2`, so this never rounds.
+## A group-4 turn saved before 2026-11-15 sorted one piece per block and asked
+## "hoeveel meer … dan …?" first; a question with a miss comes back unchanged
+## (R2), so such a save keeps its old first question.
+func _oud_band4() -> bool:
+	return int(_s.get("band", 3)) == 4 and _per() == 1
+
+## The opening sum of group 5: the whole pile in blocks of `per` (five since
+## 2026-11-15, two before).  `Sommen.Was` guarantees `T` is a multiple of
+## `per`, so this never rounds.
 func _vraag0_goed() -> int:
-	return int(int(_s.get("T", 0)) / 2)
+	@warning_ignore("integer_division")
+	return int(_s.get("T", 0)) / _per()
 
 # ------------------------------------------------------------- waar staat wat
 
@@ -506,7 +516,17 @@ func _berg_titel(stuks: int, _per_: int, _stil: bool) -> String:
 
 func _hand_tekst() -> String:
 	var so := WasSoorten.soort(_hand())
-	return "een %s" % str(so["ev"]) if _per() == 1 else "twee %s" % str(so["naam"])
+	if _per() == 1:
+		return "een %s" % str(so["ev"])
+	return "%s %s" % [GETAL_WOORD.get(_per(), str(_per())), str(so["naam"])]
+
+## The legend of a block that holds more than one piece (2026-11-15: group 4
+## sorts in twos, group 5 in fives).  `LEGENDA` is the text for two.
+func _legenda() -> String:
+	return legenda_van(_per())
+
+static func legenda_van(per: int) -> String:
+	return "📦 Elk blokje is %d stuks" % per
 
 func _berg_weg() -> void:
 	ctx.hotspots.weg(HOT_BERG)
@@ -517,14 +537,14 @@ func _berg_weg() -> void:
 ## While sorting always; during the question only when the legend does not fit
 ## on the card itself.
 func _teken_legenda() -> void:
-	var wil := _per() == 2 and _stap_nu() != "af" and _legenda_wolk \
+	var wil := _per() > 1 and _stap_nu() != "af" and _legenda_wolk \
 		and (_stap_nu() == "sorteren" or not _legenda_op_kaart())
 	if not wil:
 		ctx.hotspots.weg(HOT_LEGENDA)
 		return
 	var p := _plek(LEGENDA_F)
 	ctx.ui.wolk({"id": HOT_LEGENDA, "kamer": KAMER, "x": p.x, "z": p.y,
-		"hoog": 20.0, "prio": 6, "icoon": "📦", "tekst": LEGENDA.substr(2).strip_edges()})
+		"hoog": 20.0, "prio": 6, "icoon": "📦", "tekst": _legenda().substr(2).strip_edges()})
 
 ## The legend rides on the card only while it does not cost the bar chart.  The
 ## HTML decided this with `krapKader()` — two hard pixel thresholds per game,
@@ -548,12 +568,12 @@ func _legenda_op_kaart() -> bool:
 ## on the card — without "elk blokje is 2 stuks" the group-5 question cannot be
 ## answered at all, and a bubble that lands on the chart hides the same blocks.
 func _weeg_legenda(bodem: float) -> void:
-	if _kaart == null or _per() != 2:
+	if _kaart == null or _per() <= 1:
 		return
 	if _stap_nu() == "af" or _stap_nu() == "sorteren":
 		return
 	_legenda_kaart = true
-	_kaart.regel2(LEGENDA)
+	_kaart.regel2(_legenda())
 	if _kaart_top() >= bodem - 0.01:
 		return
 	_kaart.regel2("")
@@ -565,7 +585,7 @@ func _weeg_legenda(bodem: float) -> void:
 		return
 	ctx.hotspots.weg(HOT_LEGENDA)
 	_legenda_kaart = true
-	_kaart.regel2(LEGENDA)
+	_kaart.regel2(_legenda())
 
 # ------------------------------------------------------------------ sorteren
 
@@ -737,7 +757,7 @@ func _vraag_kaart() -> Ui.Kaart:
 	if _stap_nu() == "vraag0":
 		_kaart = ctx.ui.somkaart(obj, "", {"id": HOT_KAART, "kamer": KAMER,
 			"hoog": KAART_HOOG, "icoon": "📊", "goed": _vraag0_goed(),
-			"regel": VRAAG_BLOK, "regel2": LEGENDA,
+			"regel": VRAAG_BLOK, "regel2": _legenda(),
 			"on_ok": func(n, k) -> void: _antwoord(n, k)})
 		_regel_indeling()
 		return _kaart
@@ -754,19 +774,25 @@ func _vraag_kaart() -> Ui.Kaart:
 	var l := _laagste_idx()
 	var som := ""
 	var o := {"id": HOT_KAART, "kamer": KAMER, "hoog": KAART_HOOG, "icoon": "📊",
-		"max": 2, "goed": _antwoord_nu(), "liever": [_stuks(h), _stuks(l), _samen()],
+		"max": 2, "goed": _antwoord_nu(), "liever": _liever(),
 		"on_ok": func(n, k) -> void: _antwoord(n, k)}
 	if band == 4:
-		if _stap_nu() == "vraag1":
+		if _stap_nu() == "vraag1" and _oud_band4():
 			o["regel"] = "Hoeveel meer %s dan %s?" % [str(WasSoorten.soort(h)["naam"]),
 				str(WasSoorten.soort(l)["naam"])]
 			som = "%d − %d =" % [_stuks(h), _stuks(l)]        # U+2212, the real minus
+		elif _stap_nu() == "vraag1":
+			# 2026-11-15: group 4 sorts in twos, so the first question is the
+			# conversion (blocks x 2) and the legend rides on the card
+			o["regel"] = "Hoeveel %s zijn het?" % str(WasSoorten.soort(h)["naam"])
 		else:
 			o["regel"] = "Hoeveel stuks samen?"
 			var delen: Array[String] = []
 			for i in _m():
 				delen.append(str(_stuks(i)))
 			som = "%s =" % " + ".join(delen)
+		if _per() > 1:
+			o["regel2"] = _legenda()
 	else:
 		# group 5: the blocks come in twos, so the conversion IS the sum.  The
 		# legend is the second short line on the card itself; on a narrow frame
@@ -780,10 +806,30 @@ func _vraag_kaart() -> Ui.Kaart:
 		# scratch each time; deciding it from the previous card's verdict left
 		# the opening sum's card with a stale "no room" that then stuck to
 		# vraag 1.
-		o["regel2"] = LEGENDA
+		o["regel2"] = _legenda()
 	_kaart = ctx.ui.somkaart(obj, som, o)
 	_regel_indeling()
 	return _kaart
+
+## The slips a child really makes, for the answer strip (`Afleiders.vier`).
+## A turn of 2026-11-15 or later (group 4 in twos, group 5 in fives): the
+## blocks counted but not multiplied, one block too many or too few; the sum
+## of three with the carry forgotten (ten too few) or ten too many; the
+## difference of the blocks instead of the pieces.  An older save keeps its
+## old strip, so a question with a miss comes back unchanged (R2).
+func _liever() -> Array:
+	var h := _hoogste_idx()
+	var l := _laagste_idx()
+	var per := _per()
+	var band := int(_s.get("band", 3))
+	var nieuw := (band == 4 and per == 2) or (band == 5 and per == 5)
+	if not nieuw or _stap_nu() == "vraag0":
+		return [_stuks(h), _stuks(l), _samen()]
+	if _stap_nu() == "vraag1":
+		return [int(_vak()[h]), _stuks(h) + per, _stuks(h) - per]
+	if band == 4:
+		return [_samen() - 10, _samen() + 10, _samen() - per]
+	return [_stuks(h), _stuks(l), int(_vak()[h]) - int(_vak()[l])]
 
 ## group 3: one button of the strip
 func _kies(n: int) -> bool:
@@ -981,10 +1027,10 @@ func _pas_in_het_kader() -> void:
 	# line, and then nothing is left of the legend at all — and in group 5 the
 	# question cannot be answered without it.  So it goes back on the card,
 	# the same last resort `_weeg_legenda` ends with.
-	if _per() == 2 and _kaart != null and not _legenda_kaart \
+	if _per() > 1 and _kaart != null and not _legenda_kaart \
 			and Hits.spot(HOT_LEGENDA) == null:
 		_legenda_kaart = true
-		_kaart.regel2(LEGENDA)
+		_kaart.regel2(_legenda())
 		_mik_kaart()
 
 static func _krap(d: Dictionary, id: String) -> bool:

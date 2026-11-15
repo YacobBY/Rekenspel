@@ -53,13 +53,13 @@ const VERWACHT := {
 	"hash_tekst": {"n": 8, "h": 3404865863,
 		"eerste": "=2166136261",
 		"laatste": "ABCDEFGHIJKLMNOPQRSTUVWXYZ=2324225410"},
-	"hinkel_beurt": {"n": 432, "h": 765383834,
+	"hinkel_beurt": {"n": 432, "h": 3067472498,
 		"eerste": "1,3,1=1>3/1/2/2/10/1",
-		"laatste": "12,5,12=5>85/8/10/80/100/5"},
+		"laatste": "12,5,12=85>5/8/10/80/100/5"},
 	"hinkel_keuzes": {"n": 156, "h": 1567326636,
 		"eerste": "1,0=[1,2,3,4]",
 		"laatste": "12,12=[12,13,14,15]"},
-	"hinkel_maten": {"n": 300, "h": 1329031794,
+	"hinkel_maten": {"n": 300, "h": 1819811715,
 		"eerste": "3,1=[1]/[1]",
 		"laatste": "5,100=[10]/[10]"},
 	"hinkel_telpad": {"n": 974, "h": 3318463448,
@@ -134,12 +134,12 @@ const VERWACHT := {
 	"voerkar_somregel": {"n": 1056, "h": 728254933,
 		"eerste": "3,0,1,0=",
 		"laatste": "5,40,8,3="},
-	"was_kiest": {"n": 432, "h": 759215291,
+	"was_kiest": {"n": 432, "h": 3496313995,
 		"eerste": "1,3,1=2/1/3",
-		"laatste": "12,5,12=2/0/24"},
-	"was_recept": {"n": 432, "h": 641608456,
+		"laatste": "12,5,12=7/6/90"},
+	"was_recept": {"n": 432, "h": 1388865013,
 		"eerste": "1,3,1=2/1/3/1/2/[1,2]/[1,0,1]",
-		"laatste": "12,5,12=2/0/24/2/4/[2,5,4,1]/[2,3,0,1,1,2,1,0,2,2,1,1]"},
+		"laatste": "12,5,12=7/6/90/5/4/[4,6,5,3]/[1,1,0,1,0,2,0,3,3,1,1,2,3,0,2,2,2,1]"},
 	"was_soorten": {"n": 90, "h": 781495129,
 		"eerste": "3,1=2",
 		"laatste": "5,30=4"},
@@ -149,9 +149,9 @@ const VERWACHT := {
 	"wekker_afstand": {"n": 432, "h": 4083014735,
 		"eerste": "3,1,1=2/0/0/120",
 		"laatste": "5,12,12=3/0/0/180"},
-	"wekker_beurt": {"n": 1296, "h": 2890706338,
-		"eerste": "3,1,1,0=10:0/8:0/zet/0/[]",
-		"laatste": "5,12,12,2=1:30/10:30/zet/0/[]"},
+	"wekker_beurt": {"n": 1296, "h": 3690714904,
+		"eerste": "3,1,1,0=10:0/8:0/zet/0/[]/0",
+		"laatste": "5,12,12,2=1:30/10:30/zet/0/[]/0"},
 	"wekker_doeltijd": {"n": 108, "h": 1680031613,
 		"eerste": "3,1,0=10:0",
 		"laatste": "5,12,2=1:30"},
@@ -168,12 +168,14 @@ const VERWACHT := {
 		"eerste": "1=[000000b62c44ce3f,0000c07621a2d73f,0000c02fc022e03f,0000a058678ee63f,000000c0dae0a93f]",
 		"laatste": "0=[000000b62c44ce3f,0000c07621a2d73f,0000c02fc022e03f,0000a058678ee63f,000000c0dae0a93f]"},
 	# 2026-09-14: lanes under the window walk with the day (owner: "altijd 8
-	# meter"); the fingerprint is of the Godot rule, no longer of the JavaScript
-	"zwembad_baan": {"n": 432, "h": 3648792083,
+	# meter"); the fingerprint is of the Godot rule, no longer of the JavaScript.
+	# 2026-11-15 (owner: "groep eind 4"): zwembad, wekker_beurt, hinkel_beurt,
+	# hinkel_maten, was_kiest and was_recept are of the raised band-4/5 rules
+	"zwembad_baan": {"n": 432, "h": 244126177,
 		"eerste": "1,3,1=16/10/5/2/20",
-		"laatste": "12,5,12=80/40/10/3/100"},
-	"zwembad_keuzes": {"n": 160, "h": 969817161,
-		"eerste": "43,30,0,4,0=[43,13,20,30]/30/3/43",
+		"laatste": "12,5,12=144/76/20/0/200"},
+	"zwembad_keuzes": {"n": 160, "h": 3023832549,
+		"eerste": "43,30,0,4,0=[43,40,20,30]/30/3/43",
 		"laatste": "8,10,8,3,3=[8,10,0,1]/0/2/0"},
 	"zwembad_prng": {"n": 4, "h": 2129034377,
 		"eerste": "1=[3fe3a0a99f71e03f,62fd2c00b17ec63f,1bbf27408ddfc33f,a9712580d4b8c23f,ab712460d538d23f]",
@@ -390,8 +392,10 @@ func test_kruis_wekker() -> void:
 			for d in range(1, 13):
 				for i in range(0, 3):
 					var q := Sommen.Wekker.beurt(b, n, d, i)
-					r.append("%d,%d,%d,%d=%d:%d/%d:%d/%s/%d/[%s]" % [b, n, d, i, q["doelU"],
-						q["doelM"], q["u"], q["m"], q["stap"], q["duur"], _lijst(q["keuzes"])])
+					# 2026-11-15: the row carries `digitaal` too (band 4/5)
+					r.append("%d,%d,%d,%d=%d:%d/%d:%d/%s/%d/[%s]/%d" % [b, n, d, i, q["doelU"],
+						q["doelM"], q["u"], q["m"], q["stap"], q["duur"], _lijst(q["keuzes"]),
+						q["digitaal"]])
 	_keur("wekker_beurt", r)
 
 func test_kruis_hinkel() -> void:
