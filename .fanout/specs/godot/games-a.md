@@ -230,7 +230,8 @@ while k > 1 and k*N + r > 20 :
     k = k - 1 ; if r > k - 1 : r = k - 1
 if band <= 3 : return { T: k*N + r, k, r, band: 3 }
 
-KSET    = { 3:[1,2,3,4], 4:[2,3,4,5,10], 5:[1,2,3,4,5,6,7,8,9,10] }
+TAFELS_EIND4 = [2,3,4,5,10,6, 2,3,4,5,10,7, 2,3,4,5,10,8,9]   # 2026-11-15
+KSET    = { 3:[1,2,3,4], 4:TAFELS_EIND4, 5:[1,2,3,4,5,6,7,8,9,10] }
 PLAFOND = { 3:20, 4:100, 5:100 }
 set = KSET[band] (fallback KSET[4]) ; plaf = PLAFOND[band] (fallback 100)
 kand = [ kk in set : kk >= k and kk*N + min(r, kk-1) <= plaf ]
@@ -246,9 +247,12 @@ Nagerekend:
 |---|---|---|---|---|---|
 | 3 | 3 | 1 | 12 | 4 | 0 |
 | 2 | 3 | 2 | 9 | 4 | 1 |
-| 5 | 4 | 3 | 17 | 3 | 2 |
-| 6 | 4 | 6 | 20 | 3 | 2 |
+| 5 | 4 | 3 | 52 | 10 | 2 |
+| 6 | 4 | 6 | 32 | 5 | 2 |
+| 6 | 4 | 3 | 44 | 7 | 2 |
 | 7 | 5 | 5 | 36 | 5 | 1 |
+
+**Eind groep 4 (eigenaar, 2026-11-15: "groep eind4 niveau").** Band 4 kent alle tafels 1–10 met producten t/m 100; de lijst `TAFELS_EIND4` weegt 2, 3, 4, 5 en 10 drie keer en 6, 7, 8, 9 één keer (de dubbelen ZIJN de weging, de keuze blijft `(dag + N) mod lengte`). Band 3 is ongewijzigd; `Was.kies_t` leest alleen `r` en blijft gelijk.
 
 ### 2.4 `sommen.tafel(band)` — bedden
 
@@ -257,7 +261,7 @@ meer: de getallen van "Verdeel bedden over de kamers" zijn de dieren zelf, §3.3
 
 ```
 band = (band <= 3) ? 3 : (band >= 5) ? 5 : 4
-TAFEL_SET = { 3:[1,2,5,10], 4:[1,2,3,4,5,10], 5:[1..10] }
+TAFEL_SET = { 3:[1,2,5,10], 4:TAFELS_EIND4 (§2.3, 2026-11-15), 5:[1..10] }
 TAFEL_MAX = { 3:20, 4:100, 5:100 }
 d = state.dag ; N = aantalGasten() of 2 als dat 0 is
 a    = set[(d + N) mod set.length]
@@ -266,7 +270,8 @@ b    = 1 + (d*3 + N) mod maxB
 return { a, b, uit: a*b, band, tafels: set, plafond: plaf }
 ```
 
-Nagerekend: `(band 4, dag 3, N 5)` → a 3, b 5, uit 15.
+Nagerekend: `(band 4, dag 3, N 5)` → a 4, b 5, uit 20 (tot 2026-11-15: a 3, uit 15);
+`(band 4, dag 6, N 5)` → a 7, b 4, uit 28.
 `(band 3, dag 1, N 3)` → a 1, b 7, uit 7. `(band 5, dag 5, N 7)` → a 3, b 3, uit 9.
 
 ### 2.5 `sommen.geld(band, nachten, prijs)` en `sommen.klok(band)`
@@ -275,15 +280,20 @@ Geen van de vijf gebruikt ze (het meubelboek maakt zijn eigen prijzen), maar ze
 horen bij de bevroren kern:
 
 ```
-geld:  kans = band<=3 ? [1,2] : band===4 ? [1,2,5] : [2,5]
-       prijs   = prijs   of kans[dag mod kans.length]
-       nachten = nachten of (band<=3 ? 2 : band===4 ? 3 : 4)
+geld:  band <= 3 (bevroren):
+       prijs = prijs of [1,2][dag mod 2] ; nachten = nachten of 2
        while nachten*prijs > 20 and nachten > 1 : nachten--
-       totaal = nachten*prijs ; betaald = totaal
-       band 4 en dag even en totaal+2 <= 20 : betaald = totaal + 2
-       band >= 5 : while totaal >= 20 and nachten > 1 { nachten--; totaal = nachten*prijs }
-                   betaald = (totaal < 10) ? 10 : 20
-       return { nachten, prijs, totaal, betaald, wissel: betaald - totaal }
+       totaal = nachten*prijs ; betaald = totaal ; biljet = false
+       band >= 4 (eind groep 4, 2026-11-15):
+       band 4: prijs = [7,8,6,9,4,10,5][dag mod 7], nachten = 3 + dag mod 3, plafond 50
+       band 5: prijs = [9,12,7,15,8,11,6][dag mod 7], nachten = 4 + dag mod 3, plafond 90
+       while nachten*prijs > plafond and nachten > 1 : nachten--
+       biljet = band 5 of dag even ; dan betaald = kleinste briefje uit [20,50,100]
+                boven het totaal (band 4 alleen t/m 50; €50 precies = precies betalen)
+       anders betaald = totaal (munten, precies)
+       return { nachten, prijs, totaal, betaald, wissel: betaald - totaal, biljet }
+geldHand(totaal, betaald, biljet): biljet en betaald > totaal -> [betaald] (één
+       briefje: de rekening vraagt `€50 − €28`), anders buidel(betaald)
 
 klok:  u = 7 + (dag*3) mod 8
        band <= 3 : { u, m:0,  stap:60, tekst: u + " uur" }
@@ -616,13 +626,21 @@ handtekening            [N, band, dag, ronde].join('|')
 |---|---|---|---|
 | 3 | oneven | `telrij` | van = 1 + deel·H, stap 1, plafond 20 |
 | 3 | even | `telrij-tien` | van = (20 − H + 1) − deel·H, stap 1 — de tienovergang |
-| 4 | dag mod 3 = 0 | `sprong5` | van = 5 + deel·H·5, stap 5, plafond 100 |
-| 4 | dag mod 3 = 1 | `sprong10` | van = 10 + deel·H·10, stap 10, plafond 100 |
-| 4 | dag mod 3 = 2 | `evenoneven` | van = deel ? 2 : 1, stap 2, label `oneven` / `even` |
+| 4 | dag mod 7 = 0 | `sprong5` | van = 5·(1 + (7·dag) mod 6) + deel·H·5, stap 5, plafond 100 |
+| 4 | dag mod 7 = 1 | `sprong10` | van = 1 + (4·dag) mod 9 + deel·H·10, stap 10 (tientallen naast de tien: 7, 17, 27…) |
+| 4 | dag mod 7 = 2 | `evenoneven` | b0 = 15 + 10·((3·dag) mod 7); van = deel ? b0+1 : b0, stap 2, label `oneven` / `even` |
+| 4 | dag mod 7 = 3 | `buren` | van = 10·(2 + (3·dag) mod 5 + 3·deel) − 2, stap 1 — de buren over het tiental (38, 39, __, 41) |
+| 4 | dag mod 7 = 4 | `terug10` | van = 91 + (4·dag) mod 9 − deel·H·10, stap −10 |
+| 4 | dag mod 7 = 5 | `terug5` | van = 100 − 5·((7·dag) mod 4) − deel·H·5, stap −5 |
+| 4 | dag mod 7 = 6 | `terug2` | van = 40 + (13·dag) mod 50 − deel·H·2, stap −2 |
 | 5 | oneven | `sprong25` | van = 25 + deel·H·25, stap 25, plafond 1000 |
 | 5 | even | `kamers` | s = (dag mod 4 = 0) ? 11 : 1 ; verd = 1 + (deel mod 2) ; blok = floor(deel/2) ; van = 100·verd + s + blok·H, stap 1, label `verdieping <verd>` |
 
-Daarna altijd: `van = max(1, min(van, plafond - (H-1)*stap))`.
+Band 4 is sinds 2026-11-15 eind groep 4 (eigenaar: "groep eind4 niveau"): heel 0–100,
+sprongen van 2, 5 en 10 vooruit én terug, en de buren over het tiental.
+
+Daarna altijd: `van = max(1, min(van, plafond - (H-1)*stap))`; een rij die terug
+telt (stap < 0): `van = min(plafond, max(van, 1 - (H-1)*stap))`.
 Waarde van haakje *i* = `van + i * stap`.
 
 **Lege haakjes** (`kiesBlanco(n, hoeveel, rnd)`): kandidaten zijn de indexen
@@ -653,8 +671,9 @@ hoort; dat haakje is echt leeg.
 
 **Worked examples** (nagerekend met de exacte LCG):
 
-* `N 5, band 4, dag 3, 3 gasten` → H 5, variant `sprong5`, B 2, één bord
-  `5, 10, 15, 20, 25` met lege haakjes op index **1 en 3**; sleutels **10** en **20**.
+* `N 5, band 4, dag 3, 3 gasten` → H 5, variant `buren`, B 2, één bord
+  `58, 59, 60, 61, 62` met lege haakjes op index **1 en 3**; sleutels **59** en **61**
+  (tot 2026-11-15: `sprong5`, `5, 10, 15, 20, 25`, sleutels 10 en 20).
 * `N 2, band 3, dag 1` → H 4, variant `telrij`, B 1, bord `1, 2, 3, 4`, leeg op
   index 1, sleutel **2**.
 * `N 7, band 5, dag 4` → H 4, variant `kamers`, B 3, drie borden:
@@ -895,8 +914,10 @@ Sterrenpagina (versiering, nooit rekenen — er is altijd iets te halen):
 | band | lijstje | buidelplafond | wisselgeld |
 |---|---|---|---|
 | groep 3 | `maxLijst() = 1` — één ding per keer | `buidelMax() = 10` | **nee**: precies betalen; te veel = munt terugpakken |
-| groep 4 | 2 dingen samen (`€1 + €3 = ?`) | 20 | **ja**: `betaald − prijs = ?` |
-| groep 5 | idem groep 4 | 20 | ja |
+| groep 4 | 2 dingen samen (`€17 + €24 = ?`) | 100 | **ja**: `betaald − prijs = ?` |
+| groep 5 | idem groep 4 | 100 | ja |
+
+**Eind groep 4 (eigenaar, 2026-11-15: "groep eind4 niveau").** Vanaf groep 4 kost elk ding de tweecijferige prijs `Meubels.prijs_in_band(p, band)` = `PRIJS_EIND4[p]` = {1:8, 2:13, 3:17, 4:24, 5:26, 6:29, 7:33, 8:38} (de catalogusprijs blijft de sleutel; groep 3 betaalt hem zelf). Twee dingen gaan vaak over het tiental (`€17 + €24`), de duurste twee blijven binnen €100 (`€38 + €38 = €76`); bij een som over het tiental staat het vergeten tiental als eerste vergissing op de strook.
 
 `cap = max(totaal, min(munten, buidelMax()))` is het bedrag dat in de buidel
 komt; `rest = munten - cap` blijft in de kassa. De buidel zelf komt uit
@@ -1186,7 +1207,7 @@ dus het staat vóór de gewone klusjes.
 ### 6.2 Het recept per band
 
 ```
-PLAFOND = { 3: 10, 4: 20, 5: 36 }
+PLAFOND = { 3: 10, 4: 100, 5: 100 }   # 2026-11-15
 CAP     = { 3: {eerlijk: 5},
             4: {eerlijk: 10, dubbel: 5, half: 10},
             5: {eerlijk: 10, dubbel: 9, half: 11} }
@@ -1208,8 +1229,16 @@ rest = T - per*M
 | band | soorten | tobbes M | plafond T | rest mogelijk? |
 |---|---|---|---|---|
 | groep 3 | alleen `eerlijk` — splitsen t/m 10, even/oneven | 2 | 10 | **nee** (T altijd even) |
-| groep 4 | `eerlijk`, `dubbel` (verdubbelen t/m 20), `half` (halveren) | 2 | 20 | **nee** |
-| groep 5 | idem, plus delen mét rest | 3 (2 bij `half`) | 36 | **ja** |
+| groep 4 | `eerlijk` (`27 : 3`, uitkomst t/m 10), `dubbel` (t/m 50 + 50), `half` (even t/m 100) | 3 / 2 / 2 | 100 | **nee** |
+| groep 5 | idem, plus delen mét rest; `dubbel` over drie tobbes | 3 (2 bij `half`) | 100 | **ja** |
+
+**Eind groep 4 (eigenaar, 2026-11-15: "groep eind4 niveau").** Band 4 en 5 lopen via `_recept_eind4` (band 3 blijft de formule hierboven):
+`n0 = clamp(N, 1, 8)`, `dagdeel = (3·dag + n0) mod 5`;
+`eerlijk`: M 3, per = min(10, n0 + 2 + dag mod 3), T = 3·per (+ (dag + n0) mod 3 in band 5);
+`dubbel`: basis = min(50, 5·n0 + 3 + dagdeel), T = 2·basis, M 2 (band 5: 3);
+`half`: T = 2·min(50, 5·n0 + 3 + dagdeel) (band 5 op oneven dagen − 1), M 2.
+Het rek kent vanaf T > 20 ook een handje van 10; bij een dubbel over het tiental staat het vergeten tiental (`27 + 27` → 44) en bij een oneven tiental de helft per cijfer (`helft van 76` → 33) als eerste vergissing op de strook.
+Nagerekend (nieuw): `N 5, band 4, dag 3` → half 64, M 2, per 32; `N 5, band 4, dag 1` → eerlijk 24 : 3 = 8; `N 9, band 5, dag 6` → eerlijk 32, M 3, per 10, rest 2.
 
 Nagerekend:
 
@@ -1476,6 +1505,7 @@ Bestaat hij al met een `T`, dan wordt hij hervat.
 
 De deler volgt uit het aantal gasten en mag 6 zijn, ook in groep 4: de
 **uitkomst** komt uit `sommen.deel` en blijft binnen de tafels die de band kent.
+Sinds 2026-11-15 (eind groep 4) zijn dat in groep 4 alle tafels 1–10 (`TAFELS_EIND4`, §2.3): de kar en het bakje vragen dan ook `5 × 7 =`.
 
 **Keuzestrook** (`keuzes` aan de kaart): drie knoppen met woord —
 `🍪 pak 1`, `🍪 pak 2`, `🍪 pak 5` (`HAND = [1,2,5]`). De actieve knop krijgt de

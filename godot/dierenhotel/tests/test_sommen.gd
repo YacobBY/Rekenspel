@@ -54,20 +54,20 @@ func test_vergelijk() -> void:
 	gelijk(Sommen.vergelijk(5, 2, 10), "precies", "10 == 10")
 
 func test_deel() -> void:
-	# games-a.md §2.3, the whole table
-	for rij in [[3, 3, 1, 12, 4, 0], [2, 3, 2, 9, 4, 1], [5, 4, 3, 17, 3, 2],
-			[6, 4, 6, 20, 3, 2], [7, 5, 5, 36, 5, 1]]:
+	# games-a.md §2.3, the whole table (band 4 = end of groep 4 since 2026-11-15)
+	for rij in [[3, 3, 1, 12, 4, 0], [2, 3, 2, 9, 4, 1], [5, 4, 3, 52, 10, 2],
+			[6, 4, 6, 32, 5, 2], [7, 5, 5, 36, 5, 1], [6, 4, 3, 44, 7, 2]]:
 		var d := Sommen.deel(rij[0], rij[1], rij[2])
 		gelijk(d["T"], rij[3], "deel(%d,%d,%d).T" % [rij[0], rij[1], rij[2]])
 		gelijk(d["k"], rij[4], "deel(%d,%d,%d).k" % [rij[0], rij[1], rij[2]])
 		gelijk(d["r"], rij[5], "deel(%d,%d,%d).r" % [rij[0], rij[1], rij[2]])
 	# world.md §3.9 worked example
 	var w := Sommen.deel(5, 4, 2)
-	gelijk("%d/%d/%d" % [w["k"], w["r"], w["T"]], "10/1/51", "deel(5,4,2)")
+	gelijk("%d/%d/%d" % [w["k"], w["r"], w["T"]], "5/1/26", "deel(5,4,2)")
 
 func test_tafel() -> void:
 	var a := Sommen.tafel(4, 3, 5)
-	gelijk("%d x %d = %d" % [a["a"], a["b"], a["uit"]], "3 x 5 = 15", "tafel(4,3,5)")
+	gelijk("%d x %d = %d" % [a["a"], a["b"], a["uit"]], "4 x 5 = 20", "tafel(4,3,5)")
 	var b := Sommen.tafel(3, 1, 3)
 	gelijk("%d x %d = %d" % [b["a"], b["b"], b["uit"]], "1 x 7 = 7", "tafel(3,1,3)")
 	var c := Sommen.tafel(5, 5, 7)
@@ -76,15 +76,32 @@ func test_tafel() -> void:
 	var d := Sommen.tafel(3, 2, 2)
 	gelijk("%d x %d = %d" % [d["a"], d["b"], d["uit"]], "1 x 9 = 9", "tafel(3,2,2)")
 	var e := Sommen.tafel(4, 6, 6)
-	gelijk("%d x %d = %d" % [e["a"], e["b"], e["uit"]], "1 x 5 = 5", "tafel(4,6,6)")
+	gelijk("%d x %d = %d" % [e["a"], e["b"], e["uit"]], "2 x 5 = 10", "tafel(4,6,6)")
+	# eind groep 4: ook de tafels van 6..9, producten t/m 100
+	var f := Sommen.tafel(4, 6, 5)
+	gelijk("%d x %d = %d" % [f["a"], f["b"], f["uit"]], "7 x 4 = 28", "tafel(4,6,5)")
 
 func test_geld() -> void:
 	var g := Sommen.geld(5, 4)
-	gelijk(g["prijs"], 2, "band 5 dag 4 prijs")
-	gelijk(g["nachten"], 4, "band 5 dag 4 nachten")
-	gelijk(g["totaal"], 8, "band 5 dag 4 totaal")
-	gelijk(g["betaald"], 10, "band 5 dag 4 betaald")
-	gelijk(g["wissel"], 2, "band 5 dag 4 wissel")
+	gelijk(g["prijs"], 8, "band 5 dag 4 prijs")
+	gelijk(g["nachten"], 5, "band 5 dag 4 nachten")
+	gelijk(g["totaal"], 40, "band 5 dag 4 totaal")
+	gelijk(g["betaald"], 50, "band 5 dag 4 betaald")
+	gelijk(g["wissel"], 10, "band 5 dag 4 wissel")
+	# band 3 is frozen: two nights, pay exactly
+	var g3 := Sommen.geld(3, 1)
+	gelijk("%d/%d/%d/%d" % [g3["nachten"], g3["prijs"], g3["totaal"], g3["betaald"]],
+		"2/2/4/4", "band 3 dag 1")
+	# eind groep 4 (2026-11-15): a table product; odd day pays exactly with coins,
+	# even day with one note and the change crosses the ten
+	var g4 := Sommen.geld(4, 1)
+	gelijk("%d/%d/%d/%d/%s" % [g4["nachten"], g4["prijs"], g4["totaal"], g4["betaald"],
+		g4["biljet"]], "4/8/32/32/false", "band 4 dag 1")
+	var g4b := Sommen.geld(4, 4)
+	gelijk("%d/%d/%d/%d/%s" % [g4b["nachten"], g4b["prijs"], g4b["totaal"], g4b["betaald"],
+		g4b["biljet"]], "4/4/16/20/true", "band 4 dag 4: €20 − €16")
+	gelijk(str(Sommen.geld_hand(16, 20, true)), "[20]", "the family brings one note")
+	gelijk(str(Sommen.geld_hand(32, 32, false)), str(Sommen.buidel(32)), "exact: coins")
 
 func test_klok() -> void:
 	var k3 := Sommen.klok(3, 1)

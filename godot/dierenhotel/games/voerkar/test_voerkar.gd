@@ -1870,3 +1870,20 @@ func _va_eind(wat: String, teller: Dictionary, budget_voor: int) -> void:
 	waar(int(b["goed"]) >= 1, "%s: Reken.goed() vuurde" % wat)
 	waar(Reken.budget() > budget_voor, "%s: het budget steeg (%d -> %d)" % [wat, budget_voor,
 		Reken.budget()])
+
+## Eind groep 4 (eigenaar, 2026-11-15): in band 4 vraagt de kar ook de tafels
+## van 6 tot en met 9 — als keersom (`5 × 7 =`), nooit als lange optelling —
+## en de lading blijft binnen 100.
+func test_band_4_vraagt_alle_tafels() -> void:
+	var gezien := {}
+	for n in range(2, 7):
+		for dag in range(1, 20):
+			var som := Sommen.deel(n, 4, dag)
+			var per := int(som["k"])
+			waar(per * n <= 100, "band 4: de lading %d × %d blijft binnen 100" % [n, per])
+			if per >= 6 and per <= 9:
+				gezien[per] = true
+				gelijk(_verwachte_som(4, n, per), "%d × %d =" % [n, per],
+					"band 4: een keersom voor de tafel van %d" % per)
+	for k in [6, 7, 8, 9]:
+		waar(gezien.has(k), "band 4 vraagt de tafel van %d" % k)

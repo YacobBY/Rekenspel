@@ -234,11 +234,12 @@ func test_sleutels_opdracht() -> void:
 	]
 	var a := Sommen.Sleutels.maak_opdracht(5, 4, 3, gasten)
 	gelijk(a["H"], 5, "N 5, band 4, dag 3: vijf haakjes")
-	gelijk(a["variant"], "sprong5", "variant")
+	# eind groep 4 (2026-11-15): de buren over het tiental heen
+	gelijk(a["variant"], "buren", "variant")
 	gelijk(a["borden"].size(), 1, "één bord")
 	gelijk(str(a["borden"][0]["blanco"]), "[1, 3]", "lege haakjes op index 1 en 3")
-	gelijk(_nummers(a), "10,20", "de sleutels")
-	gelijk(_haken(a["borden"][0]), "5,10,15,20,25", "de rij")
+	gelijk(_nummers(a), "59,61", "de sleutels")
+	gelijk(_haken(a["borden"][0]), "58,59,60,61,62", "de rij")
 	var b := Sommen.Sleutels.maak_opdracht(2, 3, 1, gasten)
 	gelijk(b["H"], 4, "N 2, band 3, dag 1: vier haakjes")
 	gelijk(b["variant"], "telrij", "variant")
@@ -273,9 +274,11 @@ func _haken(bord: Dictionary) -> String:
 
 ## games-a.md §6.2 and .fanout/scratch/games-a-worked-examples.txt.
 func test_tobbe_recept() -> void:
-	for rij in [[3, 3, 1, "eerlijk", 6, 2, 3, 0], [5, 4, 3, "half", 10, 2, 5, 0],
-			[6, 4, 2, "half", 12, 2, 6, 0], [7, 5, 5, "eerlijk", 14, 3, 4, 2],
-			[7, 5, 4, "half", 21, 2, 10, 1], [9, 5, 6, "eerlijk", 18, 3, 6, 0]]:
+	# band 4 and 5 = end of groep 4 since 2026-11-15 (`_recept_eind4`)
+	for rij in [[3, 3, 1, "eerlijk", 6, 2, 3, 0], [5, 4, 3, "half", 64, 2, 32, 0],
+			[6, 4, 2, "half", 70, 2, 35, 0], [7, 5, 5, "eerlijk", 30, 3, 10, 0],
+			[7, 5, 4, "half", 84, 2, 42, 0], [9, 5, 6, "eerlijk", 32, 3, 10, 2],
+			[5, 4, 1, "eerlijk", 24, 3, 8, 0], [5, 5, 3, "half", 63, 2, 31, 1]]:
 		var wat := "N=%d band=%d dag=%d" % [rij[0], rij[1], rij[2]]
 		var q := Sommen.Tobbe.recept(rij[0], rij[1], rij[2])
 		gelijk(q["soort"], rij[3], "%s: soort" % wat)
@@ -288,10 +291,11 @@ func test_tobbe_recept() -> void:
 
 ## games-a.md §3.3, the worked example (band 4, dag 3, N 5, cap 6, maxStroken 4).
 func test_bedden_opdracht() -> void:
+	# (tafel(4, 3, 5) gives a = 4 since the end-of-groep-4 tables, 2026-11-15)
 	var q := Sommen.Bedden.opdracht(4, 3, 5, 6, 4)
-	gelijk(q["perRij"], 3, "tafel geeft a = 3")
-	gelijk(q["rijen"], 2, "min(5, 3, floor(6/3) = 2, 3, maxStroken-1 = 3)")
-	gelijk(q["doel"], 6, "2 x 3")
+	gelijk(q["perRij"], 4, "tafel geeft a = 4")
+	gelijk(q["rijen"], 1, "min(5, floor(6/4) = 1, 3, maxStroken-1 = 3)")
+	gelijk(q["doel"], 4, "1 x 4")
 	# de kamer is de baas: een te brede rij zakt naar een tafel die de band kent
 	var krap := Sommen.Bedden.opdracht(3, 1, 3, 4, 4)
 	waar(int(krap["perRij"]) <= 4, "perRij past in de kamer")
@@ -306,12 +310,14 @@ func test_voerkar_en_meubels() -> void:
 	gelijk(Sommen.Meubels.max_lijst(3), 1, "groep 3: één ding per keer")
 	gelijk(Sommen.Meubels.max_lijst(4), 2, "groep 4: twee dingen samen")
 	gelijk(Sommen.Meubels.buidel_max(3), 10, "groep 3 rekent t/m 10")
-	gelijk(Sommen.Meubels.buidel_max(5), 20, "groep 4 en 5 t/m 20")
+	gelijk(Sommen.Meubels.buidel_max(5), 100, "groep 4 en 5 t/m 100 (eind groep 4)")
 	waar(not Sommen.Meubels.wisselgeld(3), "groep 3 betaalt precies")
 	waar(Sommen.Meubels.wisselgeld(4), "vanaf groep 4 is er wisselgeld")
-	gelijk(Sommen.Meubels.buidel_cap(7, 13, 4), 13, "cap = max(totaal, min(munten, 20))")
-	gelijk(Sommen.Meubels.buidel_cap(7, 30, 4), 20, "de rest blijft in de kassa")
-	gelijk(Sommen.Meubels.buidel_cap(24, 30, 4), 24, "een duur lijstje past altijd in de buidel")
+	gelijk(Sommen.Meubels.buidel_cap(7, 13, 4), 13, "cap = max(totaal, min(munten, 100))")
+	gelijk(Sommen.Meubels.buidel_cap(7, 130, 4), 100, "de rest blijft in de kassa")
+	gelijk(Sommen.Meubels.buidel_cap(24, 30, 3), 24, "een duur lijstje past altijd in de buidel")
+	gelijk(Sommen.Meubels.prijs_in_band(5, 3), 5, "groep 3 betaalt de catalogusprijs")
+	gelijk(Sommen.Meubels.prijs_in_band(5, 4), 26, "vanaf groep 4 kost een bed €26")
 	gelijk(Sommen.Meubels.prijs_van("bed"), 5, "een bed kost €5 (HOTEL.md §4)")
 	# elk bedrag t/m de buidel is precies te leggen — dat is de hele truc
 	for totaal in range(1, 21):
@@ -320,3 +326,94 @@ func test_voerkar_en_meubels() -> void:
 		for v in munten:
 			som += v
 		gelijk(som, totaal, "buidel(%d) telt op tot %d" % [totaal, totaal])
+
+# ===================================================== eind groep 4 (2026-11-15)
+
+## Owner, 2026-11-15: "Kan je het spel updaten om groep eind4 niveau te zijn".
+## Band 4 now asks END-groep-4 items (all tables to 10 × 10, money to €100,
+## halving/doubling to 100, the number line to 100 forwards and backwards), and
+## band 5 is never easier than band 4.
+func test_eind_groep4_tafels_tot_tien() -> void:
+	var deel_k := {}
+	var tafel_a := {}
+	for n in range(1, 9):
+		for dag in range(1, 30):
+			var d := Sommen.deel(n, 4, dag)
+			deel_k[int(d["k"])] = true
+			waar(int(d["T"]) <= 100, "deel(%d,4,%d): T <= 100" % [n, dag])
+			var t := Sommen.tafel(4, dag, n)
+			tafel_a[int(t["a"])] = true
+			waar(int(t["uit"]) <= 100, "tafel(4,%d,%d): product <= 100" % [dag, n])
+	for k in [6, 7, 8, 9]:
+		waar(deel_k.has(k), "de voerkar vraagt ook de tafel van %d" % k)
+		waar(tafel_a.has(k), "tafel() kent ook %d" % k)
+	waar(Sommen.TAFEL_SET[4].count(2) > Sommen.TAFEL_SET[4].count(7),
+		"de tafels van 2, 3, 4, 5 en 10 komen vaker")
+
+func test_eind_groep4_rekening() -> void:
+	var over := 0
+	var grootste := 0
+	for dag in range(1, 30):
+		var g := Sommen.geld(4, dag)
+		grootste = maxi(grootste, int(g["totaal"]))
+		waar(int(g["totaal"]) <= 50 and int(g["betaald"]) <= 50, "band 4 dag %d: t/m €50" % dag)
+		waar(int(g["prijs"]) >= 4 and int(g["prijs"]) <= 10, "band 4: een tafelprijs")
+		if bool(g["biljet"]):
+			waar([20, 50].has(int(g["betaald"])), "band 4 betaalt met een briefje")
+			if posmod(int(g["betaald"]), 10) < posmod(int(g["totaal"]), 10):
+				over += 1
+		var g5 := Sommen.geld(5, dag)
+		waar(bool(g5["biljet"]), "band 5 betaalt altijd met een briefje")
+		waar(int(g5["totaal"]) >= 24, "band 5 is niet makkelijker (%d)" % int(g5["totaal"]))
+	waar(grootste >= 40, "band 4 haalt veertig euro of meer")
+	waar(over >= 4, "het wisselgeld gaat vaak over het tiental (%d)" % over)
+
+func test_eind_groep4_tobbe() -> void:
+	var max4 := {}
+	var max5 := {}
+	for n in range(1, 9):
+		for dag in range(1, 13):
+			var q := Sommen.Tobbe.recept(n, 4, dag)
+			var s := str(q["soort"])
+			max4[s] = maxi(int(max4.get(s, 0)), int(q["T"]))
+			waar(int(q["T"]) <= 100 and int(q["rest"]) == 0, "band 4: t/m 100, geen rest")
+			if s == "eerlijk":
+				waar(int(q["per"]) <= 10, "band 4 deelt met een uitkomst t/m 10")
+			var q5 := Sommen.Tobbe.recept(n, 5, dag)
+			max5[str(q5["soort"])] = maxi(int(max5.get(str(q5["soort"]), 0)), int(q5["T"]))
+	waar(int(max4["dubbel"]) >= 90 and int(max4["half"]) >= 90, "verdubbelen en halveren tot 100")
+	for s in max4:
+		waar(int(max5.get(s, 0)) >= int(max4[s]) - 1, "band 5 %s niet kleiner dan band 4" % s)
+
+func test_eind_groep4_sleutels() -> void:
+	var gasten: Array[Dictionary] = [{"id": "g1", "naam": "Boef", "soort": "puppy"},
+		{"id": "g2", "naam": "Muis", "soort": "poes"}]
+	var terug := 0
+	var tiental := 0
+	var groot := 0
+	for dag in range(1, 15):
+		for n in [3, 5, 6]:
+			var p := Sommen.Sleutels.maak_opdracht(n, 4, dag, gasten)
+			gelijk(str(Sommen.Sleutels.controleer(p)["fout"]), "[]", "dag %d: klopt" % dag)
+			for b in p["borden"]:
+				if int(b["stap"]) < 0:
+					terug += 1
+				var haken: Array = b["haken"]
+				var eerste := int(haken[0]["w"])
+				var laatste := int(haken[haken.size() - 1]["w"])
+				if eerste / 10 != laatste / 10:
+					tiental += 1
+				groot = maxi(groot, maxi(eerste, laatste))
+	waar(terug > 0, "er wordt ook terug geteld")
+	waar(tiental > 20, "de rijen gaan over het tiental")
+	waar(groot >= 90, "het hele getallengebied tot 100")
+
+func test_eind_groep4_meubelprijzen() -> void:
+	for w in Sommen.Meubels.WINKEL:
+		var p := Sommen.Meubels.prijs_in_band(int(w["prijs"]), 4)
+		waar(p >= 8 and p <= 40, "%s kost in groep 4 %d euro" % [str(w["type"]), p])
+		gelijk(Sommen.Meubels.prijs_in_band(int(w["prijs"]), 3), int(w["prijs"]), "groep 3 ongewijzigd")
+	var duurst := Sommen.Meubels.prijs_in_band(8, 4)
+	waar(duurst * 2 <= Sommen.Meubels.buidel_max(4), "twee dure dingen passen in de buidel")
+	gelijk(Sommen.Meubels.prijs_in_band(3, 4) + Sommen.Meubels.prijs_in_band(4, 4), 41,
+		"€17 + €24 gaat over het tiental")

@@ -340,7 +340,9 @@ func _haken(b: Dictionary) -> Array:
 
 
 func _drie_cijfers(b: Dictionary) -> bool:
-	return int(b.get("van", 0)) + (int(b.get("n", 0)) - 1) * int(b.get("stap", 1)) >= 100
+	# a row counting back (eind groep 4, 2026-11-15) starts on its biggest number
+	var van := int(b.get("van", 0))
+	return maxi(van, van + (int(b.get("n", 0)) - 1) * int(b.get("stap", 1))) >= 100
 
 
 ## `nrTekst` — hoe je één plaatje noemt.

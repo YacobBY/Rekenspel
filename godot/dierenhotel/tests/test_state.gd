@@ -693,12 +693,14 @@ func test_signaal_houdt_tien_items() -> void:
 ## The two frozen worked examples the hotel leans on (world.md §3.9).
 func test_frozen_deel_en_geld() -> void:
 	var d := Sommen.deel(5, 4, 2)
-	gelijk(d["k"], 10, "deel(5, 4, 2).k")
+	# end of groep 4 since 2026-11-15 (band 4 knows every table, band 5 the
+	# bill to €90 paid with a note)
+	gelijk(d["k"], 5, "deel(5, 4, 2).k")
 	gelijk(d["r"], 1, "deel(5, 4, 2).r")
-	gelijk(d["T"], 51, "deel(5, 4, 2).T")
+	gelijk(d["T"], 26, "deel(5, 4, 2).T")
 	var g := Sommen.geld(5, 4)
-	gelijk(g["prijs"], 2, "band 5 dag 4: prijs 2")
-	gelijk(g["nachten"], 4, "vier nachten")
-	gelijk(g["totaal"], 8, "2 x 4 = 8")
-	gelijk(g["betaald"], 10, "betaald met een biljet van 10")
-	gelijk(g["wissel"], 2, "2 terug")
+	gelijk(g["prijs"], 8, "band 5 dag 4: prijs 8")
+	gelijk(g["nachten"], 5, "vijf nachten")
+	gelijk(g["totaal"], 40, "5 x 8 = 40")
+	gelijk(g["betaald"], 50, "betaald met een biljet van 50")
+	gelijk(g["wissel"], 10, "10 terug")

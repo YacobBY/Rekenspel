@@ -1338,11 +1338,18 @@ the round name and the buttons `📋 Prikbord` and `🌙 Avond`.
   `r' = min(r, kk−1)`.
   Worked example: `deel(5, 4, 2)` → frozen `(per 3, rest 1)`, candidates `[3,4,5,10]`,
   index `(2+5) % 4 = 3` → `k = 10, r = 1, T = 51`.
+  **Since 2026-11-15 (end of groep 4, owner)** band 4's table is `TAFELS_EIND4 =
+  [2,3,4,5,10,6, 2,3,4,5,10,7, 2,3,4,5,10,8,9]` (all tables, weighted); the example is
+  now candidates `[3,4,5,10,6,3,4,5,10,7,3,4,5,10,8,9]`, index `7` → `k = 5, r = 1, T = 26`.
 * `sommen.geld(band, nachten?, prijs?)` → `{nachten, prijs, totaal, betaald, wissel}`:
   price table `band ≤ 3 → [1,2]`, `4 → [1,2,5]`, `5 → [2,5]`, chosen by `dag % len`;
   default nights `2 / 3 / 4`; nights are lowered while `nachten·prijs > 20`.
   Band 4 on an even day adds €2 change when `totaal + 2 ≤ 20`; band 5 always pays with a
   note: nights are lowered while `totaal ≥ 20`, then `betaald = totaal < 10 ? 10 : 20`.
+  **Since 2026-11-15 (end of groep 4)** band 3 is unchanged and bands 4/5 follow
+  games-a.md §2.5: band 4 = 3..5 nights × €4..€10 (≤ €50), on even days paid with ONE
+  note (€20/€50, `biljet: true`, the family's purse is that note: `Sommen.geld_hand`);
+  band 5 = 4..6 nights × €6..€15 (≤ €90), always a note of €20/€50/€100.
   Worked example band 5, day 4: prices `[2,5]`, `prijs = 2`, `nachten = 4`, `totaal = 8`,
   `betaald = 10`, `wissel = 2`.
 * `sommen.klok(band)`: `u = 7 + (dag·3) % 8`. Band 3 → `{u, m: 0, stap: 60, tekst:'<u> uur'}`;

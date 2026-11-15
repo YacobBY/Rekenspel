@@ -73,9 +73,10 @@ func test_rekening_drie_stappen() -> void:
 	var g := _gast()
 	var uit := []
 	Econ.rekening_klaar.connect(func(r): uit.append(r), CONNECT_ONE_SHOT)
-	var geld := Sommen.geld(5, 4)
-	Econ.rekening({"gast": g, "fam": "Bakker", "nachten": geld["nachten"],
-		"prijs": geld["prijs"], "totaal": geld["totaal"], "betaald": geld["betaald"]})
+	# the coin flow with the old band-5 bill of day 4 (Sommen.geld is end of
+	# groep 4 since 2026-11-15; the note flow is tested below)
+	Econ.rekening({"gast": g, "fam": "Bakker", "nachten": 4,
+		"prijs": 2, "totaal": 8, "betaald": 10})
 	var r := Econ.rekening_stand()
 	gelijk(r["stap"], 1, "stap 1: de som")
 	gelijk(r["totaal"], 8, "4 x 2 = 8")
@@ -179,6 +180,32 @@ func test_rekening_precies_betaald() -> void:
 	await Econ.klaar_met_tellen()
 	gelijk(uit.size(), 1, "meteen klaar")
 	gelijk(uit[0]["wissel"], 0, "niets terug")
+
+## End of groep 4 (2026-11-15): on a note day the family brings ONE note, the
+## child lays it on the counter, and the change is a subtraction across the
+## ten (band 4, day 4: 4 nachten x €4 = €16, paid with €20, €4 back).
+func test_rekening_met_een_briefje() -> void:
+	_voor()
+	var g := _gast()
+	var uit := []
+	Econ.rekening_klaar.connect(func(r): uit.append(r), CONNECT_ONE_SHOT)
+	var geld := Sommen.geld(4, 4)
+	waar(bool(geld["biljet"]), "band 4 dag 4 betaalt met een briefje")
+	Econ.rekening({"gast": g, "fam": "Bakker", "nachten": geld["nachten"],
+		"prijs": geld["prijs"], "totaal": geld["totaal"], "betaald": geld["betaald"],
+		"biljet": geld["biljet"]})
+	gelijk(Econ.rekening_stand()["totaal"], 16, "4 x 4 = 16")
+	gelijk(Econ.rekening_stand()["hand"], [20], "de familie heeft één briefje van 20")
+	await Econ.som_ok(16)
+	Econ.leg_neer()
+	gelijk(Econ.geteld(), 20, "het briefje ligt op de toonbank")
+	await Econ.klaar_met_tellen()
+	gelijk(Econ.rekening_stand()["stap"], 3, "nu het wisselgeld")
+	gelijk(HotelRekening._wissel_liever(20, 16)[0], 14, "het vergeten tiental is de eerste vergissing")
+	await Econ.wissel_ok(4)
+	waar(not Econ.rekening_bezig(), "de rekening is klaar")
+	gelijk(uit.size(), 1, "rekening_klaar kwam één keer")
+	gelijk(uit[0]["wissel"], 4, "€20 − €16 = €4")
 
 ## The whole moment survives a reload with the coins already counted.
 func test_rekening_overleeft_een_herlaad() -> void:

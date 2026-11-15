@@ -629,7 +629,7 @@ func _teken_vraag() -> void:
 			"tekst": "morgen dubbel", "prio": 9})
 		_kaart = ctx.ui.somkaart(rij, "%d + %d =" % [basis, basis], {
 			"id": "tb_vraag", "kamer": KAMER, "hoog": 34.0, "max": 2,
-			"goed": int(_s["T"]), "liever": [basis, basis + 1, int(_s["T"]) + 1],
+			"goed": int(_s["T"]), "liever": _dubbel_liever(basis),
 			"icoon": "🧴", "regel": "Morgen twee keer %d" % basis,
 			"regel2": "Hoeveel samen?", "titel": "de dubbele som",
 			"on_ok": func(n, k) -> void: _antwoord(n, int(_s["T"]), k)})
@@ -642,7 +642,7 @@ func _teken_vraag() -> void:
 		# leugen boven de som.
 		_kaart = ctx.ui.somkaart(rij, "helft van %d =" % t, {
 			"id": "tb_vraag", "kamer": KAMER, "hoog": 34.0, "max": 2,
-			"goed": int(_s["per"]), "liever": [t, rest, int(_s["per"]) + 1],
+			"goed": int(_s["per"]), "liever": _half_liever(t, rest, int(_s["per"])),
 			"icoon": "🚰",
 			"regel": ("%d halveren, %d over" % [t, rest]) if rest > 0
 				else ("De helft van %s" % _mv(t, "schepje", "schepjes")),
@@ -661,6 +661,21 @@ func _teken_vraag() -> void:
 			"regel2": "Hoeveel in elke tobbe?", "titel": "de som van het sop",
 			"on_ok": func(n, k) -> void: _antwoord(n, int(_s["per"]), k)})
 	_teken_zeg()
+
+## De vergissingen op de strook van `dubbel`: het getal zelf en ernaast, en
+## bij een dubbel dat over het tiental gaat (27 + 27) eerst het vergeten
+## tiental (44) — de fout van eind groep 4.
+static func _dubbel_liever(basis: int) -> Array:
+	if posmod(basis, 10) >= 5:
+		return [basis * 2 - 10, basis, basis * 2 + 1]
+	return [basis, basis + 1, basis * 2 + 1]
+
+## De vergissingen op de strook van `half`: het getal zelf, de rest en ernaast;
+## bij een oneven tiental (helft van 76) eerst de helft per cijfer (33).
+static func _half_liever(t: int, rest: int, per: int) -> Array:
+	if t >= 20 and posmod(t / 10, 2) == 1:
+		return [per - 5, t, per + 1, rest]
+	return [t, rest, per + 1]
 
 func _antwoord(n, goed: int, k) -> void:
 	if n == null or _s.is_empty():
@@ -699,9 +714,15 @@ func _antwoord(n, goed: int, k) -> void:
 func _wissel_hand() -> void:
 	if _s.is_empty():
 		return
-	_s["hand"] = HAND[(HAND.find(int(_s["hand"])) + 1) % HAND.size()]
+	var handen := _handen()
+	_s["hand"] = handen[(handen.find(int(_s["hand"])) + 1) % handen.size()]
 	ctx.snd.tik()
 	_teken()
+
+## De handjes die het rek kent: 1, 2 en 5 — en vanaf twintig schepjes ook een
+## tiental (eind groep 4, 2026-11-15: "helft van 76" schep je niet per vijf).
+func _handen() -> Array:
+	return HAND + [10] if int(_s.get("T", 0)) > 20 else HAND
 
 ## Het sleepdoel van een tobbe of het kannetje.
 func _val(lading: Dictionary, data: Dictionary) -> void:

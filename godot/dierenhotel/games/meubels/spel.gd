@@ -310,13 +310,29 @@ func _max_lijst() -> int:
 static func _eur(n: int) -> String:
 	return "€%d" % n
 
-static func _totaal_van(types: Array) -> int:
+static func _totaal_van(types: Array, band: int = 3) -> int:
 	var t := 0
 	for q in types:
 		var w := _artikel(str(q))
 		if not w.is_empty():
-			t += int(w["prijs"])
+			t += Sommen.Meubels.prijs_in_band(int(w["prijs"]), band)
 	return t
+
+## De prijs van één ding in deze band: de catalogusprijs in groep 3, vanaf groep
+## 4 de tweecijferige prijs van `Sommen.Meubels.PRIJS_EIND4` (eind groep 4,
+## eigenaar 2026-11-15: "het is nu wat te makkelijk").
+static func _prijs(type: String, band: int = 3) -> int:
+	var w := _artikel(type)
+	return Sommen.Meubels.prijs_in_band(int(w["prijs"]), band) if not w.is_empty() else 0
+
+## De band waarin de open afrekening haar prijzen noemt: die van de aankoop,
+## tenzij het bedrag nog uit de oude catalogus komt (een vraag met een misser
+## van vóór 2026-11-15 komt onveranderd terug, R2).
+func _bet_band() -> int:
+	var band := int(_bet.get("band", _band()))
+	if _totaal_van(_bet.get("types", []), band) != int(_bet.get("totaal", 0)):
+		return 3
+	return band
 
 static func _iconen(types: Array) -> String:
 	var s := ""
@@ -335,17 +351,17 @@ static func _kap(t: String) -> String:
 ## "Mandje kost €3" of "Plant en mandje kosten €4" (games-a.md §5.6).
 static func _prijs_zin(types: Array, totaal: int) -> String:
 	if types.size() == 1:
-		return "%s kost %s" % [_kap(_naam_van(str(types[0]))), _eur(_totaal_van(types))]
+		return "%s kost %s" % [_kap(_naam_van(str(types[0]))), _eur(totaal)]
 	var namen := PackedStringArray()
 	for t in types:
 		namen.append(_naam_van(str(t)))
 	return "%s kosten %s" % [_kap(" en ".join(namen)), _eur(totaal)]
 
 ## "Plant €1 en mandje €3".
-static func _som_zin(types: Array) -> String:
+static func _som_zin(types: Array, band: int = 3) -> String:
 	var delen := PackedStringArray()
 	for t in types:
-		delen.append("%s %s" % [_naam_van(str(t)), _eur(int(_artikel(str(t))["prijs"]))])
+		delen.append("%s %s" % [_naam_van(str(t)), _eur(_prijs(str(t), band))])
 	return _kap(" en ".join(delen))
 
 ## Een plek in de ruimte waar je NU staat: een wolkje in een andere kamer zou
@@ -653,7 +669,7 @@ func _blad_meubels(inhoud: Array[Control], bron: Array = Sommen.Meubels.WINKEL,
 	var maxi_lijst := _max_lijst()
 	for w in bron:
 		var type := str(w["type"])
-		var prijs := int(w["prijs"])
+		var prijs := Sommen.Meubels.prijs_in_band(int(w["prijs"]), _band())
 		var delen: Array[Control] = [
 			_icoon_label(str(w["icoon"])),
 			_chip(_eur(prijs), UiThema.PERZIK)]
@@ -694,7 +710,7 @@ func _lijst_rij(inhoud: Array[Control]) -> void:
 		return
 	var prijzen := PackedStringArray()
 	for t in _lijst:
-		prijzen.append(_eur(int(_artikel(t)["prijs"])))
+		prijzen.append(_eur(_prijs(t, _band())))
 	inhoud.append(_rij([
 		_chip("%s %s" % [_iconen(_lijst), " + ".join(prijzen)], UiThema.KAART),
 		_knop("afrekenen", "🛒", T_AFREKENEN, func() -> void: _koop(_lijst.duplicate())),
@@ -1109,7 +1125,7 @@ func _koop(types: Array) -> void:
 	# Rekenwacht: ook met te weinig geld gaat het naar de kassa — "Heb je
 	# genoeg?" is daar de eerste vraag, en "💛 Te weinig" is dan het goede
 	# antwoord (vroeger zei het kaartje dat zelf, zonder rekenen)
-	_betaal_start(types, _totaal_van(types), "munt", _munten())
+	_betaal_start(types, _totaal_van(types, _band()), "munt", _munten())
 
 ## De pogingen per stap: samen de missers van één aankoop (`State.tel`).
 const POGINGEN := ["som_pog", "gen_pog", "tel_pog", "wis_pog", "over_pog"]
@@ -1269,16 +1285,23 @@ func _betaal_teken() -> void:
 	var kaart = null
 	match stap:
 		BEURT.SOM:
+			var pb := _bet_band()
 			var prijzen := PackedStringArray()
 			for t in types:
-				prijzen.append(_eur(int(_artikel(str(t))["prijs"])))
-			var p0 := int(_artikel(str(types[0]))["prijs"])
-			var p1 := int(_artikel(str(types[types.size() - 1]))["prijs"])
+				prijzen.append(_eur(_prijs(str(t), pb)))
+			var p0 := _prijs(str(types[0]), pb)
+			var p1 := _prijs(str(types[types.size() - 1]), pb)
+			# eind groep 4: gaat de som over het tiental (€17 + €24), dan staat
+			# het vergeten tiental (€31) als eerste vergissing op de strook
+			var liever: Array = [absi(p0 - p1), maxi(p0, p1), totaal + 1]
+			if posmod(p0, 10) + posmod(p1, 10) >= 10:
+				liever.push_front(totaal - 10)
 			kaart = ctx.ui.somkaart(_kaart_obj(), " + ".join(prijzen) + " =", {
-				"id": "mb_som", "kamer": "receptie", "max": 2, "icoon": "🛒",
-				"goed": totaal, "liever": [absi(p0 - p1), maxi(p0, p1), totaal + 1],
+				"id": "mb_som", "kamer": "receptie", "max": BEURT.cijfers(totaal),
+				"icoon": "🛒",
+				"goed": totaal, "liever": liever,
 				"zaad": _zaad("mb_som"), "vlak": _kaart_vlak(),
-				"regel": _som_zin(types), "regel2": T_SAMEN,
+				"regel": _som_zin(types, pb), "regel2": T_SAMEN,
 				"on_ok": func(n) -> void: _som_ok(n)})
 		BEURT.GENOEG:
 			# de vergelijking die het kaartje in het boek vroeger zelf maakte

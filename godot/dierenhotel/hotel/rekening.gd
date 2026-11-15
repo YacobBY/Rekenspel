@@ -42,8 +42,10 @@ func begin(o: Dictionary) -> Dictionary:
 	var prijs := int(o.get("prijs", 1))
 	var totaal := int(o.get("totaal", nachten * prijs))
 	var betaald := int(o.get("betaald", totaal))
+	# end of groep 4 (2026-11-15): a family that pays with one note brings just
+	# that note, so the change is the subtraction `€50 − €28`
 	var hand: Array = []
-	for v in Sommen.buidel(betaald):
+	for v in Sommen.geld_hand(totaal, betaald, bool(o.get("biljet", false))):
 		hand.append(int(v))
 	State.s["rekening"] = {
 		"gastId": str(g.get("id", "")), "fam": str(o.get("fam", "de familie")),
@@ -295,11 +297,12 @@ func _munt_stap() -> void:
 	var o := {
 		"id": "rek_buidel", "door": EIGENAAR, "kamer": "receptie",
 		"hoog": _toonhoog(), "x": _boek().get("x", 0.0), "z": _boek().get("z", 0.0),
-		"icoon": "🪙" if volgende > 0 else "👍",
+		"icoon": ("💶" if volgende >= 20 else "🪙") if volgende > 0 else "👍",
 		"label": ("€%d" % volgende) if volgende > 0 else "",
 		"aantal": ("€%d" % volgende) if volgende > 0 else "",
 		"hand": hand.size(), "klas": "" if not hand.is_empty() else "leeg",
-		"titel": ("munt van %d euro" % volgende) if volgende > 0 else "de buidel is leeg",
+		"titel": ((("briefje van %d euro" if volgende >= 20 else "munt van %d euro") % volgende)
+			if volgende > 0 else "de buidel is leeg"),
 		"prio": 10, "drop_doel": "toonbank", "reken": true,
 		"tik": func(): leg_neer(), "aan": func(_s): leg_neer()}
 	if Ui.bron("boek", o).is_empty():
@@ -319,13 +322,21 @@ func _wissel_kaart() -> void:
 	# no help line after a miss, and no ghost coins: the same card stays
 	Ui.somkaart(_werkplek(), "€%d − €%d =" % [betaald, int(r["totaal"])], {
 		"id": "rek_wissel", "door": EIGENAAR, "kamer": "receptie",
-		"goed": betaald - int(r["totaal"]), "liever": [int(r["totaal"]), betaald,
-			betaald - int(r["totaal"]) + 1],
+		"goed": betaald - int(r["totaal"]), "liever": _wissel_liever(betaald, int(r["totaal"])),
 		"max": 2, "hoog": _werkhoog(), "icoon": "👛",
 		"dier": str(r["gastId"]), "zaad": _zaad("rek_wissel"),
 		"regel": "%s gaf €%d, het kost €%d" % [
 			State.gast_van(str(r["gastId"])).get("naam", "de gast"), betaald, int(r["totaal"])],
 		"on_ok": func(n, _k): wissel_ok(n)})
+
+## The slips the change strip offers: the bill and the paid amount (the old
+## pair), and when the subtraction crosses the ten (€50 − €28) the forgotten
+## carry first (€32) — the mistake a child at the end of groep 4 really makes.
+static func _wissel_liever(betaald: int, totaal: int) -> Array:
+	var goed := betaald - totaal
+	if posmod(betaald, 10) < posmod(totaal, 10):
+		return [goed + 10, totaal, goed + 1, betaald]
+	return [totaal, betaald, goed + 1]
 
 # ------------------------------------------------------------------ hulpjes
 

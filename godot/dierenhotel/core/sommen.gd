@@ -157,10 +157,17 @@ static func vergelijk(dagen: int, nieuw: int, voorraad: int) -> String:
 		return "minder"
 	return "precies"
 
-const KSET := {3: [1, 2, 3, 4], 4: [2, 3, 4, 5, 10], 5: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+## End of groep 4 (owner, 2026-11-15: "groep eind4 niveau"): every table 1..10
+## with the products to 100, weighted toward the tables a child knows by heart
+## (2, 3, 4, 5, 10 three times each) and 6, 7, 8, 9 once each as the harder
+## item.  Band 5 keeps the flat 1..10.  The list is walked by day + N, so the
+## duplicates ARE the weighting and the same day still gives the same table.
+const TAFELS_EIND4 := [2, 3, 4, 5, 10, 6, 2, 3, 4, 5, 10, 7, 2, 3, 4, 5, 10, 8, 9]
+const KSET := {3: [1, 2, 3, 4], 4: TAFELS_EIND4, 5: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
 const KPLAFOND := {3: 20, 4: 100, 5: 100}
 
-## `sommen.deel(N, band, dag)` -> {T, k, r, band}, with T = k*N + r.  Frozen.
+## `sommen.deel(N, band, dag)` -> {T, k, r, band}, with T = k*N + r.
+## Band 3 is frozen; band 4 takes `TAFELS_EIND4` since 2026-11-15.
 static func deel(n_gasten: int, band: int, dag: int) -> Dictionary:
 	var n: int = maxi(1, n_gasten)
 	var ks := koekjes_som(dag, n)
@@ -186,10 +193,11 @@ static func deel(n_gasten: int, band: int, dag: int) -> Dictionary:
 	var r2: int = mini(r, kk2 - 1)
 	return {"T": kk2 * n + r2, "k": kk2, "r": r2, "band": band}
 
-const TAFEL_SET := {3: [1, 2, 5, 10], 4: [1, 2, 3, 4, 5, 10], 5: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+const TAFEL_SET := {3: [1, 2, 5, 10], 4: TAFELS_EIND4, 5: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
 const TAFEL_MAX := {3: 20, 4: 100, 5: 100}
 
-## `sommen.tafel(band)` — the times table for "bedden op rij".  Frozen.
+## `sommen.tafel(band)` — the times table for "bedden op rij".  Band 3 frozen;
+## band 4 knows every table 1..10 since 2026-11-15 (`TAFELS_EIND4`).
 static func tafel(band: int, dag: int, n_gasten: int) -> Dictionary:
 	var b := 3 if band <= 3 else (5 if band >= 5 else 4)
 	var n: int = n_gasten if n_gasten > 0 else 2
@@ -200,24 +208,61 @@ static func tafel(band: int, dag: int, n_gasten: int) -> Dictionary:
 	var bb: int = 1 + posmod(dag * 3 + n, max_b)
 	return {"a": a, "b": bb, "uit": a * bb, "band": b, "tafels": set, "plafond": plaf}
 
-## `sommen.geld(band, nachten, prijs)` — the bill.  Frozen.
+## `sommen.geld(band, nachten, prijs)` — the bill.  Band 3 is frozen.
 ## `nachten`/`prijs` of 0 mean "let the generator choose".
+##
+## End of groep 4 (owner, 2026-11-15): whole euros to €100.  Band 4 is a
+## table product, 3..5 nights × €4..€10 (at most €50); on even days the family
+## pays with ONE note (`biljet`: €20 or €50, the smallest above the bill) and
+## the change is a subtraction that mostly crosses the ten (€50 − €28); on odd
+## days it pays exactly with coins.  Band 5 stays harder: 4..6 nights × €6..€15
+## (at most €90, beyond the tables) and always a note of €20, €50 or €100.
+const GELD_EIND4 := [7, 8, 6, 9, 4, 10, 5]
+const GELD_BAND5 := [9, 12, 7, 15, 8, 11, 6]
+const BILJETTEN := [20, 50, 100]
+
 static func geld(band: int, dag: int, nachten: int = 0, prijs: int = 0) -> Dictionary:
-	var kans: Array = [1, 2] if band <= 3 else ([1, 2, 5] if band == 4 else [2, 5])
+	if band >= 4:
+		return _geld_eind4(band, dag, nachten, prijs)
+	var kans: Array = [1, 2]
 	var p: int = prijs if prijs > 0 else kans[posmod(dag, kans.size())]
-	var n: int = nachten if nachten > 0 else (2 if band <= 3 else (3 if band == 4 else 4))
+	var n: int = nachten if nachten > 0 else 2
 	while n * p > 20 and n > 1:
 		n -= 1
 	var totaal := n * p
+	return {"nachten": n, "prijs": p, "totaal": totaal, "betaald": totaal, "wissel": 0,
+		"biljet": false}
+
+static func _geld_eind4(band: int, dag: int, nachten: int, prijs: int) -> Dictionary:
+	var vijf := band >= 5
+	var kans: Array = GELD_BAND5 if vijf else GELD_EIND4
+	var plaf := 90 if vijf else 50
+	var p: int = prijs if prijs > 0 else kans[posmod(dag, kans.size())]
+	var n: int = nachten if nachten > 0 else ((4 if vijf else 3) + posmod(dag, 3))
+	while n * p > plaf and n > 1:
+		n -= 1
+	var totaal := n * p
 	var betaald := totaal
-	if band == 4 and posmod(dag, 2) == 0 and totaal + 2 <= 20:
-		betaald = totaal + 2
-	if band >= 5:
-		while totaal >= 20 and n > 1:
-			n -= 1
-			totaal = n * p
-		betaald = 10 if totaal < 10 else 20
-	return {"nachten": n, "prijs": p, "totaal": totaal, "betaald": betaald, "wissel": betaald - totaal}
+	var biljet := vijf or posmod(dag, 2) == 0
+	if biljet:
+		betaald = totaal
+		for b in BILJETTEN:
+			# band 4 knows notes up to €50; a bill of exactly €50 is paid exactly
+			if int(b) > totaal and (vijf or int(b) <= 50):
+				betaald = int(b)
+				break
+		biljet = betaald > totaal
+	return {"nachten": n, "prijs": p, "totaal": totaal, "betaald": betaald,
+		"wissel": betaald - totaal, "biljet": biljet}
+
+## The family's purse for the bill: coins in which every amount up to
+## `betaald` can be laid exactly (`buidel`), or — when it pays with a note —
+## that one note, so the change is the subtraction `€betaald − €totaal`.
+static func geld_hand(totaal: int, betaald: int, biljet: bool) -> Array[int]:
+	if biljet and betaald > totaal and BILJETTEN.has(betaald):
+		var uit: Array[int] = [betaald]
+		return uit
+	return buidel(betaald)
 
 ## `sommen.klok(band)` — the wake-up time.  Frozen.
 static func klok(band: int, dag: int) -> Dictionary:
@@ -1254,8 +1299,15 @@ class Sleutels extends RefCounted:
 		if band <= 3:
 			return "telrij-tien" if dag % 2 == 0 else "telrij"
 		if band == 4:
-			return ["sprong5", "sprong10", "evenoneven"][posmod(dag, 3)]
+			return VARIANTEN_EIND4[posmod(dag, VARIANTEN_EIND4.size())]
 		return "kamers" if dag % 2 == 0 else "sprong25"
+
+	## End of groep 4 (owner, 2026-11-15): the whole range 0..100, steps of 2, 5
+	## and 10 forwards AND backwards, tens jumps off the decade (7, 17, 27…) and
+	## the neighbours across a ten (38, 39, __, 41).  Every start comes from the
+	## day, so a reload hangs the same board.
+	const VARIANTEN_EIND4 := ["sprong5", "sprong10", "evenoneven", "buren", "terug10",
+		"terug5", "terug2"]
 
 	## The row of one board; `deel` 0 is the first stretch, 1 the next (or the
 	## second floor / the even row).  An absent label is "" here, not null.
@@ -1274,18 +1326,35 @@ class Sleutels extends RefCounted:
 				stap = 1
 				plaf = int(PLAFOND[3])
 			"sprong5":
-				van = 5 + deel * h * 5
+				van = 5 * (1 + posmod(dag * 7, 6)) + deel * h * 5
 				stap = 5
 				plaf = int(PLAFOND[4])
 			"sprong10":
-				van = 10 + deel * h * 10
+				van = 1 + posmod(dag * 4, 9) + deel * h * 10
 				stap = 10
 				plaf = int(PLAFOND[4])
 			"evenoneven":
-				van = 2 if deel != 0 else 1
+				var b0 := 15 + 10 * posmod(dag * 3, 7)
+				van = b0 + 1 if deel != 0 else b0
 				stap = 2
 				plaf = int(PLAFOND[4])
 				label = "even" if deel != 0 else "oneven"
+			"buren":
+				van = 10 * (2 + posmod(dag * 3, 5) + 3 * deel) - 2
+				stap = 1
+				plaf = int(PLAFOND[4])
+			"terug10":
+				van = 91 + posmod(dag * 4, 9) - deel * h * 10
+				stap = -10
+				plaf = int(PLAFOND[4])
+			"terug5":
+				van = 100 - 5 * posmod(dag * 7, 4) - deel * h * 5
+				stap = -5
+				plaf = int(PLAFOND[4])
+			"terug2":
+				van = 40 + posmod(dag * 13, 50) - deel * h * 2
+				stap = -2
+				plaf = int(PLAFOND[4])
 			"kamers":
 				# floor 1 and 2 in turn; the third board is the next block of
 				# rooms, so no room number is ever on the board twice
@@ -1302,7 +1371,11 @@ class Sleutels extends RefCounted:
 				plaf = int(PLAFOND[5])
 		# never above the ceiling of the group and never below 1 (and do not push
 		# up with the step: the odd row starts on 1 on purpose)
-		van = maxi(1, mini(van, plaf - (h - 1) * stap))
+		if stap > 0:
+			van = maxi(1, mini(van, plaf - (h - 1) * stap))
+		else:
+			# a row counting back: the LAST plate must stay at 1 or more
+			van = mini(plaf, maxi(van, 1 - (h - 1) * stap))
 		return {"van": van, "stap": stap, "n": h, "label": label}
 
 	## Empty hooks: never on the edge and never next to each other, so there are
@@ -1452,14 +1525,15 @@ class Sleutels extends RefCounted:
 
 ## A6 — TOBBE-TIJD (games-a.md §6.2, games/tobbe.js).
 class Tobbe extends RefCounted:
-	const PLAFOND := {3: 10, 4: 20, 5: 36}
+	const PLAFOND := {3: 10, 4: 100, 5: 100}
 	## How many animals today's note may name at most, so T never runs over the
 	## ceiling of the band.
+	## (Band 3 only; bands 4 and 5 use `_recept_eind4` since 2026-11-15.)
 	const CAP := {
 		3: {"eerlijk": 5},
-		4: {"eerlijk": 10, "dubbel": 5, "half": 10},
-		5: {"eerlijk": 10, "dubbel": 9, "half": 11},
 	}
+	## Bands 4 and 5 count at most this many animals in the recipe.
+	const N_MAX := 8
 	## How many scoops the child may take per tap.
 	const HAND := [1, 2, 5]
 
@@ -1480,6 +1554,8 @@ class Tobbe extends RefCounted:
 		var d: int = maxi(1, dag)
 		var lijst := soorten(b)
 		var soort: String = lijst[posmod(d + n, lijst.size())]
+		if b >= 4:
+			return _recept_eind4(n, b, d, soort)
 		# an extra dirty turn in group 5: 3 scoops per animal, so halving can
 		# leave a remainder (9 = 4 and 4, 1 left)
 		var per_dier := 3 if (soort == "half" and b >= 5) else 2
@@ -1494,6 +1570,42 @@ class Tobbe extends RefCounted:
 		# never a tub that has to stay empty: rather one tub less
 		while m > 2 and t / m < 1:
 			m -= 1
+		return {"soort": soort, "band": b, "n0": n0, "perDier": per_dier, "basis": basis,
+			"T": t, "M": m, "per": t / m, "rest": t - (t / m) * m}
+
+	## End of groep 4 (owner, 2026-11-15).  The yard holds two or three tubs,
+	## so the numbers grow through the OPERATION, not through more tubs:
+	##   * `eerlijk` — share over three tubs, answer 3..10 (`27 : 3`), no
+	##     remainder in band 4; band 5 adds a remainder of 0..2 for the jug;
+	##   * `dubbel`  — double a two-digit number to 50 + 50 (`27 + 27`), the
+	##     ones often crossing the ten; band 5 then shares it over three tubs;
+	##   * `half`    — halve an even number to 100 (`helft van 76`); band 5 an
+	##     odd one on odd days (one scoop for the jug).
+	## Every size comes from N (`n0`, at most `N_MAX`) plus a day part, so a
+	## reload gives the same question.  `perDier` is the share per tub of
+	## `eerlijk` and the step of 5 scoops per animal of `dubbel`/`half`.
+	static func _recept_eind4(n: int, b: int, d: int, soort: String) -> Dictionary:
+		var n0: int = clampi(n, 1, N_MAX)
+		var dagdeel: int = posmod(d * 3 + n0, 5)
+		var m := 2
+		var basis := 0
+		var t := 0
+		var per_dier := 5
+		if soort == "eerlijk":
+			m = 3
+			per_dier = mini(10, n0 + 2 + posmod(d, 3))
+			var r := posmod(d + n0, 3) if b >= 5 else 0
+			t = per_dier * m + r
+			basis = t
+		elif soort == "dubbel":
+			basis = mini(50, 5 * n0 + 3 + dagdeel)
+			t = basis * 2
+			m = 3 if b >= 5 else 2
+		else:
+			t = mini(50, 5 * n0 + 3 + dagdeel) * 2
+			if b >= 5 and posmod(d, 2) == 1:
+				t -= 1
+			basis = t
 		return {"soort": soort, "band": b, "n0": n0, "perDier": per_dier, "basis": basis,
 			"T": t, "M": m, "per": t / m, "rest": t - (t / m) * m}
 
@@ -1576,9 +1688,21 @@ class Meubels extends RefCounted:
 	static func max_lijst(band: int) -> int:
 		return 2 if band >= 4 else 1
 
-	## Money up to 20 (group 3 up to 10).
+	## Money up to 100 (group 3 up to 10; group 4 and 5 up to 20 until
+	## 2026-11-15, now end of groep 4: whole euros to €100).
 	static func buidel_max(band: int) -> int:
-		return 20 if band >= 4 else 10
+		return 100 if band >= 4 else 10
+
+	## End of groep 4 (owner, 2026-11-15): from band 4 on every price is the
+	## two-digit price of this table (the catalogue keeps the band-3 price as
+	## its key), so two things together cross the ten (€17 + €24, €26 + €38)
+	## and stay within €100 (€38 + €38 = €76).  Band 3 pays the catalogue price.
+	const PRIJS_EIND4 := {1: 8, 2: 13, 3: 17, 4: 24, 5: 26, 6: 29, 7: 33, 8: 38}
+
+	static func prijs_in_band(prijs: int, band: int) -> int:
+		if band <= 3:
+			return prijs
+		return int(PRIJS_EIND4.get(prijs, prijs * 5 + 3))
 
 	## Group 3 pays exactly (too much = take a coin back); from group 4 there is
 	## change: `betaald − prijs = ?`.
