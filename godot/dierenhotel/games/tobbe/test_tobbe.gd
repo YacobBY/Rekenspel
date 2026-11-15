@@ -934,3 +934,34 @@ func test_het_rek_is_een_vrije_tik_die_op_het_rekenen_wacht() -> void:
 	gelijk(str(spel._s["stap"]), "vullen", "het rekenen gaat gewoon door")
 	gelijk(int(Reken.totaal()["geweigerd"]), geweigerd + 1, "het antwoord is niet geweigerd")
 	_af()
+
+# ------------------------------------------- 8. eind groep 4 (2026-11-15)
+
+## Owner, 2026-11-15: "groep eind4 niveau".  Band 4 doubles to 50 + 50 and
+## halves to 100 (often across the ten), shares over three tubs with an answer
+## up to 10; the strip offers the forgotten ten first, and the rack gets a
+## handful of ten for the big numbers.
+func test_band_4_is_eind_groep_4() -> void:
+	var dubbel_over := 0
+	var grootste := 0
+	for n in range(3, 7):
+		for dag in range(1, 13):
+			var r := Sommen.Tobbe.recept(n, 4, dag)
+			grootste = maxi(grootste, int(r["T"]))
+			if str(r["soort"]) == "dubbel" and posmod(int(r["basis"]), 10) >= 5:
+				dubbel_over += 1
+			if str(r["soort"]) == "eerlijk":
+				gelijk(int(r["M"]), 3, "band 4 deelt over drie tobbes")
+				waar(int(r["per"]) <= 10 and int(r["rest"]) == 0, "uitkomst t/m 10, geen rest")
+	waar(grootste >= 70, "band 4 rekent met tientallen (%d)" % grootste)
+	waar(dubbel_over > 0, "er zijn dubbels over het tiental")
+	var spel_script = load("res://games/tobbe/spel.gd")
+	gelijk(str(spel_script._dubbel_liever(27)), "[44, 27, 55]", "27 + 27: eerst het vergeten tiental")
+	gelijk(int(spel_script._half_liever(76, 0, 38)[0]), 33, "helft van 76: eerst 3 en 3")
+	var spel = _begin(OPZET[1], "half")
+	if spel == null:
+		_af()
+		return
+	waar(int(spel._s["T"]) > 20, "band 4: meer dan twintig schepjes")
+	waar(spel._handen().has(10), "het rek kent dan een handje van tien")
+	_af()

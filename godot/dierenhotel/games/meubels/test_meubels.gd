@@ -313,7 +313,7 @@ func _r1_beurt(types: Array, tab: String, wat: String) -> void:
 	var heb := int(State.s["munten"])
 	var totaal := 0
 	for t in types:
-		totaal += int(Spel._artikel(str(t))["prijs"])
+		totaal += Spel._prijs(str(t), band)   # eind groep 4: de prijs van de band
 	var va_b := _va_begin()
 	waar(Games.start("meubels"), "%s: het spel start" % wat)
 	await _tel_frames()
@@ -517,7 +517,8 @@ func test_beurt_band_3() -> void:
 
 ## Groep 4: twee dingen samen (het tweede rekent meteen af), en wisselgeld.
 func test_beurt_band_4() -> void:
-	await _op(Vector2(1000, 648), 5, 12)
+	# eind groep 4 (2026-11-15): tweecijferige prijzen, een buidel tot €100
+	await _op(Vector2(1000, 648), 5, 50)
 	gelijk(State.band(), 4, "de band is 4")
 	waar(Games.start("meubels"), "het spel start")
 	await _tel_frames()
@@ -534,28 +535,30 @@ func test_beurt_band_4() -> void:
 	await _tel_frames()
 	waar(not Ui.blad_open_nu(), "een vol lijstje rekent meteen af")
 	# stap som
-	gelijk(_kaart_tekst("mb_som", "som"), "€1 + €3 =", "de som staat op de kassa")
-	gelijk(_kaart_tekst("mb_som", "regel"), "🛒 Plant €1 en mandje €3", "de somzin")
+	gelijk(_kaart_tekst("mb_som", "som"), "€8 + €17 =", "de som gaat over het tiental")
+	gelijk(_kaart_tekst("mb_som", "regel"), "🛒 Plant €8 en mandje €17", "de somzin")
+	waar(_strook_knop("mb_som", 15) != null, "het vergeten tiental staat op de strook")
 	gelijk(_kaart_tekst("mb_som", "regel2"), Spel.T_SAMEN, "en de vraag")
-	waar(_typ("mb_som", 4), "tik 4 op de strook")
+	waar(_typ("mb_som", 25), "tik 25 op de strook")
 	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
-	gelijk(_kaart_tekst("mb_genoeg", "regel"), "🛒 Plant en mandje kosten €4", "de prijszin")
+	gelijk(_kaart_tekst("mb_genoeg", "regel"), "🛒 Plant en mandje kosten €25", "de prijszin")
 	waar(_kies("mb_genoeg", "ja"), "genoeg")
 	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
-	# stap munten: buidel(12) = [5,2,2,2,1]; €5 is te veel -> wisselgeld
-	gelijk(_kaart_tekst("mb_bon", "regel"), "🛒 Plant en mandje kosten €4", "de prijszin")
-	gelijk(str(_munten_op_strook()), "[1, 2, 5]", "de muntsoorten in je hand")
-	waar(_leg(5), "leg €5 neer")
+	# stap munten: buidel(50) = [10,10,10,10,5,2,2,1]; 3 × €10 is te veel -> wisselgeld
+	gelijk(_kaart_tekst("mb_bon", "regel"), "🛒 Plant en mandje kosten €25", "de prijszin")
+	gelijk(str(_munten_op_strook()), "[1, 2, 5, 10]", "de muntsoorten in je hand")
+	for _i in 3:
+		waar(_leg(10), "leg €10 neer")
 	waar(await _wacht_op("mb_wissel_keuzes"), "de wisselvraag")
-	gelijk(_kaart_tekst("mb_wissel", "som"), "€5 − €4 =", "de wisselsom, met een echte −")
-	gelijk(_kaart_tekst("mb_wissel", "regel"), "👛 Je gaf €5, het kost €4", "de wisselzin")
+	gelijk(_kaart_tekst("mb_wissel", "som"), "€30 − €25 =", "de wisselsom, met een echte −")
+	gelijk(_kaart_tekst("mb_wissel", "regel"), "👛 Je gaf €30, het kost €25", "de wisselzin")
 	gelijk(_kaart_tekst("mb_wissel", "regel2"), Spel.T_TERUG_VRAAG, "en de vraag")
 	var sterren_voor := int(State.s["sterren"])
-	waar(_typ("mb_wissel", 1), "tik het wisselgeld")
+	waar(_typ("mb_wissel", 5), "tik het wisselgeld")
 	waar(await _wacht_op("mb_over_keuzes"), "hoeveel houd je over?")
-	gelijk(_kaart_tekst("mb_over", "som"), "€12 − €4 =", "de oversom")
-	waar(_typ("mb_over", 8), "tik 8")
-	gelijk(int(State.s["munten"]), 8, "de prijs gaat uit de kassa, niet het gelegde bedrag")
+	gelijk(_kaart_tekst("mb_over", "som"), "€50 − €25 =", "de oversom")
+	waar(_typ("mb_over", 25), "tik 25")
+	gelijk(int(State.s["munten"]), 25, "de prijs gaat uit de kassa, niet het gelegde bedrag")
 	gelijk(int(State.s["sterren"]), sterren_voor + 1, "één ster")
 	gelijk(str(_spel().call("_nog")), '["plant", "mandje"]', "twee dingen wachten")
 	await _wacht(1.4)
@@ -574,9 +577,9 @@ func test_beurt_band_4() -> void:
 ## Groep 5: dezelfde regels als groep 4, met de grotere buidel.  Precies
 ## betalen geeft in groep 4/5 ook de wisselvraag: €9 − €9 = €0.
 func test_beurt_band_5() -> void:
-	await _op(Vector2(1000, 648), 7, 20)
+	await _op(Vector2(1000, 648), 7, 60)
 	gelijk(State.band(), 5, "de band is 5")
-	gelijk(Sommen.Meubels.buidel_max(5), 20, "de buidel gaat tot 20")
+	gelijk(Sommen.Meubels.buidel_max(5), 100, "de buidel gaat tot 100")
 	waar(Sommen.Meubels.wisselgeld(5), "en er is wisselgeld")
 	waar(Games.start("meubels"), "het spel start")
 	await _tel_frames()
@@ -585,23 +588,23 @@ func test_beurt_band_5() -> void:
 	await _tel_frames()
 	waar(_blad_tik("Kk_speelmand"), "speelmand erbij: afrekenen")
 	await _tel_frames()
-	gelijk(_kaart_tekst("mb_som", "som"), "€5 + €4 =", "de som")
-	waar(_typ("mb_som", 9), "tik 9")
+	gelijk(_kaart_tekst("mb_som", "som"), "€26 + €24 =", "de som")
+	waar(_typ("mb_som", 50), "tik 50")
 	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
 	waar(_kies("mb_genoeg", "ja"), "genoeg")
 	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
-	# buidel(20) = precies te leggen
-	var gelegd := _leg_precies(9)
-	gelijk(gelegd, 9, "er ligt precies €9 op de toonbank")
+	# buidel(60) = precies te leggen
+	var gelegd := _leg_precies(50)
+	gelijk(gelegd, 50, "er ligt precies €50 op de toonbank")
 	waar(await _wacht_op("mb_wissel_keuzes"), "ook bij precies betalen: de wisselvraag")
-	gelijk(_kaart_tekst("mb_wissel", "som"), "€9 − €9 =", "nul is een uitkomst")
+	gelijk(_kaart_tekst("mb_wissel", "som"), "€50 − €50 =", "nul is een uitkomst")
 	waar(_strook_knop("mb_wissel", 0) != null, "en 0 staat op de strook")
 	waar(_typ("mb_wissel", 0), "tik 0")
 	waar(await _wacht_op("mb_over_keuzes"), "hoeveel houd je over?")
 	var bedden_voor := State.alle_bedden().size()
 	var cap_voor := State.max_gasten()
-	waar(_typ("mb_over", 11), "tik 11")
-	gelijk(int(State.s["munten"]), 11, "20 − 9 = 11 in de kassa")
+	waar(_typ("mb_over", 10), "tik 10")
+	gelijk(int(State.s["munten"]), 10, "60 − 50 = 10 in de kassa")
 	await _wacht(1.4)
 	await _tel_frames()
 	for beurt in 2:
@@ -760,7 +763,7 @@ func test_nul_munten_slaat_de_vraag_over() -> void:
 ## doortellen, geen "+€3", geen spookmunten.  Nooit straffen: niets afgepakt,
 ## en de goede antwoorden leveren nog gewoon een ster op.
 func test_geen_hulp_en_nooit_straffen() -> void:
-	await _op(Vector2(1000, 648), 5, 12)
+	await _op(Vector2(1000, 648), 5, 50)   # eind groep 4: plant €8 + mandje €17
 	waar(Games.start("meubels"), "het spel start")
 	await _tel_frames()
 	await _kassa_door()
@@ -776,7 +779,7 @@ func test_geen_hulp_en_nooit_straffen() -> void:
 	voor.erase("mb_boek")       # R2: na een misser is die weg terug er niet meer
 	for keer in 3:
 		var wat := "som, misser %d" % (keer + 1)
-		waar(_typ_fout("mb_som", 4), "%s: een fout antwoord" % wat)
+		waar(_typ_fout("mb_som", 25), "%s: een fout antwoord" % wat)
 		await _tel_frames()
 		waar(_op_slot("mb_som"), "%s: de strook staat even op slot" % wat)
 		_alleen_teleurstelling("mb_som", wat)
@@ -785,7 +788,7 @@ func test_geen_hulp_en_nooit_straffen() -> void:
 	gelijk(int(State.s["munten"]), munten_voor, "er is geen munt afgepakt")
 	gelijk(int(State.s["sterren"]), sterren_voor, "en geen ster afgepakt")
 	waar(_er_is("mb_som"), "de kaart staat er nog")
-	waar(_typ("mb_som", 4), "het goede antwoord")
+	waar(_typ("mb_som", 25), "het goede antwoord")
 	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
 	var gen := beeld("meubels")
 	for keer in 3:
@@ -799,30 +802,30 @@ func test_geen_hulp_en_nooit_straffen() -> void:
 	waar(not Ui.blad_open_nu(), "een fout 'te weinig' brengt je niet terug naar het boek")
 	waar(_kies("mb_genoeg", "ja"), "het goede antwoord")
 	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
-	var gelegd := _leg_precies(4)
-	gelijk(gelegd, 4, "leg €4 neer")
+	var gelegd := _leg_precies(25)
+	gelijk(gelegd, 25, "leg €25 neer")
 	waar(await _wacht_op("mb_wissel_keuzes"), "de wisselvraag")
 	waar(_typ("mb_wissel", 0), "precies betaald: 0 terug")
 	waar(await _wacht_op("mb_over_keuzes"), "hoeveel houd je over?")
 	var over := beeld("meubels")
 	for keer in 3:
 		var wat := "over, misser %d" % (keer + 1)
-		waar(_typ_fout("mb_over", 8), "%s: een fout antwoord" % wat)
+		waar(_typ_fout("mb_over", 25), "%s: een fout antwoord" % wat)
 		await _tel_frames()
 		waar(_op_slot("mb_over"), "%s: de strook staat even op slot" % wat)
 		_alleen_teleurstelling("mb_over", wat)
 		gelijk(int(State.s["munten"]), munten_voor, "%s: er is nog niets betaald" % wat)
 		await _wacht_mispauze()
 		niets_erbij(over, beeld("meubels"), wat)
-	waar(_typ("mb_over", 8), "het goede antwoord")
-	gelijk(int(State.s["munten"]), 8, "nu pas betaald")
+	waar(_typ("mb_over", 25), "het goede antwoord")
+	gelijk(int(State.s["munten"]), 25, "nu pas betaald")
 	gelijk(int(State.s["sterren"]), sterren_voor + 1,
 		"de ster komt er ook na negen missers (F5)")
 	_af()
 
 ## Een fout wisselgeld (groep 4 en 5): dezelfde pauze, en geen telladder.
 func test_geen_hulp_bij_het_wisselgeld() -> void:
-	await _op(Vector2(1000, 648), 5, 12)
+	await _op(Vector2(1000, 648), 5, 50)   # eind groep 4: plant €8 + mandje €17
 	waar(Games.start("meubels"), "het spel start")
 	await _tel_frames()
 	await _kassa_door()
@@ -830,26 +833,27 @@ func test_geen_hulp_bij_het_wisselgeld() -> void:
 	await _tel_frames()
 	waar(_blad_tik("Kk_mandje"), "mandje erbij: afrekenen")
 	await _tel_frames()
-	waar(_typ("mb_som", 4), "de som")
+	waar(_typ("mb_som", 25), "de som")
 	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
 	waar(_kies("mb_genoeg", "ja"), "genoeg")
 	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
-	# buidel(12) = [5,2,2,2,1]: leg €5 neer, dan de wisselvraag (geen ✔ Klaar)
-	waar(_leg(5), "leg €5 neer")
+	# buidel(50) = [10,10,10,10,5,2,2,1]: leg 3 × €10 neer, dan de wisselvraag
+	for _i in 3:
+		waar(_leg(10), "leg €10 neer")
 	waar(await _wacht_op("mb_wissel_keuzes"), "de wisselvraag staat er")
 	var voor := beeld("meubels")
 	for keer in 3:
 		var wat := "wisselgeld, misser %d" % (keer + 1)
-		waar(_typ_fout("mb_wissel", 1), "%s: een fout getal" % wat)
+		waar(_typ_fout("mb_wissel", 5), "%s: een fout getal" % wat)
 		await _tel_frames()
 		waar(_op_slot("mb_wissel"), "%s: de strook staat even op slot" % wat)
 		_alleen_teleurstelling("mb_wissel", wat)
 		await _wacht_mispauze()
 		niets_erbij(voor, beeld("meubels"), wat)
-	waar(_typ("mb_wissel", 1), "het goede wisselgeld")
+	waar(_typ("mb_wissel", 5), "het goede wisselgeld")
 	waar(await _wacht_op("mb_over_keuzes"), "hoeveel houd je over?")
-	waar(_typ("mb_over", 8), "het goede antwoord")
-	gelijk(int(State.s["munten"]), 8, "de prijs gaat uit de kassa")
+	waar(_typ("mb_over", 25), "het goede antwoord")
+	gelijk(int(State.s["munten"]), 25, "de prijs gaat uit de kassa")
 	_af()
 
 ## Groep 3 rekent geen wisselgeld uit: te veel op de toonbank is een misser
@@ -951,7 +955,7 @@ func test_versiering_kost_sterren() -> void:
 	_af()
 
 func test_herstel_uit_ctx_data() -> void:
-	await _op(Vector2(1000, 648), 5, 12)
+	await _op(Vector2(1000, 648), 5, 50)   # eind groep 4: plant €8 + mandje €17
 	waar(Games.start("meubels"), "het spel start")
 	await _tel_frames()
 	await _kassa_door()
@@ -959,16 +963,16 @@ func test_herstel_uit_ctx_data() -> void:
 	await _tel_frames()
 	waar(_blad_tik("Kk_mandje"), "mandje erbij: afrekenen")
 	await _tel_frames()
-	waar(_typ("mb_som", 4), "de som")
+	waar(_typ("mb_som", 25), "de som")
 	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
 	waar(_kies("mb_genoeg", "ja"), "genoeg")
 	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
-	var gelegd := _leg_precies(4)
-	gelijk(gelegd, 4, "leg €4 neer")
+	var gelegd := _leg_precies(25)
+	gelijk(gelegd, 25, "leg €25 neer")
 	waar(await _wacht_op("mb_wissel_keuzes"), "wisselgeld")
 	waar(_typ("mb_wissel", 0), "0 terug")
 	waar(await _wacht_op("mb_over_keuzes"), "over")
-	waar(_typ("mb_over", 8), "8 over")
+	waar(_typ("mb_over", 25), "25 over")
 	await _wacht(1.4)
 	await _tel_frames()
 	var voor: Dictionary = State.spel_data("meubels").duplicate(true)
@@ -1379,8 +1383,12 @@ func test_de_catalogus_komt_uit_de_rekenkern() -> void:
 	gelijk(Sommen.Meubels.max_lijst(4), 2, "groep 4: twee dingen")
 	gelijk(Sommen.Meubels.max_lijst(5), 2, "groep 5: twee dingen")
 	gelijk(Sommen.Meubels.buidel_max(3), 10, "buidelplafond groep 3")
-	gelijk(Sommen.Meubels.buidel_max(4), 20, "buidelplafond groep 4")
-	gelijk(Sommen.Meubels.buidel_cap(3, 25, 4), 20, "cap = max(totaal, min(munten, max))")
+	gelijk(Sommen.Meubels.buidel_max(4), 100, "buidelplafond groep 4 (eind groep 4)")
+	gelijk(Sommen.Meubels.buidel_cap(3, 125, 4), 100, "cap = max(totaal, min(munten, max))")
+	# eind groep 4 (2026-11-15): vanaf groep 4 de tweecijferige prijs van de kern
+	gelijk(Spel._prijs("bed", 4), 26, "een bed kost in groep 4 €26")
+	gelijk(Spel._prijs("bed", 3), 5, "en in groep 3 €5")
+	gelijk(Spel._totaal_van(["plant", "mandje"], 4), 25, "€8 + €17 = €25")
 	gelijk(Sommen.Meubels.buidel_cap(8, 5, 3), 8, "en nooit minder dan de prijs")
 
 # ==================================================================================
@@ -1407,7 +1415,7 @@ func _hotel_op(maat: Vector2i) -> Dictionary:
 	# is dan een no-op en tests die WEL over dat bestand gaan
 	# (tests/test_ui.gd) houden hun eigen bestand.
 	State.nieuw_spel()
-	State.s["munten"] = 12
+	State.s["munten"] = 50       # eind groep 4: plant + mandje kosten €25
 	State.s["sterren"] = 6
 	State.s["kunnen"] = 5
 	State.s["gasten"] = _gasten(5)
@@ -1488,7 +1496,7 @@ func test_knoppen_dekken_hun_voorwerp_niet() -> void:
 			await boom.process_frame
 		_keur_dekking("%s betaalstap" % str(maat), kader)
 		# genoeg?, en dan de bon met de muntstrook: de drukste stap
-		_typ("mb_som", 4)
+		_typ("mb_som", 25)
 		waar(await _wacht_op("mb_genoeg_keuzes"), "%s: genoeg?" % str(maat))
 		for _f in 2:
 			await boom.process_frame
@@ -1854,7 +1862,8 @@ func test_rekenaandeel_band_3() -> void:
 ## kassa, genoeg, munt, wisselgeld en over = 5 rekentikken.
 func test_rekenaandeel_band_4() -> void:
 	for n in [5, 8]:
-		await _op(Vector2(1000, 648), n, 40, 5 if n == 5 else 3)
+		# eind groep 4 (2026-11-15): tweecijferige prijzen, dus een vollere kassa
+		await _op(Vector2(1000, 648), n, 99, 5 if n == 5 else 3)
 		gelijk(State.band(), 4, "N=%d: band 4" % n)
 		await _r1_beurt(["plant", "mandje"], "meubels", "groep 4 N=%d, 2 dingen" % n)
 		await _r1_beurt(["kussen"], "decoratie", "groep 4 N=%d, 1 decoratie" % n)
@@ -1867,12 +1876,17 @@ func test_rekenaandeel_band_4() -> void:
 ## een speelkist, een schilderij aan de muur.
 func test_rekenaandeel_band_5() -> void:
 	for n in [7, 8]:
-		await _op(Vector2(1000, 648), n, 60, 5)
+		await _op(Vector2(1000, 648), n, 99, 5)
 		gelijk(State.band(), 5, "N=%d: band 5" % n)
+		# eind groep 4 (2026-11-15): tweecijferige prijzen; de kassa wordt per
+		# beurt bijgevuld tot €99 zodat elke beurt "genoeg" is
 		if n == 7:
 			await _r1_beurt(["bed", "badkuip"], "meubels", "groep 5 N=%d, 2 dingen" % n)
+			State.s["munten"] = 99
 			await _r1_beurt(["schilderij"], "decoratie", "groep 5 N=%d, schilderij" % n)
+			State.s["munten"] = 99
 		await _r1_beurt(["kist"], "decoratie", "groep 5 N=%d, 1 decoratie" % n)
+		State.s["munten"] = 99
 		await _r1_beurt(["bakje"], "meubels", "groep 5 N=%d, 1 meubel" % n)
 		_af()
 
@@ -1893,7 +1907,7 @@ func test_rekenaandeel_zonder_munten() -> void:
 ## bon stond meteen klaar met de prijs al ingevuld, in groep 3 elke keer.  Nu
 ## is de eerste kaart na het kiezen een rekenvraag, in elke band.
 func test_r2_een_ding_kopen_vraagt_rekenen() -> void:
-	for geval in [[3, 9, 3], [5, 12, 4], [7, 20, 5]]:
+	for geval in [[3, 9, 3], [5, 20, 4], [7, 20, 5]]:
 		await _op(Vector2(1000, 648), geval[0], geval[1])
 		gelijk(State.band(), geval[2], "de band is %d" % geval[2])
 		waar(Games.start("meubels"), "het spel start")
@@ -1911,7 +1925,8 @@ func test_r2_een_ding_kopen_vraagt_rekenen() -> void:
 		var munten := int(State.s["munten"])
 		waar(_kies("mb_genoeg", "ja"), "genoeg")
 		waar(await _wacht_op("mb_bon_keuzes"), "de muntstrook")
-		_leg_precies(1)
+		# eind groep 4: de plant kost in groep 4/5 €8, in groep 3 €1
+		_leg_precies(Spel._prijs("plant", geval[2]))
 		var over_id := "mb_over_keuzes" if geval[2] == 3 else "mb_wissel_keuzes"
 		waar(await _wacht_op(over_id), "groep %d: nog een vraag na het leggen" % geval[2])
 		gelijk(int(State.s["munten"]), munten, "groep %d: nog niets betaald" % geval[2])
@@ -1951,7 +1966,7 @@ func test_r2_versiering_alleen_na_rekenen() -> void:
 ## halen.  Nu komt de open vraag ONVERANDERD terug — ook na een nieuwe dag, met
 ## meer munten en een andere band.
 func test_r2_open_vraag_komt_onveranderd_terug() -> void:
-	await _op(Vector2(1000, 648), 5, 12)
+	await _op(Vector2(1000, 648), 5, 30)   # eind groep 4: €8 + €17
 	waar(Games.start("meubels"), "het spel start")
 	await _tel_frames()
 	await _kassa_door()
@@ -1960,13 +1975,13 @@ func test_r2_open_vraag_komt_onveranderd_terug() -> void:
 	waar(_blad_tik("Kk_mandje"), "mandje erbij: afrekenen")
 	await _tel_frames()
 	var knoppen_voor := _strook_namen("mb_som")
-	waar(_typ_fout("mb_som", 4), "een misser op de som")
+	waar(_typ_fout("mb_som", 25), "een misser op de som")
 	await _tel_frames()
 	# een uitgang, een nieuwe dag, meer munten en een andere band
 	Games.stop()
 	await _tel_frames()
 	State.s["dag"] = int(State.s.get("dag", 1)) + 1
-	State.s["munten"] = 30
+	State.s["munten"] = 60
 	State.s["gasten"] = _gasten(7)
 	State.herbereken()
 	waar(State.band() != 4 or true, "de band mag veranderen")
@@ -1974,16 +1989,16 @@ func test_r2_open_vraag_komt_onveranderd_terug() -> void:
 	await _tel_frames()
 	waar(not _er_is("mb_kas"), "geen nieuwe kassavraag eroverheen")
 	waar(not Ui.blad_open_nu(), "en geen boek")
-	gelijk(_kaart_tekst("mb_som", "som"), "€1 + €3 =", "dezelfde som")
+	gelijk(_kaart_tekst("mb_som", "som"), "€8 + €17 =", "dezelfde som")
 	gelijk(_strook_namen("mb_som"), knoppen_voor, "met dezelfde vier knoppen")
 	waar(not _er_is("mb_boek"), "na een misser geen weg terug naar het boek")
-	waar(_typ("mb_som", 4), "het goede antwoord")
+	waar(_typ("mb_som", 25), "het goede antwoord")
 	waar(await _wacht_op("mb_genoeg_keuzes"), "genoeg?")
-	gelijk(_kaart_tekst("mb_genoeg", "regel2"), "Je hebt €12. Is dat genoeg?",
+	gelijk(_kaart_tekst("mb_genoeg", "regel2"), "Je hebt €30. Is dat genoeg?",
 		"de vraag rekent met wat je had: dezelfde vraag")
 	waar(_kies("mb_genoeg", "ja"), "genoeg")
 	waar(await _wacht_op("mb_bon_keuzes"), "de bon")
-	gelijk(str(_munten_op_strook()), "[1, 2, 5]", "dezelfde buidel van €12")
+	gelijk(str(_munten_op_strook()), "[1, 2, 5, 10]", "dezelfde buidel van €30")
 	_af()
 
 ## En de kassavraag zelf: na een misser en een uitgang dezelfde munten op de

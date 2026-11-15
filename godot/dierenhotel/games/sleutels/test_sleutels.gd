@@ -337,17 +337,18 @@ func test_rijtekst_en_geen_burenlijn() -> void:
 	_wereld(5, 3, 3)
 	waar(Games.start(ID), "het spel start")
 	var p := _bord()
-	gelijk(str(p.get("variant", "")), "sprong5", "N 5, band 4, dag 3 -> sprong5")
+	# eind groep 4 (2026-11-15): de buren over het tiental heen
+	gelijk(str(p.get("variant", "")), "buren", "N 5, band 4, dag 3 -> buren")
 	var spel := _spel()
 	waar(spel != null, "het spel hangt in de boom")
 	if spel != null:
-		gelijk(str(spel.debug()["rij_tekst"]), "5, __, 15, ?, 25",
+		gelijk(str(spel.debug()["rij_tekst"]), "58, __, 60, ?, 62",
 			"het actieve gat is __ en een later gat is ? (K1)")
 		gelijk(int(spel.debug()["gat"]), 1, "het actieve gat is het meest linkse lege")
 		gelijk(str(spel.debug()["stap"]), "reken", "het spel begint in de reken-stap")
 		gelijk(str(spel.debug()["hulp_tekst"]), "tel met de sprongen mee",
 			"de hulpregel is meteen gevuld")
-		waar(_kies(15), "een fout getal is te kiezen")
+		waar(_kies(60), "een fout getal is te kiezen")
 		gelijk(int(p["missers"]), 1, "dat is een misser")
 		waar(int(p.get("gekozen", 0)) == 0, "er is niets gekozen")
 		waar(str(p.get("stap", "")) == "reken", "de stap blijft reken")
@@ -356,9 +357,9 @@ func test_rijtekst_en_geen_burenlijn() -> void:
 			"dezelfde vier keuzes staan er nog (%d)"
 				% (0 if strook == null else strook.get_child_count()))
 		await _wacht_mispauze()
-		waar(_kies(10), "het goede getal is te kiezen")
+		waar(_kies(59), "het goede getal is te kiezen")
 		gelijk(str(p.get("stap", "")), "hang", "de beurt is overgegaan naar hang")
-		gelijk(int(p.get("gekozen", 0)), 10, "het gekozen getal staat in de save")
+		gelijk(int(p.get("gekozen", 0)), 59, "het gekozen getal staat in de save")
 	# een misser op een haakje zet GEEN getallenlijntje in het hulpregeltje
 	var i := _fout_haakje(p, [])
 	await _hang(i)
@@ -367,7 +368,7 @@ func test_rijtekst_en_geen_burenlijn() -> void:
 		waar(not spel.debug().has("buren_tekst"), "er bestaat geen buurlijntje meer")
 		gelijk(str(spel.debug()["hulp_tekst"]), "sleep of tik het lege haakje",
 			"de hulpregel blijft de vaste doe-regel")
-		gelijk(str(spel.debug()["rij_tekst"]), "5, __, 15, ?, 25", "en de rij blijft de rij")
+		gelijk(str(spel.debug()["rij_tekst"]), "58, __, 60, ?, 62", "en de rij blijft de rij")
 	_af()
 
 # ------------------------------------------------- 2b. K1: eerst het getal
@@ -1429,3 +1430,32 @@ func _va_eind(wat: String, teller: Dictionary, budget_voor: int) -> void:
 	waar(int(b["goed"]) >= 1, "%s: Reken.goed() vuurde" % wat)
 	waar(Reken.budget() > budget_voor, "%s: het budget steeg (%d -> %d)" % [wat, budget_voor,
 		Reken.budget()])
+
+
+## Eind groep 4 (eigenaar, 2026-11-15): band 4 telt ook TERUG (93, 83, __, 63)
+## en de rij leest dan als een getallenlijn van groot naar klein; een rij die
+## bij 100 begint krijgt drie cijfers in het antwoordvakje.
+func test_band_4_telt_ook_terug() -> void:
+	_op()
+	var dag := 0
+	for d in range(1, 15):
+		if Sommen.Sleutels.variant_van(4, d) == "terug5":
+			dag = d
+			break
+	waar(dag > 0, "er is een dag met terugtellen per 5")
+	_wereld(5, 3, dag)
+	waar(Games.start(ID), "het spel start")
+	var p := _bord()
+	gelijk(str(p.get("variant", "")), "terug5", "band 4 telt terug")
+	var b: Dictionary = p["borden"][0]
+	gelijk(int(b["stap"]), -5, "per vijf terug")
+	var haken: Array = b["haken"]
+	waar(int(haken[0]["w"]) > int(haken[haken.size() - 1]["w"]), "van groot naar klein")
+	gelijk(str(Sommen.Sleutels.controleer(p)["fout"]), "[]", "het bord klopt")
+	var spel := _spel()
+	if spel != null:
+		gelijk(spel._drie_cijfers({"van": 100, "n": 5, "stap": -5}), true,
+			"een rij die bij 100 begint heeft drie cijfers")
+		gelijk(spel._drie_cijfers({"van": 85, "n": 5, "stap": -5}), false,
+			"85 … 65 heeft er twee")
+	_af()

@@ -51,7 +51,7 @@ Elke minigame leidt zijn getallen af uit N (aantal gasten) met T = k·N + r, 0 �
 | Band | N | k | Plafond | Extra |
 |---|---|---|---|---|
 | groep 3 | 2–3 | 1–2 | ≤ 20 (liefst ≤ 10) | r = 0 of 1; klok hele uren; icoon-only |
-| groep 4 | 4–6 | 2,3,4,5,10 (alleen die tafels) | ≤ 100 | rest < k; kwartieren; hele euro's |
+| groep 4 | 4–6 | alle tafels 1–10, vooral 2,3,4,5,10 (eind groep 4, 2026-11-15) | ≤ 100 | rest < k; kwartieren; hele euro's t/m €100 |
 | groep 5 | 7–10 | t/m 10 | ≤ 100 (geld ≤ €20 per betaling) | verdeelstrategie, tijdsduur, wisselgeld |
 
 De band wordt begrensd door het adaptieve signaal (rollende accuratesse + twijfeltijd): hooguit één stap boven het kunnen van het kind. Een snelle zesjarige mag een groot hotel hebben zonder groep-5-sommen. Nooit levelnummers tonen. Timers: alleen memoriseer-items (splitsingen t/m 10, tafels) hebben een 2-secondenvenster, en dat bepaalt alleen of er hulp verschijnt (rekenrek/getallenlijn), nooit of het antwoord telt.

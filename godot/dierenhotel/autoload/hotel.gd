@@ -571,6 +571,7 @@ func bel() -> void:
 	g["nachten"] = geld["nachten"]
 	g["prijs"] = geld["prijs"]
 	g["betaald"] = geld["betaald"]
+	g["biljet"] = bool(geld.get("biljet", false))   # pays with one note (2026-11-15)
 	g["dagIn"] = int(State.s["dag"])
 	g["kamer"] = ""
 	g["bed"] = ""
@@ -1505,10 +1506,13 @@ func reken_af(id: String) -> void:
 	var nachten := int(g.get("nachten", 2))
 	var prijs := int(g.get("prijs", 1))
 	var betaald := int(g.get("betaald", 0))
+	var biljet := bool(g.get("biljet", false))
 	if betaald <= 0:
-		betaald = int(Sommen.geld(State.band(), int(State.s["dag"]), nachten, prijs)["betaald"])
+		var geld := Sommen.geld(State.band(), int(State.s["dag"]), nachten, prijs)
+		betaald = int(geld["betaald"])
+		biljet = bool(geld.get("biljet", false))
 	Econ.rekening({"gast": g, "fam": fam, "nachten": nachten, "prijs": prijs,
-		"totaal": nachten * prijs, "betaald": betaald})
+		"totaal": nachten * prijs, "betaald": betaald, "biljet": biljet})
 
 ## The bill is finished: coins, a star, a letter, the guest goes home.
 func _rekening_klaar(uit: Dictionary) -> void:
