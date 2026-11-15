@@ -83,6 +83,8 @@ func _wereld(n: int, band: int, dag := 2, met_bed := -1) -> Array:
 	World.sync(uit)
 	World.zet_dag(dag)
 	if band > 0:
+		# a groep-3 setup lowers the band floor for this test (`State.BAND_MIN`)
+		State.vloer = mini(State.BAND_MIN, band)
 		gelijk(State.band(), band, "de band is %d bij %d gasten" % [band, n])
 	return uit
 
@@ -1033,6 +1035,8 @@ func test_r2_misser_blijft_na_een_andere_band() -> void:
 	_op()
 	_wereld(4, 4)
 	var voor: Dictionary = await _foto_misser()
+	# the floor down too, or the band stays at end of groep 4
+	groep3()
 	State.s["kunnen"] = 2
 	gelijk(State.band(), 3, "de band zakt naar groep 3")
 	await _zelfde_geldvraag(voor, "band 3")

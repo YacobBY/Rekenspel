@@ -84,6 +84,8 @@ func _wereld(n: int, band: int, dag := 2) -> Array:
 	World.sync(uit)
 	World.zet_dag(dag)
 	if band > 0:
+		# a groep-3 setup lowers the band floor for this test (`State.BAND_MIN`)
+		State.vloer = mini(State.BAND_MIN, band)
 		gelijk(State.band(), band, "de band is %d bij %d gasten" % [band, n])
 	return uit
 
@@ -772,6 +774,8 @@ func test_een_gemiste_vraag_komt_onveranderd_terug() -> void:
 				State.s["dag"] = 3
 				World.zet_dag(3)
 			"een andere band":
+				# the floor down too, or the band stays at end of groep 4
+				groep3()
 				State.s["kunnen"] = 2
 				gelijk(State.band(), 3, "nu groep 3")
 			"een gast minder":
