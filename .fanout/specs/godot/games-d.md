@@ -219,9 +219,17 @@ voor het paar), regenlaarsjes €1–2 / €2–5 / €3–9 per laarsje, tiara 
 
 | winkel | groep 3 | groep 4 | groep 5 |
 |---|---|---|---|
-| kraampjes (hoeden, sjaals, souvenirs) | €2–9 · **betaal precies** | €6–19 · **betaal precies** | €12–39 · **betaalt €50, hoeveel terug?** |
-| schoenen (per schoentje; 4 poten, de gans 2) | €1–2 · **4 × €2** (verdubbelen, ≤ 8) · betaal | €2–5 · **4 × €5** (≤ 20) · betaal | €3–9 · **4 × €9** (≤ 36) · terug van €50 |
-| luxe (+ cadeaudoosje) | €5–10, doosje €1–3 · **samen** (≤ 13) · betaal | €20–60 per 5, doosje €2–9 · **samen** (≤ 69) · **terug** van €50/€100 | €40–98 even · **halve prijs** · **samen** met het doosje · **terug** |
+| kraampjes (hoeden, sjaals, souvenirs) | €2–9 · **betaal precies** | €23–47, geen heel tiental, hooguit vier stuks geld · **betaal precies** · **over** van €50 | €24–78 even · **halve prijs** · **betaalt €50, hoeveel terug?** |
+| schoenen (per schoentje; 4 poten, de gans 2) | €1–2 · **4 × €2** (verdubbelen, ≤ 8) · betaal | €6–11 · **4 × €11** (tafel van 4, ≤ 44) · betaal | €7–15 · **4 × €15** (≤ 60) · terug van €50/€100 |
+| luxe (+ cadeaudoosje) | €5–10, doosje €1–3 · **samen** (≤ 13) · betaal | €21–59 geen heel tiental, doosje €3–9 · **samen** over het tiental (≤ 68) · **terug** van €50/€100 | €40–98 even · **halve prijs** · **samen** met het doosje · **terug** |
+
+**Eind groep 4 (eigenaar 2026-11-15, "groep eind4 niveau"; vervangt de groep-4-kolom hierboven
+van 2026-10-07).** Groep 4 betaalt met briefjes tot €50 (`GELD[4]` = €50 €20 €10 €5 €2 €1,
+`BEURS[4]` = €50): een kraam vraagt €23–47 precies (`€37 = €20 + €10 + €5 + €2`) en dan
+"hoeveel over van €50?" — altijd over het tiental (`50 − 37`); afleiders ±10 (het tiental
+vergeten) en ±1.  Een strook met een breed handje ("20+20+5+2", meer dan 8 tekens) toont
+drie handjes in plaats van vier, zodat hij op een telefoon past (`Beurt.KORT_MAX`).  Groep 5
+gaat mee omhoog (kraam €24–78, schoenen €7–15), nooit makkelijker dan groep 4.
 
 **Betalen** = vier handjes geld op de strook ("€5 + €2", smal "5+2"), precies één is het
 bedrag; de andere zijn een euro minder, een euro meer en twee meer (of drie), elk op zijn
@@ -416,8 +424,8 @@ schoenenkraam.  Knop `📸 Foto` (`spel_foto`), open vanaf twee gasten met een b
 | groep | prijs per dier | som | bereik |
 |---|---|---|---|
 | 3 | €2 … €5 | `€2 + €2 + €2 =` (herhaald optellen: wat onder elk vakje staat) | tot €20 |
-| 4 | €2, €3, €4, €5, €10 (de tafels van groep 4) | `3 × €2 =` | tot €40 |
-| 5 | €3 … €9 | `4 × €7 =` | tot €36 |
+| 4 | €2 … €10, alle tafels (eind groep 4, 2026-11-15; 2, 3, 4, 5, 10 eerst) | `3 × €7 =` | tot €40 |
+| 5 | €6 … €9, €11, €14, €15, €18 (`PRIJZEN_5`, keer met splitsen) | `4 × €14 =` | tot €72 |
 
 Afleiders: één dier te weinig of te veel, aantal + prijs, de prijs van één dier.
 

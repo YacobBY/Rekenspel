@@ -462,7 +462,7 @@ func test_verkeerd_geld_stuurt_het_dier_de_kraam_uit() -> void:
 	await _wacht(0.2)
 	gelijk(str(_stand().get("stap", "")), "betaal", "groep 4: nu betalen")
 	var voor := _keuzes()
-	gelijk(voor.size(), 4, "vier handjes geld")
+	waar(voor.size() == 4 or voor.size() == 3, "vier handjes geld, of drie brede (%d)" % voor.size())
 	_kies(_fout_keuze())
 	waar(_knoop(KAART) == null and _knoop(STROOK) == null, "de kaart en de strook zijn meteen weg")
 	gelijk(int(_stand().get("weg", 0)), 1, "het dier moet de kraam uit")

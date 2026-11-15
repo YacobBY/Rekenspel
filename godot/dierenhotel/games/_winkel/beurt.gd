@@ -15,17 +15,21 @@ extends RefCounted
 ##
 ##   kraampjes (hoeden, sjaals, en de souvenirkraam `kraam`)  één ding kiezen,
 ##       dan groep 3: precies betalen tot €9, en wat er over is van de €10 in
-##       de beurs · groep 4: precies betalen tot €19, en wat er over is van de
-##       €20 · groep 5: halve prijs (de prijzen zijn even), dan betalen met €50,
-##       hoeveel terug?  Twee sommen per ding (eigenaar, 2026-10-08: "rekenen
-##       moet minstens 50% van de interactie zijn": kiezen is één tik, rekenen
-##       twee).
+##       de beurs · groep 4 (eind groep 4, eigenaar 2026-11-15): €23 … €47,
+##       nooit een heel tiental, precies betalen met briefjes en munten tot
+##       €50, en wat er over is van de €50 — altijd over het tiental heen
+##       (€50 − €37) · groep 5: halve prijs van €24 … €78 (de prijzen zijn
+##       even), dan betalen met €50, hoeveel terug?  Twee sommen per ding
+##       (eigenaar, 2026-10-08: "rekenen moet minstens 50% van de interactie
+##       zijn": kiezen is één tik, rekenen twee).
 ##   schoenen   per schoentje, één per poot (4, de gans 2), dan
 ##       "hoeveel kosten 4 gympjes?" (groep 3 verdubbelen tot 8, groep 4 de
-##       tafels tot 20, groep 5 tot 36), dan precies betalen (3, 4) of terug (5)
+##       tafel van 4 met €6 … €11, tot €44, groep 5 €7 … €15, tot €60), dan
+##       precies betalen (3, 4) of terug (5)
 ##   luxe winkel  duur, en er komt een cadeaudoosje bij:
 ##       groep 3: samen (tot 13), precies betalen ·
-##       groep 4: samen (tot 69), betalen met €100, terug ·
+##       groep 4: €21 … €59 (geen heel tiental) + doosje €3 … €9, samen over
+##       het tiental (€47 + €8), betalen met €50 of €100, terug ·
 ##       groep 5: halve prijs, samen met het doosje, terug van €50 of €100
 ## Een verkeerd antwoord kost geen hulp en geen ster, maar het dier moet de
 ## winkel uit (eigenaar, 2026-09-24; `WinkelSpel._weggestuurd`).
@@ -51,12 +55,22 @@ const WAREN := {
 }
 
 ## Munten en briefjes per groep, groot naar klein.
-const GELD := {3: [10, 5, 2, 1], 4: [20, 10, 5, 2, 1], 5: [50, 20, 10, 5, 2, 1]}
+## Groep 4 has the €50 note since the end-of-groep-4 shops (owner, 2026-11-15:
+## whole euros to €100, notes €5/€10/€20/€50).
+const GELD := {3: [10, 5, 2, 1], 4: [50, 20, 10, 5, 2, 1], 5: [50, 20, 10, 5, 2, 1]}
 
 ## What an animal has in its purse at a stall in groep 3 and 4 (the step
 ## `over`): the price always fits in it — €10 for prices up to €9 (groep 3:
-## splitting 10), €20 up to €19 (groep 4: within 20).
-const BEURS := {3: 10, 4: 20}
+## splitting 10), €50 for €23 … €47 (end of groep 4: "how much is left from
+## €50", across the ten).
+const BEURS := {3: 10, 4: 50}
+
+## The largest handful of money a strip may show: four pieces.
+const STUKS_MAX := 4
+## Four money buttons fit side by side on a phone up to "10+5+2+1" (8 signs,
+## `test_elke_strook_past_op_elk_scherm`); a strip with a wider handful
+## ("20+20+5+2", the €50 amounts of groep 4) shows three handfuls instead.
+const KORT_MAX := 8
 
 # ------------------------------------------------------------ de kindtekst
 
@@ -108,16 +122,19 @@ static func opzet(winkel: String, n: int, band: int, dag: int) -> Dictionary:
 		# (€1 or €2 a shoe is all there is); a price that steps by 5 or by 2
 		# keeps doing so, also round the top of the range
 		var bereik := _bereik(winkel, b)
+		var lijst := _lijst(winkel, b)
 		var stap := 1
-		if winkel == "luxe" and b == 4:
-			stap = 5
-		elif b == 5 and winkel != "schoenen":
+		if b == 5 and winkel != "schoenen":
 			stap = 2
 		var rondjes := 0
 		while gezien.has(p) and not (winkel == "schoenen" and b == 3) and rondjes < 40:
-			p -= stap
-			if p < int(bereik[0]):
-				p = int(bereik[1]) - (int(bereik[1]) - int(bereik[0])) % stap
+			if not lijst.is_empty():
+				# a price from a list stays in the list: the one below it
+				p = int(lijst[posmod(lijst.find(p) - 1, lijst.size())])
+			else:
+				p -= stap
+				if p < int(bereik[0]):
+					p = int(bereik[1]) - (int(bereik[1]) - int(bereik[0])) % stap
 			rondjes += 1
 		gezien[p] = true
 		waren.append({"naam": str(namen[i]), "prijs": p})
@@ -125,7 +142,7 @@ static func opzet(winkel: String, n: int, band: int, dag: int) -> Dictionary:
 	if winkel == "luxe":
 		match b:
 			3: doosje = 1 + int(rnd.volgende() * 3.0)          # €1..3
-			4: doosje = 2 + int(rnd.volgende() * 8.0)          # €2..9
+			4: doosje = 3 + int(rnd.volgende() * 7.0)          # €3..9
 			_: doosje = 3 + int(rnd.volgende() * 7.0)          # €3..9
 	return {"winkel": winkel, "band": b, "N": gasten, "dag": dag, "waren": waren,
 		"doosje": doosje, "zaad": int(rnd.volgende() * 100000.0)}
@@ -134,10 +151,28 @@ static func opzet(winkel: String, n: int, band: int, dag: int) -> Dictionary:
 static func _bereik(winkel: String, b: int) -> Array:
 	match winkel:
 		"schoenen":
-			return [1, 2] if b == 3 else ([2, 5] if b == 4 else [3, 9])
+			return [1, 2] if b == 3 else ([6, 11] if b == 4 else [7, 15])
 		"luxe":
-			return [5, 10] if b == 3 else ([20, 60] if b == 4 else [40, 98])
-	return [2, 9] if b == 3 else ([6, 19] if b == 4 else [12, 39])
+			return [5, 10] if b == 3 else ([21, 59] if b == 4 else [40, 98])
+	return [2, 9] if b == 3 else ([23, 47] if b == 4 else [24, 78])
+
+## The prices a shop in groep 4 may ask, when it is not every euro of its
+## range (end of groep 4, owner 2026-11-15): never a whole ten (€50 − €40 does
+## not cross the ten, €40 + €7 does not either), and at a stall never a price
+## that takes more than four coins and notes to pay (€38 = €20 + €10 + €5 + €2
+## + €1) — the money strip holds four pieces a button.  [] = every euro.
+static func _lijst(winkel: String, b: int) -> Array:
+	if b != 4 or winkel == "schoenen":
+		return []
+	var bereik := _bereik(winkel, b)
+	var uit: Array = []
+	for p in range(int(bereik[0]), int(bereik[1]) + 1):
+		if p % 10 == 0:
+			continue
+		if winkel != "luxe" and stapel(p, b).size() > STUKS_MAX:
+			continue
+		uit.append(p)
+	return uit
 
 ## One price: k·N + r (k = how dear the thing is, r = the day's seed), folded
 ## into the band's range, so it grows with the hotel and never leaves the range.
@@ -145,17 +180,20 @@ static func prijs(winkel: String, b: int, k: int, n: int, r: int) -> int:
 	var bereik := _bereik(winkel, b)
 	var lo: int = bereik[0]
 	var hi: int = bereik[1]
+	var lijst := _lijst(winkel, b)
+	if not lijst.is_empty():
+		# groep 4: k·N + r through the list (k·3 spreads a small hotel's
+		# prices over the whole range, not only its cheap end)
+		return int(lijst[(k * n + k * 3 + r) % lijst.size()])
 	match winkel:
 		"luxe":
-			if b == 4:
-				return lo + 5 * ((k * n + r) % (int((hi - lo) / 5) + 1))    # 20, 25 … 60
 			if b == 5:
 				return lo + 2 * ((k * 3 * n + r * 5) % (int((hi - lo) / 2) + 1))  # even, 40 … 98
 			return lo + (k * n + r) % (hi - lo + 1)
 		"schoenen":
 			return lo + (k * n + r) % (hi - lo + 1)
 	if b == 5:
-		# even, 12 … 38: a stall in groep 5 sells at half price (`stappen`),
+		# even, 24 … 78: a stall in groep 5 sells at half price (`stappen`),
 		# and half of it is whole euros
 		return lo + 2 * ((k * n + r) % (int((hi - lo) / 2) + 1))
 	return mini(hi, lo + (k * n + r) % (hi - lo + 1))
@@ -298,6 +336,10 @@ static func liever(stap: String, s: Dictionary, o: Dictionary) -> Array:
 			# the price itself, and ten off
 			return [int(s["totaal"]), int(s["terug"]) + 10, int(s["terug"]) - 10]
 		"over":
+			if int(o.get("band", 3)) >= 4:
+				# €50 − €37: the ten forgotten (23 / 3), one off counting on
+				return [int(s["over"]) + 10, int(s["over"]) - 10, int(s["over"]) + 1,
+					int(s["over"]) - 1]
 			# the price itself, and one off when counting on to the purse
 			return [int(s["totaal"]), int(s["over"]) + 1, int(s["over"]) - 1]
 	return []
@@ -343,15 +385,22 @@ static func stapel_knop_kort(stapel_: Array) -> String:
 ## notes for the price, and for a euro less, a euro more and two more (or three
 ## more when there is no euro less) — every one a real handful of money, never
 ## more than four pieces.  Their order comes from the seed, so the right one is
-## not always in the same place, and a reload draws the same four.
+## not always in the same place, and a reload draws the same four.  When one
+## of the four is wider than `KORT_MAX` signs ("20+20+5+2") the strip holds
+## three of them — the right one and the euro less and more — so it still fits
+## a phone.
 static func betaal_keuzes(totaal: int, band: int, zaad: int) -> Array:
 	var sommen_: Array[int] = [totaal]
 	for d in [-1, 1, 2, 3, -2]:
 		var t := totaal + int(d)
 		if sommen_.size() >= 4:
 			break
-		if t >= 1 and not sommen_.has(t) and stapel(t, band).size() <= 4:
+		if t >= 1 and not sommen_.has(t) and stapel(t, band).size() <= STUKS_MAX:
 			sommen_.append(t)
+	for t in sommen_:
+		if sommen_.size() > 3 and stapel_kort(stapel(t, band)).length() > KORT_MAX:
+			sommen_.resize(3)
+			break
 	var uit: Array = []
 	for t in sommen_:
 		uit.append(stapel(t, band))

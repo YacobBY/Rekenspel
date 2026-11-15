@@ -209,19 +209,29 @@ func _toon_vraag() -> void:
 	var d := _d()
 	d["slapers"] = _slapers
 	d["fase"] = "vraag"
+	# the form of the question is fixed the first time it is asked for this
+	# guest and room (R2): groep 3 `2 + 1 =`, from groep 4 on the whole hotel
+	# minus the other room, `7 − 4 =` (end of groep 4, `Hotel.bed_vraag`)
+	if not d.has("band"):
+		var ander: Dictionary = Hotel.bed_ander(_kamer)
+		d["band"] = ctx.state.band()
+		d["anders_kamer"] = str(ander.get("kamer", ""))
+		d["anders"] = int(ander.get("n", 0))
 	State.bewaar()
 	var g := Hotel.gast_bij_id(_gast)
 	var goed := _slapers + 1
+	var bv: Dictionary = Hotel.bed_vraag(_kamer, _slapers, str(d.get("anders_kamer", "")),
+		int(d.get("anders", 0)), str(g.get("naam", "")), int(d.get("band", 3)))
 	if _kaart != null:
 		_kaart.weg()
-	_kaart = ctx.ui.somkaart(Hotel.balieplek(), "%d + 1 =" % _slapers, {
+	_kaart = ctx.ui.somkaart(Hotel.balieplek(), str(bv["som"]), {
 		"id": "bd_som", "kamer": KAMER, "hoog": Hotel.balie_hoog(), "icoon": ICOON,
 		"volg": Hotel.balie_anker(_gast),
-		"regel": regel_slapers(_kamer, _slapers),
-		"regel2": regel_erbij(str(g.get("naam", ""))),
+		"regel": str(bv["regel"]),
+		"regel2": str(bv["regel2"]),
 		# the slips a child makes: the room without him, or one too many
-		"goed": goed, "liever": [_slapers, goed + 1], "min": 0,
-		"max_getal": goed + 4, "keuze_titel": KEUZE_TITEL,
+		"goed": goed, "liever": bv["liever"], "min": 0,
+		"max_getal": maxi(goed + 4, int(bv["max_getal"])), "keuze_titel": KEUZE_TITEL,
 		"on_ok": func(n: int, _k) -> void: _op_antwoord(n),
 	})
 	World.vuil()

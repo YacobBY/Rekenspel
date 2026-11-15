@@ -333,10 +333,12 @@ func test_kamerknoppen_hebben_pictogram_en_woord() -> void:
 # ----------------------------------------------------------- de getallen
 
 ## The numbers are the animals: the ones whose bed is in the chosen room, plus
-## the new guest.  Kamer 2 with three sleepers asks "3 + 1 =".
+## the new guest.  Kamer 2 with three sleepers asks "3 + 1 =" (groep 3).
 func test_de_vraag_telt_de_dieren_van_die_kamer() -> void:
 	_op()
 	_hotel(1, 3)
+	State.s["kunnen"] = 2            # groep 3: the room's sleepers + 1
+	gelijk(State.band(), 3, "groep 3")
 	waar(await _kies_kamer("kamer2"), "kamer 2 gekozen, het spel vraagt")
 	gelijk(Games.actief(), SPEL, "het beddenspel loopt")
 	gelijk(int(State.s["checkin"]["stap"]), 4, "de check-in staat bij zijn bedden")
@@ -364,6 +366,33 @@ func test_de_vraag_telt_de_dieren_van_die_kamer() -> void:
 		gelijk(k1.som_label.text, "0 + 1 =", "0 + 1")
 	waar(_knoppen("bd_som_keuzes").has("Kn1"), "met 1 bed als antwoord")
 	await _af()
+
+## End of groep 4 (owner, 2026-11-15): from groep 4 on, with animals in the
+## other room, the question is the whole hotel with him minus that room —
+## "Met Boef slapen er 5 dieren" / "Kamer 1 heeft 1. Hoeveel in kamer 2?",
+## `5 − 1 =` — and the answer is still the beds of his room (4).  A miss keeps
+## that same question (R2).
+func test_de_vraag_groep4_het_hele_hotel() -> void:
+	_op()
+	_hotel(1, 3)
+	gelijk(State.band(), 4, "vier gasten: groep 4")
+	waar(await _kies_kamer("kamer2"), "kamer 2 gekozen, het spel vraagt")
+	var naam := str(Hotel.gast_bij_id(_gid())["naam"])
+	var k := _kaart("bd_som")
+	waar(k != null, "de beddenvraag hangt aan de balie")
+	if k != null:
+		gelijk(k.regel_label.text, "🛏 Met %s slapen er 5 dieren" % naam, "het hele hotel met hem")
+		gelijk(k.regel2_label.text, "Kamer 1 heeft 1. Hoeveel in kamer 2?", "min de andere kamer")
+		gelijk(k.som_label.text, "5 − 1 =", "de som")
+		for zin in [k.regel_label.text.trim_prefix("🛏 "), k.regel2_label.text]:
+			waar(Ui.keur_regel("bd", zin), "'%s' past" % zin)
+	var knoppen := _knoppen("bd_som_keuzes")
+	gelijk(knoppen.size(), 4, "vier getallen")
+	waar(knoppen.has("Kn4"), "de bedden van kamer 2: %s" % str(knoppen))
+	gelijk(int(State.spel_data(SPEL).get("band", 0)), 4, "de vorm van de vraag ligt vast")
+	await _af()
+	gelijk(Hotel.BED_HOTEL % ["Stampertje", 9], "Met Stampertje slapen er 9 dieren", "letterlijk")
+	waar(Ui.keur_regel("bd", Hotel.BED_HOTEL % ["Stampertje", 9]), "past op de langste naam")
 
 func test_een_slaper_is_enkelvoud() -> void:
 	var spel: GDScript = load(BRON)

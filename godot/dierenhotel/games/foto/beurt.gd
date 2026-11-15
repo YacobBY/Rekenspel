@@ -14,8 +14,10 @@ extends RefCounted
 ## hokje van vandaag); het eerste stapt vanzelf in, de anderen kiest het kind,
 ## en na elk dier dat erbij komt: wat kost de foto nu?
 ##   groep 3: €2 + €2 + €2 =      herhaald optellen, prijs €2 … €5, tot €20
-##   groep 4: 3 × €2 =            de tafels van groep 4: €2, €3, €4, €5, €10
-##   groep 5: 4 × €7 =            de tafels tot 9: €3 … €9
+##   groep 4: 3 × €7 =            alle tafels (eind groep 4, eigenaar 2026-11-15):
+##                                €2 … €10, tot 4 × €10 = €40
+##   groep 5: 4 × €14 =           de tafels van 6 … 9 en tweecijferige prijzen
+##                                (€11, €14, €15, €18), tot 4 × €18 = €72
 ## Dan het geld erin: welke munten en briefjes zijn precies dat bedrag
 ## (`games/_winkel/beurt.gd`, dezelfde handjes geld als in de winkels).  Zo
 ## rekent het kind na elke keuze, en is rekenen meer dan de helft van de tikken
@@ -28,8 +30,13 @@ const ZAAD := 60317
 const MIN_DIEREN := 2
 const MAX_DIEREN := 4
 
-## De prijzen van groep 4: de tafels die daar geleerd worden (IDEAS.md).
-const TAFELS_4 := [2, 3, 4, 5, 10]
+## De prijzen van groep 4: alle tafels tot 10 (eind groep 4, 2026-11-15) — de
+## tafels van 2, 3, 4, 5 en 10 eerst, dan 6, 7, 8 en 9.
+const TAFELS_4 := [2, 3, 4, 5, 10, 6, 7, 8, 9]
+## De prijzen van groep 5: nooit makkelijker dan groep 4 — de lastige tafels en
+## tweecijferige prijzen (keer met splitsen, 4 × €14), elk antwoord in hooguit
+## vier munten en briefjes te betalen (dus geen €12: 4 × €12 = €48 is er vijf).
+const PRIJZEN_5 := [6, 7, 8, 9, 11, 14, 15, 18]
 
 # ------------------------------------------------------------ de kindtekst
 
@@ -64,8 +71,10 @@ static func prijs(n: int, band: int, dag: int) -> int:
 		3:
 			return 2 + (gasten + r) % 4                      # €2 … €5
 		4:
-			return int(TAFELS_4[(gasten + r) % TAFELS_4.size()])
-	return 3 + (2 * gasten + r) % 7                          # €3 … €9
+			var r4 := int(rnd.volgende() * float(TAFELS_4.size()))
+			return int(TAFELS_4[(gasten + r + r4) % TAFELS_4.size()])
+	var r5 := int(rnd.volgende() * float(PRIJZEN_5.size()))
+	return int(PRIJZEN_5[(2 * gasten + r + r5) % PRIJZEN_5.size()])
 
 ## Hoeveel dieren er vandaag op de foto gaan: twee, drie of vier, en nooit meer
 ## dan er mogen (`pool`, de dieren met een bed, hooguit vier).  Een functie van

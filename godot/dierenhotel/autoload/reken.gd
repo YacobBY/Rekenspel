@@ -66,6 +66,15 @@ const KNOP := "reken_knop"      ## the big button
 const WOLK := "reken_eerst"     ## the see-through bubble of a refused tap
 const KAART := "reken_som"      ## the quick sum
 const KOEK := "reken_koek"      ## the quick sum's biscuits: the model and the decor ids
+const PAK := "reken_pak"        ## from groep 4 on: a pack of biscuits, its number on a tag
+## The quick sum from groep 4 on (end of groep 4, owner 2026-11-15): packs with
+## the same number of biscuits each, the number on every pack — a table,
+## `4 × 7 =`.  5 words, 31 characters.
+const REKEN_PAK := "Hoeveel koekjes in alle pakjes?"
+## The biscuits per pack: every table to 10 in groep 4 (2, 3, 4, 5, 10 first),
+## the hard tables in groep 5.
+const PAK_TAFELS_4 := [2, 3, 4, 5, 10, 6, 7, 8, 9]
+const PAK_TAFELS_5 := [6, 7, 8, 9]
 const REKENING := "rekening"    ## `HotelRekening.EIGENAAR`: counting the bill's coins IS maths
 const WOLK_S := 4.0             ## how long the bubble of a refused tap hangs (a child reads slowly)
 const KLAAR_S := 1.4            ## a counted quick sum stays this long, ticked
@@ -102,6 +111,8 @@ func _ready() -> void:
 	_lees()
 	if not Art.heeft_model(KOEK):
 		Art.registreer_model(KOEK, _koek_model)
+	if not Art.heeft_model(PAK):
+		Art.registreer_model(PAK, _pak_model)
 	Games.spel_gestart.connect(_op_spel_gestart)
 	Games.spel_gestopt.connect(_op_spel_gestopt)
 	# the bill's last right answer: counting the coins out exactly is maths too
@@ -602,6 +613,10 @@ func _snelle_som() -> void:
 		return
 	_snel_nr += 1
 	var kamer := World.kamer_nu()
+	var pak := _snel_pak()
+	if not pak.is_empty():
+		_pakjes_som(kamer, int(pak["m"]), int(pak["k"]))
+		return
 	var plekken := _koek_plekken(kamer, _snel_aantal())
 	if plekken.size() < 2:
 		_kale_som(kamer)
@@ -617,8 +632,52 @@ func _snelle_som() -> void:
 	Ui.somkaart(ids[0], "", {"id": KAART, "door": EIGENAAR, "kamer": kamer,
 		"goed": n, "min": 1, "max": 2, "max_getal": 20, "liever": [n - 1, n + 1],
 		"icoon": UiTekst.REKEN_TEL_ICOON, "regel": UiTekst.REKEN_TEL,
-		"volg": _koek_volg(kamer, ids),
+		"volg": _koek_volg(kamer, ids, KOEK),
 		"on_ok": func(g, k) -> void: _snel_antwoord(int(g), k)})
+
+## From groep 4 on: `m` packs on the free floor, each with its number `k` on a
+## tag, and the card "🍪 Hoeveel koekjes in alle pakjes?" with `m × k =` — a
+## table the picture shows (the packs to count, the number on each), instead
+## of up to a hundred loose biscuits.
+func _pakjes_som(kamer: String, m: int, k: int) -> void:
+	var plekken := _koek_plekken(kamer, m)
+	if plekken.size() < 2:
+		_kale_som(kamer)
+		return
+	var ids: Array[String] = []
+	var tags: Array[String] = []
+	for i in plekken.size():
+		var id := "%s%d" % [PAK, i]
+		var p: Vector2 = plekken[i]
+		World.decor(kamer, {"id": id, "model": PAK, "x": p.x, "z": p.y, "door": EIGENAAR})
+		ids.append(id)
+		tags.append(Ui.getal_tag(id, k, {"id": "%s_tag%d" % [PAK, i], "door": EIGENAAR,
+			"kamer": kamer, "y": 13.0, "titel": "%d koekjes" % k}))
+	var aantal := ids.size()
+	var goed := aantal * k
+	var liever: Array = []
+	for x in [(aantal - 1) * k, (aantal + 1) * k, aantal + k, aantal * (k + 1)]:
+		if int(x) > 0 and int(x) != goed and not liever.has(int(x)):
+			liever.append(int(x))
+	_snel = {"kamer": kamer, "n": goed, "ids": ids, "tags": tags, "nr": _snel_nr,
+		"m": aantal, "k": k}
+	Ui.somkaart(ids[0], "%d × %d =" % [aantal, k], {"id": KAART, "door": EIGENAAR,
+		"kamer": kamer, "goed": goed, "min": 1, "max": 2, "max_getal": 99, "liever": liever,
+		"icoon": UiTekst.REKEN_TEL_ICOON, "regel": REKEN_PAK,
+		"volg": _koek_volg(kamer, ids, PAK),
+		"on_ok": func(g, kaart) -> void: _snel_antwoord(int(g), kaart)})
+
+## The packs of the quick sum from groep 4 on: {m, k}, or {} in groep 3 (loose
+## biscuits to count).  Two to five packs in groep 4, three to six in groep 5.
+func _snel_pak() -> Dictionary:
+	var band := State.band()
+	if band <= 3:
+		return {}
+	var z := _zaad()
+	var tafels: Array = PAK_TAFELS_4 if band == 4 else PAK_TAFELS_5
+	var k := int(tafels[posmod(z * 7 + 3, tafels.size())])
+	var m := (2 if band == 4 else 3) + posmod(z, 4)
+	return {"m": m, "k": k}
 
 ## Never needed in the hotel as it is built; the last rung so the gate can not
 ## dead-end in a room without free floor.
@@ -656,6 +715,8 @@ func _snel_weg() -> void:
 		var kamer := str(_snel.get("kamer", ""))
 		for id in (_snel.get("ids", []) as Array):
 			World.decor_weg(kamer, str(id))
+		for id in (_snel.get("tags", []) as Array):
+			Hits.weg(str(id))
 	_snel = {}
 
 ## The quick sum on screen: {kamer, n, ids, nr}, empty when there is none.
@@ -663,7 +724,8 @@ func snelle_som() -> Dictionary:
 	return _snel.duplicate(true)
 
 ## How many biscuits: groep 3 three to seven, groep 4 five to ten, groep 5
-## eight to twelve — a different number each time.
+## eight to twelve — a different number each time.  Since 2026-11-15 groep 4
+## and 5 count packs instead (`_snel_pak`); the loose count stays for groep 3.
 func _snel_aantal() -> int:
 	var band := State.band()
 	var lo := 3
@@ -731,14 +793,14 @@ static func _dichtbij(p: Vector2, lijst: Array[Vector2], afstand: float) -> bool
 	return false
 
 ## The card keeps clear of every biscuit: their boxes together are its thing.
-func _koek_volg(kamer: String, ids: Array[String]) -> Callable:
+func _koek_volg(kamer: String, ids: Array[String], model: String = KOEK) -> Callable:
 	return func() -> Dictionary:
 		var vak := Rect2()
 		for id in ids:
 			var p := World.decor_plek(id, kamer)
 			if p.is_empty():
 				continue
-			var v := World.vlak_van(KOEK, float(p["x"]), float(p["z"]), 0.0)
+			var v := World.vlak_van(model, float(p["x"]), float(p["z"]), 0.0)
 			if v.size.x <= 0.0:
 				continue
 			vak = v if vak.size.x <= 0.0 else vak.merge(v)
@@ -762,6 +824,27 @@ func _koek_model(_p := {}) -> Array:
 				v.append({"x": dx, "y": 1, "z": dz, "k": KOEK_KLEUR})
 	for c in [Vector2i(-1, -1), Vector2i(1, 0), Vector2i(-1, 1)]:
 		v.append({"x": c.x, "y": 2, "z": c.y, "k": KOEK_CHOCO})
+	return v
+
+const PAK_KLEUR := Color("#D8B27A")
+const PAK_RAND := Color("#B08850")
+
+## A paper pack of biscuits, seven voxels across and eight high, a biscuit on
+## its top so a child sees what is in it; the number rides on a tag.
+func _pak_model(_p := {}) -> Array:
+	var v: Array = []
+	for dx in range(-3, 4):
+		for dz in range(-3, 4):
+			var rand := absi(dx) == 3 or absi(dz) == 3
+			for y in range(0, 7):
+				if rand or y == 0 or y == 6:
+					v.append({"x": dx, "y": y, "z": dz, "k": PAK_RAND if (rand and (y == 0 or y == 6)) else PAK_KLEUR})
+	for dx in range(-2, 3):
+		for dz in range(-2, 3):
+			if dx * dx + dz * dz <= 5:
+				v.append({"x": dx, "y": 7, "z": dz, "k": KOEK_KLEUR})
+	for c in [Vector2i(-1, 0), Vector2i(1, 1)]:
+		v.append({"x": c.x, "y": 8, "z": c.y, "k": KOEK_CHOCO})
 	return v
 
 # ------------------------------------------------------------- opslag

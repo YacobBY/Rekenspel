@@ -638,6 +638,50 @@ func test_de_snelle_som_past_in_elke_kamer() -> void:
 	State.s["band"] = 3
 	await _af()
 
+## End of groep 4 (owner, 2026-11-15): from groep 4 on the quick sum is packs
+## of biscuits with the number on each — a table, `4 × 7 =` — in every room;
+## groep 4 every table to 10, groep 5 only the hard ones (never easier).
+func test_de_snelle_som_groep4_is_een_tafel() -> void:
+	alleen_spellen([])
+	await _op()
+	for geval in [[4, 5], [5, 7]]:
+		var band: int = geval[0]
+		var pool := State.gasten_pool()
+		State.s["gasten"] = pool.slice(0, int(geval[1]))
+		State.s["kunnen"] = 5
+		gelijk(State.band(), band, "de band is %d" % band)
+		var tafels := {}
+		for ronde in 4:
+			for kamer in Rooms.lijst():
+				Hotel.naar_kamer(kamer)
+				Reken._snelle_som()
+				var snel := Reken.snelle_som()
+				var wat := "%s, groep %d" % [kamer, band]
+				var ids: Array = snel.get("ids", [])
+				var m := ids.size()
+				var k := int(snel.get("k", 0))
+				tafels[k] = true
+				waar(m >= 2, "%s: minstens twee pakjes (%d)" % [wat, m])
+				gelijk(int(snel.get("n", 0)), m * k, "%s: het antwoord is pakjes × koekjes" % wat)
+				gelijk((snel.get("tags", []) as Array).size(), m, "%s: elk pakje draagt zijn getal" % wat)
+				for id in (snel.get("tags", []) as Array):
+					waar(Hits.spot(str(id)) != null, "%s: het getal %s staat er" % [wat, str(id)])
+				if band == 4:
+					waar(Reken.PAK_TAFELS_4.has(k) and m <= 5, "%s: een tafel tot 10 (%d × %d)" % [wat, m, k])
+				else:
+					waar(k >= 6 and k <= 9 and m >= 3, "%s: de lastige tafels (%d × %d)" % [wat, m, k])
+				var kaart = Ui.kaart_van(Reken.KAART)
+				waar(kaart != null and kaart.getal_vraag, "%s: een getalkaart" % wat)
+				Reken._snel_weg()
+				for id in ids:
+					waar(World.decor_plek(str(id), kamer).is_empty(), "%s: het pakje is weer weg" % wat)
+		if band == 4:
+			for t in [6, 7, 8, 9]:
+				waar(tafels.has(t), "groep 4: ook de tafel van %d (%s)" % [t, str(tafels.keys())])
+	waar(Ui.keur_regel("proef", Reken.REKEN_PAK), "de zin past (%s)" % Reken.REKEN_PAK)
+	State.s["gasten"] = []
+	await _af()
+
 # ---------------------------------------------------------------- opslag
 
 ## Rule 6: the counters live outside the hotels.  Reading the hotel back,

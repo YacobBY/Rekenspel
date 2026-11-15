@@ -250,19 +250,21 @@ func test_de_prijzen_en_de_sommen() -> void:
 								var basis := int(p / 2) if band == 5 else p
 								gelijk(t, basis + int(o["doosje"]), "luxe: met het doosje")
 							if Beurt.stappen(winkel, band).has("betaal"):
-								waar(t <= (13 if band == 3 else 20),
-									"%s groep %d: betalen tot €13 / €20 (%d)" % [winkel, band, t])
+								waar(t <= (13 if band == 3 else 50),
+									"%s groep %d: betalen tot €13 / €50 (%d)" % [winkel, band, t])
+								waar(Beurt.stapel(t, band).size() <= Beurt.STUKS_MAX,
+									"%s groep %d: €%d is hooguit vier stuks geld" % [winkel, band, t])
 							if Beurt.stappen(winkel, band).has("terug"):
 								waar(int(s["terug"]) >= 1 and int(s["terug"]) < int(s["briefje"]),
 									"%s: er is altijd wisselgeld (%d van %d)" % [winkel, int(s["terug"]),
 										int(s["briefje"])])
 								waar(int(s["briefje"]) in [20, 50, 100], "een echt briefje")
 							if Beurt.stappen(winkel, band).has("over"):
-								gelijk(int(s["beurs"]), 10 if band == 3 else 20,
-									"%s groep %d: €10 / €20 in de beurs" % [winkel, band])
+								gelijk(int(s["beurs"]), 10 if band == 3 else 50,
+									"%s groep %d: €10 / €50 in de beurs" % [winkel, band])
 								gelijk(int(s["over"]), int(s["beurs"]) - t, "%s: wat er over is" % winkel)
-								waar(int(s["over"]) >= 1 and int(s["over"]) <= (8 if band == 3 else 14),
-									"%s groep %d: er blijft iets over, binnen 10 / 20 (%d)" % [winkel, band,
+								waar(int(s["over"]) >= 1 and int(s["over"]) <= (8 if band == 3 else 27),
+									"%s groep %d: er blijft iets over, binnen 10 / 50 (%d)" % [winkel, band,
 										int(s["over"])])
 							if Beurt.stappen(winkel, band).has("half"):
 								gelijk(p % 2, 0, "%s groep 5: een even prijs, de helft is hele euro's (%d)"
@@ -292,11 +294,19 @@ func test_de_prijzen_en_de_sommen() -> void:
 ## more than four pieces, only the coins and notes of the groep.
 func test_betalen_met_echt_geld() -> void:
 	# what a shop really asks to pay: groep 3 up to €13 (the luxury shop with
-	# its box), groep 4 up to €20 (four shoes of €5); groep 5 gets change
+	# its box), groep 4 up to €47 (a stall; four shoes of €11 are €44) — every
+	# amount of four pieces at most, the shops never ask more; groep 5 gets change
 	for band in [3, 4]:
-		for totaal in range(1, 14 if band == 3 else 21):
+		for totaal in range(1, 14 if band == 3 else 50):
+			if Beurt.stapel(totaal, band).size() > Beurt.STUKS_MAX:
+				continue
 			var keuzes := Beurt.betaal_keuzes(totaal, band, 17)
-			gelijk(keuzes.size(), 4, "groep %d, €%d: vier keuzes" % [band, totaal])
+			# three when a handful is wider than "10+5+2+1" (the €50 amounts)
+			var breed := false
+			for st in keuzes:
+				breed = breed or Beurt.stapel_kort(st).length() > Beurt.KORT_MAX
+			waar(keuzes.size() == 3 or (keuzes.size() == 4 and not breed),
+				"groep %d, €%d: vier smalle keuzes, of drie (%d)" % [band, totaal, keuzes.size()])
 			var goed := 0
 			var sommen := {}
 			for st in keuzes:
@@ -312,6 +322,8 @@ func test_betalen_met_echt_geld() -> void:
 			gelijk(str(Beurt.betaal_keuzes(totaal, band, 17)), str(keuzes), "herladen: dezelfde vier")
 	gelijk(Beurt.stapel(7, 3), [5, 2], "€7 = €5 + €2")
 	gelijk(Beurt.stapel(19, 4), [10, 5, 2, 2], "€19 = €10 + €5 + €2 + €2")
+	gelijk(Beurt.stapel(47, 4), [20, 20, 5, 2], "€47 = €20 + €20 + €5 + €2")
+	gelijk(Beurt.stapel(50, 4), [50], "groep 4 heeft het briefje van €50")
 	gelijk(Beurt.stapel_tekst([5, 2]), "€5 + €2", "zo staat het op de knop")
 	gelijk(Beurt.stapel_knop_kort([5, 2]), "💶\n5+2", "op een telefoon: het pictogram boven het geld")
 
@@ -322,7 +334,7 @@ func test_elke_zin_past() -> void:
 		Ui._bouw_thema(17)
 	var naam := "Stampertje"
 	var zinnen: Array[String] = [Beurt.T_KIES % naam, Beurt.T_SOM_DOOS, Beurt.T_HALF,
-		Beurt.T_BETAAL % "€19", Beurt.T_TERUG % [naam, "€100"], Beurt.T_OVER % [naam, "€20"],
+		Beurt.T_BETAAL % "€47", Beurt.T_TERUG % [naam, "€100"], Beurt.T_OVER % [naam, "€50"],
 		Beurt.T_WEG, Beurt.T_LEEG]
 	for kl in ArtGasten.KLEDING:
 		var w: Dictionary = ArtGasten.KLEDING[kl]
@@ -394,7 +406,7 @@ func test_verkeerd_geld_stuurt_het_dier_de_winkel_uit() -> void:
 	await _wacht(0.2)
 	gelijk(str(_stand("hoeden").get("stap", "")), "betaal", "groep 4: nu betalen")
 	var voor := _keuzes()
-	gelijk(voor.size(), 4, "vier handjes geld")
+	waar(voor.size() == 4 or voor.size() == 3, "vier handjes geld, of drie brede (%d)" % voor.size())
 	var gast := str(_stand("hoeden")["gast"])
 	var fout_k := _fout_keuze("hoeden")
 	waar(not fout_k.is_empty(), "er staat een verkeerd bedrag op de strook")
@@ -1241,3 +1253,80 @@ func _va_eind(wat: String, teller: Dictionary, budget_voor: int) -> void:
 	waar(int(b["goed"]) >= 1, "%s: Reken.goed() vuurde" % wat)
 	waar(Reken.budget() > budget_voor, "%s: het budget steeg (%d -> %d)" % [wat, budget_voor,
 		Reken.budget()])
+
+# ------------------------------------------------- eind groep 4 (2026-11-15)
+
+## The owner (2026-11-15): "groep eind4 niveau".  Every shop in groep 4 asks
+## end-of-groep-4 sums: a stall €23 … €47 paid exactly with notes, and what is
+## left of €50 always crosses the ten; four shoes of €6 … €11 (the table of 4);
+## the luxury shop's price and box add up across the ten more often than not.
+## And groep 5 is never easier than groep 4 in any shop.
+func test_groep4_eind_over_het_tiental() -> void:
+	var over_tien := 0
+	var luxe_samen := 0
+	var luxe_tien := 0
+	var groot := {}
+	for winkel in WINKELS:
+		groot[winkel] = [0, 0, 0, 0]
+	for winkel in WINKELS:
+		for n in range(1, 11):
+			for dag in range(1, 8):
+				var o := Beurt.opzet(winkel, n, 4, dag)
+				var o5 := Beurt.opzet(winkel, n, 5, dag)
+				for w in o["waren"]:
+					var p := int(w["prijs"])
+					var s := Beurt.sommen(o, str(w["naam"]), "hond")
+					match winkel:
+						"schoenen":
+							waar(p >= 6 and p <= 11, "schoenen groep 4: €6 … €11 (%d)" % p)
+							gelijk(int(s["som"]), 4 * p, "schoenen groep 4: de tafel van 4")
+						"luxe":
+							waar(p % 10 != 0 and p > 20 and p < 60, "luxe groep 4: geen heel tiental (%d)" % p)
+							luxe_samen += 1
+							if p % 10 + int(o["doosje"]) >= 10:
+								luxe_tien += 1
+							waar(int(s["briefje"]) in [50, 100], "luxe groep 4: terug van €50 of €100")
+						_:
+							waar(p >= 23 and p <= 47 and p % 10 != 0,
+								"%s groep 4: €23 … €47, geen tiental (%d)" % [winkel, p])
+							gelijk(int(s["beurs"]), 50, "%s groep 4: €50 in de beurs" % winkel)
+							# 50 − p crosses the ten: the ones of p are not 0
+							waar(int(s["over"]) % 10 != 0, "%s: €50 − €%d gaat over het tiental" % [winkel, p])
+							over_tien += 1
+							waar(Beurt.stapel(p, 4).size() >= 2,
+								"%s: €%d betaal je met meer dan één stuk" % [winkel, p])
+				# groep 5 is never easier: its numbers are on average at least
+				# as large (the price it starts from, or the product)
+				for w in o["waren"]:
+					groot[winkel][0] += maxi(int(w["prijs"]),
+						int(Beurt.sommen(o, str(w["naam"]), "hond")["som"]))
+					groot[winkel][1] += 1
+				for w in o5["waren"]:
+					groot[winkel][2] += maxi(int(w["prijs"]),
+						int(Beurt.sommen(o5, str(w["naam"]), "hond")["som"]))
+					groot[winkel][3] += 1
+	for winkel in WINKELS:
+		var g: Array = groot[winkel]
+		if winkel != "luxe":
+			waar(float(g[2]) / float(g[3]) >= float(g[0]) / float(g[1]),
+				"%s: groep 5 (gem. %.1f) niet kleiner dan groep 4 (gem. %.1f)" % [winkel,
+					float(g[2]) / float(g[3]), float(g[0]) / float(g[1])])
+		else:
+			# the luxury shop halves first in groep 5: one sum more per turn
+			var r4 := 0
+			var r5 := 0
+			for stap in Beurt.stappen(winkel, 4):
+				r4 += 1 if Beurt.REKENSTAPPEN.has(stap) else 0
+			for stap in Beurt.stappen(winkel, 5):
+				r5 += 1 if Beurt.REKENSTAPPEN.has(stap) else 0
+			waar(r5 > r4, "luxe: groep 5 rekent een stap meer (%d / %d)" % [r5, r4])
+	waar(over_tien > 100, "genoeg kraamsommen bekeken (%d)" % over_tien)
+	waar(luxe_tien * 2 >= luxe_samen, "luxe groep 4: meestal over het tiental (%d van %d)"
+		% [luxe_tien, luxe_samen])
+	# the ranges themselves: groep 5 reaches further
+	for winkel in WINKELS:
+		var r4: Array = Beurt._bereik(winkel, 4)
+		var r5: Array = Beurt._bereik(winkel, 5)
+		waar(int(r5[1]) > int(r4[1]),
+			"%s: groep 5 gaat verder dan groep 4 (%s / %s)" % [winkel, str(r4), str(r5)])
+	gelijk(Beurt.GELD[4], [50, 20, 10, 5, 2, 1], "groep 4: briefjes tot €50")
