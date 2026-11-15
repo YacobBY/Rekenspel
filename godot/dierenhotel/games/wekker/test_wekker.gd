@@ -279,6 +279,7 @@ func test_tijd_in_woorden() -> void:
 
 func _speel_beurt(band_n: int, dag: int, kunnen: int, verwacht_band: int) -> void:
 	_op()
+	State.vloer = mini(State.BAND_MIN, verwacht_band)   # band 3 only below the floor
 	_gasten(band_n, dag, kunnen)
 	gelijk(State.band(), verwacht_band, "band bij N=%d" % band_n)
 	waar(Games.start(ID), "het spel start")
@@ -1082,6 +1083,7 @@ func test_elke_keuzeknop_draagt_een_woord() -> void:
 			[4, 5, 2, 3, ["uur_af", "uur", "kwartier", "klaar"]],
 			[5, 8, 2, 5, ["uur_af", "uur", "vijf", "klaar"]]]:
 		_op()
+		State.vloer = mini(State.BAND_MIN, int(rij[0]))   # band 3 only below the floor
 		_gasten(int(rij[1]), int(rij[2]), int(rij[3]))
 		waar(Games.start(ID), "het spel start (band %d)" % int(rij[0]))
 		gelijk(int(_spel().stand()["band"]), int(rij[0]), "band %d" % int(rij[0]))
@@ -1313,6 +1315,7 @@ func test_rekenaandeel() -> void:
 		var wat := "groep %d, %d gasten" % [int(geval[3]), n]
 		_teller = {"reken": 0, "spel": 0}
 		_op()
+		State.vloer = mini(State.BAND_MIN, int(geval[3]))   # groep 3 only below the floor
 		_gasten(n, int(geval[1]), int(geval[2]))
 		gelijk(State.band(), int(geval[3]), "%s: de band" % wat)
 		var va_b := _va_begin()
@@ -1383,6 +1386,7 @@ func test_een_gemiste_wektijd_komt_onveranderd_terug() -> void:
 				World.zet_dag(3)
 			"een andere band":
 				State.s["kunnen"] = 2
+				groep3()             # (only below the floor of end groep 4)
 				gelijk(State.band(), 3, "nu groep 3")
 			"een gast minder":
 				(State.s["gasten"] as Array).pop_back()

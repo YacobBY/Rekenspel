@@ -411,6 +411,7 @@ func test_een_hele_beurt_op_band_5() -> void:
 
 func _beurt_per_band(n_gasten: int, band: int) -> void:
 	_op()
+	State.vloer = mini(State.BAND_MIN, band)     # band 3 only below the floor
 	var gasten := _gasten(n_gasten, 5 if band == 5 else 3)
 	gelijk(State.band(), band, "band %d met %d gasten" % [band, n_gasten])
 	var sterren_voor := int(State.s["sterren"])
@@ -759,7 +760,8 @@ func test_wisselen_terwijl_het_spel_wacht() -> void:
 	World.pauzeer(false)
 	await _af()
 
-## Eén gast: band 3, baan 16 m — twee slagen, en over de laatste 6 m valt er
+## Eén gast: band 3 (onder de vloer van eind groep 4, `groep3()`: de druppeltelling
+## hieronder rust op die korte baan), baan 16 m — twee slagen, en over de laatste 6 m valt er
 ## precies één plonsdruppel (elke 5 m), zodat een piek van 6 druppels alleen
 ## van de klimax zelf kan komen.  De return zegt óf er tijdens het pollen een
 ## sterkleurig deeltje rondhing: dat hoort alleen bij de precieze overkant.
@@ -767,6 +769,7 @@ func test_wisselen_terwijl_het_spel_wacht() -> void:
 ## (`soort_ver`: de proef wacht de misser af en eist stilte in het water).
 func _klimax_spat(soort_ver: bool) -> bool:
 	_op()
+	groep3()
 	_gasten(1)
 	gelijk(State.band(), 3, "één gast baant weg op band 3")
 	Ui.zet_rust_modus(false)
@@ -1137,7 +1140,7 @@ func test_startblokken_staan_klaar() -> void:
 func test_gehaalde_strepen_kleuren_mee() -> void:
 	_op()
 	_gasten(1)
-	gelijk(State.band(), 3, "één gast baant weg op band 3")
+	gelijk(State.band(), 4, "één gast zwemt op de vloer: eind groep 4")
 	Ui.zet_rust_modus(true)          # de zwemtocht kost geen muurkloktijd
 	waar(Games.start(ID), "het spel start")
 	waar(await _wacht(_kaart_staat, 20000), "de vraagkaart staat er")
@@ -1171,7 +1174,7 @@ func test_gehaalde_strepen_kleuren_mee() -> void:
 func test_na_een_misser_licht_niets_op() -> void:
 	_op()
 	var gasten := _gasten(1)
-	gelijk(State.band(), 3, "één gast baant weg op band 3")
+	gelijk(State.band(), 4, "één gast zwemt op de vloer: eind groep 4")
 	Ui.zet_rust_modus(true)          # de zwemtocht kost geen muurkloktijd
 	waar(Games.start(ID), "het spel start")
 	waar(await _wacht(_kaart_staat, 20000), "de vraagkaart staat er")
@@ -1357,6 +1360,7 @@ func test_elke_knop_op_de_strook_werkt() -> void:
 		for rij in [[1, 3, 3], [4, 3, 4], [7, 5, 5]]:
 			State.nieuw_spel()
 			State.s["taken"] = []
+			State.vloer = mini(State.BAND_MIN, int(rij[2]))   # band 3 below the floor
 			var gasten := _gasten(int(rij[0]), int(rij[1]))
 			gelijk(State.band(), int(rij[2]), "%s: band %d" % [str(maat), rij[2]])
 			var baan := Sommen.Zwembad.baan(State.n_gasten(), State.band(), int(State.s["dag"]))
@@ -1722,6 +1726,7 @@ func _tel(soort: String) -> void:
 func _rekenaandeel(n_gasten: int, band: int) -> void:
 	_op()
 	_teller = {"reken": 0, "spel": 0}
+	State.vloer = mini(State.BAND_MIN, band)     # band 3 only below the floor
 	_gasten(n_gasten, band - 1)
 	gelijk(State.band(), band, "band %d met %d gasten" % [band, n_gasten])
 	var va_b := _va_begin()

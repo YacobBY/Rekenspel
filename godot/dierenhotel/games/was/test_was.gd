@@ -18,7 +18,8 @@ const SCHERMEN := [Vector2i(1024, 768), Vector2i(768, 1024),
 	Vector2i(360, 740), Vector2i(740, 360)]
 const BANDEN := [3, 4, 5]
 ## N and `kunnen` that really produce band 3, 4 and 5
-## (`band = max(3, min(band_van_n(N), kunnen + 1))`).
+## (`band = max(vloer, min(band_van_n(N), kunnen + 1))`; band 3 only below
+## the floor of end groep 4, which `_wereld(3)` lowers for its own test).
 const BAND_OPZET := {3: [3, 3], 4: [5, 3], 5: [8, 4]}
 
 ## Every child-facing literal of games-b.md §4.10 that the game spells out.
@@ -107,6 +108,9 @@ func _wereld(band: int, dag := 1, gasten := -1, kunnen := -1) -> void:
 	State.s["kunnen"] = int(opzet[1])
 	State.s["dag"] = dag
 	State.s["taken"] = []
+	# 2026-11-15: the hotel plays at least end groep 4; a groep-3 case lowers
+	# the floor for itself, a band-4/5 case keeps the real one
+	State.vloer = mini(State.BAND_MIN, band)
 	gelijk(State.band(), band, "de opzet geeft band %d" % band)
 	gelijk(State.n_gasten(), aantal, "en %d gasten" % aantal)
 
@@ -708,7 +712,7 @@ func test_mis_sorteren_is_niet_straffend() -> void:
 ## a drop on a crate puts nothing in it.
 func test_slepen_van_de_berg_naar_de_krat() -> void:
 	_licht_op()
-	_wereld(3)
+	_wereld(4)
 	Games.start(ID)
 	waar(_door_de_opening(), "eerst de opening")
 	Hits.plaats()
@@ -736,20 +740,22 @@ func test_slepen_van_de_berg_naar_de_krat() -> void:
 ## then the answer still gives exactly one star.
 func test_ster_is_voor_meedoen() -> void:
 	_licht_op()
-	_wereld(3)
+	_wereld(4)                     # the real hotel: at least end groep 4
 	Games.start(ID)
 	var voor := int(State.s["sterren"])
 	_sorteer_alles()
-	var st := _stand()
-	var l := 0
-	for i in (st["vak"] as Array).size():
-		if int(st["vak"][i]) < int(st["vak"][l]):
-			l = i
 	for _p in 3:
-		_kies(str(WasSoorten.soort(l)["id"]))
+		waar(_toets_fout(), "een misser op vraag 1")
 		await _wacht_mispauze()
 	gelijk(int(State.s["sterren"]), voor, "missen levert geen ster op, maar kost er ook geen")
-	_antwoord_goed()
+	waar(_antwoord_goed(), "vraag 1 goed")
+	gelijk(str(_stand()["stap"]), "vraag2", "de tweede vraag")
+	await _spoel(1.0)              # the second card comes in after a beat
+	for _p in 3:
+		waar(_toets_fout(), "een misser op vraag 2")
+		await _wacht_mispauze()
+	gelijk(int(State.s["sterren"]), voor, "nog steeds geen ster en geen verlies")
+	waar(_antwoord_goed(), "vraag 2 goed")
 	gelijk(int(State.s["sterren"]), voor + 1, "meedoen levert er precies een op")
 	gelijk(str(_stand()["ster"]), "1", "en maar een keer")
 	_antwoord_goed()
@@ -1301,6 +1307,7 @@ func test_een_gemiste_vraag_blijft_bij_een_andere_band() -> void:
 	waar(_toets_fout(), "een misser")
 	Games.stop()
 	State.s["kunnen"] = 2                    # the band drops to groep 3
+	groep3()                                 # (only below the floor of end groep 4)
 	gelijk(State.band(), 3, "nu groep 3")
 	Games.start(ID)
 	gelijk(str(_stand()["stap"]), "vraag1", "de open vraag blijft")

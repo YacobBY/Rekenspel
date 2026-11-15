@@ -283,6 +283,7 @@ func test_band_4_terug_hinkelen() -> void:
 func test_beurt_op_band_3_4_en_5() -> void:
 	for rij in BANDEN:
 		_op()
+		State.vloer = mini(State.BAND_MIN, int(rij["band"]))   # band 3 below the floor
 		var node := await _speel(int(rij["n"]), int(rij["dag"]), int(rij["kunnen"]))
 		if node == null:
 			await _af()
@@ -499,18 +500,29 @@ func test_geen_hulp_na_een_fout() -> void:
 ## stone and the turn simply goes on.
 func test_nooit_van_de_lijn_af() -> void:
 	_op()
-	var node := await _speel(2, 1, 3)          # band 3: van 1 naar 3 met 1, 2 sprongen
+	var node := await _speel(2, 1, 3)          # the floor: end groep 4, a line to 100
 	if node == null:
 		await _af()
 		return
+	gelijk(int(node.proef_stand()["band"]), State.BAND_MIN, "twee gasten spelen eind groep 4")
 	waar(_tik_keuze("k%d" % int(node.proef_maten()[0])), "een sprongmaat die past")
 	Hits.plaats()
 	var st: Dictionary = node.proef_stand()
-	gelijk(int(st["E"]), 10, "de lijn loopt tot 10")
-	waar(_tik_keuze("n%d" % 4), "vier sprongen")
+	var s0 := int(st["s"])
+	gelijk(int(st["E"]), 100, "de lijn loopt tot 100")
+	# the BIGGEST wrong count on the strip: the one that would carry him furthest
+	@warning_ignore("integer_division")
+	var goed: int = absi(int(st["doel"]) - s0) / maxi(1, int(st["sprong"]))
+	var verst := -1
+	for w in _keuze_woorden():
+		var n := int(w.trim_prefix("🪨 ").trim_suffix(" keer"))
+		if n != goed:
+			verst = maxi(verst, n)
+	waar(verst > goed, "er staat een te groot aantal op de strook (%d, goed %d)" % [verst, goed])
+	waar(_tik_keuze("n%d" % verst), "%d sprongen" % verst)
 	Hits.plaats()
 	st = node.proef_stand()
-	gelijk(int(st["s"]), 1, "een fout aantal: hij blijft op 1")
+	gelijk(int(st["s"]), s0, "een fout aantal: hij blijft op %d" % s0)
 	waar(int(st["s"]) <= int(st["E"]), "en nooit voorbij het einde van de lijn")
 	gelijk(str(st["fase"]), "aantal", "de vraag blijft staan")
 	await _af()
@@ -1285,6 +1297,7 @@ func _rekenaandeel(n: int, dag: int, kunnen: int, band: int) -> void:
 	await _af()
 
 func test_rekenaandeel_band_3() -> void:
+	groep3()                                   # band 3 only below the floor
 	await _rekenaandeel(1, 1, 3, 3)
 	await _rekenaandeel(8, 2, 2, 3)
 
@@ -1377,7 +1390,7 @@ func test_een_gemiste_vraag_blijft_bij_een_wissel() -> void:
 ## (until 2026-10-08 a stand of another day, N or band was never resumed).
 func test_een_gemiste_vraag_blijft_na_een_nieuwe_dag() -> void:
 	_op()
-	var node := await _speel(2, 1, 3)          # band 3
+	var node := await _speel(2, 1, 3)          # the floor: band 4
 	if node == null:
 		await _af()
 		return
