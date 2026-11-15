@@ -1066,6 +1066,17 @@ dagen: state.levering, voorraad: state.scoops, stap: 1, fouten1: 0, fouten2: 0, 
 keuze: null, weg: false, t0}` where `samen = Σ scoops of the current guests` and
 `extra = the new guest's scoops`.  **Port (2026-09-24):** plus `kamer: ''`, the room of
 step 3; `stap` runs 1 (samen) → 2 (genoeg) → 3 (the room) → 4 (the beds game).
+**Port (end of groep 4, owner 2026-11-15):** from groep 4 on (`State.band()` at the bell,
+stored as `band`) the numbers come from `Hotel.ci_groep4(gasten, band, dag, gast)` and the
+same keys keep their meaning: question 1 is a table — "Elke gast eet 7 scheppen per dag" /
+"Met Boef: 6 gasten. Hoeveel samen?", `6 × 7 =` (`per` from every table to 10; groep 5 the
+hard ones), `nieuw = gasten × per = samen + extra`; question 2 adds two bags across the ten
+and compares with today's need (`dagen = 1`) — "Elke dag eten de gasten 42 scheppen" /
+"📦 Twee zakken voer: 25 en 19. Genoeg?", `25 + 19` (`voorraad = zak1 + zak2`, within 4 of
+`nieuw`, so te weinig / precies / blijft over all occur).  Groep 3 keeps the real scoops.
+The beds sum of step 4 from groep 4 on, when one other bedroom has sleepers
+(`Hotel.bed_vraag`): "Met Boef slapen er 7 dieren" / "Kamer 2 heeft 4. Hoeveel in kamer 1?",
+`7 − 4 =` — the answer is still the beds of his room.
 
 **Step 1 — "Samen?"** One sum card at (105, 30), height 24 (lifted when the frame is under
 300 px high, by `ceil(20/(2k))` height steps), icon 🥄, with two lines — **port:** the card

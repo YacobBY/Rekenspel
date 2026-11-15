@@ -81,6 +81,29 @@ const BED_NIEMAND := "%s slaapt nog niemand"
 const BED_EEN := "%s slaapt al 1 dier"
 const BED_VEEL := "%s slapen al %d dieren"
 const BED_ERBIJ := "%s komt erbij. Hoeveel bedden?"
+## The beds sum from groep 4 on (end of groep 4, owner 2026-11-15), when the
+## other bedroom has sleepers: the whole hotel with him, minus that room —
+## "Met Stampertje slapen er 9 dieren" (6 / 33) / "Kamer 2 heeft 4. Hoeveel in
+## kamer 1?" (7 / 36), `9 − 4 =`.  The answer is still the beds of his room.
+const BED_HOTEL := "Met %s slapen er %d dieren"
+const BED_ANDERS := "%s heeft %d. Hoeveel in %s?"
+
+## The check-in's food from groep 4 on (end of groep 4, owner 2026-11-15).
+## Question 1 is a table: every guest eats the same portion today —
+## "Elke gast eet 7 scheppen per dag" (7 / 32) / "Met Stampertje: 9 gasten.
+## Hoeveel samen?" (6 / 40), `9 × 7 =`.  Question 2 adds two bags across the
+## ten and compares: "Elke dag eten de gasten 63 scheppen" / "📦 Twee zakken
+## voer: 35 en 28. Genoeg?" (8 / 37), `35 + 28`.  Groep 3 keeps the real
+## scoops of the guests and the cupboard (`init_checkin`).
+const CI_PER := "Elke gast eet %s per dag"
+const CI_GASTEN := "Met %s: %s. Hoeveel samen?"
+const CI_ZAKKEN := "📦 Twee zakken voer: %d en %d. Genoeg?"
+## The portion per guest: every table to 10 in groep 4 (2, 3, 4, 5 and 10
+## first), the hard tables in groep 5 — never easier than groep 4.
+const CI_TAFELS_4 := [2, 3, 4, 5, 10, 6, 7, 8, 9]
+const CI_TAFELS_5 := [6, 7, 8, 9, 4, 3]
+## How far the two bags are off what is needed (0 = exactly enough).
+const CI_VERSCHIL := [-4, -2, -1, 0, 0, 1, 2, 4]
 
 var _bord_open := false
 var _bord_blad = null          ## the open board sheet (UiBlad), or null
@@ -620,7 +643,57 @@ func init_checkin(g: Dictionary) -> void:
 		# `Ui`'s own seed moves with the day
 		"zaad": _ci_zaad(int(State.s["dag"])),
 	}
+	var band := State.band()
+	if band >= 4:
+		# end of groep 4: the numbers of `ci_groep4`, stored with the band,
+		# so a night, a reload or another band asks the same (R2).  The keys
+		# keep their meaning for the questions: nieuw = samen + extra is
+		# question 1's answer, and question 2 compares dagen × nieuw with
+		# voorraad (the frozen `vergelijk`)
+		var o := ci_groep4(State.n_gasten() + 1, band, int(State.s["dag"]), str(g["id"]))
+		for k in o:
+			State.s["checkin"][k] = o[k]
 	checkin_veranderd.emit()
+
+## The food questions of the check-in from groep 4 on, for `gasten` guests (him
+## included) on day `dag`: a pure function of its arguments.
+##   {band, gasten, per, samen, extra, nieuw, dagen: 1, zak1, zak2, voorraad}
+## per = the table (`CI_TAFELS_4/5`), nieuw = gasten × per (question 1);
+## the two bags zak1 + zak2 = voorraad lie a little off nieuw (`CI_VERSCHIL`),
+## and their ones add up across the ten wherever the numbers allow it.
+static func ci_groep4(gasten: int, band: int, dag: int, gast_id: String) -> Dictionary:
+	var g := maxi(1, gasten)
+	var rnd := Sommen.Prng.new(48611 + dag * 7919 + g * 131 + band * 17 + posmod(hash(gast_id), 997))
+	var tafels: Array = CI_TAFELS_4 if band <= 4 else CI_TAFELS_5
+	var per := int(tafels[int(rnd.volgende() * float(tafels.size())) % tafels.size()])
+	var nieuw := g * per
+	var d := int(CI_VERSCHIL[int(rnd.volgende() * float(CI_VERSCHIL.size())) % CI_VERSCHIL.size()])
+	var voorraad := nieuw + d
+	if voorraad < 2:
+		voorraad = nieuw + absi(d)
+	voorraad = maxi(2, voorraad)
+	# two bags across the ten: the ones of the second bag are more than the
+	# ones of the total, so the ones of the two together pass 10
+	var een := voorraad % 10
+	var zak2 := 0
+	if voorraad >= 11 and een <= 8:
+		var e2 := een + 1 + int(rnd.volgende() * float(9 - een)) % (9 - een)
+		var tientallen := int(voorraad / 10) - 1
+		var t2 := 0
+		if tientallen >= 2:
+			t2 = 1 + int(rnd.volgende() * float(tientallen - 1)) % (tientallen - 1)
+		zak2 = t2 * 10 + e2
+	else:
+		zak2 = int(voorraad / 2)
+	zak2 = clampi(zak2, 1, voorraad - 1)
+	var zak1 := voorraad - zak2
+	return {"band": band, "gasten": g, "per": per,
+		"samen": (g - 1) * per, "extra": per, "nieuw": nieuw,
+		"dagen": 1, "zak1": zak1, "zak2": zak2, "voorraad": voorraad}
+
+## Does this check-in ask the questions of groep 4 (`ci_groep4`)?
+static func ci_is_groep4(v) -> bool:
+	return v != null and int(v.get("band", 3)) >= 4 and v.has("per") and v.has("zak1")
 
 ## The seed `Ui` would take for the desk card on day `dag` — so on the day the
 ## guest rings nothing changes, and after that it no longer moves.
@@ -704,6 +777,24 @@ func paint_checkin() -> void:
 		var op_ok := func(n, _k) -> void:
 			v["invoer"] = "" if n == null else str(n)
 			antwoord1()
+		if ci_is_groep4(v):
+			# end of groep 4: a table — the guests with him, times the portion
+			var gn := int(v["gasten"])
+			var per := int(v["per"])
+			var liever: Array = []
+			for x in [(gn - 1) * per, (gn + 1) * per, gn + per, gn * (per + 1)]:
+				if int(x) > 0 and int(x) != gn * per and not liever.has(int(x)):
+					liever.append(int(x))
+			_ci_kaart = Ui.somkaart(plek, "%d × %d =" % [gn, per], {
+				"id": "ci_som", "door": CHECKIN, "kamer": "receptie",
+				"goed": int(v["nieuw"]), "liever": liever,
+				"max": 2, "hoog": _ci_hoog(), "icoon": "🥄", "volg": volg, "dier": gid,
+				"zaad": _ci_zaad_van(v),
+				"regel": CI_PER % scheppen(per),
+				"regel2": CI_GASTEN % [g["naam"], Ui.meervoud(gn, "gast", "gasten")],
+				"on_ok": op_ok})
+			World.vuil()
+			return
 		_ci_kaart = Ui.somkaart(plek, "%d + %d =" % [int(v["samen"]), int(v["extra"])], {
 			"id": "ci_som", "door": CHECKIN, "kamer": "receptie",
 			"goed": int(v["nieuw"]), "liever": [int(v["samen"]), int(v["extra"]),
@@ -718,6 +809,19 @@ func paint_checkin() -> void:
 		# delivery), the second where it is: "in de kast" is a place a child can
 		# picture, "in huis" was not (owner, 2026-09-23).  The product is never
 		# written out after a slip (owner, 2026-09-24).
+		if ci_is_groep4(v):
+			# end of groep 4: two bags across the ten, then compared with
+			# what the guests eat today (dagen = 1)
+			_ci_kaart = Ui.somkaart(plek, "%d + %d" % [int(v["zak1"]), int(v["zak2"])], {
+				"id": "ci_som", "door": CHECKIN, "kamer": "receptie", "pad": false,
+				"hoog": _ci_hoog(), "icoon": "🥄", "volg": volg, "dier": gid,
+				"reken": true,
+				"regel": "Elke dag eten de gasten %s" % scheppen(int(v["nieuw"])),
+				"regel2": CI_ZAKKEN % [int(v["zak1"]), int(v["zak2"])],
+				"keuze_titel": "is er genoeg voer?",
+				"keuzes": _checkin_keuzes()})
+			World.vuil()
+			return
 		_ci_kaart = Ui.somkaart(plek, "%d × %d" % [int(v["dagen"]), int(v["nieuw"])], {
 			"id": "ci_som", "door": CHECKIN, "kamer": "receptie", "pad": false,
 			"hoog": _ci_hoog(), "icoon": "🥄", "volg": volg, "dier": gid,
@@ -733,13 +837,15 @@ func paint_checkin() -> void:
 		# and no star before the right answer (R2).
 		var kamer := str(v["kamer"])
 		var slapers := int(v.get("slapers", 0))
-		_ci_kaart = Ui.somkaart(plek, "%d + 1 =" % slapers, {
+		var bv := bed_vraag(kamer, slapers, str(v.get("anders_kamer", "")),
+			int(v.get("anders", 0)), str(g["naam"]), int(v.get("bed_band", 3)))
+		_ci_kaart = Ui.somkaart(plek, str(bv["som"]), {
 			"id": "ci_som", "door": CHECKIN, "kamer": "receptie",
-			"goed": slapers + 1, "liever": [slapers, slapers + 2], "min": 0,
-			"max_getal": slapers + 5, "zaad": _ci_zaad_van(v),
+			"goed": slapers + 1, "liever": bv["liever"], "min": 0,
+			"max_getal": int(bv["max_getal"]), "zaad": _ci_zaad_van(v),
 			"hoog": _ci_hoog(), "icoon": "🛏", "volg": volg, "dier": gid,
-			"regel": _bed_regel(kamer, slapers),
-			"regel2": BED_ERBIJ % g["naam"], "keuze_titel": "hoeveel bedden?",
+			"regel": str(bv["regel"]),
+			"regel2": str(bv["regel2"]), "keuze_titel": "hoeveel bedden?",
 			"on_ok": func(n, _k) -> void: antwoord_bed(-1 if n == null else int(n))})
 	else:
 		# Step 3 — a room, not a bed (owner, 2026-09-24): only the rooms where one
@@ -899,6 +1005,10 @@ func _bed_zonder_spel(kamer_id: String) -> bool:
 	if str(v.get("los_kamer", "")) != kamer_id:
 		v["los_kamer"] = kamer_id
 		v["slapers"] = State.slapers_in(kamer_id).size()
+		var ander := bed_ander(kamer_id)
+		v["anders_kamer"] = str(ander.get("kamer", ""))
+		v["anders"] = int(ander.get("n", 0))
+		v["bed_band"] = State.band()
 		v["fouten4"] = 0
 		v["t4"] = Time.get_ticks_msec()
 	State.bewaar()
@@ -951,6 +1061,52 @@ func _bedden_vast(v) -> void:
 		return
 	if not str(d.get("kamer", "")).is_empty():
 		v["vast"] = str(d["kamer"])
+
+## The one other bedroom where animals sleep, when there is exactly one:
+## {kamer, n} — else {} (the beds sum then stays `slapers + 1`).
+func bed_ander(kamer_id: String) -> Dictionary:
+	var uit := {}
+	for k in State.slaapkamers():
+		if k == kamer_id:
+			continue
+		var n := State.slapers_in(k).size()
+		if n <= 0:
+			continue
+		if not uit.is_empty():
+			return {}
+		uit = {"kamer": k, "n": n}
+	return uit
+
+## The beds sum of check-in step 4, the same at the desk and in the beds game
+## (`games/bedden`): {som, regel, regel2, liever, max_getal}; the answer is
+## always the beds of his room, `slapers + 1`.
+##   groep 3: "In kamer 1 slapen al 2 dieren" / "Boef komt erbij. Hoeveel
+##            bedden?", `2 + 1 =`
+##   groep 4 and 5 (end of groep 4, owner 2026-11-15), when one other bedroom
+##            has sleepers: "Met Boef slapen er 7 dieren" / "Kamer 2 heeft 4.
+##            Hoeveel in kamer 1?", `7 − 4 =` — the whole hotel with him minus
+##            the other room; without sleepers elsewhere the groep-3 sum.
+func bed_vraag(kamer_id: String, slapers: int, ander: String, anders: int, naam: String,
+		band: int) -> Dictionary:
+	var goed := slapers + 1
+	if band >= 4 and anders > 0 and not ander.is_empty() and ander != kamer_id:
+		var totaal := goed + anders
+		var r = Rooms.get_kamer(ander)
+		var ander_naam: String = str(r.naam) if r != null else ander
+		ander_naam = ander_naam.substr(0, 1).to_upper() + ander_naam.substr(1)
+		var hier = Rooms.get_kamer(kamer_id)
+		var hier_naam: String = (str(hier.naam) if hier != null else kamer_id).to_lower()
+		var liever: Array = []
+		# the slips: him forgotten, the other room's count, one too many
+		for x in [goed - 1, anders, goed + 1, totaal]:
+			if int(x) >= 0 and int(x) != goed and not liever.has(int(x)):
+				liever.append(int(x))
+		return {"som": "%d − %d =" % [totaal, anders],
+			"regel": BED_HOTEL % [naam, totaal],
+			"regel2": BED_ANDERS % [ander_naam, anders, hier_naam],
+			"liever": liever, "max_getal": totaal + 2}
+	return {"som": "%d + 1 =" % slapers, "regel": _bed_regel(kamer_id, slapers),
+		"regel2": BED_ERBIJ % naam, "liever": [slapers, slapers + 2], "max_getal": slapers + 5}
 
 ## The first line of the beds sum, as the beds game words it.
 func _bed_regel(kamer_id: String, slapers: int) -> String:
@@ -1153,9 +1309,12 @@ func mand_vraag(kamer_id: String) -> Dictionary:
 ## scale rule, T = k·m with m the players (two grabs for a lone animal, so a
 ## lone animal is still a sum):
 ##   groep 3  2 + 2 + 2 (each takes 2; to 8), alone: 3 + 3 (doubling to 10)
-##   groep 4  m × k, k in the tables of 2, 5 and 10
+##   groep 4  m × k, every table to 10 (end of groep 4, owner 2026-11-15:
+##            2, 3, 4, 5 and 10 twice as often as 6, 7, 8 and 9)
 ##   groep 5  m × k, k in the tables of 3, 4, 6, 7, 8 and 9
 ## Keys: som, goed, m, k, regel, regel2, liever.
+const MAND_TAFELS_4 := [2, 5, 10, 6, 3, 4, 7, 2, 5, 10, 8, 3, 4, 9]
+
 func mand_som(w: int, band: int, dag: int, naam: String) -> Dictionary:
 	var n := clampi(w, 1, 8)
 	var m := maxi(2, n)
@@ -1168,7 +1327,7 @@ func mand_som(w: int, band: int, dag: int, naam: String) -> Dictionary:
 			delen.append(str(k))
 		som = " + ".join(delen) + " ="
 	else:
-		var tafels: Array = [2, 5, 10] if band == 4 else [3, 4, 6, 7, 8, 9]
+		var tafels: Array = MAND_TAFELS_4 if band == 4 else [3, 4, 6, 7, 8, 9]
 		k = int(tafels[posmod(dag + n, tafels.size())])
 		som = "%d × %d =" % [m, k]
 	var goed := m * k

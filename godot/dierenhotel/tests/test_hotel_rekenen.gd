@@ -422,6 +422,159 @@ func test_checkin_genoeg_is_een_rekenstrook() -> void:
 	Ui.zet_rust_modus(rust)
 	await _scherm_weg(laag)
 
+# ------------------------------------------- eind groep 4 (2026-11-15)
+
+## The numbers of the groep-4 check-in, every hotel size, band and day: a
+## table to 10 × 10 in question 1, two bags that add up across the ten in
+## question 2 and lie close to what is needed, the stock under 100.
+func test_checkin_groep4_getallen() -> void:
+	var over_tien := 0
+	var zakken := 0
+	var tafels := {}
+	var uitkomst := {}
+	for band in [4, 5]:
+		for gasten in range(1, 10):
+			for dag in range(1, 15):
+				var o := Hotel.ci_groep4(gasten, band, dag, "boef")
+				var wat := "groep %d, %d gasten, dag %d" % [band, gasten, dag]
+				gelijk(str(Hotel.ci_groep4(gasten, band, dag, "boef")), str(o), "%s: dezelfde vraag" % wat)
+				var per := int(o["per"])
+				waar((Hotel.CI_TAFELS_4 if band == 4 else Hotel.CI_TAFELS_5).has(per),
+					"%s: een tafel (%d)" % [wat, per])
+				if band == 4:
+					tafels[per] = true
+				else:
+					waar(per >= 3 and per != 5 and per != 10, "%s: groep 5 de lastige tafels" % wat)
+				gelijk(int(o["nieuw"]), gasten * per, "%s: gasten × per" % wat)
+				gelijk(int(o["samen"]) + int(o["extra"]), int(o["nieuw"]), "%s: nieuw = samen + extra" % wat)
+				waar(int(o["nieuw"]) <= 90, "%s: tot 9 × 10" % wat)
+				gelijk(int(o["zak1"]) + int(o["zak2"]), int(o["voorraad"]), "%s: twee zakken" % wat)
+				waar(int(o["zak1"]) >= 1 and int(o["zak2"]) >= 1, "%s: twee echte zakken" % wat)
+				waar(int(o["voorraad"]) <= 99 and absi(int(o["voorraad"]) - int(o["nieuw"])) <= 4,
+					"%s: de voorraad ligt dichtbij (%d / %d)" % [wat, int(o["voorraad"]), int(o["nieuw"])])
+				gelijk(int(o["dagen"]), 1, "%s: voor vandaag" % wat)
+				if int(o["voorraad"]) >= 20:
+					zakken += 1
+					if int(o["zak1"]) % 10 + int(o["zak2"]) % 10 >= 10:
+						over_tien += 1
+				uitkomst[Sommen.vergelijk(1, int(o["nieuw"]), int(o["voorraad"]))] = true
+	for t in [2, 3, 4, 5, 6, 7, 8, 9, 10]:
+		waar(tafels.has(t), "groep 4: de tafel van %d komt voor" % t)
+	waar(over_tien * 10 >= zakken * 8, "de zakken gaan meestal over het tiental (%d van %d)"
+		% [over_tien, zakken])
+	gelijk(uitkomst.size(), 3, "te weinig, precies en over komen alle drie voor (%s)" % str(uitkomst.keys()))
+	# every sentence with the longest name and the largest numbers
+	for zin in [Hotel.CI_PER % "10 scheppen", Hotel.CI_GASTEN % ["Stampertje", "9 gasten"],
+			Hotel.CI_ZAKKEN % [55, 39], "Elke dag eten de gasten 90 scheppen",
+			Hotel.BED_HOTEL % ["Stampertje", 9], Hotel.BED_ANDERS % ["Kamer 2", 4, "kamer 1"]]:
+		waar(Ui.keur_regel("proef", zin), "de zin past: %s" % zin)
+		gelijk(str(Ui.mist_tekens(zin)), "[]", "alle tekens in het font: %s" % zin)
+
+## The check-in at the desk in groep 4: question 1 is the table, question 2 the
+## two bags, both answered as before (`antwoord1` / `antwoord2`); a miss keeps
+## the same question after a night and a reload.  Groep 3 is unchanged.
+func test_checkin_groep4_aan_de_balie() -> void:
+	_voor()
+	var laag := _scherm()
+	var rust := Ui.rust_modus()
+	Ui.zet_rust_modus(true)
+	_gasten(5)
+	State.s["kunnen"] = 5
+	gelijk(State.band(), 4, "vijf gasten: groep 4")
+	World.naar("receptie")
+	Hotel.bel()
+	var v = State.s["checkin"]
+	waar(v != null and Hotel.ci_is_groep4(v), "een check-in van groep 4")
+	if v != null:
+		gelijk(int(v["gasten"]), 6, "vijf gasten en hij")
+		Hits.plaats()
+		var som: String = (Hits.spot("ci_som").knoop as UiSomkaart).som_label.text
+		gelijk(som, "6 × %d =" % int(v["per"]), "vraag 1 is een tafel")
+		var knoppen := _strook("ci_som_keuzes")
+		waar(knoppen.has("Kn%d" % int(v["nieuw"])), "het goede getal staat op de strook")
+		waar(_druk("ci_som_keuzes", _mis_knop("ci_som_keuzes", int(v["nieuw"]))), "een fout getal")
+		gelijk(int(v["stap"]), 1, "dezelfde vraag")
+		var voor := str([int(v["gasten"]), int(v["per"]), int(v["zak1"]), int(v["zak2"])])
+		Hotel.morgen()
+		waar(State.bewaar(), "bewaar")
+		State.s = State.standaard()
+		waar(State.lees(), "lees")
+		Hotel.paint_checkin()
+		Hits.plaats()
+		var w = State.s["checkin"]
+		gelijk(str([int(w["gasten"]), int(w["per"]), int(w["zak1"]), int(w["zak2"])]), voor,
+			"dezelfde getallen na nacht en herladen")
+		gelijk(str(_strook("ci_som_keuzes")), str(knoppen), "dezelfde vier getallen")
+		w["invoer"] = str(int(w["nieuw"]))
+		Hotel.antwoord1()
+		gelijk(int(w["stap"]), 2, "goed: vraag 2")
+		Hits.plaats()
+		gelijk((Hits.spot("ci_som").knoop as UiSomkaart).som_label.text,
+			"%d + %d" % [int(w["zak1"]), int(w["zak2"])], "vraag 2: de twee zakken")
+		Hotel.antwoord2(Sommen.vergelijk(int(w["dagen"]), int(w["nieuw"]), int(w["voorraad"])))
+		gelijk(int(w["stap"]), 3, "goed: de kamer")
+		World.weg(str(w["gastId"]))
+	Ui.zet_rust_modus(rust)
+	await _scherm_weg(laag)
+	# groep 3 as it was: the real scoops
+	_voor()
+	State.s["scoops"] = 20
+	State.s["levering"] = 4
+	_gasten(1)
+	var nieuw: Dictionary = State.gasten_pool()[1]
+	Hotel.init_checkin(nieuw)
+	var g3: Dictionary = State.s["checkin"]
+	waar(not Hotel.ci_is_groep4(g3), "groep 3: de echte scheppen")
+	gelijk([int(g3["samen"]), int(g3["extra"]), int(g3["dagen"]), int(g3["voorraad"])], [2, 1, 4, 20],
+		"groep 3 ongewijzigd")
+
+## The beds sum in groep 4: the whole hotel with him minus the other room, the
+## answer still the beds of his room; groep 3 and an empty other room keep `+ 1`.
+func test_beddensom_groep4() -> void:
+	_voor()
+	var bv := Hotel.bed_vraag("kamer1", 3, "kamer2", 4, "Boef", 4)
+	gelijk(str(bv["som"]), "8 − 4 =", "het hele hotel min kamer 2")
+	gelijk(str(bv["regel"]), "Met Boef slapen er 8 dieren", "de eerste zin")
+	gelijk(str(bv["regel2"]), "Kamer 2 heeft 4. Hoeveel in kamer 1?", "de tweede zin")
+	waar((bv["liever"] as Array).has(3) and (bv["liever"] as Array).has(8),
+		"de vergissingen: hem vergeten, het hele hotel (%s)" % str(bv["liever"]))
+	waar(not (bv["liever"] as Array).has(4), "het goede antwoord is geen vergissing")
+	var b3 := Hotel.bed_vraag("kamer1", 3, "kamer2", 4, "Boef", 3)
+	gelijk(str(b3["som"]), "3 + 1 =", "groep 3: + 1")
+	var leeg := Hotel.bed_vraag("kamer1", 0, "", 0, "Boef", 4)
+	gelijk(str(leeg["som"]), "0 + 1 =", "niemand elders: + 1")
+	# the desk fallback asks it too, and only the beds of his room are right
+	_gasten(5)
+	State.s["kunnen"] = 5
+	var v := _naar_kamerstap()
+	if v.is_empty():
+		fout("er checkt niemand in")
+		return
+	var kamer := str(State.kamers_met_plek()[0])
+	waar(Hotel.kies_kamer(kamer), "een kamer met plek: %s" % kamer)
+	var slapers := State.slapers_in(kamer).size()
+	var ander: Dictionary = Hotel.bed_ander(kamer)
+	waar(int(ander.get("n", 0)) > 0, "in de andere kamer slapen dieren")
+	gelijk(int(v["anders"]), int(ander.get("n", 0)), "de andere kamer staat in de check-in")
+	gelijk(int(v["bed_band"]), 4, "met de band")
+	Hotel.antwoord_bed(slapers + 1 + int(v["anders"]))
+	if int(v["anders"]) > 0:
+		gelijk(int(v["fouten4"]), 1, "het hele hotel is fout")
+	Hotel.antwoord_bed(slapers + 1)
+	gelijk(State.s["checkin"], null, "de bedden van zijn kamer zijn goed")
+
+## The play basket in groep 4: every table to 10 comes round, not only 2, 5
+## and 10; groep 5 keeps the hard tables.
+func test_mand_som_groep4_alle_tafels() -> void:
+	var k4 := {}
+	for dag in range(1, 30):
+		for w in [1, 2, 3, 4]:
+			k4[int(Hotel.mand_som(w, 4, dag, "Boef")["k"])] = true
+			var k5 := int(Hotel.mand_som(w, 5, dag, "Boef")["k"])
+			waar(k5 >= 3 and k5 != 5 and k5 != 10, "groep 5: de lastige tafels (%d)" % k5)
+	for t in [2, 3, 4, 5, 6, 7, 8, 9, 10]:
+		waar(k4.has(t), "groep 4: de tafel van %d komt voor (%s)" % [t, str(k4.keys())])
+
 # ------------------------------------------------------------- de rekening
 
 func _gast_weg() -> Dictionary:

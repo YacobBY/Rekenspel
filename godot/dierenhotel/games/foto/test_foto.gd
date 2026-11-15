@@ -224,11 +224,11 @@ func test_de_prijs_en_de_som() -> void:
 				match band:
 					3: waar(p >= 2 and p <= 5, "%s: €2 … €5 (%d)" % [wat, p])
 					4: waar(Beurt.TAFELS_4.has(p), "%s: een tafel van groep 4 (%d)" % [wat, p])
-					5: waar(p >= 3 and p <= 9, "%s: €3 … €9 (%d)" % [wat, p])
+					5: waar(Beurt.PRIJZEN_5.has(p), "%s: een prijs van groep 5 (%d)" % [wat, p])
 				for aantal in range(Beurt.MIN_DIEREN, Beurt.MAX_DIEREN + 1):
 					var goed := Beurt.goed(aantal, p)
 					gelijk(goed, aantal * p, "%s: %d dieren keer de prijs" % [wat, aantal])
-					waar(goed <= (20 if band == 3 else 40), "%s: binnen het getallengebied (%d)" % [wat, goed])
+					waar(goed <= [20, 40, 72][band - 3], "%s: binnen het getallengebied (%d)" % [wat, goed])
 					var som := Beurt.som(aantal, p, band)
 					if band == 3:
 						gelijk(som.count("+"), aantal - 1, "%s: groep 3 telt de prijzen op (%s)" % [wat, som])
@@ -241,7 +241,7 @@ func test_de_prijs_en_de_som() -> void:
 					waar(vier.has(goed), "%s: het goede bedrag staat erbij" % wat)
 					# the money: four real handfuls, exactly one of them right
 					var geld := Spel.Geld.betaal_keuzes(goed, band, Beurt.zaad(n, band, dag, aantal) + 7)
-					gelijk(geld.size(), 4, "%s: vier handjes geld" % wat)
+					waar(geld.size() == 4 or geld.size() == 3, "%s: vier handjes geld (drie brede)" % wat)
 					var raak := 0
 					for st in geld:
 						waar((st as Array).size() <= 4, "%s: hooguit vier stuks geld (%s)" % [wat, str(st)])
@@ -254,6 +254,36 @@ func test_de_prijs_en_de_som() -> void:
 					waar(k >= Beurt.MIN_DIEREN and k <= mini(Beurt.MAX_DIEREN, maxi(2, pool)),
 						"%s: %d dieren op de foto bij %d die mogen" % [wat, k, pool])
 		waar(gezien.size() >= 3, "band %d: de prijs verschilt van dag tot dag (%s)" % [band, str(gezien.keys())])
+
+## End of groep 4 (owner, 2026-11-15): the booth asks every table to 10, the
+## hard ones (6, 7, 8, 9) too, written `3 × €7 =`; groep 5 is never easier —
+## its prices are on average higher and it has two-digit prices.
+func test_groep4_eind_alle_tafels() -> void:
+	var tafels := {}
+	var som4 := 0
+	var som5 := 0
+	var tel := 0
+	for dag in range(1, 40):
+		for n in range(1, 9):
+			var p4 := Beurt.prijs(n, 4, dag)
+			var p5 := Beurt.prijs(n, 5, dag)
+			tafels[p4] = true
+			som4 += p4
+			som5 += p5
+			tel += 1
+			gelijk(Beurt.som(3, p4, 4), "3 × €%d =" % p4, "groep 4: de keersom")
+	for t in [6, 7, 8, 9]:
+		waar(tafels.has(t), "groep 4: de tafel van %d komt voor (%s)" % [t, str(tafels.keys())])
+	for t in [2, 3, 4, 5, 10]:
+		waar(tafels.has(t), "groep 4: de tafel van %d blijft" % t)
+	waar(som5 > som4, "groep 5 (gem. %.1f) duurder dan groep 4 (gem. %.1f)"
+		% [float(som5) / tel, float(som4) / tel])
+	waar(Beurt.PRIJZEN_5.any(func(p: int) -> bool: return p > 10), "groep 5: tweecijferige prijzen")
+	# groep 3 as it was: €2 … €5 from the same draw
+	for dag in range(1, 8):
+		for n in [2, 4]:
+			var p3 := Beurt.prijs(n, 3, dag)
+			waar(p3 >= 2 and p3 <= 5, "groep 3 ongewijzigd: €2 … €5 (%d)" % p3)
 
 ## Every sentence the child reads fits the card rules (HOTEL.md §9) and every
 ## character is in the font subset.
