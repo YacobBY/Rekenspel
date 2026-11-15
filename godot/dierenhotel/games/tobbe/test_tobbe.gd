@@ -118,8 +118,11 @@ const OPZET := [
 	{"band": 5, "kunnen": 4, "gasten": 7},
 ]
 
-## Lay the table for one band and one soort, and start the game.
+## Lay the table for one band and one soort, and start the game.  Band 3 lies
+## under the hotel's floor of groep 4 (2026-11-15), so only an opzet of band 3
+## lowers it (`Proef.groep3()`); 4 and 5 run at the real floor.
 func _begin(opzet: Dictionary, soort: String):
+	State.vloer = mini(State.BAND_MIN, int(opzet["band"]))
 	_op()
 	_gasten(int(opzet["gasten"]), 1, int(opzet["kunnen"]))
 	var band := State.band()
@@ -827,8 +830,9 @@ func test_halveren_doet_het_kind_zelf() -> void:
 
 ## R2 (the ✓): the share is checked by itself the moment it is complete — there
 ## is no ✓ to press — and a wrong share sends the soap back to the rack.
+## At the real band (groep 4, the floor since 2026-11-15): three tubs.
 func test_de_verdeling_wordt_vanzelf_nagekeken() -> void:
-	var spel = _begin(OPZET[0], "eerlijk")
+	var spel = _begin(OPZET[1], "eerlijk")
 	if spel == null:
 		_af()
 		return
@@ -836,13 +840,15 @@ func test_de_verdeling_wordt_vanzelf_nagekeken() -> void:
 	waar(_tik_keuze(_juist(s)), "het goede getal")
 	waar(Hits.spot("tb_klaar") == null, "er is geen ✓ om te bevestigen")
 	var t := int(s["T"])
-	# everything into the first tub that fits under its rim, the rest into the second
+	# fill the tubs in turn up to their rim (per + 2): a lopsided share
 	var rand: int = int(s["per"]) + 2
-	var in_een: int = mini(t, rand)
-	for _k in in_een:
-		spel._tik_tobbe(0)
-	for _k in t - in_een:
-		spel._tik_tobbe(1)
+	var over := t
+	for i in int(s["M"]):
+		var hier: int = mini(over, rand)
+		for _k in hier:
+			spel._tik_tobbe(i)
+		over -= hier
+	gelijk(over, 0, "alles is verdeeld (scheef)")
 	gelijk(int(spel._s["missers"]), 1, "een scheve verdeling is een misser")
 	gelijk(int(spel._s["rek"]), t, "en al het sop is terug op het rek")
 	gelijk(str(spel._s["stap"]), "vullen", "dezelfde opdracht")
@@ -907,7 +913,7 @@ func _va_eind(wat: String, teller: Dictionary, budget_voor: int) -> void:
 ## took every tap.  Now the free tap waits for the maths, like free play, and
 ## the maths itself (the answer on the strip) is never refused.
 func test_het_rek_is_een_vrije_tik_die_op_het_rekenen_wacht() -> void:
-	var spel = _begin(OPZET[0], "eerlijk")
+	var spel = _begin(OPZET[1], "eerlijk")   # groep 4: the floor since 2026-11-15
 	if spel == null:
 		_af()
 		return
