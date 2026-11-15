@@ -478,6 +478,7 @@ func test_beurt_band_5() -> void:
 ## tik op de kar, een deur of het bakje.  Bij de laatste levering gaat de rest
 ## in de snoeppot en sluit de lus.  Bij elke stap hangt er hoogstens één wolkje.
 func _hele_beurt(band: int, n: int, dag: int) -> void:
+	State.vloer = mini(State.BAND_MIN, band)   # groep 3 onder de vloer (2026-11-15)
 	_op()
 	Ui.zet_rust_modus(true)
 	var spel := _start(n, band, dag, mini(n, 6))
@@ -828,6 +829,7 @@ func test_het_bakje_vraagt_de_som_per_band() -> void:
 	# genoeg gasten voor de band (zoals de hele beurten): drie, vijf, zeven
 	for band in [3, 4, 5]:
 		var n_gasten: int = {3: 3, 4: 5, 5: 7}[band]
+		State.vloer = mini(State.BAND_MIN, band)   # groep 3 onder de vloer (2026-11-15)
 		var spel := _start(n_gasten, band, 2, mini(n_gasten, 6))
 		waar(spel != null, "band %d: het spel draait" % band)
 		if spel == null:
@@ -1763,6 +1765,7 @@ func _tel(soort: String) -> void:
 	_teller[soort] = int(_teller.get(soort, 0)) + 1
 
 func _rekenaandeel(band: int, n: int, dag: int) -> void:
+	State.vloer = mini(State.BAND_MIN, band)   # groep 3 onder de vloer (2026-11-15)
 	_op()
 	_teller = {"reken": 0, "spel": 0}
 	Ui.zet_rust_modus(true)

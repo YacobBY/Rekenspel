@@ -887,6 +887,12 @@ func _op_lijstje(type: String) -> void:
 			"tekst": T_GENOEG, "klas": "hulp"})
 		ctx.wereld.vuil()
 		return
+	# groep 4/5: een bed zonder vrije bedplek komt niet eens op het lijstje —
+	# anders zei pas de tweede tik "alle kamers vol" en bleef het lijstje vol
+	# hangen met een bed dat nergens heen kan (zelfde wolkje als bij 🛒)
+	if not _bedden_passen(_lijst + [type]):
+		_kamers_vol()
+		return
 	_lijst.append(type)
 	_spaar = {}
 	if _lijst.size() >= _max_lijst():

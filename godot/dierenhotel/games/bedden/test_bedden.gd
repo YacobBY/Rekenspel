@@ -63,6 +63,15 @@ func fout(melding: String) -> void:
 	_fouten += 1
 	_meldingen.append(melding)
 
+## Zoals `Proef.groep3()`: de vloer van groep 4 (2026-11-15) zakt voor deze ene
+## test naar groep 3, en de runner zet hem na elke test terug
+## (`herstel_spellen`, zoals in Proef).
+func groep3() -> void:
+	State.vloer = 3
+
+func herstel_spellen() -> void:
+	State.vloer = State.BAND_MIN
+
 # ------------------------------------------------------------------ opzet
 
 func _boom() -> SceneTree:
@@ -335,6 +344,7 @@ func test_kamerknoppen_hebben_pictogram_en_woord() -> void:
 ## The numbers are the animals: the ones whose bed is in the chosen room, plus
 ## the new guest.  Kamer 2 with three sleepers asks "3 + 1 =" (groep 3).
 func test_de_vraag_telt_de_dieren_van_die_kamer() -> void:
+	groep3()   # de groep-3-vraag ligt onder de vloer van groep 4 (2026-11-15)
 	_op()
 	_hotel(1, 3)
 	State.s["kunnen"] = 2            # groep 3: the room's sleepers + 1

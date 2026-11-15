@@ -456,6 +456,7 @@ func test_ontgrendelt_vanaf_drie_gasten() -> void:
 ## Groep 3: één ding per keer, precies betalen, geen wisselgeld — en sinds de
 ## Rekenwacht ook bij één ding: genoeg? → munten → hoeveel houd je over?
 func test_beurt_band_3() -> void:
+	groep3()   # de vloer is groep 4 (2026-11-15): deze test gaat over groep 3
 	await _op(Vector2(1000, 648), 3, 9)
 	gelijk(State.band(), 3, "de band is 3")
 	waar(Games.start("meubels"), "het spel start")
@@ -860,6 +861,7 @@ func test_geen_hulp_bij_het_wisselgeld() -> void:
 ## zonder hulp — de stapel gaat terug in je hand, dezelfde bon blijft staan.
 ## En « pakt een munt terug (vrij spel), zolang er iets ligt.
 func test_groep_drie_pakt_een_munt_terug() -> void:
+	groep3()
 	await _op(Vector2(1000, 648), 3, 9)
 	waar(not Sommen.Meubels.wisselgeld(3), "groep 3 kent nog geen wisselgeld")
 	waar(Games.start("meubels"), "het spel start")
@@ -893,29 +895,33 @@ func test_groep_drie_pakt_een_munt_terug() -> void:
 	_af()
 
 ## Rekenwacht: het boek zegt niet meer vooraf of je genoeg hebt (vroeger 💛).
-## Wie de badkuip van €8 met €3 wil, krijgt de vraag "Heb je genoeg?" — en het
+## Wie de badkuip van €38 met €20 wil, krijgt de vraag "Heb je genoeg?" — en het
 ## goede antwoord "💛 Te weinig" geeft het spaarwolkje.  Er gaat niets op slot.
+## Met 3 gasten is dat sinds 2026-11-15 groep 4 (de vloer): + en 🛒 Afrekenen.
 func test_te_weinig_geld_zet_niets_op_slot() -> void:
-	await _op(Vector2(1000, 648), 3, 3)
+	await _op(Vector2(1000, 648), 3, 20)
+	gelijk(State.band(), 4, "de band is 4")
 	waar(Games.start("meubels"), "het spel start")
 	await _tel_frames()
 	await _kassa_door()
-	gelijk(_blad_knop("Kk_badkuip").text, "🛒", "de badkuip heeft gewoon een 🛒")
-	gelijk(_blad_knop("Kk_badkuip").tooltip_text, "badkuip kopen, 8 euro",
+	gelijk(_blad_knop("Kk_badkuip").text, "+", "de badkuip heeft gewoon een +")
+	gelijk(_blad_knop("Kk_badkuip").tooltip_text, "badkuip 38 euro erbij",
 		"en staat gewoon in het boek")
 	waar(_blad_tik("Kk_badkuip"), "tik hem aan")
 	await _tel_frames()
+	waar(_blad_tik("Kafrekenen"), "en afrekenen")
+	await _tel_frames()
 	waar(_er_is("mb_genoeg"), "de vraag: heb je genoeg?")
-	gelijk(_kaart_tekst("mb_genoeg", "regel2"), "Je hebt €3. Is dat genoeg?", "de vraag")
+	gelijk(_kaart_tekst("mb_genoeg", "regel2"), "Je hebt €20. Is dat genoeg?", "de vraag")
 	waar(_kies("mb_genoeg", "nee"), "te weinig: goed gezegd")
 	await _tel_frames()
 	waar(_er_is("mb_spaar"), "er komt een spaarwolkje")
-	gelijk(_titel("mb_spaar"), "💛 €8 je hebt €3", "met de prijs en wat je hebt")
-	gelijk(int(State.s["munten"]), 3, "er is niets afgeschreven")
+	gelijk(_titel("mb_spaar"), "💛 €38 je hebt €20", "met de prijs en wat je hebt")
+	gelijk(int(State.s["munten"]), 20, "er is niets afgeschreven")
 	waar(Ui.blad_open_nu(), "het boek staat weer open")
 	waar(_blad_knop("Kk_badkuip") != null, "en de badkuip staat er nog")
-	waar(_blad_knop("Kk_plant") != null and _blad_knop("Kk_plant").text == "🛒",
-		"wat je wel kunt betalen blijft gewoon te koop")
+	waar(_blad_knop("Kk_plant") != null and _blad_knop("Kk_plant").text == "+",
+		"wat je wel kunt betalen (€8) blijft gewoon te koop")
 	gelijk(State.spel_data("meubels").get("open", null), null, "er staat geen open vraag")
 	_af()
 
@@ -1199,9 +1205,11 @@ func test_een_gekocht_bed_gaat_op_een_bedplek() -> void:
 
 ## Elke bedplek heeft een bed: een bed kopen kan dan niet, want het zou in de
 ## doos blijven zonder vakje.  Hetzelfde wolkje als de bel bij een vol hotel,
-## en er gaat geen munt af.
+## en er gaat geen munt af.  Met 3 gasten is dat groep 4 (de vloer, 2026-11-15):
+## de + zet het bed dan niet eens op het lijstje.
 func test_geen_bed_te_koop_als_alle_bedplekken_vol_zijn() -> void:
 	await _op(Vector2(1000, 648), 3, 12)
+	gelijk(State.band(), 4, "de band is 4")
 	for k in Rooms.lijst():
 		while not Rooms.meubel_zet(k, "bed").is_empty():
 			pass
@@ -1215,6 +1223,7 @@ func test_geen_bed_te_koop_als_alle_bedplekken_vol_zijn() -> void:
 	waar(_er_is("mb_bedvol"), "het wolkje zegt dat alle kamers vol zijn")
 	gelijk(int(State.s["munten"]), munten, "er gaat geen munt af")
 	gelijk(str(_spel().call("_nog")), "[]", "en er zit niets in de doos")
+	gelijk(str(_spel().get("_lijst")), "[]", "en niets op het lijstje")
 	_af()
 
 func _vakken() -> Array[String]:
@@ -1846,6 +1855,7 @@ func test_kamerdecoratie_de_doos_loopt_mee_door_de_deur() -> void:
 ## derde ding, en een sticker met sterren — vier beurten na elkaar, elk van de
 ## start tot het spel vanzelf dichtgaat, en elk met reken >= spel + 1.
 func test_rekenaandeel_band_3() -> void:
+	groep3()
 	for n in [3, 8]:
 		await _op(Vector2(1000, 648), n, 20, 5 if n == 3 else 2)
 		gelijk(State.band(), 3, "N=%d: band 3" % n)
@@ -1908,6 +1918,8 @@ func test_rekenaandeel_zonder_munten() -> void:
 ## is de eerste kaart na het kiezen een rekenvraag, in elke band.
 func test_r2_een_ding_kopen_vraagt_rekenen() -> void:
 	for geval in [[3, 9, 3], [5, 20, 4], [7, 20, 5]]:
+		# groep 3 alleen onder de vloer van groep 4 (2026-11-15)
+		State.vloer = mini(State.BAND_MIN, geval[2])
 		await _op(Vector2(1000, 648), geval[0], geval[1])
 		gelijk(State.band(), geval[2], "de band is %d" % geval[2])
 		waar(Games.start("meubels"), "het spel start")
@@ -2028,21 +2040,25 @@ func test_r2_kassavraag_komt_onveranderd_terug() -> void:
 ## R2-gat 4: na een misser terug naar het boek en iets goedkopers kiezen
 ## verving de open vraag.  Nu staat 📖 er na een misser niet meer.
 func test_r2_na_een_misser_geen_goedkoper_ding() -> void:
-	await _op(Vector2(1000, 648), 3, 9)
+	# 3 gasten = groep 4 (de vloer, 2026-11-15): de badkuip kost €38
+	await _op(Vector2(1000, 648), 3, 40)
+	gelijk(State.band(), 4, "de band is 4")
 	waar(Games.start("meubels"), "het spel start")
 	await _tel_frames()
 	await _kassa_door()
-	waar(_blad_tik("Kk_badkuip"), "koop de badkuip van €8")
+	waar(_blad_tik("Kk_badkuip"), "de badkuip van €38 erbij")
+	await _tel_frames()
+	waar(_blad_tik("Kafrekenen"), "en afrekenen")
 	await _tel_frames()
 	waar(_er_is("mb_boek"), "zonder misser mag je nog terug naar het boek")
-	waar(_kies("mb_genoeg", "nee"), "een misser: 9 is wel genoeg voor 8")
+	waar(_kies("mb_genoeg", "nee"), "een misser: 40 is wel genoeg voor 38")
 	await _tel_frames()
 	waar(not _er_is("mb_boek"), "na een misser niet meer")
 	await _wacht_mispauze()
 	waar(not _er_is("mb_boek"), "ook niet na de pauze")
 	waar(_kies("mb_genoeg", "ja"), "het goede antwoord")
 	waar(await _wacht_op("mb_bon_keuzes"), "de bon van de badkuip")
-	gelijk(_kaart_tekst("mb_bon", "vak"), "€8", "dezelfde aankoop")
+	gelijk(_kaart_tekst("mb_bon", "vak"), "€38", "dezelfde aankoop")
 	waar(not _er_is("mb_boek"), "en ook hier geen weg terug")
 	_af()
 

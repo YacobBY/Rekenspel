@@ -586,12 +586,20 @@ func test_de_rekenknop_vindt_altijd_rekenwerk() -> void:
 	var snel := Reken.snelle_som()
 	waar(not snel.is_empty(), "4: de snelle som staat er")
 	var n := int(snel.get("n", 0))
-	var koekjes := 0
+	# groep 4 is de vloer (eigenaar 2026-11-15): pakjes met hun getal, `m × k`
+	# (groep 3 telt losse koekjes: test_de_snelle_som_past_in_elke_kamer)
+	gelijk(State.band(), 4, "4: de band is 4")
+	var pakjes := 0
 	for stuk in World.decor_lijst("tuin"):
 		if str(stuk.get("door", "")) == Reken.EIGENAAR:
-			koekjes += 1
-	gelijk(koekjes, n, "4: zoveel koekjes liggen er als het antwoord zegt")
-	waar(n >= 3 and n <= 7, "4: groep 3 telt drie tot zeven (%d)" % n)
+			pakjes += 1
+	var m := int(snel.get("m", 0))
+	var k := int(snel.get("k", 0))
+	gelijk(pakjes, m, "4: zoveel pakjes liggen er als de som zegt")
+	gelijk(n, m * k, "4: het antwoord is pakjes × koekjes (%d × %d)" % [m, k])
+	waar(m >= 2 and m <= 5 and Reken.PAK_TAFELS_4.has(k),
+		"4: groep 4 is een tafel tot 10 (%d × %d)" % [m, k])
+	gelijk((snel.get("tags", []) as Array).size(), m, "4: elk pakje draagt zijn getal")
 	waar(Ui.som_in_beeld(), "4: het is een som in beeld")
 	waar(Hits.spot(Reken.KNOP) == null, "4: de knop stapt opzij")
 	var kaart = Hits.spot(Reken.KAART)
@@ -601,19 +609,22 @@ func test_de_rekenknop_vindt_altijd_rekenwerk() -> void:
 		var kr: Rect2 = Hits.debug()[Reken.KAART]["rect"]
 		for stuk in World.decor_lijst("tuin"):
 			if str(stuk.get("door", "")) == Reken.EIGENAAR:
-				var v := World.vlak_van(Reken.KOEK, float(stuk["x"]), float(stuk["z"]), 0.0)
-				waar(not kr.intersects(v), "4: de kaart ligt niet op koekje %s" % str(stuk["id"]))
+				var v := World.vlak_van(str(stuk.get("model", Reken.KOEK)),
+					float(stuk["x"]), float(stuk["z"]), 0.0)
+				waar(not kr.intersects(v), "4: de kaart ligt niet op pakje %s" % str(stuk["id"]))
 	waar(_kies(Reken.KAART, "n%d" % n), "4: het goede getal staat op de strook")
 	await _frames(2)
 	waar(Reken.vrij(), "4: goed geteld maakt het vrij")
 	gelijk(Reken.budget(), 1, "4: één rekentik, één vrije tik terug")
 	await _boom().create_timer(Reken.KLAAR_S + 0.3).timeout
 	await _frames(2)
-	koekjes = 0
+	pakjes = 0
 	for stuk in World.decor_lijst("tuin"):
 		if str(stuk.get("door", "")) == Reken.EIGENAAR:
-			koekjes += 1
-	gelijk(koekjes, 0, "4: daarna zijn de koekjes weg")
+			pakjes += 1
+	gelijk(pakjes, 0, "4: daarna zijn de pakjes weg")
+	for id in (snel.get("tags", []) as Array):
+		waar(Hits.spot(str(id)) == null, "4: en het getal %s ook" % str(id))
 	waar(Hits.spot(Reken.KAART) == null, "4: en de kaart ook")
 	await _af()
 
@@ -625,6 +636,8 @@ func test_de_snelle_som_past_in_elke_kamer() -> void:
 	await _op()
 	for band in [3, 4, 5]:
 		State.s["band"] = band
+		# groep 3 (losse koekjes) ligt onder de vloer van groep 4 (2026-11-15)
+		State.vloer = mini(State.BAND_MIN, band)
 		for kamer in Rooms.lijst():
 			Hotel.naar_kamer(kamer)
 			Reken._snelle_som()
@@ -636,6 +649,7 @@ func test_de_snelle_som_past_in_elke_kamer() -> void:
 			waar(k != null and k.getal_vraag, "%s, groep %d: een getalkaart" % [kamer, band])
 			Reken._snel_weg()
 	State.s["band"] = 3
+	State.vloer = State.BAND_MIN
 	await _af()
 
 ## End of groep 4 (owner, 2026-11-15): from groep 4 on the quick sum is packs

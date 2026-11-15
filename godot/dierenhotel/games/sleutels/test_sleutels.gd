@@ -507,6 +507,8 @@ func test_de_keuzes_blijven_binnen_de_band() -> void:
 	for geval in [{"n": 2, "kunnen": 3, "band": 3, "plafond": 20},
 			{"n": 5, "kunnen": 3, "band": 4, "plafond": 100},
 			{"n": 7, "kunnen": 4, "band": 5, "plafond": 1000}]:
+		# groep 3 alleen onder de vloer van groep 4 (2026-11-15)
+		State.vloer = mini(State.BAND_MIN, int(geval["band"]))
 		_op()
 		_wereld(int(geval["n"]), int(geval["kunnen"]))
 		gelijk(State.band(), int(geval["band"]), "band bij N %d" % int(geval["n"]))
@@ -620,6 +622,7 @@ func test_getekende_regels_passen() -> void:
 func test_een_hele_beurt_op_elke_band() -> void:
 	for geval in [{"n": 2, "kunnen": 3, "band": 3}, {"n": 5, "kunnen": 3, "band": 4},
 			{"n": 7, "kunnen": 4, "band": 5}]:
+		State.vloer = mini(State.BAND_MIN, int(geval["band"]))   # groep 3 onder de vloer
 		_op()
 		_wereld(int(geval["n"]), int(geval["kunnen"]))
 		gelijk(State.band(), int(geval["band"]), "band bij N %d" % int(geval["n"]))
@@ -1311,6 +1314,7 @@ func test_rekenaandeel() -> void:
 		var mis: String = geval[3]
 		var wat := "groep %d, %d gasten" % [band, n]
 		_teller = {"reken": 0, "spel": 0}
+		State.vloer = mini(State.BAND_MIN, band)   # groep 3 onder de vloer (2026-11-15)
 		_op()
 		_wereld(n, int(geval[1]))
 		gelijk(State.band(), band, "%s: de band" % wat)
@@ -1379,6 +1383,7 @@ func test_een_gemiste_sleutel_komt_onveranderd_terug() -> void:
 				State.s["dag"] = 2
 			"een andere band":
 				State.s["kunnen"] = 2
+				groep3()   # de vloer is groep 4 (2026-11-15): alleen zo zakt de band
 				gelijk(State.band(), 3, "nu groep 3")
 			"een gast minder":
 				(State.s["gasten"] as Array).pop_back()

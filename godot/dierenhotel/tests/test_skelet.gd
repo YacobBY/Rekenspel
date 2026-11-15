@@ -78,8 +78,12 @@ func test_band_en_signaal() -> void:
 	var boom := Engine.get_main_loop() as SceneTree
 	var st = boom.root.get_node_or_null(NodePath("State"))
 	st.nieuw_spel()
-	gelijk(st.band(), 3, "zonder gasten band 3")
+	# de vloer is groep 4 (eigenaar 2026-11-15): zonder gasten band 4, niet 3
+	gelijk(st.band(), 4, "zonder gasten band 4: de vloer")
 	for i in 6:
 		st.tel(true, 1000)
 	gelijk(st.s["kunnen"], 4, "kunnen stijgt na 6 goede items")
-	gelijk(st.band(), 3, "N begrenst de band")
+	gelijk(st.band(), 4, "N begrenst de band: geen groep 5 zonder gasten")
+	# onder de vloer rekent de regel zoals altijd: zonder gasten groep 3
+	groep3()
+	gelijk(st.band(), 3, "N begrenst de band tot groep 3 onder de vloer")
