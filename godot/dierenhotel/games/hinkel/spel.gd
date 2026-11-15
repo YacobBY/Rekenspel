@@ -750,7 +750,8 @@ static func sprong_passend(afst: int, band: int) -> Array[int]:
 
 ## The sizes that do NOT divide the distance: the band's own sizes first, and
 ## for groep 3/4 (whose own sizes all divide some distances) the tables of 3
-## and 4 that groep 4 knows (IDEAS.md).  Never a size that divides the
+## and 4 that groep 4 knows (IDEAS.md) — band 4 has 3 and 4 among its own
+## sizes since 2026-11-15, so there the fallback is rare.  Never a size that divides the
 ## distance but needs more than ten hops — that one is not wrong, so it is
 ## simply not offered.
 static func _sprong_mis(afst: int, band: int) -> Array[int]:

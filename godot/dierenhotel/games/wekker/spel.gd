@@ -416,7 +416,7 @@ func _lees_stand(v) -> Dictionary:
 		return {}
 	var uit: Dictionary = {}
 	for k in ["dag", "N", "band", "idx", "doelU", "doelM", "u", "m", "duur",
-			"missers", "draaien", "gekeurd", "ster", "af", "gemist"]:
+			"missers", "draaien", "gekeurd", "ster", "af", "gemist", "digitaal"]:
 		uit[k] = int(float(v.get(k, 0)))
 	uit["stap"] = str(v.get("stap", "zet"))
 	uit["gast"] = str(v.get("gast", ""))
@@ -634,6 +634,17 @@ func groot_rect() -> Rect2:
 func tijd_woord(u: int, m: int) -> String:
 	return Sommen.Wekker.tijd_woord(u, m)
 
+## The wake-up time the guest asks for: in words ("kwart voor 5"), or — band 4
+## and 5 on every other setting question since 2026-11-15 — the digital way
+## ("4:45"), because the end of groep 4 reads the clock both ways.  It is the
+## TARGET, never the time the clock shows now.
+func doel_woord() -> String:
+	var u := int(_s.get("doelU", 12))
+	var m := int(_s.get("doelM", 0))
+	if int(_s.get("digitaal", 0)) != 0:
+		return "%d:%02d" % [Sommen.Wekker.u12(u), m]
+	return tijd_woord(u, m)
+
 ## De zin blijft binnen het budget van F4: hooguit 8 woorden EN 40 tekens, en
 ## op één regel past ongeveer 34 tekens.  Met de langste naam en de langste
 ## tijd loopt "... wil om ... op" daar net over; dan zegt de kaart het korter.
@@ -642,7 +653,7 @@ func tijd_woord(u: int, m: int) -> String:
 ## van de wijzers.
 func zin_zet() -> Array:
 	var naam := naam_van(str(_s.get("gast", "")))
-	var wil := tijd_woord(int(_s.get("doelU", 12)), int(_s.get("doelM", 0)))
+	var wil := doel_woord()
 	var een := "%s wil om %s op" % [naam, wil]
 	if een.length() > 34:
 		een = "Wek %s om %s" % [naam, wil]
@@ -684,12 +695,21 @@ func knoppen() -> Array:
 		"kies": func(_k: String) -> void: klaar_tik()})
 	return l
 
+## The answers of a duration question.  Every choice shares the minute of the
+## target (`Sommen.Wekker.duur_minuut`): whole hours in the old band-5 save,
+## "half 5" in band 4, "kwart over 3" / "kwart voor 3" in band 5 (2026-11-15);
+## the short word is the digital time.
 func tijd_knoppen() -> Array:
 	var l: Array = []
+	var m := int(_s.get("doelM", 0))
 	for q in (_s.get("keuzes", []) as Array):
 		var u := int(q)
-		l.append({"id": "u%d" % u, "icoon": Sommen.Wekker.uur_ico(u, 0),
-			"tekst": "%d uur" % u, "kies": func(_k: String) -> void: kies_tijd(u)})
+		var knop := {"id": "u%d" % u, "icoon": Sommen.Wekker.uur_ico(u, m),
+			"tekst": "%d uur" % u if m == 0 else tijd_woord(u, m),
+			"kies": func(_k: String) -> void: kies_tijd(u)}
+		if m != 0:
+			knop["kort"] = "%d:%02d" % [Sommen.Wekker.u12(u), m]
+		l.append(knop)
 	return l
 
 func _teken_kaart(nieuw: bool) -> void:
@@ -769,8 +789,7 @@ func _teken_gast(zeg: String) -> void:
 	if gast.is_empty() or _af_nu() or d == null or d.kamer != ctx.wereld.kamer_nu():
 		ctx.ui.wolk_weg("wk_gast")
 		return
-	var tekst := zeg if not zeg.is_empty() \
-		else tijd_woord(int(_s.get("doelU", 12)), int(_s.get("doelM", 0)))
+	var tekst := zeg if not zeg.is_empty() else doel_woord()
 	ctx.ui.wolk({"id": "wk_gast", "kamer": d.kamer, "x": d.x, "z": d.z,
 		"volg": _volg_dier(gast), "hoog": 54.0,
 		"icoon": "💤" if bool(_s.get("slaapt", false)) else T_ICOON,

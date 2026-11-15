@@ -536,11 +536,13 @@ static func _cellen_som(plan: Dictionary) -> int:
 ## G1 — HET ZWEMBAD (games-b.md §1.3/§1.4, games/zwembad.js).
 class Zwembad extends RefCounted:
 	## k = the step per guest, lo/hi = the window of the band, M = metres per
-	## stroke (band 5 decides that from L), plafond = the biggest button number.
+	## stroke (0 = decided from L, `max_van`), plafond = the biggest button number.
+	## Owner 2026-11-15 ("groep eind 4"): band 4 swims lanes of 51…95 m and
+	## band 5 of 101…175 m, and the second card always crosses the ten.
 	const BANDEN := {
 		3: {"k": 5, "lo": 8, "hi": 20, "M": 10, "plafond": 20},
-		4: {"k": 8, "lo": 21, "hi": 50, "M": 30, "plafond": 100},
-		5: {"k": 7, "lo": 31, "hi": 80, "M": 0, "plafond": 100},
+		4: {"k": 8, "lo": 51, "hi": 95, "M": 0, "plafond": 100},
+		5: {"k": 12, "lo": 101, "hi": 175, "M": 0, "plafond": 200},
 	}
 
 	static func band_van(b: int) -> int:
@@ -549,16 +551,32 @@ class Zwembad extends RefCounted:
 	static func plafond_van(band: int) -> int:
 		return int(BANDEN[band_van(band)]["plafond"])
 
-	## The maximum per stroke: fixed per band, 40 m for the long lanes of band 5.
+	## The maximum per stroke.  Band 3: a fixed 10 m.  Band 4 and 5 (2026-11-15):
+	## just over half the lane, with a ones digit of 6…9 that is BIGGER than the
+	## lane's own, so `L − M` always crosses the ten (73 − 37 = 36, 143 − 76 =
+	## 67) and a lane still takes exactly two strokes (`M < L < 2M`).  A lane
+	## that ends in 9 has no such M; `baan` never makes one.
 	static func max_van(l: int, band: int) -> int:
 		var b := band_van(band)
-		if b < 5:
+		if b < 4:
 			return int(BANDEN[b]["M"])
-		return 40 if l >= 55 else 30
+		var e: int = posmod(l, 10)
+		@warning_ignore("integer_division")
+		var m0: int = l / 2 + 1
+		for i in 10:
+			var e2: int = posmod(m0 + i, 10)
+			if e2 > e and e2 >= 6:
+				return m0 + i
+		return m0
+
+	## The distance between two metre markers on the rim.
+	static func stap_van(l: int) -> int:
+		return 5 if l <= 20 else (10 if l <= 100 else 20)
 
 	## `baan(N, band, dag)` -> {L, M, band, N, dag, k, r, stap, plafond}.
-	## Band 5 shifts a lane three metres whenever the remainder would be a round
-	## ten (40 -> 43, 50 -> 53, …), and no lane ever needs more than two strokes.
+	## Band 4/5 move a lane that ends in 9 two metres on (69 -> 71), so
+	## `max_van` always finds an M that crosses the ten; no lane ever needs more
+	## than two strokes.
 	static func baan(n_gasten: int, band: int, dag: int) -> Dictionary:
 		var b := band_van(band)
 		var info: Dictionary = BANDEN[b]
@@ -575,14 +593,15 @@ class Zwembad extends RefCounted:
 		# deviation from the frozen JavaScript, documented in games-b.md §1.3.
 		if k * n + r < lo:
 			l = lo + posmod(k * n + 3 * d, hi - lo + 1)
+		if b >= 4 and posmod(l, 10) == 9:
+			l += 2
+			if l > hi:
+				l -= 4
 		var m := max_van(l, b)
-		if b >= 5 and l > m and (l - m) % 10 == 0:
-			l = clampi(l + 3, int(info["lo"]), int(info["hi"]))
-			m = max_van(l, b)
 		if l > 2 * m:
 			l = 2 * m
 		return {"L": l, "M": m, "band": b, "N": n, "dag": d, "k": k, "r": r,
-			"stap": 5 if l <= 20 else 10, "plafond": int(info["plafond"])}
+			"stap": stap_van(l), "plafond": int(info["plafond"])}
 
 	## "As far as you can": the whole remainder, or M when that is more.
 	static func juist_van(l: int, m: int, p: int) -> int:
@@ -601,6 +620,13 @@ class Zwembad extends RefCounted:
 		var plafond := plafond_van(band)
 		var wens: Array[int] = [r, l, m, r - m, juist - 10, juist + 10,
 			juist - 1, juist + 1, juist + 2, juist - 2, juist + 3, juist - 3]
+		if band_van(band) >= 4:
+			# 2026-11-15: the second card crosses the ten, so the slip a child
+			# really makes there — forgetting the carry, ten too many — comes
+			# straight after the whole remainder, then the visible M, ten too
+			# few and the lane
+			wens = [r, juist + 10, m, juist - 10, l, r - m,
+				juist - 1, juist + 1, juist + 2, juist - 2, juist + 3, juist - 3]
 		var goed: Array[int] = []
 		for v in wens:
 			if v < 1 or v > plafond or v == juist or goed.has(v):
@@ -743,16 +769,35 @@ class Wekker extends RefCounted:
 		gedraaid.append_array(uit.slice(0, k))
 		return gedraaid
 
-	## Is this a duration question?  Only band 5, and only on every other guest
-	## of every other day (games-b.md §2.3).
+	## Is this a duration question?  Band 4 and 5 (band 4 since 2026-11-15, end
+	## of groep 4: elapsed time in whole hours), on every other guest of every
+	## other day (games-b.md §2.3).
 	static func duur_vraag(band: int, dag: int, idx: int) -> bool:
-		return band_klem(band) >= 5 and posmod(dag + idx, 2) == 1
+		return band_klem(band) >= 4 and posmod(dag + idx, 2) == 1
 
-	## The numbers of one wake-up turn -> {doelU, doelM, u, m, stap, duur, keuzes}.
-	## `u`/`m` is where the hands START; `stap` is "duur" (first the duration
-	## question) or "zet" (set the clock straight away).  A duration target
-	## always sits on a whole hour and the clock starts `duur` whole hours
-	## earlier, so the question has a clean answer.
+	## The minute a duration question starts and ends on: band 4 on the half
+	## hour ("half 3 + 2 uur = half 5"), band 5 on a quarter past or a quarter
+	## to (2026-11-15).  Before that only band 5 asked, on whole hours.
+	static func duur_minuut(band: int, dag: int, idx: int) -> int:
+		var b := band_klem(band)
+		if b <= 3:
+			return 0
+		if b == 4:
+			return 30
+		return 15 if posmod(dag + idx, 4) == 1 else 45
+
+	## Does the card name the target the digital way ("4:45") instead of in
+	## words ("kwart voor 5")?  Band 4 and 5, on every other setting question
+	## (2026-11-15: end of groep 4 reads analog AND digital).
+	static func digitaal(band: int, dag: int, idx: int) -> bool:
+		return band_klem(band) >= 4 and posmod(dag + idx, 4) == 0
+
+	## The numbers of one wake-up turn -> {doelU, doelM, u, m, stap, duur,
+	## keuzes, digitaal}.  `u`/`m` is where the hands START; `stap` is "duur"
+	## (first the duration question) or "zet" (set the clock straight away).  A
+	## duration target sits on `duur_minuut` and the clock starts `duur` whole
+	## hours earlier on the same minute, so the question has a clean answer and
+	## every choice (`keuzes`, hours) shares that minute.
 	static func beurt(band: int, n_gasten: int, dag: int, idx: int) -> Dictionary:
 		var b := band_klem(band)
 		var doel := doel_tijd(b, dag, idx)
@@ -762,8 +807,8 @@ class Wekker extends RefCounted:
 		var start := {}
 		var keuzes: Array[int] = []
 		if duur:
-			doel = {"u": int(doel["u"]), "m": 0}
-			start = van_min(in_min(int(doel["u"]), 0) - dh * 60)
+			doel = {"u": int(doel["u"]), "m": duur_minuut(b, dag, idx)}
+			start = van_min(in_min(int(doel["u"]), int(doel["m"])) - dh * 60)
 			keuzes = duur_keuzes(int(start["u"]), dh, dag)
 		else:
 			start = van_min(in_min(int(doel["u"]), int(doel["m"])) - int(a["min"]))
@@ -771,7 +816,8 @@ class Wekker extends RefCounted:
 			"doelU": int(doel["u"]), "doelM": int(doel["m"]),
 			"u": int(start["u"]), "m": int(start["m"]),
 			"stap": "duur" if duur else "zet", "duur": dh if duur else 0,
-			"keuzes": keuzes}
+			"keuzes": keuzes,
+			"digitaal": 1 if (not duur and digitaal(b, dag, idx)) else 0}
 
 
 ## G3 — HET HINKELPAD (games-b.md §3.4, games/hinkel.js).
@@ -782,7 +828,7 @@ class Hinkel extends RefCounted:
 	## stenen = how many stones, sprongen = the hop sizes on the strip.
 	const BAND := {
 		3: {"E": 10, "stap": 1, "stenen": 11, "sprongen": [1, 2, 5]},
-		4: {"E": 100, "stap": 5, "stenen": 21, "sprongen": [2, 5, 10]},
+		4: {"E": 100, "stap": 5, "stenen": 21, "sprongen": [2, 3, 4, 5, 10]},
 		5: {"E": 100, "stap": 5, "stenen": 21, "sprongen": [2, 3, 4, 5, 6, 7, 8, 9, 10]},
 	}
 
@@ -817,7 +863,9 @@ class Hinkel extends RefCounted:
 	## Two demands on the distance: at least TWO hop sizes fit it exactly (or the
 	## strip is not a real choice), and it is a multiple of the stone spacing (so
 	## the little staircase always lands ON a stone).  The target is never on the
-	## last stone — otherwise "too far" could not exist.
+	## last stone — otherwise "too far" could not exist.  Band 4 and 5 start
+	## between the tens and, on an even day, hop BACK from the high end to the
+	## staircase at the low end (2026-11-15, owner: "groep eind 4").
 	static func beurt(n_gasten: int, band: int, dag: int) -> Dictionary:
 		var b := band_of(band)
 		var n0: int = maxi(1, n_gasten)
@@ -869,14 +917,19 @@ class Hinkel extends RefCounted:
 		afst = best if best != 0 else maxi(stap, mini(afst - (afst % stap), ruimte))
 		var max_s: int = maxi(0, ruimte - afst)
 		var s := 0
-		if b == 4:
-			s = 10 * posmod(d, max_s / 10 + 1)
-		elif b == 5:
+		if b >= 4:
 			# deliberately NOT on a ten, but still on a stone: 5, 15, 25, …
+			# (band 4 too since 2026-11-15: end of groep 4 hops across the tens)
 			s = 5 + 10 * posmod(d + n0, (max_s - 5) / 10 + 1) if max_s >= 5 else 0
 		else:
 			s = k * posmod(d, max_s / k + 1)
-		return {"band": b, "E": e, "stap": stap, "s": s, "doel": s + afst,
+		var doel := s + afst
+		# 2026-11-15: band 4 and 5 hop BACKWARDS on every even day — the
+		# staircase stands at the low end and he starts at the high one
+		if b >= 4 and posmod(d, 2) == 0:
+			doel = s
+			s = s + afst
+		return {"band": b, "E": e, "stap": stap, "s": s, "doel": doel,
 			"sprong": k, "n": JsGetal.rond(float(afst) / float(k)), "afstand": afst}
 
 	static func _past(a: int, ruimte: int, stap: int, band: int) -> bool:
@@ -920,20 +973,29 @@ class Hinkel extends RefCounted:
 ## G4 — DE WASMANDTOREN (games-b.md §4.3, games/was.js).
 class Was extends RefCounted:
 	## plaf = the ceiling in pieces, soorten = how many kinds, per = pieces per
-	## tap (group 5 picks up two at a time), kset = the k the sum may use.
+	## block (one block per tap), kset = the k the sum may use.
+	## 2026-11-15 (owner: "groep eind 4"): group 4 sorts up to 42 pieces in
+	## blocks of TWO (the pile sums cross the ten: 12 + 14 + 16), group 5 up to
+	## 100 pieces in blocks of FIVE.  The highest pile stays 8 blocks, so the
+	## bar chart keeps fitting the room.  k runs to 20, so one or two guests
+	## still sort a real pile (group 4 with one guest: 38 pieces).
 	const BAND := {
 		3: {"plaf": 12, "soorten": 3, "per": 1, "kset": [1, 2]},
-		4: {"plaf": 20, "soorten": 3, "per": 1, "kset": [1, 2, 3, 4, 5]},
-		5: {"plaf": 30, "soorten": 4, "per": 2, "kset": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]},
+		4: {"plaf": 42, "soorten": 3, "per": 2, "kset": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+			11, 12, 13, 14, 15, 16, 17, 18, 19, 20]},
+		5: {"plaf": 100, "soorten": 4, "per": 5, "kset": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+			11, 12, 13, 14, 15, 16, 17, 18, 19, 20]},
 	}
 
 	static func band_klem(band: int) -> int:
 		return 4 if band == 4 else (5 if band == 5 else 3)
 
 	## `kiesT(N, band, dag)` -> {k, r, T}.  Every (k, r) under this game's ceiling,
-	## biggest totals first; in group 5 T must be even (the washing comes off the
-	## pile two at a time).  On a tie the r closest to the frozen `deel()` wins,
-	## and the three biggest totals take turns per day.
+	## biggest totals first; T must be a whole number of blocks (group 4: even,
+	## group 5: a multiple of five).  On a tie the r closest to a base rest
+	## wins — group 3 the frozen `deel()`, groups 4/5 `(N + dag) mod 5` since
+	## 2026-11-15 (so this table no longer moves when `deel()` does) — and the
+	## three biggest totals take turns per day.
 	## Emergency (even k = 1 runs over the ceiling): T drops to the ceiling itself
 	## and `k = 0` says honestly that the form k·N + r no longer holds.
 	static func kies_t(n_gasten: int, band: int, dag: int) -> Dictionary:
@@ -941,14 +1003,15 @@ class Was extends RefCounted:
 		var info: Dictionary = BAND[b]
 		var plaf := int(info["plaf"])
 		var per := int(info["per"])
-		var basis := Sommen.deel(n_gasten, b, dag)
-		var basis_r := int(basis["r"])
+		var basis_r: int = posmod(n_gasten + dag, 5)
+		if b == 3:
+			basis_r = int(Sommen.deel(n_gasten, b, dag)["r"])
 		var lijst: Array[Dictionary] = []
 		for k in info["kset"]:
 			var r := int(k) - 1
 			while r >= 0:
 				var t: int = int(k) * n_gasten + r
-				if t > plaf or (per == 2 and t % 2 != 0):
+				if t > plaf or t % per != 0:
 					r -= 1
 					continue
 				var al := -1
@@ -968,7 +1031,7 @@ class Was extends RefCounted:
 		if goed.is_empty():
 			goed = lijst
 		if goed.is_empty():
-			var t2 := plaf - (plaf % 2 if per == 2 else 0)
+			var t2 := plaf - plaf % per
 			return {"k": 0, "r": 0, "T": t2}
 		goed = _aflopend_op_t(goed)
 		var top: Array[Dictionary] = []

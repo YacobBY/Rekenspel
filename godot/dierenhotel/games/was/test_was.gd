@@ -314,7 +314,8 @@ func test_beurt_per_band() -> void:
 		waar(Games.start(ID), "start band %d" % band)
 		var st := _stand()
 		var per := int(st["per"])
-		gelijk(per, 2 if band == 5 else 1, "per tik bij band %d" % band)
+		# 2026-11-15 (groep eind 4): group 4 sorts in twos, group 5 in fives
+		gelijk(per, {3: 1, 4: 2, 5: 5}[band], "stuks per blokje bij band %d" % band)
 		var bron := Ui.bron_van("ws_berg")
 		waar(bron != null, "de berg hangt er bij de start (band %d)" % band)
 		if band == 5:
@@ -400,7 +401,7 @@ func test_alleen_groep_5_begint_met_een_vraag() -> void:
 			Games.stop()
 			continue
 		gelijk(str(st["stap"]), "vraag0", "band 5 begint met de opening")
-		var goed := int(int(st["T"]) / 2)
+		var goed := int(int(st["T"]) / 5)
 		gelijk(int(_spel().juist()), goed, "band 5 vraagt om %d blokjes" % goed)
 		gelijk(_kaart_tekst("regel"), "📊 Hoeveel blokjes worden dat?", "de vraag zelf")
 		var strook := Hits.spot("ws_vraag_keuzes")
@@ -501,9 +502,12 @@ func test_de_vragen_letterlijk() -> void:
 			waar(Hits.spot("ws_vraag_keuzes").knoop.get_node_or_null("Rij/Kn%d" % (int(vak[h]) * per)) == null,
 				"band 3 kiest een stapel, geen getal")
 		elif band == 4:
-			gelijk(_kaart_tekst("regel"), "📊 Hoeveel meer %s dan %s?" % [hn, ln], "band 4 vraag 1")
-			gelijk(_kaart_tekst("som"), "%d − %d =" % [int(vak[h]) * per, int(vak[l]) * per],
-				"de sombalk met het echte minteken")
+			# 2026-11-15: blocks of two — first the conversion, then the sum of
+			# three that crosses the ten
+			gelijk(_kaart_tekst("regel"), "📊 Hoeveel %s zijn het?" % hn, "band 4 vraag 1")
+			gelijk(_kaart_tekst("regel2"), "📦 Elk blokje is 2 stuks", "de legenda op de kaart")
+			gelijk(_kaart_tekst("som"), "", "vraag 1 heeft geen sombalk")
+			gelijk(_spel().juist(), int(vak[h]) * 2, "de blokjes keer twee")
 			waar(Hits.spot("ws_vraag_pad") == null, "band 4 heeft geen cijferpad meer")
 			var strook := Hits.spot("ws_vraag_keuzes")
 			waar(strook != null and strook.knoop.get_node("Rij").get_child_count() == 4,
@@ -519,13 +523,39 @@ func test_de_vragen_letterlijk() -> void:
 			gelijk(_kaart_tekst("som"), "%s =" % " + ".join(delen), "de optelbalk")
 		else:
 			gelijk(_kaart_tekst("regel"), "📊 Hoeveel %s zijn het?" % hn, "band 5 vraag 1")
-			gelijk(_kaart_tekst("regel2"), "📦 Elk blokje is 2 stuks", "de legenda op de kaart")
+			gelijk(_kaart_tekst("regel2"), "📦 Elk blokje is 5 stuks", "de legenda op de kaart")
+			gelijk(_spel().juist(), int(vak[h]) * 5, "de blokjes keer vijf")
 			gelijk(_kaart_tekst("som"), "", "band 5 heeft geen sombalk")
 			_antwoord_goed()
 			await _spoel(1.0)
 			gelijk(_kaart_tekst("regel"), "📊 Hoeveel meer %s dan %s?" % [hn, ln], "band 5 vraag 2")
 		Games.stop()
 	_licht_af()
+
+## 2026-11-15 (owner: "groep eind 4"): group 4 sorts up to 42 pieces in blocks
+## of two, so the sum of the three piles mostly crosses the ten (12 + 14 + 16),
+## and the highest pile stays 8 blocks (the chart still fits the room).  Group
+## 5 sorts in fives, up to 100 pieces.
+func test_band_4_telt_in_tweeen_over_het_tiental() -> void:
+	var kruist := 0
+	var keer := 0
+	for n in range(1, 9):
+		for dag in range(1, 9):
+			var q := Sommen.Was.recept(n, 4, dag)
+			gelijk(int(q["per"]), 2, "band 4: blokjes van twee")
+			waar(int(q["T"]) <= 42 and int(q["T"]) >= 16, "band 4: T = %d" % int(q["T"]))
+			var eenheden := 0
+			for v in q["blok"]:
+				waar(int(v) <= 8, "band 4: hooguit 8 blokjes per stapel")
+				eenheden += (int(v) * 2) % 10
+			keer += 1
+			if eenheden >= 10:
+				kruist += 1
+			var q5 := Sommen.Was.recept(n, 5, dag)
+			gelijk(int(q5["per"]), 5, "band 5: blokjes van vijf")
+			waar(int(q5["T"]) % 5 == 0 and int(q5["T"]) <= 100, "band 5: T = %d" % int(q5["T"]))
+	waar(kruist * 2 >= keer, "band 4: de som van de stapels gaat meestal over het tiental (%d van %d)"
+		% [kruist, keer])
 
 ## The legend bubble stands there the whole of the sorting in group 5, and never
 ## when the turn is over (games-b.md §4.9).
@@ -538,18 +568,29 @@ func test_legenda_bij_band_5() -> void:
 	var w := Hits.spot("ws_legenda")
 	waar(w != null, "het legendawolkje staat er tijdens het sorteren")
 	if w != null:
-		gelijk((w.knoop as UiWolk).zeg_label.text, "Elk blokje is 2 stuks", "de legenda")
+		gelijk((w.knoop as UiWolk).zeg_label.text, "Elk blokje is 5 stuks", "de legenda")
 		gelijk((w.knoop as UiWolk).icoon_label.text, "📦", "met het pictogram")
 	_sorteer_alles()
 	waar(Hits.spot("ws_legenda") == null,
 		"bij de vraag staat de legenda op de kaart, dus niet ook nog als wolkje")
 	Games.stop()
 	_licht_af()
-	# band 3 and 4 sort one piece at a time: no legend at all
+	# band 4 sorts in twos since 2026-11-15: its own legend while sorting
 	_licht_op()
 	_wereld(4)
 	Games.start(ID)
-	waar(Hits.spot("ws_legenda") == null, "band 4 heeft geen legenda nodig")
+	await _spoel(1.0)
+	var w4 := Hits.spot("ws_legenda")
+	waar(w4 != null, "band 4: het legendawolkje staat er tijdens het sorteren")
+	if w4 != null:
+		gelijk((w4.knoop as UiWolk).zeg_label.text, "Elk blokje is 2 stuks", "band 4: de legenda")
+	Games.stop()
+	_licht_af()
+	# band 3 sorts one piece at a time: no legend at all
+	_licht_op()
+	_wereld(3)
+	Games.start(ID)
+	waar(Hits.spot("ws_legenda") == null, "band 3 heeft geen legenda nodig")
 	_licht_af()
 
 # ------------------------------------------------- fout, geen hulp, ster

@@ -206,11 +206,14 @@ func test_getallen_van_de_generator() -> void:
 		# N, band, dag, idx, startwoord, doelwoord, vorm
 		[2, 3, 1, 0, "7 uur", "10 uur", "zet"],
 		[3, 3, 2, 0, "10 uur", "1 uur", "zet"],
-		[5, 4, 1, 0, "half 7", "10 uur", "zet"],
-		[5, 4, 2, 1, "kwart voor 11", "half 3", "zet"],
-		[8, 5, 1, 0, "7 uur", "10 uur", "duur"],
+		# 2026-11-15 (groep eind 4): band 4 asks the duration too, from a half
+		# hour ("half 8 + 3 uur"), band 5 from a quarter past or to
+		[5, 4, 1, 0, "half 8", "half 11", "duur"],
+		[5, 4, 2, 1, "half 12", "half 3", "duur"],
+		[5, 4, 2, 0, "half 10", "kwart over 1", "zet"],
+		[8, 5, 1, 0, "kwart over 7", "kwart over 10", "duur"],
 		[8, 5, 2, 0, "5 voor 10", "half 2", "zet"],
-		[9, 5, 3, 0, "5 uur", "8 uur", "duur"],
+		[9, 5, 3, 0, "kwart voor 6", "kwart voor 9", "duur"],
 	]
 	for r in rijen:
 		var b: Dictionary = w.beurt(int(r[1]), int(r[0]), int(r[2]), int(r[3]))
@@ -221,6 +224,11 @@ func test_getallen_van_de_generator() -> void:
 	# de twee tijdsduurrijen met hun keuzes, in die volgorde
 	gelijk(str(w.beurt(5, 8, 1, 0)["keuzes"]), str([11, 9, 4, 10]), "keuzes dag 1")
 	gelijk(str(w.beurt(5, 9, 3, 0)["keuzes"]), str([2, 8, 9, 7]), "keuzes dag 3")
+	gelijk(str(w.beurt(4, 5, 2, 1)["keuzes"]), str([1, 8, 2, 3]), "band 4: keuzes (half 3 is goed)")
+	# every other setting question names the target the digital way (band 4/5)
+	gelijk(int(w.beurt(4, 5, 2, 2)["digitaal"]), 1, "band 4 dag 2 gast 3: digitaal (3:45)")
+	gelijk(int(w.beurt(4, 5, 2, 0)["digitaal"]), 0, "band 4 dag 2 gast 1: in woorden")
+	gelijk(int(w.beurt(3, 5, 2, 2)["digitaal"]), 0, "band 3: nooit digitaal")
 
 ## Tijd in woorden, de Nederlandse afspraken van games-b.md §2.4.
 func test_tijd_in_woorden() -> void:
@@ -572,6 +580,53 @@ func test_tijdsduurvraag() -> void:
 		"en de draaiknoppen van band 5 staan er")
 	_af()
 
+## 2026-11-15 (groep eind 4): band 4 asks the elapsed time too.  The clock
+## stands on a half hour, the guest sleeps whole hours, and every answer is a
+## half hour in words ("half 11"); then the clock is set as always.
+func test_tijdsduurvraag_band_4_op_het_halve_uur() -> void:
+	_op()
+	_gasten(5, 1, 3)
+	gelijk(State.band(), 4, "vijf gasten: band 4")
+	waar(Games.start(ID), "het spel start")
+	var spel := _spel()
+	if spel == null:
+		_af()
+		return
+	var s: Dictionary = spel.stand()
+	gelijk(str(s["stap"]), "duur", "dag 1, gast 1, band 4: een tijdsduurvraag")
+	gelijk(int(s["m"]), 30, "de klok staat op een half uur")
+	gelijk(int(s["doelM"]), 30, "en hij wordt wakker op een half uur")
+	var teksten: Array = []
+	for k in spel.tijd_knoppen():
+		teksten.append(str(k["tekst"]))
+		waar(str(k["tekst"]).begins_with("half "), "een knop zegt een half uur (%s)" % k["tekst"])
+		gelijk(str(Ui.mist_tekens(str(k["kort"]))), "[]", "het korte woord tekent")
+	waar(teksten.has(Sommen.Wekker.tijd_woord(int(s["doelU"]), 30)), "het goede antwoord staat erbij")
+	waar(_tik("u%d" % int(s["doelU"])), "het goede uur")
+	gelijk(str(s["stap"]), "zet", "nu mag de klok gezet worden")
+	waar(_knop("uur") != null and _knop("kwartier") != null, "met de knoppen van band 4")
+	_af()
+
+## 2026-11-15: every other setting question of band 4 names the target the
+## digital way ("3:45"), never the time the clock shows now.
+func test_band_4_noemt_de_wektijd_soms_digitaal() -> void:
+	_op()
+	_gasten(5, 2, 3)
+	waar(Games.start(ID), "het spel start")
+	var spel := _spel()
+	if spel == null:
+		_af()
+		return
+	var s: Dictionary = spel.stand()
+	s["digitaal"] = 1
+	s["doelU"] = 3
+	s["doelM"] = 45
+	gelijk(spel.doel_woord(), "3:45", "digitaal")
+	waar(str(spel.zin_zet()[0]).contains("3:45"), "de kaart noemt 3:45")
+	s["digitaal"] = 0
+	gelijk(spel.doel_woord(), "kwart voor 4", "anders in woorden")
+	_af()
+
 ## K3 — de kaart groeit niet tussen de standen: zetten, drie missers, de
 ## tijdsduurvraag en daarna.  De kaarthoogte blijft gelijk tot op 2 px, zodat
 ## de strook eronder en de klok erboven hun plek houden (en sinds 2026-09-24
@@ -766,7 +821,9 @@ func test_herstel_uit_ctx_data() -> void:
 ## ronde waarin het gekozen dier al gewekt is, gaat gewoon verder.
 func test_het_kind_kiest_wie_er_gewekt_wordt() -> void:
 	_op()
-	var gasten := _gasten(4, 1, 3)
+	# dag 2: the first guest of a round sets the clock (band 4 asks a duration
+	# on every other guest since 2026-11-15, and dag 1 would start with one)
+	var gasten := _gasten(4, 2, 3)
 	var ids: Array[String] = []
 	for g in gasten:
 		ids.append(str(g["id"]))

@@ -169,7 +169,7 @@ static func normaliseer(b: Dictionary, band_nu: int) -> Dictionary:
 	var l := int(uit.get("L", 0))
 	uit["L"] = l
 	uit["M"] = Sommen.Zwembad.max_van(l, band)
-	uit["stap"] = 5 if l <= 20 else 10
+	uit["stap"] = Sommen.Zwembad.stap_van(l)
 	uit["p"] = clampi(int(uit.get("p", 0)), 0, maxi(0, l))
 	uit["leg"] = maxi(0, int(uit.get("leg", 0)))
 	uit["misser"] = maxi(0, int(uit.get("misser", 0)))

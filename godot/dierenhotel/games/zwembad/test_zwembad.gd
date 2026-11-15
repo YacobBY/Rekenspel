@@ -203,10 +203,11 @@ func test_taakkaartje_houdt_zijn_naam() -> void:
 
 # ------------------------------------------------------ het rekenen per band
 
-## The owner's own windows (§1.3): the band-5 lane runs to 80, not to 76, and
-## the +3 shift keeps a round ten out of the remainder.
+## The windows of §1.3 (band 4 and 5 raised 2026-11-15, owner: "groep eind
+## 4"): band 4 swims 51…95 m, band 5 101…175 m, and in both the second card
+## `L − M` crosses the ten — the ones digit of M is bigger than that of L.
 func test_de_baan_per_band() -> void:
-	var vensters := {3: [8, 20], 4: [21, 50], 5: [31, 80]}
+	var vensters := {3: [8, 20], 4: [51, 95], 5: [101, 175]}
 	for band in [3, 4, 5]:
 		for n in range(1, 13):
 			for dag in range(1, 9):
@@ -217,38 +218,50 @@ func test_de_baan_per_band() -> void:
 					"band %d N=%d dag=%d: L=%d in het venster" % [band, n, dag, l])
 				waar(l <= 2 * m, "band %d: L=%d kost hooguit twee etappes (M=%d)"
 					% [band, l, m])
-				gelijk(int(baan["stap"]), 5 if l <= 20 else 10, "meterstreep bij L=%d" % l)
-				if band == 5:
-					# the +3 shift: 40, 50, 60 and 70 never come out (§1.3)
-					waar(not [40, 50, 60, 70].has(l),
-						"band 5: geen rond tiental als baan (L=%d)" % l)
-	# the header of the HTML file says band 5 stops at 76; from N = 11 the window
-	# really reaches 80 (A1 §13 Q-X3-1), and that is what the port uses
-	var langste := 0
+				gelijk(int(baan["stap"]), 5 if l <= 20 else (10 if l <= 100 else 20),
+					"meterstreep bij L=%d" % l)
+				if band >= 4:
+					waar(m < l and l % 10 < m % 10,
+						"band %d: %d − %d gaat over het tiental" % [band, l, m])
+					waar(l % 10 != 9, "band %d: geen baan die op 9 eindigt (L=%d)" % [band, l])
+	# band 5 is never easier than band 4: every lane is longer
+	var langste4 := 0
+	var kortste5 := 999
 	for n in range(1, 13):
 		for dag in range(1, 9):
-			langste = maxi(langste, int(Sommen.Zwembad.baan(n, 5, dag)["L"]))
-	gelijk(langste, 80, "band 5 haalt 80, niet 76 (A1 §13 Q-X3-1)")
-	for schuif in [[40, 43], [50, 53], [60, 63], [70, 73]]:
-		var gevonden := false
-		for n in range(1, 13):
-			for dag in range(1, 9):
-				if int(Sommen.Zwembad.baan(n, 5, dag)["L"]) == int(schuif[1]):
-					gevonden = true
-		waar(gevonden, "%d schuift naar %d" % [schuif[0], schuif[1]])
+			langste4 = maxi(langste4, int(Sommen.Zwembad.baan(n, 4, dag)["L"]))
+			kortste5 = mini(kortste5, int(Sommen.Zwembad.baan(n, 5, dag)["L"]))
+	waar(kortste5 > langste4, "band 5 (%d…) zwemt verder dan band 4 (…%d)" % [kortste5, langste4])
+
+## 2026-11-15: band 4 swims to 100 and the second card crosses the ten
+## (lane 73, max 37: 73 − 37 = 36), with "forgot the carry" (46) on the strip.
+func test_band_4_gaat_over_het_tiental() -> void:
+	var b := Sommen.Zwembad.max_van(73, 4)
+	gelijk(b, 37, "73 m: max 37 per keer")
+	var k := Sommen.Zwembad.keuze_getallen(73, 37, 37, 4, 1)
+	gelijk(int(k["juist"]), 36, "73 − 37 = 36")
+	waar((k["lijst"] as Array).has(46), "46 (de tien vergeten) staat op de strook")
+	var gezien := {}
+	for n in range(1, 9):
+		for dag in range(1, 9):
+			var baan := Sommen.Zwembad.baan(n, 4, dag)
+			gezien[int(baan["L"])] = true
+	waar(gezien.size() >= 20, "band 4 kent veel banen (%d)" % gezien.size())
 
 ## The G1-F1 ordering: first the numbers the child SEES in the world, then a
 ## round ten off/on, and only as filler the neighbours.  The owner's card is
-## 43 -> 43, 13, 20, 30.
+## 43 -> 43, 13, 20, 30.  Since 2026-11-15 band 4/5 put "ten too many" right
+## after the whole remainder, so the same lane now reads 43 / 40 / 20 / 30;
+## band 3 keeps the old order.
 func test_de_kaart_van_de_eigenaar() -> void:
 	var k := Sommen.Zwembad.keuze_getallen(43, 30, 0, 4, 0)
-	gelijk(str(k["lijst"]), str([43, 13, 20, 30]), "43 m, max 30: 43 / 13 / 20 / 30")
+	gelijk(str(k["lijst"]), str([43, 40, 20, 30]), "43 m, max 30: 43 / 40 / 20 / 30")
 	gelijk(int(k["juist"]), 30, "en 30 is het goede antwoord")
 	# L, M, p, band, leg, the four buttons — the second card of a turn has
 	# `leg = 1`, and that seventh in the seed is what moves the right button
-	for rij in [[43, 30, 30, 4, 1, [43, 30, 13, 3]], [14, 10, 0, 3, 0, [14, 10, 4, 20]],
-			[14, 10, 10, 3, 1, [14, 4, 10, 3]], [76, 40, 0, 5, 0, [76, 36, 40, 30]],
-			[76, 40, 40, 5, 1, [76, 40, 36, 26]]]:
+	for rij in [[73, 37, 37, 4, 1, [46, 36, 37, 26]], [14, 10, 0, 3, 0, [14, 10, 4, 20]],
+			[14, 10, 10, 3, 1, [14, 4, 10, 3]], [73, 37, 0, 4, 0, [73, 47, 37, 27]],
+			[143, 76, 76, 5, 1, [77, 76, 67, 57]]]:
 		var uit := Sommen.Zwembad.keuze_getallen(int(rij[0]), int(rij[1]), int(rij[2]),
 			int(rij[3]), int(rij[4]))
 		gelijk(str(uit["lijst"]), str(rij[5]),
@@ -318,7 +331,7 @@ func test_normaliseren_en_geldigheid() -> void:
 	var b := ZwembadBeurt.normaliseer({"L": 43, "p": 99, "band": 9,
 		"laatste_p": 12.7}, 4)
 	gelijk(int(b["band"]), 5, "de band wordt geklemd")
-	gelijk(int(b["M"]), 30, "M komt uit maxVan(L, band)")
+	gelijk(int(b["M"]), 26, "M komt uit maxVan(L, band): 43 − 26 gaat over het tiental")
 	gelijk(int(b["stap"]), 10, "meterstreep bij L > 20")
 	gelijk(int(b["p"]), 43, "p wordt geklemd op 0..L")
 	gelijk(int(b["laatste_p"]), 13, "laatstep is een geheel getal")
