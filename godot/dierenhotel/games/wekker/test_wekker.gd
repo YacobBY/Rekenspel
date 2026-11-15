@@ -95,6 +95,38 @@ func _kaart_tekst(veld: String) -> String:
 	var l := s.knoop.get_node_or_null(veld) as Label
 	return "" if l == null else l.text
 
+## Since 2026-11-15 band 4 asks a duration first on every other guest, and
+## with the band floor of 4 a test of the setting card may start on one: answer
+## it (the right hour), so the card that follows is the setting card.  A no-op
+## on a setting card.
+func _naar_zetten(spel: MiniGame) -> void:
+	var s: Dictionary = spel.stand()
+	if str(s.get("stap", "")) == "duur":
+		waar(_tik("u%d" % int(s["doelU"])), "de tijdsduurvraag eerst goed")
+		Hits.plaats()
+
+## Turn the hands forward until they stand on the wake-up time, with the
+## biggest step that does not overshoot (uur, kwartier, vijf — whatever the
+## band shows).  Never "uur" alone: a band-4 target on a quarter cannot be
+## reached by whole hours, and that loop never ended — every turn queued
+## deferred layout calls until the message queue ran out and the engine
+## crashed (seen with the band floor of 4, 2026-11-15).  At most 200 taps.
+func _draai_tot_goed(spel: MiniGame) -> void:
+	var stappen := {"uur": 60, "kwartier": 15, "vijf": 5}
+	for _rondje in 200:
+		if spel.goed():
+			return
+		var s: Dictionary = spel.stand()
+		var nu: int = Sommen.Wekker.in_min(int(s["u"]), int(s["m"]))
+		var over: int = posmod(Sommen.Wekker.in_min(int(s["doelU"]), int(s["doelM"])) - nu, 720)
+		var gedaan := false
+		for knop in ["uur", "kwartier", "vijf"]:
+			if _knop(knop) != null and over >= int(stappen[knop]):
+				gedaan = _tik(knop)
+				break
+		if not gedaan:
+			return
+
 ## Na een misser staat de strook even op slot (S5): wacht die pauze af, zoals
 ## een kind met een echte vinger dat ook doet.
 func _wacht_mispauze() -> void:
@@ -341,9 +373,8 @@ func test_hele_ronde_sluit_zichzelf() -> void:
 		var s: Dictionary = spel.stand()
 		if s.is_empty():
 			break
-		while not spel.goed():
-			if not _tik("uur") and not _tik("kwartier"):
-				break
+		_naar_zetten(spel)
+		_draai_tot_goed(spel)
 		waar(_tik("klaar"), "beurt %d: ✅ Klaar" % (beurt + 1))
 		gewekt += 1
 		if beurt < 2:
@@ -395,6 +426,7 @@ func test_geen_hulp_na_een_fout() -> void:
 	if spel == null:
 		_af()
 		return
+	_naar_zetten(spel)
 	var s: Dictionary = spel.stand()
 	waar(not spel.goed(), "de klok staat nog niet goed")
 	var regel_voor := _kaart_tekst("Kolom/Regel")
@@ -419,9 +451,7 @@ func test_geen_hulp_na_een_fout() -> void:
 		waar(bool(World.slaapt(str(s["gast"]))), "%s: de gast slaapt door" % wat)
 	gelijk(int(State.s["sterren"]), 0, "een misser kost geen ster")
 	# de goede stand wekt hem gewoon
-	while not spel.goed():
-		if not _tik("uur") and not _tik("kwartier"):
-			break
+	_draai_tot_goed(spel)
 	waar(_tik("klaar"), "✅ op de goede stand")
 	gelijk(str(spel.stand()["stap"]), "wakker", "en de gast wordt wakker")
 	_af()
@@ -439,6 +469,7 @@ func test_klaar_zonder_draaien_telt_geen_misser() -> void:
 	if spel == null:
 		_af()
 		return
+	_naar_zetten(spel)
 	var s: Dictionary = spel.stand()
 	var u_voor := int(s["u"])
 	var m_voor := int(s["m"])
@@ -473,6 +504,7 @@ func test_nooit_spookwijzers() -> void:
 	if spel == null:
 		_af()
 		return
+	_naar_zetten(spel)
 	var s: Dictionary = spel.stand()
 	for keer in 4:
 		_draai_naast(spel, "draai %d" % (keer + 1))
@@ -650,6 +682,7 @@ func test_kaarthoogte_blijft_gelijk_over_de_stappen() -> void:
 	if spel == null:
 		_af()
 		return
+	_naar_zetten(spel)
 	var s: Dictionary = spel.stand()
 	var h_zet := _kaart_hoogte()
 	waar(h_zet > 0.0, "de kaart hangt")
@@ -747,12 +780,9 @@ func test_de_wekslag_wordt_nooit_afgeremd() -> void:
 	if spel == null:
 		_af()
 		return
+	_naar_zetten(spel)
 	var s: Dictionary = spel.stand()
-	var rondjes := 0
-	while not spel.goed() and rondjes < 200:
-		rondjes += 1
-		if not _tik("uur") and not _tik("kwartier") and not _tik("vijf"):
-			break
+	_draai_tot_goed(spel)
 	waar(spel.goed(), "de klok staat goed")
 	# de laatste draai heeft `Snd.klok()` net geslagen: de rem staat erop
 	waar(Snd.ontgrendeld() and not Snd.dempt(), "de geluidsband is open")
