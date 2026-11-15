@@ -716,7 +716,11 @@ groeit er een **galerij**: een verzamelmoment zonder meter en zonder verval.
 
 **Per band.** Band 3: links liggen 5 stippen, rechts 2 — `🧸 Hoeveel stippen nog
 rechts?` 4/26, sombalk `5 − 2 =`. Band 4: `🧸 Hoeveel stippen in totaal?` 4/26,
-`7 + 7 =`. Band 5: `🧸 Hoeveel stippen na twee vouwen?` 5/31, `6 × 4 =`. Eigen
+`7 + 7 =`. Band 5: `🧸 Hoeveel stippen na twee vouwen?` 5/31, `6 × 4 =`.
+(Eind groep 4, 2026-11-15: band 4 en 5 op een bord van 6 × 8; band 4 verdubbelt
+een getal van twee cijfers in rijen van vier, L = 11 … 18, `17 + 17 =`; band 5
+`Q × 4 =` met Q = 6 … 10; rechts/onder staat al alles behalve de laatste vier
+stippen, die het kind plakt — 50 + 50 past niet op een bord met tikbare vakjes.) Eigen
 gezaaide generator `games/spiegel/beurt.gd` op `Sommen.Prng`, gezaaid op spel-id ^ dag,
 met een eigen test. De kern wordt niet aangeraakt.
 

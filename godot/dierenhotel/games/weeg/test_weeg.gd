@@ -121,7 +121,7 @@ func _leg(kg: int) -> bool:
 func _te_veel(o: Dictionary) -> Array:
 	var g2 := int(o["gewicht2"])
 	var z := int((o["rek"] as Array).max())
-	var uit: Array = [] if g2 % z != 0 else [1]
+	var uit: Array = [] if g2 % z != 0 else [int((o["rek"] as Array).min())]
 	var t := Beurt.som(uit)
 	while t <= g2:
 		uit.append(z)
@@ -260,32 +260,69 @@ func test_de_weegschaal_bakt_en_helt() -> void:
 ## Every band, many days and hotel sizes (games-c.md §3.3).
 func test_de_gewichten_per_band() -> void:
 	for band in [3, 4, 5]:
-		var gasten: Array = [[1, 2, 3], [4, 5, 6], [7, 8, 9, 10]][band - 3]
+		var gasten: Array = [[1, 2, 3], [1, 4, 5, 6, 8], [1, 4, 7, 8, 9, 10]][band - 3]
 		var rek: Array = Beurt.REK[band]
 		waar(rek.size() <= 4, "band %d: hooguit vier soorten, vier knoppen op een strook" % band)
 		for n in gasten:
 			for dag in range(1, 15):
 				var o := Beurt.opzet(n, band, dag)
 				var set1: Array = o["set1"]
-				waar(set1.size() >= 2 and set1.size() <= 4, "band %d: 2 tot 4 gewichten op de weegschaal" % band)
+				if band == 3:
+					waar(set1.size() >= 2 and set1.size() <= 4, "band %d: 2 tot 4 gewichten op de weegschaal" % band)
+				else:
+					waar(set1.size() >= 3 and set1.size() <= Beurt.PAN_MAX,
+						"band %d: 3 tot %d gewichten op de weegschaal" % [band, Beurt.PAN_MAX])
+					var klein := 0
+					for kg in set1:
+						klein += int(kg) if int(kg) < 10 else 0
+					waar(klein > 10 and klein < 20 and klein != 10,
+						"band %d: de kleine gewichten gaan over de tien (%s)" % [band, str(set1)])
+					waar(int(set1[0]) >= 10, "met een gewicht van tien of meer voorop (%s)" % str(set1))
+					waar(Beurt.liever(set1).has(Beurt.som(set1) - 10), "de vergeten tien is een keuze")
 				gelijk(Beurt.som(set1), int(o["gewicht1"]), "de gewichten wegen samen wat het ding weegt")
 				for kg in set1:
 					waar(rek.has(int(kg)), "alleen gewichten van deze band (%d)" % int(kg))
-				var lo: int = [3, 11, 21][band - 3]
-				var hi: int = [10, 20, 60][band - 3]
+				var lo: int = [3, 21, 21][band - 3]
+				var hi: int = [10, 49, 60][band - 3]
 				waar(int(o["gewicht1"]) >= lo and int(o["gewicht1"]) <= hi,
 					"band %d: het eerste ding weegt %d … %d (%d)" % [band, lo, hi, int(o["gewicht1"])])
 				var g2 := int(o["gewicht2"])
 				waar(g2 != int(o["gewicht1"]), "het tweede ding weegt iets anders")
-				var lo2: int = [3, 8, 21][band - 3]
-				var hi2: int = [9, 19, 59][band - 3]
+				var lo2: int = [3, 21, 21][band - 3]
+				var hi2: int = [9, 49, 59][band - 3]
 				waar(g2 >= lo2 and g2 <= hi2, "band %d: het tweede %d … %d (%d)" % [band, lo2, hi2, g2])
 				waar(Beurt.splits(g2, rek).size() <= Beurt.PAN_MAX - 1,
 					"met hooguit %d gewichten recht te krijgen" % (Beurt.PAN_MAX - 1))
+				gelijk(Beurt.som(Beurt.splits(g2, rek)), g2, "en die gewichten maken het precies (%d)" % g2)
 				gelijk(str(Beurt.opzet(n, band, dag)), str(o), "dezelfde dag, dezelfde beurt")
 				waar(Beurt.DINGEN[band].has(str(o["ding1"])) and Beurt.DINGEN[band].has(str(o["ding2"])),
 					"dingen van deze band")
 				waar(str(o["ding1"]) != str(o["ding2"]), "twee verschillende dingen")
+
+## Eind groep 4 (owner, 2026-11-15): the scale is read across the ten, the
+## weight to make goes past twenty, and groep 5 is never lighter for the same
+## hotel.
+func test_eind_groep_4_gaat_over_de_tien() -> void:
+	for n in range(1, 9):
+		var laag4 := 999
+		var hoog4 := 0
+		var laag5 := 999
+		var hoog5 := 0
+		for dag in range(1, 30):
+			var o4 := Beurt.opzet(n, 4, dag)
+			var o5 := Beurt.opzet(n, 5, dag)
+			laag4 = mini(laag4, int(o4["gewicht2"]))
+			hoog4 = maxi(hoog4, int(o4["gewicht2"]))
+			laag5 = mini(laag5, int(o5["gewicht2"]))
+			hoog5 = maxi(hoog5, int(o5["gewicht2"]))
+			waar(int(o4["gewicht1"]) > 20 and int(o4["gewicht2"]) > 20,
+				"N %d dag %d: groep 4 weegt meer dan 20 kilo" % [n, dag])
+			waar((o4["rek"] as Array).has(20), "met een gewicht van 20 kilo")
+		waar(laag5 >= laag4 and hoog5 >= hoog4,
+			"N %d: groep 5 (%d … %d) niet lichter dan groep 4 (%d … %d)" % [n, laag5, hoog5, laag4, hoog4])
+	var o := Beurt.opzet(4, 4, 2)
+	print("    weeg band 4, N 4, dag 2: ", Beurt.som_regel(o["set1"]), " ", int(o["gewicht1"]),
+		"; leg ", int(o["gewicht2"]), " = ", str(Beurt.splits(int(o["gewicht2"]), o["rek"])))
 
 ## Which way the beam leans, and how far.
 func test_de_balans() -> void:
@@ -299,6 +336,11 @@ func test_de_balans() -> void:
 	gelijk(Beurt.kant(4, 1), -2, "bij iets lichts telt minstens 2 kilo als ver")
 	gelijk(Beurt.splits(17, [1, 2, 5, 10]), [10, 5, 2], "zo min mogelijk gewichten, zwaarste eerst")
 	gelijk(Beurt.splits(26, [1, 5, 10, 20]), [20, 5, 1], "groep 5 zonder 2 kilo")
+	gelijk(Beurt.splits(37, [2, 5, 10, 20]), [20, 10, 5, 2], "eind groep 4 zonder 1 kilo")
+	gelijk(Beurt.splits(33, [2, 5, 10, 20]), [20, 5, 2, 2, 2, 2], "33 zonder 1 kilo: via de 5")
+	gelijk(Beurt.splits(1, [2, 5, 10, 20]), [], "1 kilo is zonder 1 kilo niet te maken")
+	var kruis := Beurt.liever([20, 5, 5, 2])
+	waar(kruis.has(22), "over de tien: de vergeten tien (%s)" % str(kruis))
 	gelijk(Beurt.som_regel([10, 5, 2]), "10 + 5 + 2 =", "de somregel")
 	var liever := Beurt.liever([10, 5, 2])
 	waar(liever.has(15), "een gewicht vergeten")
@@ -432,10 +474,12 @@ func test_de_schaal_is_vol() -> void:
 	await _wacht_kaart()
 	var voor := beeld(SPEL)
 	var regel := _kaart_tekst("Kolom/Regel")
-	waar(int(o["gewicht2"]) > Beurt.PAN_MAX, "vijf keer 1 kilo is te licht (%d)" % int(o["gewicht2"]))
+	# the lightest weight of eind groep 4 is 2 kilo (no 1 kg any more)
+	var licht := int((o["rek"] as Array).min())
+	waar(int(o["gewicht2"]) > Beurt.PAN_MAX * licht, "vijf keer het lichtste is te licht (%d)" % int(o["gewicht2"]))
 	for i in Beurt.PAN_MAX:
-		_leg(1)
-	_leg(1)
+		_leg(licht)
+	_leg(licht)
 	gelijk((_stand()["pan"] as Array).size(), Beurt.PAN_MAX, "niet meer dan %d gewichten" % Beurt.PAN_MAX)
 	waar(is_sip(str(_stand().get("gast", ""))), "de weger is teleurgesteld")
 	waar(mis_wolk(KAART), "met 🔄 Nog een keer")
@@ -611,16 +655,17 @@ func test_herladen_hervat_de_weging() -> void:
 	var o := Beurt.opzet(4, 4, 2)
 	_kies(int(o["gewicht1"]))
 	await _wacht_kaart()
-	_leg(1)
+	var licht := int((o["rek"] as Array).min())
+	_leg(licht)
 	Games.stop()
 	gelijk(_stand().get("stap", ""), "leg", "de stand is bewaard")
 	waar(Games.start(SPEL), "opnieuw gestart")
-	gelijk(str(_stand()["pan"]), str([1]), "het gewicht ligt er nog")
-	gelijk(str(_schaal()["params"]["r"]), str([1]), "ook op de weegschaal")
+	gelijk(str(_stand()["pan"]), str([licht]), "het gewicht ligt er nog")
+	gelijk(str(_schaal()["params"]["r"]), str([licht]), "ook op de weegschaal")
 	gelijk(_kaart_tekst("Kolom/Regel"), Beurt.icoon(str(o["ding2"])) + " " + Beurt.maak(int(o["gewicht2"])),
 		"verder met wegen")
 	var st: Dictionary = State.spel_data(SPEL)["stand"]
-	st["pan"] = [1.0, 2.0]
+	st["pan"] = [float(licht), 5.0]
 	st["missers"] = 0.0
 	Games.stop()
 	waar(Games.start(SPEL), "na een JSON-ronde")

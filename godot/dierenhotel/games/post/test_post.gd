@@ -263,8 +263,13 @@ func test_elke_brief_past_in_een_vakje() -> void:
 							gelijk(int(delen[0]) * int(delen[1]), int(br["getal"]), "de keersom klopt")
 							waar(int(delen[0]) >= 2 and int(delen[0]) <= 10 and int(delen[1]) >= 2 and int(delen[1]) <= 10,
 								"uit de tafels van 2 tot 10")
+						elif band == 4:
+							gelijk(Beurt.waarde(str(br["tekst"])), int(br["getal"]),
+								"groep 4: de som op de brief is het huisnummer (%s)" % str(br["tekst"]))
+							waar(Beurt.over_de_tien(str(br["tekst"])),
+								"eind groep 4: de som gaat over het tiental (%s)" % str(br["tekst"]))
 						else:
-							gelijk(str(br["tekst"]), str(br["getal"]), "groep 3/4: het getal zelf op de brief")
+							gelijk(str(br["tekst"]), str(br["getal"]), "groep 3: het getal zelf op de brief")
 						if band == 3:
 							waar(int(br["getal"]) >= 1 and int(br["getal"]) <= 20, "groep 3 tot 20")
 
@@ -276,6 +281,21 @@ func test_de_voorbeelden_uit_het_ontwerp() -> void:
 	var paren: Array = Beurt._tafels_in(0, 39)
 	waar(paren.has(Vector2i(3, 4)), "3 × 4 zit in het venster 0..39")
 	waar(not paren.has(Vector2i(7, 8)), "7 × 8 niet")
+	# eind groep 4 (owner, 2026-11-15): a sum across the ten on the letter
+	gelijk(Beurt.waarde("35 + 7"), 42, "35 + 7 is huisnummer 42")
+	gelijk(Beurt.waarde("50 − 8"), 42, "50 − 8 ook")
+	waar(Beurt.over_de_tien("35 + 7") and Beurt.over_de_tien("50 − 8") and Beurt.over_de_tien("27 + 15"),
+		"die gaan over het tiental")
+	waar(not Beurt.over_de_tien("31 + 7") and not Beurt.over_de_tien("48 − 6"), "die niet")
+	for g in range(1, 100):
+		for soort in 6:
+			var som := Beurt.som4(g, soort, g * 7 + soort)
+			gelijk(Beurt.waarde(som), g, "de som %s is %d" % [som, g])
+			waar(Beurt.over_de_tien(som), "%s gaat over het tiental" % som)
+			var delen := som.replace(" + ", " ").replace(" − ", " ").split(" ")
+			waar(int(delen[0]) >= 1 and int(delen[0]) <= 100 and int(delen[1]) >= 1, "%s: getallen tot 100" % som)
+	gelijk(Beurt.vak_van(Beurt.waarde("35 + 7"), vk.map(func(v): return {"van": int(v["van"]) - 20,
+		"tot": int(v["tot"]) - 20})), 1, "42 hoort in 40 - 49, niet in 30 - 39 (de vergeten tien)")
 	gelijk(Beurt.adres({"tekst": "34"}), "📮 34", "het adres op de bovenste brief")
 	gelijk(Beurt.adres({"tekst": "7 × 8"}), "📮 7 × 8", "ook als keersom")
 	gelijk(str(Beurt.vol([{"vak": 2}, {"vak": 0}, {"vak": 2}], 3)), str([1, 0, 2, 0]),

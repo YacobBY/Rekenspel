@@ -15,9 +15,10 @@ extends RefCounted
 ##   band 3 (groep 3): one rhythm of T ticks (T ≤ 10)       "hoeveel tikken?"   T
 ##                     from day 3 half the time two short rhythms, two colours
 ##                                                          "hoeveel samen?"    A + B ≤ 20
-##   band 4 (groep 4): a pattern of k ∈ {2, 5, 10} ticks repeated over M bars
-##                                                          "tikken in M maten?" k × M
-##   band 5 (groep 5): k ∈ {3, 4, 6, 7, 8} ticks × M bars   "tikken in M maten?" k × M
+##   band 4 (eind groep 4, owner 2026-11-15): a pattern of k ticks repeated
+##                     over M bars, k = every table 2 … 10 (3, 4, 5 twice as
+##                     often)                               "tikken in M maten?" k × M ≤ 60
+##   band 5 (groep 5): k ∈ {3, 4, 6, 7, 8, 9} ticks × M bars "tikken in M maten?" k × M
 ##                     on even days the inverse: ONE bar of k ticks is shown,
 ##                     "hoeveel maten voor D tikken?"       D ÷ k = M
 ## Distractors come from `ui/afleiders.gd` through `goed`, `min`, `max` and
@@ -56,8 +57,11 @@ const T_BLIJ := "mooi!"                                 ## wolk boven het dier v
 
 const MATEN_MIN := 2
 const MATEN_MAX := 6
-const SPRONGEN := [2, 5, 10]          ## groep 4: skip counting
-const TAFELS := [3, 4, 6, 7, 8]       ## groep 5: the tables (7 × 8 is groep 5, IDEAS.md)
+## Eind groep 4: every table up to 10 (the brief of 2026-11-15 relaxes
+## IDEAS.md's "7 × 8 is groep 5" for band 4: allowed as a harder item); the
+## tables of 3, 4 and 5 twice, the others once.
+const TAFELS_4 := [2, 3, 4, 5, 6, 7, 8, 9, 10, 3, 4, 5]
+const TAFELS := [3, 4, 6, 7, 8, 9]    ## groep 5: the tables without the easy 2, 5, 10
 const SOORTEN := ["tel", "samen", "maten", "tafel", "omgekeerd"]
 
 ## Seconds between two ticks and the rest between two bars — the beats a child
@@ -116,7 +120,7 @@ static func opzet(n: int, band: int, dag: int, nr: int = 0) -> Dictionary:
 				o["max"] = 10
 				o["liever"] = [t - 1, t + 1]
 		4:
-			var k: int = SPRONGEN[_tussen(rnd, 0, SPRONGEN.size() - 1)]
+			var k: int = TAFELS_4[_tussen(rnd, 0, TAFELS_4.size() - 1)]
 			var m := maten_voor(gasten)
 			o["soort"] = "maten"
 			o["maten"] = herhaal(k, m)

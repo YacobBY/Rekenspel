@@ -11,8 +11,12 @@ extends RefCounted
 ##   groep 3  getallen tot 20, vakjes van vijf: 1-5 · 6-10 · 11-15 · 16-20;
 ##            op de brief staat een los getal 1..20.
 ##   groep 4  getallen tot 100, vakjes van TIEN, een venster van vier
-##            tientallen (a0-a9 … d0-d9, a uit 0..6); op de brief een getal
-##            uit dat venster — tientallen en eenheden ("tussen 30 en 40").
+##            tientallen (a0-a9 … d0-d9, a uit 0..6).  Eind groep 4 (owner,
+##            2026-11-15): op de brief staat een PLUS- of MINSOM over het
+##            tiental heen ("35 + 7", "50 − 8", "27 + 15", "61 − 19") waarvan
+##            de uitkomst in het venster valt: het huisnummer uitrekenen en
+##            dan het tiental kiezen.  Wie de tien vergeet, kiest het vakje
+##            ernaast — de echte misser staat zo vanzelf op de strook.
 ##   groep 5  hetzelfde venster, maar op de brief staat een KEERSOM uit de
 ##            tafels (k × m, 2..10) waarvan het product in het venster valt.
 ##
@@ -112,7 +116,65 @@ static func brief(band: int, n: int, dag: int, i: int, ronde: int = 0) -> Dictio
 			var g5 := p.x * p.y
 			return {"getal": g5, "tekst": "%d × %d" % [p.x, p.y], "vak": vak_van(g5, vakken)}
 	var g4 := laag + posmod(i * 13 + dag * 7 + n * 3 + ronde * 17, 40)
-	return {"getal": g4, "tekst": str(g4), "vak": vak_van(g4, vakken)}
+	if g4 == 0:
+		g4 = 10          # 0 has no sum across the ten: the ten beside it
+	return {"getal": g4, "tekst": som4(g4, i + dag + ronde, i * 3 + dag + n),
+		"vak": vak_van(g4, vakken)}
+
+## The sum on a groep 4 letter whose answer is `g`, always across the ten:
+## `soort` picks plus or minus (and every third letter a two-digit second
+## number), `zaad` the ones of the second number.  Plus `x + y` crosses when
+## the ones of y are larger than those of g (35 + 7 = 42; 35 + 5 = 40 lands
+## on the next ten); minus `x − y` borrows when the ones of y are 10 − (ones
+## of g) or more (50 − 8 = 42).  A g ending in 9 has no crossing plus, a g
+## ending in 0 no borrowing minus.
+static func som4(g: int, soort: int, zaad: int) -> String:
+	var e := posmod(g, 10)
+	var plus := posmod(soort, 2) == 0
+	if e == 9:
+		plus = false
+	if e == 0:
+		plus = true
+	var tien := 10 * (1 + posmod(zaad, 2)) if posmod(soort, 3) == 2 else 0
+	for _poging in 2:
+		if plus:
+			var een := e + 1 + posmod(zaad, 9 - e)
+			for y in [tien + een, een, e + 1]:
+				if g - int(y) >= 1:
+					return "%d + %d" % [g - int(y), int(y)]
+		else:
+			var een := 10 - e + posmod(zaad, e)
+			for y in [tien + een, een, 10 - e]:
+				if g + int(y) <= 100:
+					return "%d − %d" % [g + int(y), int(y)]
+		if e == 0 or e == 9:
+			break
+		plus = not plus
+	return str(g)
+
+## True when the sum on a letter crosses the ten (for the tests).
+static func over_de_tien(tekst: String) -> bool:
+	if " + " in tekst:
+		var d := tekst.split(" + ")
+		return posmod(int(d[0]), 10) + posmod(int(d[1]), 10) >= 10
+	if " − " in tekst:
+		var d := tekst.split(" − ")
+		return posmod(int(d[0]), 10) < posmod(int(d[1]), 10)
+	return false
+
+## What a letter's text adds up to: "35 + 7" is 42, "50 − 8" is 42, "7 × 8"
+## is 56, "34" is 34 (for the tests and the browser tools).
+static func waarde(tekst: String) -> int:
+	if " + " in tekst:
+		var d := tekst.split(" + ")
+		return int(d[0]) + int(d[1])
+	if " − " in tekst:
+		var d := tekst.split(" − ")
+		return int(d[0]) - int(d[1])
+	if " × " in tekst:
+		var d := tekst.split(" × ")
+		return int(d[0]) * int(d[1])
+	return int(tekst)
 
 ## Every k × m of the tables (2..10 × 2..10) whose product lies in [laag, hoog].
 static func _tafels_in(laag: int, hoog: int) -> Array:

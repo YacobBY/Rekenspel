@@ -243,13 +243,27 @@ func test_de_getallen_per_band() -> void:
 								links += 1
 						gelijk(stip.size() + doel.size(), 2 * links, "%s: rechts komen er evenveel als links" % wat)
 					4:
-						gelijk(str(o["som"]), "%d + %d =" % [doel.size(), doel.size()], "%s: verdubbelen" % wat)
-						gelijk(int(o["goed"]), 2 * doel.size(), "%s: het hele masker" % wat)
+						var l := int(o["goed"]) / 2
+						gelijk(str(o["som"]), "%d + %d =" % [l, l], "%s: verdubbelen" % wat)
+						gelijk(int(o["goed"]), stip.size() + doel.size(), "%s: het hele masker" % wat)
+						waar(l >= 11 and l <= 18, "%s: eind groep 4, een getal van twee cijfers (%d)" % [wat, l])
+						waar((o["liever"] as Array).has(2 * l - 10), "%s: de vergeten tien" % wat)
+						var links := 0
+						for c in stip:
+							if int(c[1]) < k / 2:
+								links += 1
+						gelijk(links, l, "%s: links staan alle L stippen" % wat)
+						for rij in l / (k / 2):
+							for kol in k / 2:
+								waar(stip.has([rij, kol]), "%s: rij %d is vol" % [wat, rij])
 					5:
 						waar(str(o["som"]).ends_with("× 4 ="), "%s: de tafel van 4" % wat)
 						gelijk(int(o["goed"]), stip.size() + doel.size(), "%s: het hele masker" % wat)
 						gelijk(int(o["goed"]) % 4, 0, "%s: vier gelijke kwarten" % wat)
-				waar(int(o["goed"]) <= 20, "%s: binnen het getallengebied (%d)" % [wat, int(o["goed"])])
+				waar(int(o["goed"]) <= [20, 36, 40][band - 3], "%s: binnen het getallengebied (%d)" % [wat, int(o["goed"])])
+				if band >= 4:
+					gelijk(doel.size(), Beurt.PLAK, "%s: de laatste vier plakt het kind" % wat)
+					gelijk([r, k], [6, 8], "%s: een bord van 6 × 8" % wat)
 				waar(not (o["liever"] as Array).has(int(o["goed"])) or band == 3,
 					"%s: de afleiders zijn fout" % wat)
 				var vol := {}

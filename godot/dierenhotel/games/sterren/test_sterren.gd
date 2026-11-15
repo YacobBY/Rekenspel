@@ -231,6 +231,35 @@ func test_elke_groep_elke_beurt_is_een_kloppende_som() -> void:
 	for s in SOORTEN:
 		waar(gezien.has(s), "soort %s komt voor" % s)
 
+## Eind groep 4 (owner, 2026-11-15): rows of every table up to 10, and the
+## double constellation is a two-digit number whose ones cross the ten.
+func test_eind_groep_4_alle_tafels_en_dubbel_over_de_tien() -> void:
+	var tafels := {}
+	var dubbel := 0
+	for n in range(1, 9):
+		for nr in 12:
+			for zaad in [Beurt.ZAAD, Beurt.ZAAD + 1, Beurt.ZAAD + 2, Beurt.ZAAD + 3]:
+				var b := Beurt.maak(4, n, nr, zaad)
+				var wat := "N %d, beurt %d, zaad %d" % [n, nr, zaad]
+				var p: Dictionary = b["patronen"][0]
+				match str(b["soort"]):
+					"rijen":
+						tafels[int(p["breed"])] = true
+						waar(int(b["goed"]) <= 100, wat + ": hooguit 10 × 10")
+					"dubbel":
+						dubbel += 1
+						@warning_ignore("integer_division")
+						var k := int(b["goed"]) / 2
+						waar(k >= 15 and k <= 49, wat + ": een sterrenbeeld van 15 … 49 (%d)" % k)
+						waar(k % 10 >= 5, wat + ": de eenheden gaan over de tien (%d)" % k)
+						waar((b["liever"] as Array).has(int(b["goed"]) - 10), wat + ": de vergeten tien")
+						@warning_ignore("integer_division")
+						var helft := Beurt.aantal((b["patronen"] as Array).slice(0, (b["patronen"] as Array).size() / 2))
+						gelijk(helft, k, wat + ": twee keer hetzelfde sterrenbeeld")
+	for k in [2, 3, 4, 5, 6, 7, 8, 9, 10]:
+		waar(tafels.has(k), "rijen van %d komen voor" % k)
+	waar(dubbel > 0, "het dubbele sterrenbeeld komt voor")
+
 func test_dezelfde_dag_dezelfde_vraag() -> void:
 	var a := Beurt.maak(4, 3, 5, Beurt.ZAAD + 9)
 	var b := Beurt.maak(4, 3, 5, Beurt.ZAAD + 9)

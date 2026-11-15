@@ -242,6 +242,12 @@ func _keur_tafel(b: Dictionary, wat: String) -> void:
 			gelijk(str(voor["kommen"]), str([int(b["eieren"])]), "%s: N eieren in de kom" % wat)
 			gelijk(int(voor["los"]), int(b["erbij"]), "%s: en r ernaast" % wat)
 			gelijk(str(na["kommen"]), str([int(b["goed"])]), "%s: daarna alle eieren in de kom" % wat)
+		"recept":
+			gelijk(Beurt.op_tafel(voor), int(b["totaal"]), "%s: één recept deeg op de plaat" % wat)
+			gelijk(Beurt.op_tafel(na), int(b["goed"]), "%s: daarna het dubbele, gebakken" % wat)
+			waar(not bool(voor["gaar"]) and bool(na["gaar"]), "%s: deeg, dan gebakken" % wat)
+			gelijk(int(voor["kolommen"]), 10, "%s: in rijen van tien" % wat)
+			waar(Beurt.bank(b, "bak").is_empty(), "%s: de plaat is in de oven" % wat)
 		"dubbel":
 			gelijk(Beurt.op_tafel(voor), int(b["goed"]), "%s: twee kommen met e eieren" % wat)
 			waar(bool(na["beslag"]), "%s: daarna beslag" % wat)
@@ -277,18 +283,30 @@ func test_groep3_telt_tot_twintig() -> void:
 			waar(int(b["erbij"]) >= 1 and int(b["erbij"]) <= 3, "er komen er 1 tot 3 bij"))
 	waar(soorten.has("koekjes") and soorten.has("eieren"), "beide soorten komen voor")
 
-func test_groep4_tafels_2_5_10_en_verdubbelen() -> void:
+## Eind groep 4 (owner, 2026-11-15): every table up to 10, and the double
+## recipe of a two-digit number of cookies that crosses the ten.
+func test_groep4_alle_tafels_en_verdubbelen_over_het_tiental() -> void:
 	var soorten := {}
+	var tafels := {}
 	_elke(4, func(n: int, b: Dictionary) -> void:
 		soorten[b["soort"]] = true
-		waar(["plaat", "dubbel"].has(b["soort"]), "groep 4 soort " + str(b["soort"]))
+		waar(["plaat", "recept"].has(b["soort"]), "groep 4 soort " + str(b["soort"]))
 		if b["soort"] == "plaat":
-			gelijk(int(b["rijen"]), n, "een rij per gast")
-			waar(int(b["kolommen"]) in [2, 5, 10], "tafel van 2, 5 of 10")
+			waar(int(b["rijen"]) >= clampi(n, 2, 8) and int(b["rijen"]) <= clampi(n + 2, 2, 8),
+				"een rij per gast en hooguit twee erbij (%d)" % int(b["rijen"]))
+			waar(int(b["kolommen"]) >= 2 and int(b["kolommen"]) <= 10, "een tafel van 2 … 10")
+			waar(int(b["goed"]) <= 80, "hooguit 8 × 10")
+			tafels[int(b["kolommen"])] = true
+			waar((b["liever"] as Array).has(int(b["rijen"]) + int(b["kolommen"])), "+ in plaats van ×")
 		else:
-			waar(int(b["eieren"]) <= 10 and int(b["goed"]) <= 20, "dubbel blijft onder 20")
-			waar(int(b["eieren"]) > n, "het recept heeft meer eieren dan er gasten zijn"))
-	waar(soorten.has("plaat") and soorten.has("dubbel"), "beide soorten komen voor")
+			var e := int(b["totaal"])
+			waar(e >= 15 and e <= 39, "een recept van 15 … 39 koekjes (%d)" % e)
+			waar(e % 10 >= 5, "de eenheden gaan bij het verdubbelen over de tien (%d)" % e)
+			gelijk(int(b["goed"]), 2 * e, "dubbel recept")
+			waar((b["liever"] as Array).has(2 * e - 10), "de vergeten tien is een keuze"))
+	waar(soorten.has("plaat") and soorten.has("recept"), "beide soorten komen voor")
+	for k in [2, 3, 4, 5, 6, 7, 8, 9, 10]:
+		waar(tafels.has(k), "de tafel van %d komt voor" % k)
 
 func test_groep5_alle_tafels_en_delen_met_rest() -> void:
 	var soorten := {}
@@ -296,7 +314,8 @@ func test_groep5_alle_tafels_en_delen_met_rest() -> void:
 		soorten[b["soort"]] = true
 		waar(["tafel", "verdeel"].has(b["soort"]), "groep 5 soort " + str(b["soort"]))
 		if b["soort"] == "tafel":
-			gelijk(int(b["rijen"]), n, "een rij per gast")
+			waar(int(b["rijen"]) >= clampi(n, 2, 8) and int(b["rijen"]) <= clampi(n + 2, 2, 8),
+				"een rij per gast en hooguit twee erbij, net als groep 4")
 			waar(int(b["kolommen"]) in [3, 4, 6, 7, 8, 9], "de tafels van groep 5")
 		else:
 			waar(n >= 2, "delen alleen met twee of meer dieren")
@@ -627,10 +646,10 @@ func test_een_beurt_per_band() -> void:
 		_af()
 
 ## The other three kinds of turn put their own answer on the table: golden
-## cookies after the oven (groep 3 and 5), batter in both bowls (groep 4).
+## cookies after the oven (groep 3 and 5), the double recipe baked (groep 4).
 func test_elke_soort_legt_zijn_antwoord_neer() -> void:
 	alleen_spellen([SPEL])
-	for geval in [[3, 3, "koekjes"], [5, 4, "dubbel"], [7, 5, "tafel"]]:
+	for geval in [[3, 3, "koekjes"], [5, 4, "recept"], [7, 5, "tafel"]]:
 		var n: int = geval[0]
 		var band: int = geval[1]
 		var soort: String = geval[2]

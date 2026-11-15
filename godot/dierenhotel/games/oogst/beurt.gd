@@ -11,12 +11,16 @@ extends RefCounted
 ## hundred-field of the Dutch classroom):
 ##   band 3 (groep 3):  0 or 1 full punnet and one open one  -> tot 20;
 ##                      how many to fill the open punnet     -> splitsen tot 10
-##   band 4 (groep 4):  2 … 5 full punnets and one open one  -> tot 100;
-##                      how many to fill the open punnet     -> aanvullen tot het tiental
+##   band 4 (eind groep 4, owner 2026-11-15): 3 … 8 full punnets and one open
+##                      one -> tot 100; how many until one to three punnets
+##                      more are full -> aanvullen over het tiental heen tot een
+##                      tiental verder (37 + __ = 60) or tot 100 (64 + __ = 100)
 ##   band 5 (groep 5):  5 … 8 full punnets and one open one  -> tot 100;
 ##                      how many until all ten punnets are full -> aanvullen tot 100
 ## The number of full punnets grows with the hotel: one punnet per guest but
-## the guest of the turn, whose punnet is the open one (T = 10·(N − 1) + r).
+## the guest of the turn, whose punnet is the open one (T = 10·(N − 1) + r);
+## band 4 adds a fixed part of two punnets plus 0 … 1 of the day
+## (T = 10·(N + 1 + d) + r), so even a small hotel counts past 30.
 
 const ZAAD := 60617
 
@@ -28,6 +32,8 @@ const T_BIJ := "Hoeveel passen er nog bij?"              ## 5 woorden, 26 tekens
 ## Not "Hoeveel nog tot 100 aardbeien?": one line too wide for the maths bar
 ## of a 360-wide phone, and the card floated over the room (the 🍓 says what).
 const T_HONDERD := "Hoeveel nog tot 100?"                ## 4 woorden, 20 tekens
+## Band 4: to a ten further on ("Hoeveel nog tot 60?").
+const T_TOT := "Hoeveel nog tot %d?"                     ## 4 woorden, ≤ 20 tekens
 ## While the answer is picked (wave 2, R1): the guest of the turn picks by
 ## himself, so no tap of the child is play — and no line on the card gives a
 ## number away ("Pluk er nog %d" told the answer to the picking).
@@ -55,14 +61,18 @@ static func opzet(n: int, band: int, dag: int) -> Dictionary:
 			vol = 0 if gasten == 1 or (dag + gasten) % 2 == 0 else 1
 			los = (3 if vol == 0 else 1) + int(rnd.volgende() * (7.0 if vol == 0 else 9.0))
 		4:
-			vol = clampi(gasten - 1, 2, 5)
 			los = 1 + int(rnd.volgende() * 9.0)
+			vol = clampi(gasten + 1 + int(rnd.volgende() * 2.0), 3, 8)
 		_:
 			vol = clampi(gasten - 1, 5, 8)
 			los = 1 + int(rnd.volgende() * 9.0)
 	los = clampi(los, 1, 9)
 	var t := 10 * vol + los
 	var doel := 10 if b == 5 else vol + 1
+	if b == 4:
+		# one, two or three punnets past the open one, never past the tenth:
+		# the sum crosses the ten and lands on a ten further on (or on 100)
+		doel = mini(10, vol + 2 + int(rnd.volgende() * 3.0))
 	return {"band": b, "vol": vol, "los": los, "T": t, "doel": doel,
 		"nodig": doel * 10 - t}
 
@@ -82,16 +92,25 @@ static func liever_tel(o: Dictionary) -> Array:
 
 ## ... and of the second: what is already in the punnet, a whole punnet, and
 ## (band 5) only the ones or only the tens.
+## Band 4: only the open punnet filled, the carry forgotten (ten too many or
+## too few), one off.
 static func liever_bij(o: Dictionary) -> Array:
 	var los := int(o["los"])
 	var nodig := int(o["nodig"])
 	if int(o["band"]) >= 5:
 		return [10 - los, 100 - 10 * int(o["vol"]), nodig + 10]
+	if int(o["band"]) == 4:
+		return [10 - los, nodig + 10, nodig - 10, nodig + 1]
 	return [los, 10, nodig + 1]
 
-## The second question: to the full punnet, or to a hundred.
+## The second question: to the full punnet, to a ten further on (band 4:
+## "Hoeveel nog tot 60?"), or to a hundred.
 static func vraag_bij(o: Dictionary) -> Array:
-	return [T_HONDERD] if int(o["band"]) >= 5 else [T_BIJ]
+	if int(o["band"]) >= 5 or (int(o["band"]) == 4 and int(o["doel"]) >= 10):
+		return [T_HONDERD]
+	if int(o["band"]) == 4:
+		return [T_TOT % (10 * int(o["doel"]))]
+	return [T_BIJ]
 
 ## ... and its sum line, the missing addend written out with the gap the key
 ## board uses (`__`, games-a.md §4): `7 + __ = 10`, `63 + __ = 100`.  Never
@@ -99,6 +118,8 @@ static func vraag_bij(o: Dictionary) -> Array:
 static func som_bij(o: Dictionary) -> String:
 	if int(o["band"]) >= 5:
 		return "%d + __ = 100" % int(o["T"])
+	if int(o["band"]) == 4:
+		return "%d + __ = %d" % [int(o["T"]), 10 * int(o["doel"])]
 	return "%d + __ = 10" % int(o["los"])
 
 ## The berries on the table right now: one entry per place, -1 = no punnet.
@@ -122,7 +143,7 @@ static func bakjes(o: Dictionary, geplukt: int) -> Array:
 	return b
 
 ## What one pick step brings in: one berry while the open punnet is not full,
-## then (band 5, towards a hundred) a whole punnet at a time — the strategy
+## then (band 4 and 5, towards a ten further on) a whole punnet at a time — the strategy
 ## "via the ten" made physical.  Since wave 2 the guest picks by himself, step
 ## by step, after the second answer.
 static func pluk_stap(o: Dictionary, geplukt: int) -> int:

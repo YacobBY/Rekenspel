@@ -308,7 +308,8 @@ func test_de_getallen_per_band() -> void:
 						gelijk(str(Beurt.kleuren(o)), "[0, 1]", wie + " twee kleuren")
 					"maten":
 						gelijk(band, 4, wie + " sprongen zijn groep 4")
-						waar(Beurt.SPRONGEN.has(k), wie + " k in {2, 5, 10}")
+						waar(k >= 2 and k <= 10, wie + " eind groep 4: alle tafels tot 10")
+						waar((o["liever"] as Array).has(k + m), wie + " + in plaats van × is een keuze")
 						gelijk(m, Beurt.maten_voor(n), wie + " één maat per gast")
 						gelijk(goed, k * m, wie + " k × m")
 						gelijk(goed, int(o["tikken"]), wie + " alle tikken")
@@ -327,6 +328,21 @@ func test_de_getallen_per_band() -> void:
 						waar((o["liever"] as Array).has(k), wie + " de tikken van één maat zijn een echte misser")
 	for s in Beurt.SOORTEN:
 		waar(soorten.has(s), "soort %s komt voor" % s)
+
+## Eind groep 4 (owner, 2026-11-15): every table from 2 to 10 comes round in
+## band 4, also the ones that were groep 5 (6, 7, 8, 9); groep 5 keeps the
+## hard tables and the inverse question.
+func test_eind_groep_4_alle_tafels() -> void:
+	var gezien := {}
+	for n in range(1, 9):
+		for dag in range(1, 40):
+			var o := Beurt.opzet(n, 4, dag)
+			gezien[int(o["k"])] = true
+			waar(int(o["goed"]) <= 60, "hooguit 6 maten van 10")
+	for k in [2, 3, 4, 5, 6, 7, 8, 9, 10]:
+		waar(gezien.has(k), "band 4: de tafel van %d komt voor" % k)
+	for k in Beurt.TAFELS:
+		waar(not [2, 5, 10].has(int(k)), "band 5: geen makkelijke tafel (%d)" % int(k))
 
 ## The same day, the same guests and band, the same turn number: the same
 ## rhythm (a reload asks the same question).  Another day — or the next turn of

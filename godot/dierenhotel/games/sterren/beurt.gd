@@ -12,11 +12,15 @@ extends RefCounted
 ##   groep 3  `patroon`  één patroon 1..10 → hoeveel?
 ##            `samen`    twee sterrenbeelden (a, b ≤ 10, a+b ≤ 20) → samen?
 ##            `tot_tien` een tienveld met k sterren en 10 − k lege vakjes → erbij tot tien?
-##   groep 4  `rijen`    r rijen van 2, 5 of 10 → r·s (de tafels van 2, 5, 10)
-##            `dubbel`   hetzelfde patroon k twee keer → 2k
+##   groep 4  (eind groep 4, owner 2026-11-15)
+##            `rijen`    r rijen van s, s = alle tafels 2 … 10 (3, 4, 5 vaker)
+##                       → r·s, tot 10 × 10
+##            `dubbel`   hetzelfde sterrenbeeld twee keer: k = t tienvelden +
+##                       e losse (k = 15 … 49, e = 5 … 9) → 2k, over het
+##                       tiental heen tot 98 (37 + 37 = 74)
 ##   groep 5  `tientallen`  t tienvelden + e losse → 10t + e
 ##            `honderden`   h blokken van honderd + t tienvelden → 100h + 10t
-##            `rijen_van`   r rijen van s (2..9) → r·s
+##            `rijen_van`   r rijen van s (3..10, r ≤ 10) → r·s
 ## Een fout antwoord: geen hulp, dezelfde vraag blijft (`Ui.misser`).
 
 const ZAAD := 90317
@@ -36,6 +40,9 @@ const T_TOT_TIEN := "Hoeveel sterren erbij tot 10?"
 const T_DUBBEL := "Dubbel: hoeveel sterren samen?"
 const T_BIJ_ELKAAR := "Hoeveel sterren bij elkaar?"
 const T_RIJEN := "Hoeveel sterren in %d rijen van %d?"
+
+## Eind groep 4: every table up to 10, the tables of 3, 4 and 5 twice.
+const TAFELS_4 := [2, 3, 4, 5, 6, 7, 8, 9, 10, 3, 4, 5]
 
 ## A pattern of `k` stars, as cells (Vector2i: column, row) in a small grid
 ## `breed` columns wide and `hoog` rows high, and — for a ten-frame — the cells
@@ -148,19 +155,27 @@ static func maak(band: int, n: int, beurt_nr: int, zaad := ZAAD) -> Dictionary:
 			regel = T_TOT_TIEN
 			liever = [goed - 1, goed + 1, k]
 		"rijen":
-			var per: int = [2, 5, 10][rng.randi_range(0, 2)]
+			var per: int = TAFELS_4[rng.randi_range(0, TAFELS_4.size() - 1)]
 			var r := rng.randi_range(2, maxi(2, mini(10, n + 2)))
 			patronen.append(patroon("rij", r * per, per))
 			goed = r * per
 			regel = T_RIJEN % [r, per]
 			liever = [goed - per, goed + per]
 		"dubbel":
-			var k := rng.randi_range(2, 10)
-			patronen.append(patroon(vorm_voor(k), k))
-			patronen.append(patroon(vorm_voor(k), k))
+			# one constellation of t ten-frames and e loose stars, twice; the
+			# ones 5 … 9, so doubling crosses the ten (the forgotten ten is a
+			# choice on the strip)
+			@warning_ignore("integer_division")
+			var t := clampi(1 + n / 3 + rng.randi_range(0, 1), 1, 4)
+			var e := rng.randi_range(5, 9)
+			var k := 10 * t + e
+			for _kopie in 2:
+				for _i in t:
+					patronen.append(patroon("tien", 10))
+				patronen.append(patroon(vorm_voor(e), e))
 			goed = 2 * k
 			regel = T_DUBBEL
-			liever = [goed - 1, goed + 1, k]
+			liever = [goed - 10, goed + 10, k]
 		"tientallen":
 			var t := rng.randi_range(1, mini(9, n + 2))
 			var e := rng.randi_range(0, 9)
@@ -182,8 +197,9 @@ static func maak(band: int, n: int, beurt_nr: int, zaad := ZAAD) -> Dictionary:
 			regel = T_BIJ_ELKAAR
 			liever = [goed - 100, goed + 100, goed - 10]
 		"rijen_van":
-			var r := rng.randi_range(2, mini(9, n + 3))
-			var per := rng.randi_range(2, 9)
+			# never easier than eind groep 4's rows: up to 10 rows, tables 3 … 10
+			var r := rng.randi_range(2, mini(10, n + 3))
+			var per := rng.randi_range(3, 10)
 			patronen.append(patroon("rij", r * per, per))
 			goed = r * per
 			regel = T_RIJEN % [r, per]
