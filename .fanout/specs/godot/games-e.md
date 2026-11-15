@@ -76,9 +76,9 @@ kolommen wat elk dier krijgt: de tafelsom is iets om te tellen.
 |---|---|---|---|---|
 | 3 | `koekjes` (alleen 2 ≤ N ≤ 5) | N rijen van 2 deegbolletjes | `2 + 2 + 2 =` (≤ 10) | "🍪 Hoeveel koekjes op de plaat?" |
 | 3 | `eieren` (altijd bij N = 1 of N > 5) | N eieren in de kom, r = 1..3 ernaast | `3 + 2 =` | "🍪 Hoeveel eieren in de kom?" |
-| 4 | `plaat` | N rijen × k, k ∈ {2, 5, 10} | `3 × 5 =`; in de export gespeeld: `4 × 5 =` | "🍪 Hoeveel koekjes op de plaat?" |
-| 4 | `dubbel` | twee kommen met e = min(N+1+0..2, 10) eieren | `4 + 4 =` (≤ 20) | "🍪 Dubbel recept: hoeveel eieren?" |
-| 5 | `tafel` | N rijen × k, k ∈ {3, 4, 6, 7, 8, 9} | `6 × 7 =` (alle tafels, ≤ 72) | "🍪 Hoeveel koekjes op de plaat?" |
+| 4 | `plaat` | R rijen × k, R = clamp(N + 0..2, 2, 8), k = alle tafels 2..10 (3, 4, 5 dubbel zo vaak) — eind groep 4, 2026-11-15 | `6 × 7 =` (≤ 80) | "🍪 Hoeveel koekjes op de plaat?" |
+| 4 | `recept` (sinds 2026-11-15, vervangt `dubbel`) | één recept: e deegbolletjes in rijen van tien, e = 10·clamp(1 + N/3 + 0..1, 1, 3) + 5..9; na de oven 2e gebakken | `37 + 37 =` (over het tiental, ≤ 78); afleiders 2e − 10, e, 2e + 10 | "🍪 Dubbel: hoeveel koekjes?" |
+| 5 | `tafel` | R rijen × k (R als groep 4), k ∈ {3, 4, 6, 7, 8, 9} | `6 × 7 =` (alle tafels, ≤ 72) | "🍪 Hoeveel koekjes op de plaat?" |
 | 5 | `verdeel` (N ≥ 2) | T = k·N + r koekjes in rijen van tien, k 2..9, r 0..N−1 | `14 : 3 =`, antwoord k | "🍪 Hoeveel koekjes per dier?" + regel 2 "▸ De rest is voor de kok" |
 
 Afleiders (`_liever`): ±1, ±k, N + k, de rest r — altijd > 0 en nooit het antwoord.  Groep 5
@@ -148,8 +148,8 @@ zodat een tweede beurt een ander ritme is en herladen hetzelfde):
 |---|---|---|---|---|
 | 3 | `tel` | één ritme van T tikken, T 2..10 | — (alleen het getal) | "🥁 Hoeveel tikken hoorde je?" |
 | 3 | `samen` (vanaf dag 3, de helft van de keren) | twee ritmes, a 3..10 en c 2..10, rood en blauw | `a + c =` (≤ 20) | "🥁 Hoeveel tikken samen?" |
-| 4 | `maten` | M maten van k, k ∈ {2, 5, 10} | `M × k =`; in de export gespeeld: 4 maten van 5, `4 × 5 =`, "20 tikken, goed geteld" | "🥁 Hoeveel tikken in 4 maten?" |
-| 5 | `tafel` (oneven dagen) | M maten van k, k ∈ {3, 4, 6, 7, 8} | `M × k =`, bijvoorbeeld `6 × 6 =` (raster 3 × 2) | "🥁 Hoeveel tikken in %d maten?" |
+| 4 | `maten` | M maten van k, k = alle tafels 2..10 (3, 4, 5 dubbel zo vaak; eind groep 4, 2026-11-15; ≤ 6 × 10) | `M × k =`, bijvoorbeeld `4 × 7 =` | "🥁 Hoeveel tikken in 4 maten?" |
+| 5 | `tafel` (oneven dagen) | M maten van k, k ∈ {3, 4, 6, 7, 8, 9} | `M × k =`, bijvoorbeeld `6 × 6 =` (raster 3 × 2) | "🥁 Hoeveel tikken in %d maten?" |
 | 5 | `omgekeerd` (even dagen) | één maat van k wordt getoond, D = k·M | `D : k =`, antwoord M; bijvoorbeeld "Hoeveel maten voor 48 tikken?" met k = 8 → 6 | "🥁 Hoeveel maten voor %d tikken?" |
 
 Afleiders (`liever`, de echte vergissingen): één tik ernaast, één maat ernaast (`k·(M−1)`,
@@ -218,11 +218,11 @@ bloembakken, bankje, plant, kussenhoek).  In de hoek rechtsvoor (zone `sterren`,
 | 3 | `patroon` | één patroon 1..10 (dobbelsteen tot 6, daarboven een tienveld) | k | "🔭 Hoeveel sterren zie je?" |
 | 3 | `samen` (N ≥ 2) | twee sterrenbeelden, a ≤ 10, a + b ≤ 20 | a + b | "🔭 Hoeveel sterren zijn het samen?" |
 | 3 | `tot_tien` | een tienveld met k sterren en 10 − k lege vakjes | 10 − k | "🔭 Hoeveel sterren erbij tot 10?" |
-| 4 | `rijen` | r rijen van 2, 5 of 10, r 2..min(10, N+2) | in de export gespeeld: 3 rijen van 2 → 6 | "🔭 Hoeveel sterren in %d rijen van %d?" |
-| 4 | `dubbel` | hetzelfde patroon k twee keer, k 2..10 | 2k | "🔭 Dubbel: hoeveel sterren samen?" |
+| 4 | `rijen` | r rijen van s, s = alle tafels 2..10 (3, 4, 5 dubbel zo vaak), r 2..min(10, N+2) — eind groep 4, 2026-11-15 | r·s ≤ 100, bijvoorbeeld 4 rijen van 7 → 28 | "🔭 Hoeveel sterren in %d rijen van %d?" |
+| 4 | `dubbel` | hetzelfde sterrenbeeld twee keer: t tienvelden + e losse, t = clamp(1 + N/3 + 0..1, 1, 4), e 5..9 | 2k over het tiental, bijvoorbeeld 37 + 37 → 74; afleiders 2k ± 10, k | "🔭 Dubbel: hoeveel sterren samen?" |
 | 5 | `tientallen` | t tienvelden (1..min(9, N+2)) + e losse | 10t + e, bijvoorbeeld 3 tienvelden en 4 → 34 | "🔭 Hoeveel sterren bij elkaar?" |
 | 5 | `honderden` | h blokken van honderd (1..min(3, N)) + t tienvelden | 100h + 10t, bijvoorbeeld 2 blokken en 3 tienvelden → 230 | "🔭 Hoeveel sterren bij elkaar?" |
-| 5 | `rijen_van` | r rijen van s, r 2..min(9, N+3), s 2..9 | r·s | "🔭 Hoeveel sterren in %d rijen van %d?" |
+| 5 | `rijen_van` | r rijen van s, r 2..min(10, N+3), s 3..10 (nooit makkelijker dan groep 4) | r·s | "🔭 Hoeveel sterren in %d rijen van %d?" |
 
 Afleiders: structuurfouten — ±1, ±een rij, ±10, ±100, "alleen één groep"; het antwoordvak heeft
 drie cijfers vanaf 100 (`Beurt.cijfers`).
@@ -295,7 +295,7 @@ dezelfde vakjes.
 | groep | vakjes | op de brief | stapel van dag 1 (nagerekend) |
 |---|---|---|---|
 | 3 | 1-5 · 6-10 · 11-15 · 16-20 | een los getal 1..20 | 1 gast (2 brieven): 6, 13 |
-| 4 | vier tientallen a0-a9 … d9, a = (N + dag) mod 7 | een getal uit dat venster | 4 gasten: 69, 82, 55, 68 in 50..89 |
+| 4 | vier tientallen a0-a9 … d9, a = (N + dag) mod 7 | eind groep 4 (2026-11-15): een plus- of minsom over het tiental heen met de uitkomst in dat venster (`Beurt.som4`: om de brief + of −, elke derde brief een tweede getal van twee cijfers) | "35 + 7" → 40 - 49, "50 − 8" → 40 - 49, "61 − 19" → 40 - 49; de vergeten tien is het vakje ernaast |
 | 5 | hetzelfde venster | een keersom k × m (2..10) met het product in het venster | 7 gasten (6 brieven): 3 × 2, 3 × 7, 4 × 3, 4 × 8, 5 × 5, 6 × 4 in 0..39 |
 
 `7 × 8` hoort in "50 - 59" en `9 × 9` in "80 - 89" (`test_de_voorbeelden_uit_het_ontwerp`).

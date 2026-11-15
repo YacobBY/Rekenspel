@@ -15,9 +15,17 @@ class_name KoekjesBeurt
 ##
 ##   groep 3  `koekjes`: N rijen van 2 → "2 + 2 + 2 =" (2 tot 5 gasten, tot 10)
 ##            `eieren`:  N eieren in de kom en r ernaast (r 1..3) → "3 + 2 ="
-##   groep 4  `plaat`:   N rijen × k (2, 5, 10) → "3 × 5 ="
-##            `dubbel`:  twee kommen met e eieren (e = N+1 .. N+3, ≤ 10) → "4 + 4 ="
-##   groep 5  `tafel`:   N rijen × k (3, 4, 6, 7, 8, 9) → "6 × 7 =" (alle tafels)
+##   groep 4  (eind groep 4, owner 2026-11-15)
+##            `plaat`:   R rijen × k, R = N + 0..2 (2 … 8), k = alle tafels 2 … 10
+##                       (3, 4, 5 vaker) → "6 × 7 =", tot 8 × 10 = 80
+##            `recept`:  één recept is e bolletjes deeg in rijen van tien
+##                       (e = 15 … 39, de eenheden 5 … 9) → dubbel recept
+##                       "37 + 37 =", over het tiental heen, tot 78
+##            (`dubbel`, twee kommen met e ≤ 10 eieren, blijft voor oude
+##            standen leesbaar maar wordt niet meer gemaakt: een kom houdt er
+##            twaalf, verdubbelen tot 50 + 50 past alleen op de plaat)
+##   groep 5  `tafel`:   R rijen × k (3, 4, 6, 7, 8, 9) → "6 × 7 =" (alle tafels),
+##                       R = N + 0..2 zoals in groep 4
 ##            `verdeel`: T = k·N + r koekjes eerlijk over N dieren → "14 : 3 =",
 ##                       de rest is voor de kok (delen met rest, IDEAS.md)
 ##
@@ -40,6 +48,8 @@ const ICOON_LEKKER := "😋"
 const T_PLAAT := "Hoeveel koekjes op de plaat?"        ## 5 woorden, 28 tekens
 const T_KOM := "Hoeveel eieren in de kom?"             ## 5 woorden, 25 tekens
 const T_DUBBEL := "Dubbel recept: hoeveel eieren?"     ## 4 woorden, 30 tekens
+## Short: one line of the maths bar on a 360 wide phone (≈ 28 characters).
+const T_RECEPT := "Dubbel: hoeveel koekjes?"           ## 3 woorden, 24 tekens
 const T_VERDEEL := "Hoeveel koekjes per dier?"         ## 4 woorden, 25 tekens
 const T_REST := "▸ De rest is voor de kok"             ## 7 stukjes, 24 tekens
 const T_GAAR := "Klaar! Ze zijn gaar"                  ## 4 woorden, 19 tekens
@@ -53,12 +63,12 @@ const TAAK := "Bak koekjes"
 
 ## Alle zinnen die een kind te zien krijgt, voor de tekstregels van de test.
 static func zinnen() -> Array[String]:
-	return [T_PLAAT, T_KOM, T_DUBBEL, T_VERDEEL, T_REST, T_GAAR, T_IN_DE_KOM, T_DEEG,
+	return [T_PLAAT, T_KOM, T_DUBBEL, T_RECEPT, T_VERDEEL, T_REST, T_GAAR, T_IN_DE_KOM, T_DEEG,
 		T_EERLIJK, T_LEKKER, T_LEEG, KNOP, TAAK]
 
 ## De vragen die als `regel` op een kaart staan (met het pictogram ervoor).
 static func vragen() -> Array[String]:
-	return [T_PLAAT, T_KOM, T_DUBBEL, T_VERDEEL, T_GAAR, T_IN_DE_KOM, T_DEEG, T_EERLIJK]
+	return [T_PLAAT, T_KOM, T_DUBBEL, T_RECEPT, T_VERDEEL, T_GAAR, T_IN_DE_KOM, T_DEEG, T_EERLIJK]
 
 ## De beurt van vandaag voor `n_gasten` gasten in groep `band` (3, 4, 5).
 ## Sleutels: soort, regel, [regel2], som, goed, liever, rijen, kolommen,
@@ -90,17 +100,33 @@ static func _groep3(n: int, rnd: Sommen.Prng) -> Dictionary:
 	return _beurt("eieren", T_KOM, "%d + %d =" % [n, r], goed,
 		_liever(goed, [goed + 1, goed - 1, goed + 2]), {"eieren": n, "erbij": r})
 
+## De tafels van eind groep 4: alle tafels tot 10, de tafels van 3, 4 en 5
+## twee keer zo vaak (SLO: 1 … 5 en 10 uit het hoofd, de rest met een
+## strategie).
+const TAFELS_4 := [2, 3, 4, 5, 6, 7, 8, 9, 10, 3, 4, 5]
+
+## Het aantal rijen op de plaat: een rij per gast en 0 … 2 van de dag erbij,
+## minstens twee (één rij is geen tafelsom), hooguit acht (de plaat past op de
+## tafel: `ArtDecorBakkerij.BANK_D`).
+static func _rijen(n: int, rnd: Sommen.Prng) -> int:
+	return clampi(n + _tot(rnd, 3), 2, 8)
+
 static func _groep4(n: int, rnd: Sommen.Prng) -> Dictionary:
 	if rnd.volgende() < 0.5:
-		var k: int = _kies(rnd, [2, 5, 10])
-		var goed := k * n
-		return _beurt("plaat", T_PLAAT, "%d × %d =" % [n, k], goed,
-			_liever(goed, [goed + k, goed - k, n + k]),
-			{"rijen": n, "kolommen": k})
-	var e := mini(n + 1 + _tot(rnd, 3), 10)
+		var rijen := _rijen(n, rnd)
+		var k: int = _kies(rnd, TAFELS_4)
+		var goed := k * rijen
+		# de buurtafel (een rij te veel of te weinig), en + in plaats van ×
+		return _beurt("plaat", T_PLAAT, "%d × %d =" % [rijen, k], goed,
+			_liever(goed, [goed + k, goed - k, rijen + k]),
+			{"rijen": rijen, "kolommen": k})
+	# één recept: e bolletjes deeg, rijen van tien; de eenheden 5 … 9, zodat
+	# het verdubbelen over het tiental gaat (37 + 37 = 74)
+	@warning_ignore("integer_division")
+	var e := 10 * clampi(1 + n / 3 + _tot(rnd, 2), 1, 3) + 5 + _tot(rnd, 5)
 	var goed := 2 * e
-	return _beurt("dubbel", T_DUBBEL, "%d + %d =" % [e, e], goed,
-		_liever(goed, [goed + 1, goed - 1, e]), {"eieren": e})
+	return _beurt("recept", T_RECEPT, "%d + %d =" % [e, e], goed,
+		_liever(goed, [goed - 10, e, goed + 10]), {"totaal": e})
 
 static func _groep5(n: int, rnd: Sommen.Prng) -> Dictionary:
 	if n >= 2 and rnd.volgende() < 0.5:
@@ -112,11 +138,12 @@ static func _groep5(n: int, rnd: Sommen.Prng) -> Dictionary:
 			{"rijen": n, "kolommen": k, "totaal": t, "rest": r})
 		b["regel2"] = T_REST
 		return b
+	var rijen := _rijen(n, rnd)
 	var k: int = _kies(rnd, [3, 4, 6, 7, 8, 9])
-	var goed := k * n
-	return _beurt("tafel", T_PLAAT, "%d × %d =" % [n, k], goed,
-		_liever(goed, [goed + k, goed - k, n + k]),
-		{"rijen": n, "kolommen": k})
+	var goed := k * rijen
+	return _beurt("tafel", T_PLAAT, "%d × %d =" % [rijen, k], goed,
+		_liever(goed, [goed + k, goed - k, rijen + k]),
+		{"rijen": rijen, "kolommen": k})
 
 static func _beurt(soort: String, regel: String, som: String, goed: int,
 		liever: Array, extra: Dictionary) -> Dictionary:
@@ -152,7 +179,7 @@ static func _kies(rnd: Sommen.Prng, lijst: Array) -> Variant:
 ## Bakken de koekjes in de oven na het goede antwoord?  (Bij de eieren en bij
 ## het delen niet: daar ligt de uitkomst meteen op tafel.)
 static func bakt(b: Dictionary) -> bool:
-	return str(b.get("soort", "")) in ["koekjes", "plaat", "tafel"]
+	return str(b.get("soort", "")) in ["koekjes", "plaat", "tafel", "recept"]
 
 ## Wat er op de bakkerstafel ligt (`ArtDecorBakkerij.werkbank`) in stap `stap`
 ## van de beurt: "som" (de vraag), "bak" (de plaat is in de oven) of "af".
@@ -169,6 +196,13 @@ static func bank(b: Dictionary, stap: String) -> Dictionary:
 		"dubbel":
 			var e := int(b.get("eieren", 0))
 			return {"kommen": [e, e], "beslag": af}
+		"recept":
+			# één recept deeg in rijen van tien; na de oven het dubbele, gebakken
+			var t := int(b.get("totaal", 0)) * (2 if af else 1)
+			if stap == "bak":
+				return {}
+			@warning_ignore("integer_division")
+			return {"rijen": (t + 9) / 10, "kolommen": mini(t, 10), "aantal": t, "gaar": af}
 		"verdeel":
 			if af:
 				return {"rijen": int(b["rijen"]), "kolommen": int(b["kolommen"]),

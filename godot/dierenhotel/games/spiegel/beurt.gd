@@ -12,11 +12,20 @@ extends RefCounted
 ## pink dots; the other side has to become its mirror image:
 ##   band 3 (groep 3): left L dots, right already R0 of their mirrors
 ##                     "how many more on the right?"          L − R0 =   (minus)
-##   band 4 (groep 4): left L dots, right empty
-##                     "how many dots will the mask have?"    L + L =    (doubling)
-##   band 5 (groep 5): the top left quarter Q dots, the top right its mirror,
-##                     the bottom half empty — two fold lines
+##   band 4 (eind groep 4, owner 2026-11-15): a board of 6 × 8, four columns a
+##                     side; left L = 11 … 18 dots in ROWS of four (full rows
+##                     from the top, the rest loose below), right already the
+##                     mirror of all but the last four
+##                     "how many dots will the mask have?"    L + L =    (doubling a
+##                     two-digit number, 14 + 14, 17 + 17 across the ten)
+##   band 5 (groep 5): the same 6 × 8 board, two fold lines: the top left
+##                     quarter Q = 6 … 10 dots (rows of four), the top right its
+##                     mirror, the bottom half the mirror of all but four
 ##                     "how many dots will the mask have?"    Q × 4 =    (the table of 4)
+## The board cannot hold 50 + 50 dots (a dot is a cell, the cells must stay
+## large enough to tap on a phone), so band 4 doubles what 24 cells a side can
+## show — a two-digit count laid out in rows of four so it can be counted — and
+## does not ask every dot: the four last ones are placed.
 ## After the sum every missing dot is placed one by one, and each placement is
 ## a mirror question of its own: of three coloured marks on the empty side,
 ## which one is the mirror image of the dot that shines?  The wrong marks are
@@ -46,6 +55,9 @@ const T_TITEL := "Maak een masker"
 
 ## The three marks on the board and their buttons on the strip: a heart and
 ## the colour's own word (HOTEL.md §9: pictogram AND word).
+## Band 4 and 5: the dots that are still to place (the rest is on the board).
+const PLAK := 4
+
 const MERKEN := [
 	{"id": "blauw", "icoon": "💙", "tekst": "blauw"},
 	{"id": "groen", "icoon": "💚", "tekst": "groen"},
@@ -64,8 +76,8 @@ static func opzet(n: int, band: int, dag: int) -> Dictionary:
 	var b := clampi(band, 3, 5)
 	var gasten := maxi(1, n)
 	var rnd := Sommen.Prng.new(ZAAD + dag * 7919 + gasten * 131 + b * 17)
-	var r := 4
-	var k := 4 if b == 3 else 6
+	var r := 4 if b == 3 else 6
+	var k := 4 if b == 3 else 8
 	var h := k / 2
 	var as_ := "vh" if b == 5 else "v"
 	var o := {"band": b, "R": r, "K": k, "as": as_}
@@ -90,18 +102,26 @@ static func opzet(n: int, band: int, dag: int) -> Dictionary:
 			o["liever"] = [l, l + r0, r0]
 			o["basis"] = l + r0
 		4:
-			var l := clampi(3 + gasten / 3 + int(rnd.volgende() * 2.0), 3, 6)
-			var links := _kies(rnd, _cellen(0, r, 0, h), l)
+			# left: L dots in rows of four; right: the mirror of all but the
+			# last PLAK of them (reading order), which the child places
+			var l := clampi(10 + gasten + int(rnd.volgende() * 3.0), 11, 18)
+			var links := _rijen(rnd, r, h, l)
 			for c in links:
 				stip.append(c)
-				doel.append({"cel": spiegel_v(c, k), "bron": c})
+			for i in links.size():
+				var m := spiegel_v(links[i], k)
+				if i < links.size() - PLAK:
+					stip.append(m)
+				else:
+					doel.append({"cel": m, "bron": links[i]})
 			o["goed"] = 2 * l
 			o["som"] = "%d + %d =" % [l, l]
-			o["liever"] = [l, 2 * l + 1, 2 * l - 2]
-			o["basis"] = l
+			# the forgotten ten, one side only, the double of one more
+			o["liever"] = [2 * l - 10, l, 2 * l + 2]
+			o["basis"] = 2 * l - PLAK
 		_:
-			var q := clampi(2 + gasten / 4 + int(rnd.volgende() * 2.0), 2, 3)
-			var kwart := _kies(rnd, _cellen(0, r / 2, 0, h), q)
+			var q := clampi(5 + gasten / 2 + int(rnd.volgende() * 2.0), 6, 10)
+			var kwart := _rijen(rnd, r / 2, h, q)
 			var boven: Array = []
 			for c in kwart:
 				boven.append(c)
@@ -109,13 +129,22 @@ static func opzet(n: int, band: int, dag: int) -> Dictionary:
 				boven.append(spiegel_v(c, k))
 			for c in boven:
 				stip.append(c)
-			# the bottom half, the left dots first: the second fold
-			for c in boven:
-				doel.append({"cel": spiegel_h(c, r), "bron": c})
+			# the bottom half: the mirror of every top dot but the last two of
+			# the left quarter and their twins on the right (left first)
+			var vraag: Array = []
+			for j in range(q - PLAK / 2, q):
+				vraag.append(j)
+			for j in range(q - PLAK / 2, q):
+				vraag.append(q + j)
+			for j in boven.size():
+				if not vraag.has(j):
+					stip.append(spiegel_h(boven[j], r))
+			for j in vraag:
+				doel.append({"cel": spiegel_h(boven[j], r), "bron": boven[j]})
 			o["goed"] = 4 * q
 			o["som"] = "%d × 4 =" % q
 			o["liever"] = [3 * q, q + 4, 2 * q]
-			o["basis"] = 2 * q
+			o["basis"] = 4 * q - PLAK
 	# every mark in its own place: the right one, the slips, then any free cell
 	var bezet := {}
 	for c in stip:
@@ -201,6 +230,18 @@ static func _cellen(r0: int, r1: int, k0: int, k1: int) -> Array:
 	for rij in range(r0, r1):
 		for kol in range(k0, k1):
 			uit.append([rij, kol])
+	return uit
+
+## `n` dots on the left `breed` columns of rows 0 … `rijen` − 1, in rows: the
+## full rows from the top, then the rest loose (drawn) in the rows below —
+## in reading order, so the loose ones are the last.
+static func _rijen(rnd, rijen: int, breed: int, n: int) -> Array:
+	@warning_ignore("integer_division")
+	var vol := mini(n / breed, rijen)
+	var uit: Array = _cellen(0, vol, 0, breed)
+	var los := _kies(rnd, _cellen(vol, rijen, 0, breed), n - uit.size())
+	for c in los:
+		uit.append(c)
 	return uit
 
 ## `n` different cells out of `uit`, in reading order (top to bottom, left to

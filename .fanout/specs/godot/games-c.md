@@ -144,11 +144,13 @@ taak: { id: 'oogst', icoon: '🍓', tekst: 'Pluk de aardbeien', kamer: 'kas', pr
 opzet(N, band, dag):                   rnd = Prng(60617 + dag·7919 + N·131 + band·17)
   band 3: vol = 0 als N = 1 of (dag + N) even, anders 1
           los = 3 … 9 (vol = 0) of 1 … 9 (vol = 1)
-  band 4: vol = clamp(N − 1, 2, 5),  los = 1 … 9
+  band 4: los = 1 … 9, vol = clamp(N + 1 + rnd(0..1), 3, 8)     // eind groep 4 (2026-11-15)
   band 5: vol = clamp(N − 1, 5, 8),  los = 1 … 9
   T     = 10·vol + los                 // tientallen en eenheden
   doel  = band 5 ? 10 : vol + 1        // bakjes die aan het eind vol zijn
-  nodig = 10·doel − T                  // band 3/4: 10 − los; band 5: 100 − T
+          band 4: min(10, vol + 2 + rnd(0..2))   // een tot drie tientallen verder, of 100
+  nodig = 10·doel − T                  // band 3: 10 − los; band 4: 37 + __ = 60, 64 + __ = 100;
+                                       // band 5: 100 − T
 ```
 
 Eén vol bakje per gast behalve de gast van de beurt, wiens bakje het open bakje is: het
@@ -157,16 +159,17 @@ getal groeit met het hotel (T = 10·(N − 1) + r, HOTEL.md §3).
 | band | vraag 1 (tellen) | vraag 2 (aanvullen) | curriculum (IDEAS.md) |
 |---|---|---|---|
 | 3 | 3 … 19 | 1 … 9: splitsen tot 10 | tot 20, splitsingen t/m 10 |
-| 4 | 21 … 59 | 1 … 9: aanvullen tot het tiental | tot 100, via de 10 |
+| 4 | 31 … 89 | 11 … 39: aanvullen over het tiental tot een tiental verder of 100 ("Hoeveel nog tot 60?") | eind groep 4: tot 100 over het tiental |
 | 5 | 51 … 89 | 11 … 49: aanvullen tot 100 | tot 100 via de tientallen |
 
 **De vier antwoorden** (`Afleiders.vier`, `max_getal` 100): vraag 1 liever de
 omgedraaide cijfers (`10·los + vol`: "veertien" is vier-tien, dus 14 wordt 41 — de
 Nederlandse slip), de cijfers opgeteld (`vol + los`) en één bakje te veel (`T + 10`);
-vraag 2 liever `los` (wat er al ligt), `10` (een heel bakje) en `nodig + 1`; in groep 5
+vraag 2 liever `los` (wat er al ligt), `10` (een heel bakje) en `nodig + 1`; in groep 4
+`10 − los` (alleen het open bakje), `nodig ± 10` (de vergeten tien); in groep 5
 `10 − los` (alleen de eenheden), `100 − 10·vol` (alleen de tientallen) en `nodig + 10`.
 
-**Plukken** (`pluk_stap`): één aardbei per tik tot het open bakje vol is; daarna (groep 5)
+**Plukken** (`pluk_stap`): één aardbei per tik tot het open bakje vol is; daarna (groep 4 en 5)
 een heel bakje per tik tot alle tien vol zijn — de strategie "via de tien" in het echt.
 `bakjes(o, geplukt)` geeft de tafel zoals hij er dan bij staat; op tafel ligt altijd
 `T + geplukt`.  *Nagerekend* in `test_plukken_via_de_tien` en `test_de_getallen_per_band`.
@@ -282,7 +285,7 @@ id: 'weeg'   naam: 'Groenten wegen'   kamer: 'kas'   stub: false
 hotspot: { obj: 'pompoenen', dx: −24, dz: −46, icoon: '⚖️', label: 'Wegen',
            hoog: 16, rust: 'rust_wg_schaal' }      // (114, 100) + (−24, −46) = de weegschaal
 modellen: { weeg_schaal, weeg_gewicht }            // games/weeg/modellen.gd
-rust: de rechte, lege weegschaal op (90, 54) en de gewichten 1, 2, 5, 10 kg in hun rij
+rust: de rechte, lege weegschaal op (90, 54) en de gewichten van groep 4 (2, 5, 10, 20 kg sinds 2026-11-15) in hun rij
 unlock: N >= 1
 taak: { id: 'weeg', icoon: '⚖️', tekst: 'Weeg de groente', kamer: 'kas', prio: 7 }
 ```
@@ -290,16 +293,19 @@ taak: { id: 'weeg', icoon: '⚖️', tekst: 'Weeg de groente', kamer: 'kas', pri
 ### 3.3 Het rekenen per band
 
 ```
-REK    = { 3: [1, 2, 5], 4: [1, 2, 5, 10], 5: [1, 5, 10, 20] }   // kg, lichtste eerst
+REK    = { 3: [1, 2, 5], 4: [2, 5, 10, 20], 5: [1, 5, 10, 20] }  // kg, lichtste eerst
 DINGEN = { 3: [pompoen, meloen], 4: [pompoen, zak], 5: [pompoen, zak] }
 opzet(N, band, dag):                 rnd = Prng(51329 + dag·7919 + N·131 + band·17)
-  gewicht1: band 3: 3 … 10 · band 4: 11 … 20 · band 5: 21 … 60, zo gekozen dat
-            splits(gewicht1) 2 … 4 gewichten is; set1 = splits(gewicht1)
-  gewicht2: band 3: 3 + N + rnd·4 · band 4: 8 + 3(N − 4) + rnd·6 · band 5: 21 + 8(N − 7) + rnd·16,
-            geklemd op 3 … 9 · 8 … 19 · 21 … 59, nooit gelijk aan gewicht1 en
+  gewicht1: band 3: 3 … 10, zo gekozen dat splits(gewicht1) 2 … 4 gewichten is;
+            set1 = splits(gewicht1).  Band 4 (21 … 49) en 5 (21 … 60), eind groep 4
+            (2026-11-15): set1 = 3 … 5 gewichten met minstens één van 10+ kg en kleine
+            gewichten die samen 11 … 19 kg wegen (over de tien: 20 + 5 + 5 + 2 = 32);
+            liever dan de vergeten tien (22)
+  gewicht2: band 3: 3 + N + rnd·4 · band 4: 20 + 3N + rnd·8 · band 5: 24 + 4N + rnd·8,
+            geklemd op 3 … 9 · 21 … 49 · 21 … 59, nooit gelijk aan gewicht1 en
             met hooguit 4 gewichten recht te krijgen (het dichtstbijzijnde getal dat past)
   ding1 / ding2 = de twee DINGEN van de band, om de dag andersom
-splits(g, rek) = zo min mogelijk gewichten, zwaarste eerst
+splits(g, rek) = zo min mogelijk gewichten, zwaarste eerst (zonder 1 kg: 33 = 20+5+2+2+2+2)
 kant(ding, gewichten) = 0 als gelijk; −2/+2 als het verschil groter is dan
             max(2, ding / 4), anders −1/+1  (−: het ding zakt, +: de gewichten zakken)
 ```
@@ -307,7 +313,7 @@ kant(ding, gewichten) = 0 als gelijk; −2/+2 als het verschil groter is dan
 | band | gewichten | vraag 1 | zelf wegen | curriculum (IDEAS.md) |
 |---|---|---|---|---|
 | 3 | 1, 2, 5 kg | 3 … 10 kg | 3 … 9 kg | vergelijken, natuurlijke maten, splitsen t/m 10 |
-| 4 | 1, 2, 5, 10 kg | 11 … 20 kg | 8 … 19 kg | kg, optellen tot 20 |
+| 4 | 2, 5, 10, 20 kg | 21 … 49 kg, over de tien | 21 … 49 kg | eind groep 4: hele kg tot 100, optellen over het tiental |
 | 5 | 1, 5, 10, 20 kg | 21 … 60 kg | 21 … 59 kg | kg tot 100 (de reuzenpompoen) |
 
 Groep 5 weegt zonder 2 kg: een strook heeft hooguit vier knoppen (HOTEL.md §9), en 1, 5,

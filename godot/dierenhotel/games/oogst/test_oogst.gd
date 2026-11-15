@@ -264,11 +264,16 @@ func test_de_getallen_per_band() -> void:
 			waar(int(o["los"]) >= (3 if int(o["vol"]) == 0 else 1), "een open bakje met genoeg")
 			gelijk(int(o["doel"]), int(o["vol"]) + 1, "groep 3 vult het open bakje")
 			gelijk(int(o["nodig"]), 10 - int(o["los"]), "splitsen tot 10")
-		for n in [4, 5, 6]:
+		for n in [1, 4, 5, 6, 8]:
 			var o := Beurt.opzet(n, 4, dag)
-			gelijk(int(o["vol"]), clampi(n - 1, 2, 5), "groep 4: een vol bakje per gast behalve één")
-			waar(int(o["T"]) >= 21 and int(o["T"]) <= 59, "groep 4: tot 100 (%d)" % int(o["T"]))
-			gelijk(int(o["nodig"]), 10 - int(o["los"]), "aanvullen tot het tiental")
+			waar(int(o["vol"]) >= clampi(n + 1, 3, 8) and int(o["vol"]) <= clampi(n + 2, 3, 8),
+				"eind groep 4: een vol bakje per gast plus twee (%d)" % int(o["vol"]))
+			waar(int(o["T"]) >= 31 and int(o["T"]) <= 89, "eind groep 4: tot 100 (%d)" % int(o["T"]))
+			waar(int(o["doel"]) >= int(o["vol"]) + 2 and int(o["doel"]) <= 10,
+				"eind groep 4: aanvullen tot een tiental verder of 100")
+			gelijk(int(o["nodig"]), 10 * int(o["doel"]) - int(o["T"]), "aanvullen tot het doel")
+			waar(int(o["nodig"]) >= 11 and int(o["nodig"]) <= 39, "over het tiental heen (%d)" % int(o["nodig"]))
+			waar(int(o["nodig"]) % 10 + int(o["T"]) % 10 == 10, "de eenheden gaan over de tien")
 		for n in [7, 8, 9, 10]:
 			var o := Beurt.opzet(n, 5, dag)
 			waar(int(o["vol"]) >= 5 and int(o["vol"]) <= 8, "groep 5: vijf tot acht volle bakjes")
@@ -340,8 +345,18 @@ func test_elke_zin_past() -> void:
 		gelijk(Ui.mist_tekens(zin).size(), 0, "alle tekens bestaan: %s" % zin)
 	for teken in [Beurt.ICOON, Beurt.ICOON_AF, Beurt.ICOON_LEKKER]:
 		gelijk(Ui.mist_tekens(teken).size(), 0, "het pictogram %s staat in de fontsubset" % teken)
-	var o := {"band": 4, "vol": 3, "los": 4, "T": 34, "doel": 4, "nodig": 6}
-	gelijk(Beurt.som_bij(o), "4 + __ = 10", "de aanvulsom met het gat")
+	var o := {"band": 4, "vol": 3, "los": 7, "T": 37, "doel": 6, "nodig": 23}
+	gelijk(Beurt.som_bij(o), "37 + __ = 60", "de aanvulsom met het gat")
+	gelijk(str(Beurt.vraag_bij(o)[0]), "Hoeveel nog tot 60?", "de vraag naar het tiental verder")
+	var o4 := {"band": 4, "vol": 6, "los": 4, "T": 64, "doel": 10, "nodig": 36}
+	gelijk(Beurt.som_bij(o4), "64 + __ = 100", "eind groep 4: ook tot honderd")
+	gelijk(str(Beurt.vraag_bij(o4)[0]), Beurt.T_HONDERD, "met de honderdvraag")
+	var o3 := {"band": 3, "vol": 1, "los": 4, "T": 14, "doel": 2, "nodig": 6}
+	gelijk(Beurt.som_bij(o3), "4 + __ = 10", "groep 3 blijft splitsen tot 10")
+	for t in [10, 20, 30, 40, 50, 60, 70, 80, 90]:
+		var zin: String = Beurt.T_TOT % t
+		waar(Ui.keur_regel("oogst", zin), "binnen het budget: %s" % zin)
+		gelijk(Ui.mist_tekens(zin).size(), 0, "alle tekens bestaan: %s" % zin)
 	var o5 := {"band": 5, "vol": 6, "los": 3, "T": 63, "doel": 10, "nodig": 37}
 	gelijk(Beurt.som_bij(o5), "63 + __ = 100", "de aanvulsom tot honderd")
 	# the help ladder is gone (owner, 2026-09-24): no counting line, no ghost
@@ -400,8 +415,9 @@ func test_een_beurt_in_groep_4() -> void:
 	_kies(int(o["T"]))
 	await _wacht_kaart()
 	gelijk(_stand().get("stap", ""), "bij", "tweede vraag: hoeveel passen er nog bij")
-	gelijk(_kaart_tekst("Kolom/Regel"), "🍓 " + Beurt.T_BIJ, "de zin van de tweede vraag")
-	gelijk(_kaart_tekst("Kolom/Rij/Som"), "%d + __ = 10" % int(o["los"]), "de aanvulsom")
+	gelijk(_kaart_tekst("Kolom/Regel"), "🍓 " + str(Beurt.vraag_bij(o)[0]), "de zin van de tweede vraag")
+	gelijk(_kaart_tekst("Kolom/Rij/Som"), "%d + __ = %d" % [int(o["T"]), 10 * int(o["doel"])],
+		"de aanvulsom over het tiental heen")
 	waar(_strook().has(int(o["nodig"])), "het goede antwoord staat op de strook")
 	_kies(int(o["nodig"]))
 	await _wacht_kaart()
@@ -545,7 +561,7 @@ func test_herladen_hervat_de_beurt() -> void:
 	gelijk(_stand().get("stap", ""), "bij", "de stand is bewaard")
 	waar(Games.start(SPEL), "opnieuw gestart")
 	gelijk(_stand().get("stap", ""), "bij", "verder bij de tweede vraag")
-	gelijk(_kaart_tekst("Kolom/Regel"), "🍓 " + Beurt.T_BIJ, "met dezelfde vraag")
+	gelijk(_kaart_tekst("Kolom/Regel"), "🍓 " + str(Beurt.vraag_bij(o)[0]), "met dezelfde vraag")
 	_kies(int(o["nodig"]))
 	await _wacht_kaart()
 	await _wacht_tot_geplukt(1)
