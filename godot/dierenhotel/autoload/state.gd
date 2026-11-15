@@ -961,12 +961,15 @@ func n_gasten() -> int:
 ## groep 4, so a small hotel no longer drops to the groep-3 sums.  Band 3 stays
 ## in the number rules (and their tests); the hotel just never asks it.
 const BAND_MIN := 4
+## The floor in use: BAND_MIN; a test about the groep-3 sums sets it to 3
+## (`Proef.groep3()`), and every test gets BAND_MIN back after it.
+var vloer := BAND_MIN
 
 ## `band = max(BAND_MIN, min(bandVanN(N), kunnen + 1))` — right or wrong never
 ## buys stars or access, only the size of the next sum.  Until 2026-11-15 the
 ## floor was 3.
 func band() -> int:
-	return maxi(BAND_MIN, mini(Sommen.band_van_n(n_gasten()), int(s["kunnen"]) + 1))
+	return maxi(vloer, mini(Sommen.band_van_n(n_gasten()), int(s["kunnen"]) + 1))
 
 ## `State.tel(goed, ms)` — the adaptive signal (world.md §3.9).
 func tel(goed: bool, ms: int) -> void:

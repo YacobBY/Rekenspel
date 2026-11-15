@@ -53,6 +53,10 @@ func alleen_spellen(ids: Array) -> void:
 			Games._scenes.erase(k)
 
 func herstel_spellen() -> void:
+	# the band floor back to end of groep 4 (`groep3()` lowers it for one test)
+	var st = Engine.get_main_loop().root.get_node_or_null(^"State")
+	if st != null:
+		st.vloer = st.BAND_MIN
 	# a test that looked at the other art style (docs/ART-STIJL.md) hands the
 	# game back in its own style
 	var art = Engine.get_main_loop().root.get_node_or_null(^"Art")
@@ -64,6 +68,12 @@ func herstel_spellen() -> void:
 			Games._scenes[k] = _scenes_weg[k]
 	_spellen_weg.clear()
 	_scenes_weg.clear()
+
+## The groep-3 sums for the rest of this test: the hotel's band floor is end
+## of groep 4 (`State.BAND_MIN`, owner 2026-11-15), so a test about the
+## groep-3 wording or numbers lowers it; `herstel_spellen` puts it back.
+func groep3() -> void:
+	State.vloer = 3
 
 ## The rekenwacht off for the rest of this test (`autoload/reken.gd`).  Only
 ## for a test about something else that must tap more free buttons in a row

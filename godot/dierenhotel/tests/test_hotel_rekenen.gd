@@ -450,14 +450,21 @@ func test_checkin_groep4_getallen() -> void:
 				waar(int(o["nieuw"]) <= 90, "%s: tot 9 × 10" % wat)
 				gelijk(int(o["zak1"]) + int(o["zak2"]), int(o["voorraad"]), "%s: twee zakken" % wat)
 				waar(int(o["zak1"]) >= 1 and int(o["zak2"]) >= 1, "%s: twee echte zakken" % wat)
-				waar(int(o["voorraad"]) <= 99 and absi(int(o["voorraad"]) - int(o["nieuw"])) <= 4,
-					"%s: de voorraad ligt dichtbij (%d / %d)" % [wat, int(o["voorraad"]), int(o["nieuw"])])
-				gelijk(int(o["dagen"]), 1, "%s: voor vandaag" % wat)
+				# the bags last as many days as it takes to need CI_MIN scoops,
+				# so they are two-digit numbers (played 2026-11-15: "6 + 9")
+				var nodig := int(o["dagen"]) * int(o["nieuw"])
+				gelijk(int(o["dagen"]), maxi(1, ceili(float(Hotel.CI_MIN) / float(int(o["nieuw"])))),
+					"%s: zoveel dagen dat het minstens %d scheppen zijn" % [wat, Hotel.CI_MIN])
+				waar(nodig >= Hotel.CI_MIN and nodig <= 90, "%s: nodig %d" % [wat, nodig])
+				waar(int(o["voorraad"]) <= 99 and absi(int(o["voorraad"]) - nodig) <= 4,
+					"%s: de voorraad ligt dichtbij (%d / %d)" % [wat, int(o["voorraad"]), nodig])
+				waar(int(o["zak1"]) >= 10 and int(o["zak2"]) >= 10 or int(o["voorraad"]) < 30,
+					"%s: twee tweecijferige zakken (%d, %d)" % [wat, int(o["zak1"]), int(o["zak2"])])
 				if int(o["voorraad"]) >= 20:
 					zakken += 1
 					if int(o["zak1"]) % 10 + int(o["zak2"]) % 10 >= 10:
 						over_tien += 1
-				uitkomst[Sommen.vergelijk(1, int(o["nieuw"]), int(o["voorraad"]))] = true
+				uitkomst[Sommen.vergelijk(int(o["dagen"]), int(o["nieuw"]), int(o["voorraad"]))] = true
 	for t in [2, 3, 4, 5, 6, 7, 8, 9, 10]:
 		waar(tafels.has(t), "groep 4: de tafel van %d komt voor" % t)
 	waar(over_tien * 10 >= zakken * 8, "de zakken gaan meestal over het tiental (%d van %d)"
@@ -466,6 +473,7 @@ func test_checkin_groep4_getallen() -> void:
 	# every sentence with the longest name and the largest numbers
 	for zin in [Hotel.CI_PER % "10 scheppen", Hotel.CI_GASTEN % ["Stampertje", "9 gasten"],
 			Hotel.CI_ZAKKEN % [55, 39], "Elke dag eten de gasten 90 scheppen",
+			Hotel.CI_DAGEN % [13, "26 scheppen"],
 			Hotel.BED_HOTEL % ["Stampertje", 9], Hotel.BED_ANDERS % ["Kamer 2", 4, "kamer 1"]]:
 		waar(Ui.keur_regel("proef", zin), "de zin past: %s" % zin)
 		gelijk(str(Ui.mist_tekens(zin)), "[]", "alle tekens in het font: %s" % zin)
@@ -518,6 +526,7 @@ func test_checkin_groep4_aan_de_balie() -> void:
 	await _scherm_weg(laag)
 	# groep 3 as it was: the real scoops
 	_voor()
+	groep3()
 	State.s["scoops"] = 20
 	State.s["levering"] = 4
 	_gasten(1)

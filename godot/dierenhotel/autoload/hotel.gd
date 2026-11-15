@@ -104,6 +104,11 @@ const CI_TAFELS_4 := [2, 3, 4, 5, 10, 6, 7, 8, 9]
 const CI_TAFELS_5 := [6, 7, 8, 9, 4, 3]
 ## How far the two bags are off what is needed (0 = exactly enough).
 const CI_VERSCHIL := [-4, -2, -1, 0, 0, 1, 2, 4]
+## Question 2 needs at least this many scoops (more days when one is less), so
+## the two bags are two-digit numbers.
+const CI_MIN := 34
+## "🥄 In 3 dagen eten ze 45 scheppen" (7 words) when the bags last more days.
+const CI_DAGEN := "In %d dagen eten ze %s"
 
 var _bord_open := false
 var _bord_blad = null          ## the open board sheet (UiBlad), or null
@@ -657,7 +662,7 @@ func init_checkin(g: Dictionary) -> void:
 
 ## The food questions of the check-in from groep 4 on, for `gasten` guests (him
 ## included) on day `dag`: a pure function of its arguments.
-##   {band, gasten, per, samen, extra, nieuw, dagen: 1, zak1, zak2, voorraad}
+##   {band, gasten, per, samen, extra, nieuw, dagen, zak1, zak2, voorraad}
 ## per = the table (`CI_TAFELS_4/5`), nieuw = gasten × per (question 1);
 ## the two bags zak1 + zak2 = voorraad lie a little off nieuw (`CI_VERSCHIL`),
 ## and their ones add up across the ten wherever the numbers allow it.
@@ -667,8 +672,14 @@ static func ci_groep4(gasten: int, band: int, dag: int, gast_id: String) -> Dict
 	var tafels: Array = CI_TAFELS_4 if band <= 4 else CI_TAFELS_5
 	var per := int(tafels[int(rnd.volgende() * float(tafels.size())) % tafels.size()])
 	var nieuw := g * per
+	# Played on 2026-11-15: with few guests one day's food was "6 + 9" against
+	# 15 — no end of groep 4.  The bags are for as many days as it takes to
+	# need at least CI_MIN scoops (the card names that total, it is never a
+	# second product to work out), so both bags are two-digit numbers.
+	var dagen_n := maxi(1, ceili(float(CI_MIN) / float(nieuw)))
+	var nodig := dagen_n * nieuw
 	var d := int(CI_VERSCHIL[int(rnd.volgende() * float(CI_VERSCHIL.size())) % CI_VERSCHIL.size()])
-	var voorraad := nieuw + d
+	var voorraad := nodig + d
 	if voorraad < 2:
 		voorraad = nieuw + absi(d)
 	voorraad = maxi(2, voorraad)
@@ -689,7 +700,7 @@ static func ci_groep4(gasten: int, band: int, dag: int, gast_id: String) -> Dict
 	var zak1 := voorraad - zak2
 	return {"band": band, "gasten": g, "per": per,
 		"samen": (g - 1) * per, "extra": per, "nieuw": nieuw,
-		"dagen": 1, "zak1": zak1, "zak2": zak2, "voorraad": voorraad}
+		"dagen": dagen_n, "zak1": zak1, "zak2": zak2, "voorraad": voorraad}
 
 ## Does this check-in ask the questions of groep 4 (`ci_groep4`)?
 static func ci_is_groep4(v) -> bool:
@@ -816,7 +827,9 @@ func paint_checkin() -> void:
 				"id": "ci_som", "door": CHECKIN, "kamer": "receptie", "pad": false,
 				"hoog": _ci_hoog(), "icoon": "🥄", "volg": volg, "dier": gid,
 				"reken": true,
-				"regel": "Elke dag eten de gasten %s" % scheppen(int(v["nieuw"])),
+				"regel": ("Elke dag eten de gasten %s" % scheppen(int(v["nieuw"]))
+					if int(v["dagen"]) <= 1 else
+					CI_DAGEN % [int(v["dagen"]), scheppen(int(v["dagen"]) * int(v["nieuw"]))]),
 				"regel2": CI_ZAKKEN % [int(v["zak1"]), int(v["zak2"])],
 				"keuze_titel": "is er genoeg voer?",
 				"keuzes": _checkin_keuzes()})

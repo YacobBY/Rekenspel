@@ -349,6 +349,8 @@ func test_behoefte_klaar() -> void:
 
 func test_check_in_twee_vragen_dan_een_kamer() -> void:
 	_voor()
+	# the groep-3 check-in (the end-of-groep-4 one: test_hotel_rekenen.gd)
+	groep3()
 	State.s["scoops"] = 20
 	State.s["levering"] = 4
 	var er_al := _gasten(1)                    # Boef eet 2 scheppen
@@ -417,6 +419,8 @@ func test_check_in_twee_vragen_dan_een_kamer() -> void:
 ## and the SAME question with the same choices stays up.
 func test_een_misser_bij_het_inchecken_geeft_geen_hulp() -> void:
 	_voor()
+	# the groep-3 check-in (the end-of-groep-4 one: test_hotel_rekenen.gd)
+	groep3()
 	var boom := Engine.get_main_loop() as SceneTree
 	var laag := Control.new()
 	laag.size = Vector2(1000, 648)
