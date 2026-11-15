@@ -59,8 +59,8 @@ De band wordt begrensd door het adaptieve signaal (rollende accuratesse + twijfe
 ## 4. Economie
 
 - Sterren: voor meedoen (taak afgerond, hoe dan ook) → versiering (vlaggetjes, kleuren, stickers). Beloning die niet aan goed rekenen hangt.
-- Munten (hele euro's): uit uitchecken. Rekening = nachten × prijs (€1/€2/€5), totaal ≤ €20; familie legt munten neer, kind telt en geeft wisselgeld (groep 3: samen tellen; 4: bedrag samenstellen; 5: wisselgeld van €20). Muntenlade van Zilverhoef hergebruikt.
-- Meubelboek, alles ≤ €20: plant €1, bakje €2, mandje €3, bed €5 (+1 gast), speelmand €4, badkuip €8; nieuwe kamer = 4 bouwdelen × €5; verdieping = 4 × €10 (tafel van 10 met biljetten). Meubels slepen op het voxelraster, tik = draaien.
+- Munten (hele euro's): uit uitchecken. Rekening = nachten × prijs (€1/€2/€5), totaal ≤ €20; familie legt munten neer, kind telt en geeft wisselgeld (groep 3: samen tellen; 4: bedrag samenstellen; 5: wisselgeld van €20). Muntenlade van Zilverhoef hergebruikt. **Sinds 2026-11-15 (eind groep 4):** groep 4 = 3–5 nachten × €4–€10 (≤ €50), op even dagen betaald met één briefje van €20/€50 en het wisselgeld als aftreksom over het tiental; groep 5 = 4–6 × €6–€15 met €20/€50/€100 (`Sommen.geld`, games-a.md §2.5).
+- Meubelboek, alles ≤ €20: plant €1, bakje €2, mandje €3, bed €5 (+1 gast), speelmand €4, badkuip €8; nieuwe kamer = 4 bouwdelen × €5; verdieping = 4 × €10 (tafel van 10 met biljetten). Meubels slepen op het voxelraster, tik = draaien. **Sinds 2026-11-15** kost alles vanaf groep 4 tweecijferige bedragen tot €100 (`PRIJS_EIND4`: plant €8, mandje €17, bed €26, badkuip €38), zodat optellen en wisselgeld over het tiental gaan; de rekening groeide even hard mee.
 
 ## 5. Minigame-catalogus (in-world, schaalt met N)
 

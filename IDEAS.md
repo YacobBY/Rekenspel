@@ -16,8 +16,10 @@ New kerndoelen 10–18 in force since Aug 2026 (overgangsrecht until 2031); per-
 | Meten | natural units, compare | m + cm, omtrek, kg | mm/dm/km, liter/ml, oppervlakte on grid, prijs per kg |
 | Meetkunde/data | shapes, staafdiagram read | spiegelbeeld, aanzichten, turven | lijnsymmetrie, bouwplaat, patterns, legenda |
 
+End of groep 4 (research 2026-11-15, SLO tussendoelen 2017 pp. 89–96, Pluspunt 4, WIG 5, Semsom groep 4) — what the game's band 4 asks since the owner's "eind groep 4" request: + and − t/m 100 WITH tientaloverschrijding (47 + 38, 83 − 29, 48 + _ = 50), all tafels ≤ 100, sharing ≤ 100 with an answer ≤ 10 and no remainder, halving/doubling to 100, whole euros t/m €100 and "what is left of €50", whole/half/quarter hours + elapsed whole/half hours, whole kg. The hotel never plays below band 4 (`State.BAND_MIN`).
+
 Design traps to avoid:
-- `7×8` is groep 5, NOT groep 4 (groep 4 memorizes only tafels 1–5 and 10).
+- `7×8`: SLO puts memorizing tafels 6–9 in groep 5, but the current methods (Pluspunt 4, Wereld in getallen 5, Semsom) finish all tafels t/m 10 in groep 4. Since 2026-11-15 the game's band 4 is END of groep 4 (owner: "het is nu wat te makkelijk"): it asks all tafels ≤ 10 × 10, weighted to 1–5 and 10; band 5 leans on 6–9.
 - `€3,45` comma notation is groep 5; groep 4 says "3 euro en 45 cent"; groep-4 cent composition only t/m €2.
 - No cijferen (column arithmetic) before groep 5 — conflicts with school.
 - 2-second timers only on *memoriseren* items; strategy-year skills get ~3–5s or untimed, and never penalize a slower correct strategy.

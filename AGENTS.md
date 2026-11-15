@@ -126,7 +126,13 @@ The design contract the code must keep serving (details: `ANALYSIS.md` §1,
 1. **One scale rule.** Every sum derives from N = number of guests
    (`T = k·N + r`); the band (groep 3/4/5) comes from an adaptive signal
    (`State.band()`, `State.tel(goed, ms)`). Right or wrong never buys access,
-   only the size of the next sum.
+   only the size of the next sum.  **Band 4 is END of groep 4** (owner
+   2026-11-15: "het is nu wat te makkelijk"): + and − t/m 100 across the ten,
+   all tafels ≤ 10 × 10, sharing ≤ 100, whole euros t/m €100, quarter hours —
+   and the hotel never plays below it (`State.BAND_MIN = 4`; a test about the
+   groep-3 numbers calls `groep3()` from `tests/proef.gd`, which lowers
+   `State.vloer` for that test only). Research and per-game table: IDEAS.md,
+   PLAN.md §7 (2026-11-15).
 2. **The loop closes through furniture.** Maths → coins → beds → more guests →
    bigger N → harder sums. Stars reward participation, coins come from maths.
 3. **Never punishing, never helping after a miss.** No red X, no timers except
@@ -142,7 +148,8 @@ The design contract the code must keep serving (details: `ANALYSIS.md` §1,
 4. **No reading required.** Every card sentence ≤ 8 words AND ≤ 40 characters,
    pictogram AND word on every button, answers are one tap on a strip of at
    most four choices. There is **no keypad** (removed 2026-09-14).
-5. **Curriculum honesty** (`IDEAS.md`): 7×8 is groep 5, no comma money before
+5. **Curriculum honesty** (`IDEAS.md`): tafels 6–9 lean on groep 5 but end of
+   groep 4 asks them too (band 4 since 2026-11-15), no comma money before
    groep 5, no column arithmetic, realistic euro denominations.
 6. **Maths comes first ("Rekenen gaat voor", owner 2026-10-09).** *"Zorg wel dat
    rekenen altijd een prioriteit wordt en dat kinderen niet lang kunnen spelen
@@ -455,12 +462,12 @@ Sounds: `ctx.snd.plop(i)`, `ja()`, `hoera()` … Particles: `World.spetter`.
 | `hoeden` `sjaals` `schoenen` | Hoeden-, Sjaal-, Schoenenkraam | winkels | choose a piece, pay exactly with real coins/notes; shoes: paws × price; groep 5: change | games-d §4 |
 | `luxe` | Luxe winkel | winkels | sum with a gift box, half price, change from €50/€100 | games-d §4 |
 | `paskamer` | Paskamer | winkels | dressing up from the wardrobe (no sum, no star) | games-d §5 |
-| `spiegel` | Spiegelmaskers | speelzaal (on the easel, `SpiegelBord` shows the mask large) | mirror symmetry: a sum per band (groep 3 `5 − 2`, groep 4 doubling `4 + 4`, groep 5 two fold lines `3 × 4`), then per dot "which of three coloured marks is the mirror image?" | PLAN.md §3.7.2 (M3/M4) |
-| `foto` | Fotohokje | winkels (the booth at the end of the row; `FotoScherm` shows the photo large) | choose at least two animals, one price per animal under each, then how much money goes in: groep 3 `€2 + €2 + €2`, groep 4/5 `3 × €2`; a wrong amount sends them out (the shop rule) | games-d §5a |
-| `koekjes` | Koekjes bakken | bakkerij (the stone oven and the baker's table; `KoekjesBord` shows the table large) | one row of cookies per guest on a tray: groep 3 `2 + 2 + 2` or eggs `3 + 2`, groep 4 `4 × 5` and a double recipe `4 + 4`, groep 5 all tables and sharing with a rest for the cook `14 : 3` | games-e §1 |
-| `band` | De dierenband | muziekkamer (the drum; `BandNotenbalk` lights a note per tick) | one bar per guest, counting ticks: groep 3 one rhythm or two `a + c`, groep 4 bars of 2/5/10 `4 × 5`, groep 5 the tables and the inverse `48 : 8` (how many bars) | games-e §2 |
-| `sterren` | Sterren tellen | dakterras (the telescope; `SterrenKijker` shows the patterns) | stars in patterns: groep 3 dice/ten-frame, two together, up to 10; groep 4 rows of 2/5/10, double; groep 5 ten-frames + ones, blocks of a hundred, rows of s | games-e §3 |
-| `post` | De post sorteren | postkamer (the shelf with four holes, the cart) | the shelf is a number line in four holes: groep 3 1–20 in fives, groep 4 four tens, groep 5 a product on the letter (`7 × 8` → 50 - 59); answers on the strip | games-e §4 |
+| `spiegel` | Spiegelmaskers | speelzaal (on the easel, `SpiegelBord` shows the mask large) | mirror symmetry: a sum per band (groep 3 `5 − 2`, groep 4 doubling 11–18 dots on a 6×8 board `17 + 17`, groep 5 two fold lines `3 × 4`), then per dot "which of three coloured marks is the mirror image?" | PLAN.md §3.7.2 (M3/M4) |
+| `foto` | Fotohokje | winkels (the booth at the end of the row; `FotoScherm` shows the photo large) | choose at least two animals, one price per animal under each, then how much money goes in: groep 3 `€2 + €2 + €2`, groep 4 all tafels `3 × €7`, groep 5 up to `4 × €18`; a wrong amount sends them out (the shop rule) | games-d §5a |
+| `koekjes` | Koekjes bakken | bakkerij (the stone oven and the baker's table; `KoekjesBord` shows the table large) | one row of cookies per guest on a tray: groep 3 `2 + 2 + 2` or eggs `3 + 2`, groep 4 all tafels `6 × 7` and a double recipe `37 + 37`, groep 5 all tables and sharing with a rest for the cook `14 : 3` | games-e §1 |
+| `band` | De dierenband | muziekkamer (the drum; `BandNotenbalk` lights a note per tick) | one bar per guest, counting ticks: groep 3 one rhythm or two `a + c`, groep 4 bars of all tafels `4 × 7`, groep 5 the tables and the inverse `48 : 8` (how many bars) | games-e §2 |
+| `sterren` | Sterren tellen | dakterras (the telescope; `SterrenKijker` shows the patterns) | stars in patterns: groep 3 dice/ten-frame, two together, up to 10; groep 4 rows of all tafels, doubling `37 + 37`; groep 5 ten-frames + ones, blocks of a hundred, rows of s | games-e §3 |
+| `post` | De post sorteren | postkamer (the shelf with four holes, the cart) | the shelf is a number line in four holes: groep 3 1–20 in fives, groep 4 a sum across the ten on the letter (`61 − 19` → which ten), groep 5 a product on the letter (`7 × 8` → 50 - 59); answers on the strip | games-e §4 |
 
 Each has `test_<id>.gd` next to it (200–1000 lines, run headless with shells
 at four viewports). Owner's rules for zwembad are verbatim in games-b §1.
