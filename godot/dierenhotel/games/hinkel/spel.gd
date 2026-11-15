@@ -825,6 +825,11 @@ func _zinnen() -> Dictionary:
 ## has to leave room for on both sides.
 const KAART_HALF := 60.0
 
+## The frame lies down: the card goes beside the path, not under it.
+func _liggend() -> bool:
+	var f: Rect2 = ctx.wereld.kader_rect()
+	return f.size.x / maxf(1.0, f.size.y) > 1.15
+
 ## The world point that projects onto this point of the frame (the inverse of
 ## `World.mik_punt`, at height 0).  `x − z` and `x + z` are exactly what the
 ## isometry uses, so one division per axis gives the voxel back.
@@ -853,7 +858,7 @@ func _kaart_plek() -> Dictionary:
 	var f: Rect2 = ctx.wereld.kader_rect()
 	var midden: Vector2 = ctx.wereld.mik_punt(
 		(float(m["eerste"]) + float(m["laatste"])) / 2.0, float(m["zSteen"]), 0.0)
-	if f.size.x / maxf(1.0, f.size.y) > 1.15:
+	if _liggend():
 		# beside the path: the whole block keeps 26 css-px between its right edge
 		# and the first stone, halfway up the frame so the strip has room under
 		# the card AND above it
@@ -893,6 +898,14 @@ func _kaart_vlak() -> Rect2:
 	var r: Rect2 = ctx.wereld.vlak_van_dier(str(g["id"]))
 	if r.size.x <= 0.0 or r.size.y <= 0.0:
 		return Rect2()
+	# Lying down the card stands BESIDE the path (`_kaart_plek`), never over the
+	# animal, so no strip has to fit between the two: the animal alone.  The
+	# extra room over his head closed off the place ABOVE the card, the one
+	# place where the strip of band 4 (2026-11-15, "🪨 sprong 10": wider than the
+	# room left of the path) clears the stones when other guests wait on the
+	# grass under the card — on a 740 × 360 phone it landed on the number line.
+	if _liggend():
+		return r
 	var strook := float(Ui.tap_maat()) + 12.0 + float(Hits.KLEEF)
 	return Rect2(r.position - Vector2(0.0, strook), r.size + Vector2(0.0, strook))
 
